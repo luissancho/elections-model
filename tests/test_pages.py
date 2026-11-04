@@ -2825,6 +2825,100 @@ def test_metodo_rating_check_card_shows_the_live_figures(api, fresh_app):
     initial = json.loads(re.search(r'id="initial-data">(.*?)</script>', page).group(1))
     assert initial['rating_check']['scatter'][0]['pollster'] and initial['rating_check']['axes']['xMin'] <= 0
     assert_public_wording(page, '/metodo/rating')
+    # the figures of the fixture, as the card writes them
+    assert '<div class="l">Correlación de rango</div><div class="v">−0,22<small></small></div><div class="s">IC 95%: −0,34 a −0,11</div>' in page
+    assert '<div class="l">Acierto relativo</div><div class="v">12,4%' in page and 'Skill del rating' not in page
+    assert '<tr><td class="f l">Todas</td><td>1,34</td><td>103</td><td>–</td><td>–</td></tr>' in page
+    assert ('<tr><td class="f l">Todas</td><td>74</td><td>1,60</td><td>1,55</td><td>−0,051 '
+            '<span class="muted">(IC 95%: −0,141 a +0,012)</span></td><td>44</td><td>30</td></tr>') in page
+    flat = re.sub(r'\s+', ' ', text)
+    assert 'la correlación de rango es negativa y su intervalo no llega a 0' in flat
+    assert 'el intervalo de la diferencia incluye el 0' in flat and 'con 2.000 réplicas' in flat
+    assert 'id="rating-check-download"' in page and initial['rating_check']['fit'] is None
+
+
+def write_rating_check(fs, data):
+    """La parte `rating-check` de `es` con `data` en lugar de la del fixture (el resto del análisis, el del fixture)."""
+    write_analysis(fs)
+    bundle.BundleWriter(fs).write_json(bundle.path_analysis('es', 'rating-check'), bundle.ANALYSIS_SCHEMAS['rating-check'],
+                                       data, 'es')
+    webapi.site().manifest_cache_clear()
+
+
+def rating_check_fixture():
+    """Copia de los datos de la parte `rating-check` del fixture, para modificarla en un test."""
+    import copy
+    return copy.deepcopy(fixture_data(bundle.ANALYSIS_SCHEMAS['rating-check']))
+
+
+def test_metodo_rating_check_card_without_intervals_says_nothing_about_the_sign(api, fresh_app):
+    """Sin intervalos (pocos pares o un bootstrap fallido), las frases que dependen del signo son neutras; con la
+    recta ajustada, la isla la lleva como dos puntos [x, y]."""
+    data = rating_check_fixture()
+    for population in data['summary'].values():
+        population['spearman'].update(lo=None, hi=None)
+        population['average'].update(lo=None, hi=None)
+    data['fit'] = [[-1.29, -0.53], [1.3, 0.61]]
+    write_rating_check(fresh_app.fs, data)
+    status, _, body = call(api, '/metodo/rating')
+    page = html(body)
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert status == 200 and 'incluye el 0' not in text and 'no llega a 0' not in text
+    assert 'La correlación de rango no tiene intervalo con estos datos' in text
+    assert 'no tiene intervalo con estos datos, así que no podemos decir cuál de los dos acierta más' in text
+    assert '<div class="l">Correlación de rango</div><div class="v">−0,22<small></small></div></div>' in page
+    fit = initial(body)['rating_check']['fit']
+    assert fit == [[-1.29, -0.53], [1.3, 0.61]]
+    assert_public_wording(page, '/metodo/rating')
+
+
+def test_metodo_rating_check_card_with_a_degenerate_part(api, fresh_app):
+    """Una parte sin la población `all` se trata como ausente (la página no cae: el párrafo que anuncia la
+    comprobación); una nube vacía no deja ni el hueco del gráfico ni el botón de descarga."""
+    data = rating_check_fixture()
+    del data['summary']['all']
+    write_rating_check(fresh_app.fs, data)
+    status, _, body = call(api, '/metodo/rating')
+    page = html(body)
+    assert status == 200 and 'se publica con la siguiente actualización' in page
+    assert 'rating-check-chart' not in page and 'id="initial-data"' not in page
+    data = rating_check_fixture()
+    data['scatter'] = []
+    write_rating_check(fresh_app.fs, data)
+    page = html(call(api, '/metodo/rating')[2])
+    assert 'id="rating-check-quarters"' in page and 'rating-check-chart' not in page
+    assert 'rating-check-download' not in page and 'Cada punto de la nube' not in page
+
+
+def test_rating_check_helpers_write_the_minus_the_percent_and_round_the_axes():
+    """Las piezas puras de la tarjeta: el signo menos tipográfico sin «+», los intervalos, los KPI con las cifras reales
+    del 2026-11-04 y los ejes simétricos redondeados a múltiplos de 5."""
+    from mtpy.lib.pages import metodo
+    assert metodo.fmt_without_plus(-0.1848) == '−0,18' and metodo.fmt_without_plus(0.4408) == '0,44'
+    assert metodo.fmt_without_plus(None) == '–' and metodo.fmt_without_plus(-3.7, 1) == '−3,7'
+    assert metodo.interval_text({'lo': -0.2406, 'hi': -0.0785}) == 'IC 95%: −0,24 a −0,08'
+    assert metodo.interval_text({'lo': -0.0197, 'hi': 0.0478}, 3, signed=True) == 'IC 95%: −0,020 a +0,048'
+    assert metodo.interval_text({'lo': None, 'hi': 0.1}) == '' and metodo.interval_text(None) == ''
+    summary = {
+        'all': {'n_pairs': 942, 'n_pollsters': 112, 'spearman': {'value': -0.1848, 'lo': -0.2406, 'hi': -0.0785},
+                'slope': {'value': 0.4408, 'lo': -0.0238, 'hi': 0.7204}, 'skill': {'skill_rating': -0.037}},
+        'generales': {'n_events': 13}, 'autonomicas': {'n_events': 65},
+    }
+    kpis = {kpi['label']: kpi for kpi in metodo.rating_check_kpis(summary)}
+    assert list(kpis) == ['Pares encuestadora-elección', 'Elecciones', 'Correlación de rango', 'Pendiente de calibración',
+                          'Acierto relativo']
+    assert kpis['Pares encuestadora-elección']['value'] == '942' and kpis['Elecciones']['value'] == '13 + 65'
+    assert kpis['Correlación de rango']['support'] == 'IC 95%: −0,24 a −0,08'
+    assert kpis['Pendiente de calibración']['value'] == '0,44' and kpis['Pendiente de calibración']['support'] == 'IC 95%: −0,02 a 0,72'
+    assert kpis['Acierto relativo']['value'] == '−3,7%'
+    assert metodo.rating_check_kpis({'all': {}})[4]['value'] == '–'
+    # the larger of both differentials, up to the next multiple of 5, on both axes; five ticks per half axis
+    assert metodo.rating_check_axes([{'d_prev': 1.3, 'd_obs': -4.8}]) == {
+        'xMin': -5, 'xMax': 5, 'yMin': -5, 'yMax': 5, 'interval': 1.0}
+    assert metodo.rating_check_axes([{'d_prev': -7.2, 'd_obs': 0.4}]) == {
+        'xMin': -10, 'xMax': 10, 'yMin': -10, 'yMax': 10, 'interval': 2.0}
+    assert metodo.rating_check_axes([{'d_prev': 0.0, 'd_obs': 5.0}])['xMax'] == 5
+    assert metodo.rating_check_axes([])['yMin'] == -5
 
 
 def test_metodo_rating_explains_evidence_by_election(api):

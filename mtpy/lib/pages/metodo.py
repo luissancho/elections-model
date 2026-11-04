@@ -438,14 +438,15 @@ def interval_text(entry: Optional[dict], digits: int = 2, signed: bool = False) 
     if _is_missing(entry.get('lo')) or _is_missing(entry.get('hi')):
         return ''
 
-    write = delta_text if signed else signed_num
+    write = delta_text if signed else fmt_without_plus
 
     return 'IC 95%: {} a {}'.format(write(entry['lo'], digits), write(entry['hi'], digits))
 
 
-def signed_num(x, digits: int = 2) -> str:
+def fmt_without_plus(x, digits: int = 2) -> str:
     """
-    A number with a typographic minus when negative and no sign otherwise (``−0,18``, ``0,44``).
+    A number as ``delta_text`` writes it but without the plus: a typographic minus when negative and no sign
+    otherwise (``−0,18``, ``0,44``).
 
     Parameters
     ----------
@@ -485,18 +486,18 @@ def rating_check_kpis(summary: dict) -> list:
     regional = (summary.get('autonomicas') or {}).get('n_events')
     spearman, slope, skill = every.get('spearman') or {}, every.get('slope') or {}, every.get('skill') or {}
     skill_rating = skill.get('skill_rating')
-    skill_text = DASH if _is_missing(skill_rating) else signed_num(skill_rating * 100, 1) + '%'
+    skill_text = DASH if _is_missing(skill_rating) else fmt_without_plus(skill_rating * 100, 1) + '%'
 
     return [
         {'label': 'Pares encuestadora-elección', 'value': fmt_int(every.get('n_pairs')), 'unit': '',
          'support': '{} encuestadoras'.format(fmt_int(every.get('n_pollsters'))), 'ok': False, 'color': None},
         {'label': 'Elecciones', 'value': '{} + {}'.format(fmt_int(general), fmt_int(regional)), 'unit': '',
          'support': 'generales + autonómicas', 'ok': False, 'color': None},
-        {'label': 'Correlación de rango', 'value': signed_num(spearman.get('value')), 'unit': '',
+        {'label': 'Correlación de rango', 'value': fmt_without_plus(spearman.get('value')), 'unit': '',
          'support': interval_text(spearman), 'ok': False, 'color': None},
-        {'label': 'Pendiente de calibración', 'value': signed_num(slope.get('value')), 'unit': '',
+        {'label': 'Pendiente de calibración', 'value': fmt_without_plus(slope.get('value')), 'unit': '',
          'support': interval_text(slope), 'ok': False, 'color': None},
-        {'label': 'Skill del rating', 'value': skill_text, 'unit': '',
+        {'label': 'Acierto relativo', 'value': skill_text, 'unit': '',
          'support': 'frente a prever una desviación nula', 'ok': False, 'color': None},
     ]
 
@@ -538,6 +539,10 @@ def rating_check_summary() -> Optional[dict]:
         return None
 
     summary = data.get('summary') or {}
+
+    if not summary.get('all'):
+        return None
+
     scope_names = {code: row['name'] for code, row in catalogue().iterrows()}
 
     def election(row):
@@ -604,7 +609,8 @@ def rating_check_context() -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``None`` without the part. Otherwise ``kpis`` (``rating_check_kpis``), ``summary`` (the one of the part, by
+        ``None`` without the part or when its ``summary`` has no ``all`` population (the card then shows the
+        paragraph of a missing part). Otherwise ``kpis`` (``rating_check_kpis``), ``summary`` (the one of the part, by
         population), ``quarters`` (one row per population with quarters: ``population``, ``name``, ``first`` and
         ``last``, the mean error per party in points of the first and the last quarter of the rating formatted with
         two decimals, and their pairs ``n_first`` and ``n_last``), ``average`` (one row per population with

@@ -622,19 +622,26 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           ella, y si el promedio de su última campaña acierta más con el rating que sin él.{{ m.note('comprobacion', note_keys) }}
         </p>
         {% if rating_check %}
+        {#- every sign-dependent sentence has its outcomes: an interval below 0, above 0, across 0, or none (too few
+            pairs or a failed bootstrap: a neutral sentence). `summary.all` exists (`rating_check_context`). -#}
         {% set every = rating_check.summary.all %}
-        {% set rho, average = every.spearman, every.average %}
+        {% set rho, average = every.get('spearman') or {}, every.get('average') or {} %}
+        {% set rho_interval = rho.get('lo') is number and rho.get('hi') is number %}
+        {% set average_interval = average.get('lo') is number and average.get('hi') is number %}
         {{ m.kpis(rating_check.kpis) }}
         <p>
-          {% if rho.hi is number and rho.hi < 0 %}
+          {% if rho_interval and rho.hi < 0 %}
           Las encuestadoras con más rating antes de una elección se desviaron menos en ella: la correlación de rango
           es negativa y su intervalo no llega a 0.
-          {% elif rho.lo is number and rho.lo > 0 %}
+          {% elif rho_interval and rho.lo > 0 %}
           Las encuestadoras con más rating antes de una elección se desviaron más en ella: la correlación de rango
           es positiva y su intervalo no llega a 0.
-          {% else %}
+          {% elif rho_interval %}
           Con estas elecciones no se distingue si las encuestadoras con más rating se desvían menos: el intervalo de
           la correlación de rango incluye el 0.
+          {% else %}
+          La correlación de rango no tiene intervalo con estos datos, así que no podemos decir si las encuestadoras
+          con más rating se desviaron menos.
           {% endif %}
           {% if rating_check.initial.scatter %}
           Cada punto de la nube es una encuestadora en una elección: en horizontal, el diferencial que le atribuía su
@@ -657,19 +664,24 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           </table>
         </div>
         {% endif %}
-        {% if rating_check.average %}
+        {% if average.get('n') %}
         <p>
-          {% if average.hi is number and average.hi < 0 %}
+          {% if average_interval and average.hi < 0 %}
           El promedio de la última campaña acierta más con el rating que sin él: la diferencia es negativa y su
           intervalo no llega a 0.
-          {% elif average.lo is number and average.lo > 0 %}
+          {% elif average_interval and average.lo > 0 %}
           El promedio de la última campaña acierta menos con el rating que sin él: la diferencia es positiva y su
           intervalo no llega a 0.
-          {% else %}
+          {% elif average_interval %}
           El promedio de la última campaña acierta lo mismo con el rating que sin él, dentro del margen: el
           intervalo de la diferencia incluye el 0.
+          {% else %}
+          La diferencia entre el promedio con rating y sin él no tiene intervalo con estos datos, así que no podemos
+          decir cuál de los dos acierta más.
           {% endif %}
         </p>
+        {% endif %}
+        {% if rating_check.average %}
         <div class="table-wrap">
           <table class="et et-fit" id="rating-check-average">
             <caption>El promedio de los sondeos de los {{ rating_check.params.window_days|default(30) }} días anteriores a cada elección, de al menos {{ rating_check.params.min_pollsters|default(3) }} encuestadoras, con y sin el rating en los pesos: error medio por partido principal, en puntos de voto. La diferencia es con rating menos sin él.</caption>
@@ -697,8 +709,8 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           previsión exacta y la recta roja, la que mejor ajusta los puntos.
         </p>
         <p>
-          El skill es cuánto menor es el error cuadrático de prever la desviación de cada encuestadora con su rating
-          que de prever que nadie se desvía: 0% si no aporta nada, negativo si lo hace peor. Los cuartos hacen la
+          El acierto relativo es cuánto menor es el error cuadrático de prever la desviación de cada encuestadora
+          con su rating que de prever que nadie se desvía: 0% si no aporta nada, negativo si lo hace peor. Los cuartos hacen la
           misma pregunta en puntos de voto, dentro de cada elección. Un rating que no mejora el promedio puede seguir
           ordenando a las encuestadoras: con pocas casas por campaña y pesos parecidos, el promedio cambia poco.
         </p>
@@ -945,8 +957,9 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
             <var>d</var><sub><var>e</var></sub> sobre <var>d</var><sub>prev</sub>, en los pares con
             <var>d</var><sub>prev</sub>. Una salvedad: la contracción por sondeo es mayor en las fechas con pocos
             sondeos, lo que achica <var>d</var><sub><var>e</var></sub> y atenúa β en las elecciones poco sondeadas;
-            por eso la parte publica también β sólo con las elecciones de {{ rc.min_event_polls|default(10) }} o más
-            sondeos. El skill es 1 − ECM(<var>R</var>)/ECM(0), con ECM el error cuadrático medio de prever
+            por eso publicamos también β sólo con las elecciones de {{ rc.min_event_polls|default(10) }} o más
+            sondeos. El acierto relativo (<em>skill</em>) es 1 − ECM(<var>R</var>)/ECM(0), con ECM el error
+            cuadrático medio de prever
             <var>d</var><sub><var>e</var></sub> con −τ·Φ<sup>−1</sup>(<var>R</var>), la desviación que implica el
             rating antes de <var>e</var>, frente a prever 0; el de la calidad previa sola usa
             −τ·Φ<sup>−1</sup>(<var>Q</var>).
