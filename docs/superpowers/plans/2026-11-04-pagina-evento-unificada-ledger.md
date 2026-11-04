@@ -27,3 +27,22 @@ Medido en Chrome headless sobre un paquete sintético de 8 partidos (tabla de re
   altura (a 1280: 459 y 524 px cerradas).
 - Móvil (390 px): todo apilado, sin desbordar el documento. La tabla se desliza en su `table-wrap` y su caption se
   corta con ella (ya pasaba en Escaños).
+
+## Peso de llegada (tarea 5, 2026-11-05)
+
+Mismo run `20261104-120225` de `es`, `mode=forecast`, rama `feat/pagina-evento` servida en local con el `.env` real
+(`curl` a `/es?mode=forecast&run=20261104-120225`, `wc -c` y `gzip -9c | wc -c`).
+
+| Página | HTML sin comprimir | gzip -9 |
+|---|---:|---:|
+| `/es` unificada | 904.624 B | 84.132 B |
+| `/api/v1/forecast/es/forecast/dist?run=…` (diferido) | 338.156 B | 85.755 B |
+
+Relación con la Promedios de partida: 84.132 / 67.909 = 1,24 (límite 2,0 = 135.818 B). Con `dist` incluido:
+169.887 B, frente a los 121.495 B de la antigua Escaños. `/es/escanos` responde 301 a `/es?seccion=escanos`.
+
+Revisión en navegador (Chrome headless, 1280 y 390 px, `/es` y `/es-md`, forecast y nowcast): los 5 enlaces del índice
+dejan la sección en el borde inferior de la cabecera fija (56 px a 1280, 52 px a 390; el `scroll-margin-top` de la
+sección coincide con la cabecera, 1 px de solape en escritorio por el borde); `/es/escanos#coalition=PP,VOX` acaba en
+`/es#coalition=PP,VOX` con PP y VOX marcados y el desplazamiento en Escaños; sin JavaScript el formulario envía
+`seccion=territorio&region=4` y muestra «Almería · 6 escaños»; ningún error de consola.
