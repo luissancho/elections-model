@@ -24,7 +24,7 @@ const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
 const LOADING = 'Cargando las simulaciones…';
 const LOAD_FAILED = 'No se han podido cargar las simulaciones.';
 /** Heights of the charts in the image of the calculator: the bar as on the page, the histogram a little shorter. */
-export const BAR_IMAGE_HEIGHT = 120;
+const BAR_IMAGE_HEIGHT = 120;
 const HISTOGRAM_IMAGE_HEIGHT = 300;
 /** Shared seat axis of the ridges, as a share of the chamber: parties up to 60%, blocks up to 80% (Luis, 2026-10-14). */
 const PARTY_AXIS_SHARE = 0.6;
@@ -47,7 +47,7 @@ const bySeats = (a, b) => ((b.seats ?? 0) - (a.seats ?? 0)) || ((b.seats_mean ??
  * @returns {object} `names` (by seats), `rows` (`{name, seats}` in the catalogue order), `colors`, `fullnames`,
  *   `deltas` and `year`
  */
-export function partyBar(initial, dist, catalog, colors) {
+function partyBar(initial, dist, catalog, colors) {
   const partyRows = (initial.summary.parties || []).filter((row) => row.seats !== null && row.seats !== undefined);
   const names = [...partyRows].sort(bySeats).map((row) => row.name).filter((name) => dist.parties.includes(name));
   const deltas = initial.deltas || {parties: {}, year: null};
@@ -385,12 +385,12 @@ function wireRegion(initial, catalog) {
 
 /**
  * Draw the seats of an event page: «Resultados por territorio» with the detail of a district and the vote fan at
- * once; then, once the simulations arrive (`initial.dist` when the page embeds them, else one request to
- * `initial.dist_href`), the majority calculator and the button of the distributions. Meanwhile the calculator says
- * «Cargando las simulaciones…»; if the request fails it says so, and the rest of the page keeps working.
+ * once; then, once the simulations arrive (one request to `initial.dist_href`), the majority calculator and the
+ * button of the distributions. Meanwhile the calculator says «Cargando las simulaciones…»; if the request fails it
+ * says so, and the rest of the page keeps working.
  *
  * @param {object} initial the page's initial data (`state`, `meta`, `summary`, `deltas`, `fan`, `districts`,
- *   `scenario`, and `dist_href` or `dist`)
+ *   `scenario` and `dist_href`)
  * @param {Catalog} catalog party catalogue of the run
  * @param {function} [view] the view of the results shown: `() => 'partidos'|'bloques'`
  * @returns {{redraw: function}} `redraw(view)`, for the Partidos/Bloques switch: shows the results table of `view`
@@ -431,9 +431,8 @@ export function wireSeatsPage(initial, catalog, view = () => 'partidos') {
 
   let ridges = null;
   holdCoalition(LOADING);
-  // asked for once per page load; a page that embeds the simulations uses them as they are
-  const ready = initial.dist ? Promise.resolve(initial.dist) : loadDist(initial.dist_href);
-  ready.then((dist) => {
+  // asked for once per page load
+  loadDist(initial.dist_href).then((dist) => {
     const names = [...new Set([...dist.parties, ...(summary.parties || []).map((row) => row.name)])];
     const colors = colorsOf(names);
     tryDraw(() => {

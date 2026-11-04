@@ -114,7 +114,7 @@ def event_cards(scopes: list, today: Optional[date] = None) -> list:
             'frozen': frozen,
             'mode': mode,
             'href': '/' + code if published else None,
-            'href_seats': '/' + code + '/escanos' if published else None,
+            'href_seats': '/' + code + '#escanos' if published else None,
             'leader': leader,
             'majority': majority,
         })

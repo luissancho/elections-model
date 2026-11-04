@@ -33,11 +33,6 @@ PAGES = (
     {'href': '/analisis', 'label': 'Análisis'},
     {'href': '/metodo', 'label': 'Método'},
 )
-# Tabs of the old event bar (Promedios and Escaños); only the bottom bar still reads them until Escaños goes
-EVENT_TABS = (
-    {'suffix': '', 'label': 'Promedios'},
-    {'suffix': '/escanos', 'label': 'Escaños'},
-)
 # Index of the event page (2026-11-04): ``(id, label)`` of each section, in page order; the ids are the public anchors
 EVENT_SECTIONS = (
     ('promedio', 'Promedio'),
@@ -46,12 +41,11 @@ EVENT_SECTIONS = (
     ('territorio', 'Territorio'),
     ('tabla', 'Tabla'),
 )
-# Bottom tab bar of the phones: five entries with an icon of the sprite (``_svg.html``); the method goes in the
-# round button of the header
+# Bottom tab bar of the phones: four entries with an icon of the sprite (``_svg.html``), ``event`` being the event page
+# of the scope («Encuestas», 2026-11-04); the method goes in the round button of the header
 TABBAR = (
     {'key': 'inicio', 'label': 'Inicio', 'icon': 'home'},
-    {'key': 'promedios', 'label': 'Promedios', 'icon': 'line'},
-    {'key': 'escanos', 'label': 'Escaños', 'icon': 'hemi'},
+    {'key': 'event', 'label': 'Encuestas', 'icon': 'line'},
     {'key': 'historico', 'label': 'Histórico', 'icon': 'target'},
     {'key': 'ranking', 'label': 'Ranking', 'icon': 'trophy'},
 )
@@ -82,7 +76,8 @@ ROUTES = [
     # the default alias (``[0-9a-z_\-]+``): ``:str`` is only ``[a-z]+`` and the slugs have hyphens (``voto-cera``)
     ('/analisis/{study}', 'analisis', 'study', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
-    ('/{scope}/escanos', 'escanos', 'index', ['GET']),
+    # the old seats page of a scope (before 2026-11-04): a 301 to its section of the event page
+    ('/{scope}/escanos', 'redirect', 'seats', ['GET']),
 ]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MESSAGES = {
@@ -373,7 +368,7 @@ def resolve_scope(scope: Optional[str]) -> str:
 
 def resolve_event_scope(raw: str) -> str:
     """
-    Scope of the route of an event page (``/{scope}``, ``/{scope}/escanos``).
+    Scope of the route of an event page (``/{scope}``, and ``/{scope}/escanos`` before its redirection).
 
     Parameters
     ----------
@@ -572,7 +567,7 @@ def chamber_text(scope: str, meta: dict) -> Optional[str]:
     return '{}, {} escaños'.format(CHAMBERS.get(scope, DEFAULT_CHAMBER), fmt_int(seats))
 
 
-def tabbar(scope: str, active: Optional[str], active_suffix: str, event: bool, query: str) -> list:
+def tabbar(scope: str, active: Optional[str], event: bool, query: str) -> list:
     """
     Entries of the bottom tab bar.
 
@@ -582,8 +577,6 @@ def tabbar(scope: str, active: Optional[str], active_suffix: str, event: bool, q
         Scope of the page (the event shown, or the scope the global page reads).
     active : str or None
         ``href`` of the current global page in ``PAGES``; ``None`` on an event page.
-    active_suffix : str
-        Suffix of the current tab of the event bar (``''`` or ``'/escanos'``), on an event page.
     event : bool
         Whether the page is an event page: its links keep ``query``.
     query : str
@@ -592,29 +585,23 @@ def tabbar(scope: str, active: Optional[str], active_suffix: str, event: bool, q
     Returns
     -------
     list of dict
-        One entry per row of ``TABBAR``: ``key``, ``label``, ``icon``, ``href`` and ``active``. Promedios and
-        Escaños link the event of ``scope`` (with ``query`` on an event page), Histórico keeps the scope in its
-        query and Ranking goes to ``/casas``; the active one is the tab of an event page or the global page of
-        ``TABBAR_ACTIVE`` (none for the method).
+        One entry per row of ``TABBAR``: ``key``, ``label``, ``icon``, ``href`` and ``active``. Encuestas links the
+        event page of ``scope`` (with ``query`` on an event page), Histórico keeps the scope in its query and Ranking
+        goes to ``/casas``; the active one is Encuestas on an event page and the global page of ``TABBAR_ACTIVE``
+        otherwise (none for the method).
     """
-    keep = query if event else ''
     hrefs = {
         'inicio': '/',
-        'promedios': '/' + scope + keep,
-        'escanos': '/' + scope + '/escanos' + keep,
+        'event': '/' + scope + (query if event else ''),
         'historico': '/elecciones' + scope_query(scope),
         'ranking': '/casas',
     }
-
-    if event:
-        lit = 'escanos' if active_suffix == '/escanos' else 'promedios'
-    else:
-        lit = TABBAR_ACTIVE.get(active)
+    lit = 'event' if event else TABBAR_ACTIVE.get(active)
 
     return [dict(row, href=hrefs[row['key']], active=row['key'] == lit) for row in TABBAR]
 
 
-def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: Optional[date] = None,
+def event_info(scope: str, meta: dict, state: dict, today: Optional[date] = None,
                scopes: Optional[list] = None) -> dict:
     """
     Data of the event bar of an event page.
@@ -625,9 +612,6 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
         Scope code.
     meta : dict
         Data of the meta part of the run shown (``event_date``).
-    active_suffix : str
-        Suffix of the current tab of the bottom bar (``''`` or ``'/escanos'``); unused by the index of sections, kept
-        for the callers until the Escaños page goes.
     state : dict
         Resolved page state (``mode``, ``run``, ``pinned``); unused by the index of sections, kept for the callers.
     today : datetime.date, optional
@@ -920,7 +904,7 @@ def block_color(block: str, meta: dict, parties: Catalog) -> str:
     return OTHERS_COLOR
 
 
-def common_context(state: dict, active: Optional[str], event: bool = False, active_suffix: str = '') -> dict:
+def common_context(state: dict, active: Optional[str], event: bool = False) -> dict:
     """
     Template context shared by every page.
 
@@ -933,10 +917,8 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         ``href`` of the current page in the main menu; ``None`` for the event pages, which are
         not in it.
     event : bool, optional
-        Whether the page is an event page (Promedios or Escaños): it gets the event bar and links
-        that keep ``mode`` and ``run``; a global page gets links that keep ``scope``.
-    active_suffix : str, optional
-        Suffix of the current tab of the event bar (``EVENT_TABS``).
+        Whether the page is the event page of the scope (``/{scope}``): it gets the event bar and links that keep
+        ``mode`` and ``run``; a global page gets links that keep ``scope``.
 
     Returns
     -------
@@ -971,7 +953,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     mode = state['mode'] or default_mode(run_horizon(meta))
     full = {'scope': scope, 'mode': mode, 'run': run, 'pinned': pinned}
     scopes = published_scopes()
-    info = event_info(scope, meta, active_suffix, full, scopes=scopes) if event else None
+    info = event_info(scope, meta, full, scopes=scopes) if event else None
 
     return {
         'site_title': SITE_TITLE,
@@ -994,7 +976,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'meta': meta,
         'catalog': catalog(meta, parties_catalogue()),
         'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
-        'tabbar': tabbar(scope, active, active_suffix, event, event_query(full) if event else ''),
+        'tabbar': tabbar(scope, active, event, event_query(full) if event else ''),
     }
 
 

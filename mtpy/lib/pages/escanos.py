@@ -1,17 +1,16 @@
 """
-The seats of an event: ``seats_context``, the seats part of the event page (``/{scope}``), its pieces (tables,
-calculator, districts, downloads) and ``escanos_context``, the old seats page (``/{scope}/escanos``) until it redirects.
+The seats of an event: ``seats_context``, the seats part of the event page (``/{scope}``), and its pieces (calculator,
+districts, downloads).
 """
 import unicodedata
 from typing import Optional
 
 from ...core.api import HttpError
-from .. import bundle
-from ..webapi import check_region, site
-from .common import Catalog, api_url, block_color, common_context, ink_color, part
+from ..webapi import check_region
+from .common import api_url, part
 from .elecciones import last_results
-from .filters import DASH, _is_missing, fmt_int, fmt_prob, fmt_range
-from .promedios import inherited_results, seat_deltas
+from .filters import DASH, fmt_range
+from .promedios import inherited_results
 
 CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
@@ -20,44 +19,6 @@ CSV_PARTS = (
     ('scenario', 'Reparto central', True),
     ('fan', 'Abanico por horizonte', False),
 )
-
-
-def seat_rows(rows: list) -> list:
-    """
-    Party rows of the summary sorted by seats.
-
-    Parameters
-    ----------
-    rows : list of dict
-        Records of ``summary['parties']`` (``seats`` is an integer or ``None``).
-
-    Returns
-    -------
-    list of dict
-        The same records by ``seats`` descending, ``None`` last; ties keep the input order.
-    """
-    return sorted(rows, key=lambda row: -1 if row.get('seats') is None else row['seats'], reverse=True)
-
-
-def block_rows(rows: list, meta: dict, parties: Catalog) -> list:
-    """
-    Block rows of the summary with their colour.
-
-    Parameters
-    ----------
-    rows : list of dict
-        Records of ``summary['vs']`` or ``summary['blocks']``.
-    meta : dict
-        Data of the meta part.
-    parties : Catalog
-        Party catalogue of the run.
-
-    Returns
-    -------
-    list of dict
-        Copies of the records, in the input order, with ``color`` (``block_color``).
-    """
-    return [dict(row, color=block_color(row['name'], meta, parties)) for row in rows]
 
 
 def default_coalition(meta: dict, summary: dict, names: list) -> list:
@@ -96,7 +57,7 @@ def default_coalition(meta: dict, summary: dict, names: list) -> list:
 
 def csv_links(scope: str, mode: str, run: str) -> list:
     """
-    Download links of the seats page.
+    Download links of the seats of the event page.
 
     Parameters
     ----------
@@ -364,79 +325,3 @@ def seats_context(context: dict, region=None) -> dict:
             'scenario': scenario,
         },
     }
-
-
-def escanos_context(state: dict, region=None, active: Optional[str] = None, event: bool = False,
-                    active_suffix: str = '') -> dict:
-    """
-    Template context of the seats page (``/{scope}/escanos``), a thin wrapper over ``seats_context`` until the page
-    redirects to the event page.
-
-    Parameters
-    ----------
-    state : dict
-        Validated page parameters (``parse_state``).
-    region : str, optional
-        ``region`` query parameter: id of the district the detail table shows (the largest by
-        default).
-    active : str or None, optional
-        ``href`` of the page in the navigation (``None``: the seats are an event page).
-    event : bool, optional
-        Whether it is rendered as an event page (see ``common_context``).
-    active_suffix : str, optional
-        Suffix of the current tab of the bottom bar (``'/escanos'`` on the event page).
-
-    Returns
-    -------
-    dict
-        The common context plus the keys of ``seats_context`` (but ``initial_extra``), ``party_rows``
-        (``seat_rows``), ``block_rows``, ``subtitle``, ``deltas`` (``seat_deltas`` against the last published
-        election, for the «vs {year}» column of the tables), ``results_year`` and ``results_date`` (of that election;
-        ``None`` without one), ``blocks`` (the names of ``meta['bmaps']['blocks']``, the Bloques view of the
-        evolution; ``[]`` without a block map) and ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan``,
-        ``districts``, ``scenario``, ``runs``, ``deltas`` (for the seats bar) and ``inks`` (the text colour over
-        the colour of each party and block, for the pills of the evolution legend), the data the charts, the
-        calculator and the territory table are drawn from).
-
-    Raises
-    ------
-    HttpError
-        503 without a bundle; 404 for an unpublished scope, a missing run, a missing part or an
-        unknown district; 400 for an invalid ``region``.
-    """
-    context = common_context(state, active, event=event, active_suffix=active_suffix)
-    seats = seats_context(context, region)
-    extra = seats.pop('initial_extra')
-    context.update(seats)
-    full, meta, parties = context['state'], context['meta'], context['catalog']
-    scope, mode, run = full['scope'], full['mode'], full['run']
-    summary = seats['summary']
-    suffix = context['title_suffix']
-    results = inherited_results(last_results(scope, parties), meta)
-    deltas = seat_deltas(summary, meta, parties, results)
-
-    context['party_rows'] = seat_rows(summary.get('parties') or [])
-    context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
-    context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
-    context['deltas'] = deltas
-    context['results_year'] = results['year'] if results else None
-    context['results_date'] = results['date'] if results else None
-    # the Bloques view of the evolution, summed in the browser from the block map
-    blocks = (meta.get('bmaps') or {}).get('blocks')
-    context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
-    context['initial'] = {
-        'state': full,
-        'meta': meta,
-        'summary': summary,
-        'dist': part(scope, run, 'dist', mode=mode),
-        'fan': extra['fan'],
-        'districts': extra['districts'],
-        'scenario': extra['scenario'],
-        'runs': bundle.loads(site().history(scope))['data'],
-        'deltas': deltas,
-        # ink of every party and block of the evolution, for the pills of its legend when they are on
-        'inks': {**{party['name']: ink_color(party.get('color')) for party in meta.get('parties') or []},
-                 **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},
-    }
-
-    return context

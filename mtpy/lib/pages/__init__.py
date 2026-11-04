@@ -20,7 +20,7 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PAT
                     RANKING_SHOWN, analysis_part, block_bar_colors, casa_context, table_columns,
                     casas_context, effects_table, herding_rows, house_effects_grid, last_poll_records, mtype_label, poll_date,
                     profile_rows, quality_card, ranking_rows, rating_path)
-from .common import (EVENT_SECTIONS, EVENT_TABS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT,
+from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT,
                      ROUTES, SITE_TAGLINE, SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog,
                      chamber_text, common_context, days_left, days_text, default_mode, environment, event_info,
                      event_query, event_title, hemicycle_order, ink_color, parse_state, part, parties_catalogue,
@@ -32,8 +32,8 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
                          last_results, horizon_tables, majority_of, mark_shown, model_last, MODEL_ROW, party_blocks,
                          poll_error_parts, published_events, resolve_event, run_less_colours, shown_parties, split_sides,
                          table_blocks, with_abs, with_model_row, year_range)
-from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, has_communities, escanos_context,
-                      region_rows, resolve_region, seat_rows, seats_context)
+from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, has_communities, region_rows, resolve_region,
+                      seats_context)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,
                       fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around,
                       shade_scale)

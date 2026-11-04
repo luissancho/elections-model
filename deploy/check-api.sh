@@ -128,8 +128,8 @@ check_header() {
 
 check / 200 html
 check "/es?mode=nowcast" 200 html
-check "/es/escanos?mode=forecast" 200 html
-check "/es/escanos?region=abc" 400 html
+check "/es/escanos?mode=forecast" 301 none
+check "/es?region=abc" 400 html
 check /promedio 301 none
 check /es-zz 404 html
 check_db_only "/casas?scope=es" 200 html

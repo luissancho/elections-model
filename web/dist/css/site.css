@@ -689,7 +689,7 @@ ol.notes > li:target { color: var(--color-text); }
 
 /* Escaños: histograms, blocks chart, majority calculator and district form */
 #ridge-chart { margin-top: var(--space-3); }
-#seats-bar, #coalition-bar { height: 120px; }
+#coalition-bar { height: 120px; }
 /* The calculator histogram: a chart plus the band of its three caption lines (48 px) */
 #coalition-chart { height: 388px; }
 /* The coalition result is a long sentence: a chip that wraps (a nowrap chip pushed the page sideways on phones) */
