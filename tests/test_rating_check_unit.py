@@ -158,3 +158,40 @@ def test_rating_check_summary_has_the_part_shape_and_scaled_scatter():
     assert data['params']['k'] == pytest.approx(1.96) and data['scatter'][0]['d_prev'] == pytest.approx(PAIRS['d_prev'].dropna().iloc[0] * 100, abs=.01)
     assert all('average' in data['summary'][p] for p in POPULATIONS)
     assert data['params']['replicas'] == 2000 and data['params']['quarters'] == 4
+
+
+def _two_party_polls(index=None, error=None):
+    """Dos casas y un partido, pesos 1 y 3 (promedio de 1 y 2 -> (1 + 6) / 4 = 1.75)."""
+    frame = pd.DataFrame({'event_scope': 'es', 'event_date': '2019-11-10', 'population': 'generales',
+                          'pollster_id': [1, 2, 1, 2], 'pollster': list('ABAB'), 'party': ['X', 'X', 'Y', 'Y'],
+                          'error': [1., 2., 3., 3.], 'weight_over': 1., 'weight_sample': [1., 3., 1., 3.],
+                          'weight_rating': 1.})
+    if index is not None:
+        frame.index = index
+    if error is not None:
+        frame['error'] = error
+    return frame
+
+
+def test_simple_average_errors_is_correct_with_a_duplicated_index():
+    out = simple_average_errors(_two_party_polls(index=[0, 1, 0, 1]), min_pollsters=2)
+    # X: (1 + 6) / 4 = 1.75; Y: 3; media de 1.75 y 3
+    assert out['mae_flat'].iloc[0] == pytest.approx((1.75 + 3.) / 2)
+    same = simple_average_errors(_two_party_polls(), min_pollsters=2)
+    assert out['mae_flat'].iloc[0] == pytest.approx(same['mae_flat'].iloc[0])
+
+
+def test_simple_average_errors_ignores_rows_with_nan_error_or_zero_weight_parties():
+    out = simple_average_errors(_two_party_polls(error=[1., 2., np.nan, 3.]), min_pollsters=2)
+    assert out['mae_flat'].iloc[0] == pytest.approx((1.75 + 3.) / 2)     # la fila NaN no cuenta ni en sum(w)
+    zero = _two_party_polls().assign(weight_rating=lambda df: np.where(df['party'] == 'Y', 0., 1.))
+    row = simple_average_errors(zero, min_pollsters=2).iloc[0]
+    assert row['mae_flat'] == pytest.approx(1.75) and row['mae_rated'] == pytest.approx(1.75)   # Y fuera de los dos
+
+
+def test_slope_and_fit_line_ignore_infinite_d_prev_and_share_one_fit():
+    pairs = PAIRS.copy()
+    pairs.loc[0, 'd_prev'] = np.inf
+    assert slope(pairs, replicas=10)['n'] == 8 and len(scatter_rows(pairs)) == 8
+    (x0, y0), (x1, y1) = fit_line(pairs)
+    assert (y1 - y0) / (x1 - x0) == pytest.approx(slope(pairs, replicas=10)['value'])
