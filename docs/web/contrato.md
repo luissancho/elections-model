@@ -321,8 +321,8 @@ sólo en `es`:
   '{"what":["analysis"],"scopes":["es"],"rating_check":true}'`); con `rating_check` en otro ámbito no se escribe ni
   falla, y una publicación sin `rating_check` deja la parte anterior (JSON y CSV) como estaba. `summary` tiene una
   entrada por población (`all`, `generales`, `autonomicas`) con las medidas (`spearman`, `spearman_evidence`,
-  `slope`, `slope_polled`, `skill`) y `average` (el promedio simple con y sin rating); `quarters`, una fila por
-  población y cuarto de rating; `scatter`, un punto por casa y elección (`d_prev` y `d_obs` ×100); `fit`, los dos
+  `slope`, `slope_polled` y `skill`, éste sólo con `skill_prior`, `skill_rating` y `n`: los MSE no se publican) y
+  `average` (el promedio simple con y sin rating); `quarters`, una fila por población y cuarto de rating; `scatter`, un punto por casa y elección (`d_prev` y `d_obs` ×100); `fit`, los dos
   extremos de la recta o `null` sin pares suficientes; `dates`, la primera y la última elección; `params`, los
   parámetros del cálculo (`n_scopes`, `tau`, `sigma`, `k`, …). Las medidas sin datos van a `null`.
 - `meta.params.rating_check` es `true` sólo si esa publicación escribió `rating-check` (y entonces `meta.seconds`
