@@ -920,6 +920,10 @@ def test_evolution_cards_share_the_markup_and_explain_the_revision(api):
             text = text[:text.index('</section>')]
             assert 'retrospectiva' not in text and 'cambió' in text and 'hace una semana' in text and 'su fecha' in text
             assert 'todos los partidos' in text and 'marcados en la leyenda' in text and 'Sólo muestra' not in text
+            # Luis, 2026-11-04: the table only on demand, behind a «Ver listado» button the JS shows
+            assert ('<button type="button" class="more" id="evolution-changes-toggle" aria-controls="evolution-changes" '
+                    'aria-expanded="false" hidden>Ver listado</button>') in page
+            assert '<div class="table-wrap" id="evolution-changes" hidden></div>' in page and '«Ver listado»' in text
             assert 'revisa el pasado' in text and 'no se revisan' in text and 'id="evolution-changes"' in text
             assert 'Si un día hubo varias actualizaciones, se muestra la última' in text
             assert_public_wording(page, path)

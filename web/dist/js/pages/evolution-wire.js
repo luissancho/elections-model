@@ -58,8 +58,9 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
 /**
  * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the Partidos/Bloques radios
  * (`#evolution-view`, shown only when the scope has blocks), the pill legend (`#evolution-legend`), which selects
- * the names through the hidden ECharts legend, the table of changes (`#evolution-changes`, hidden with fewer than
- * two days), with every name of the view whatever the legend shows (Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the
+ * the names through the hidden ECharts legend, the table of changes (`#evolution-changes`), with every name of the
+ * view whatever the legend shows, shown only on demand by its button (`#evolution-changes-toggle`, «Ver listado» /
+ * «Ocultar listado», hidden with fewer than two days; Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the
  * chart as shown, with the table under it, as a signed image (`share.js`). Changing the view resets the selection.
  *
  * @param {object} initial the page's initial data (`runs`, the history part, and `inks`, the text colour over
@@ -75,9 +76,10 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
   }
   const legendEl = document.getElementById('evolution-legend');
   const changesEl = document.getElementById('evolution-changes');
+  const toggleEl = document.getElementById('evolution-changes-toggle');
   const viewSet = document.getElementById('evolution-view');
   const views = evolutionViews((initial.runs || {}).runs || [], catalog, {parties, field, total});
-  const state = {view: 'partidos', selected: null};
+  const state = {view: 'partidos', selected: null, listOpen: false};
   let chart = null;
 
   /** Data of the chart (`evolutionOption`) in the view and selection of `chartState`. */
@@ -95,7 +97,7 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     };
   }
 
-  /** Fill the table of changes of the current view (empty and hidden with fewer than two days). */
+  /** Fill the table of changes of the current view and show it if open; button and table hidden without changes. */
   function fillChanges() {
     if (!changesEl) {
       return;
@@ -103,7 +105,12 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     const current = views[state.view];
     const changes = evolutionChanges(current.runs, current.parties, field);
     changesEl.innerHTML = changes ? changesTableHtml(changes, current, {field, formatter}) : '';
-    changesEl.hidden = !changes;
+    changesEl.hidden = !changes || !state.listOpen;
+    if (toggleEl) {
+      toggleEl.hidden = !changes;
+      toggleEl.textContent = state.listOpen ? 'Ocultar listado' : 'Ver listado';
+      toggleEl.setAttribute('aria-expanded', String(state.listOpen));
+    }
   }
 
   /** Draw the chart, fill its pill legend and its table and, the first time, listen to the legend selection. */
@@ -130,6 +137,13 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
   wireDownload(document.getElementById('evolution-download'), () => evolutionImageOption(dataOf(state), chartZoom(chart)), showError, {
     bottom: changesEl ? () => (changesEl.hidden ? null : tableImage(changesEl.querySelector('table'))) : null,
   });
+
+  if (toggleEl && changesEl) {
+    toggleEl.addEventListener('click', () => {
+      state.listOpen = !state.listOpen;
+      fillChanges();
+    });
+  }
 
   // The selector only works with JavaScript, so the server renders it hidden.
   if (viewSet && views.bloques) {
