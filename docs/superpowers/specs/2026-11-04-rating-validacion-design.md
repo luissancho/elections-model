@@ -375,7 +375,8 @@ empeora: voto +1,6 %, CRPS +3,1 %, Brier +16,4 %). MAE de voto de `es` por horiz
 Frente a las líneas base sin rating (último sondeo 2,452 y media de 4 semanas 2,382 en las generales; 2,717 y 2,634
 en las autonómicas), el modelo gana con y sin rating salvo el plano de las generales frente a la media de 4 semanas
 (+0,010). Juicio: dentro del ±2 % en voto y escaños en las dos poblaciones; el Brier y la cobertura se mueven en
-sentidos opuestos por población, sobre diferencias que no se distinguen del ruido. Lectura declarada: **el rating es
+sentidos opuestos por población, sobre diferencias que no se distinguen del ruido; en sentido estricto, el plano no pasa
+el criterio 17 en las autonómicas (Brier +3,3 %, cobertura −0,45 puntos). Lectura declarada: **el rating es
 cosmético para la predicción del modelo vivo.**
 
 **Prueba 1b (promedio simple de los 30 días anteriores, con rating − sin rating, IC 95 % por bootstrap de elecciones).**

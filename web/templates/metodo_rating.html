@@ -751,9 +751,11 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           medio del voto pasa de 2,37 a 2,39 puntos por partido en las generales (28 casos de cinco elecciones) y de
           2,51 a 2,52 en las autonómicas (66 casos de once elecciones), y el CRPS de los escaños sube un 1% o menos: dentro del 2%
           con el que juzgamos cualquier cambio del modelo, con casi tantos casos mejores como peores, y las bandas del
-          95% cubren casi lo mismo. El Brier de la probabilidad de mayoría baja un 9% sin el rating en las generales,
-          pero es cosa de 2023: sin esa elección, sube un 16%. En las autonómicas sube un 3%. En el modelo completo,
-          el rating apenas mueve la predicción. Los periodos, las métricas y los cortes de evaluación se detallan en
+          95% cubren casi lo mismo. El Brier de la probabilidad de mayoría lo deciden pocas elecciones: en las
+          generales, sin el rating baja un 9% por 2023, la más reciente, y sube en las otras tres con mayorías
+          medidas; en las autonómicas sube un 3% sobre un error de 0,02, con la mitad de los casos iguales. Son
+          diferencias de milésimas, pero en sentido estricto quitar el rating no pasaría ese criterio en las
+          autonómicas. En el modelo completo, el rating apenas mueve la predicción. Los periodos, las métricas y los cortes de evaluación se detallan en
           <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
         </p>
         {% call m.how() %}

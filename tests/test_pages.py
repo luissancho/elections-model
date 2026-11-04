@@ -2839,6 +2839,9 @@ def test_metodo_rating_check_card_shows_the_live_figures(api, fresh_app):
     assert '{fecha}' not in page and '{cifras}' not in page
     assert 'pruebas históricas del modelo completo, el 4 de noviembre de 2026,' in flat
     assert 'pasa de 2,37 a 2,39 puntos por partido en las generales (28 casos de cinco elecciones)' in flat
+    # the Brier is read with its scale: few elections, an error of 0,02, and the strict reading of the criterion
+    assert 'El Brier de la probabilidad de mayoría lo deciden pocas elecciones' in flat
+    assert 'quitar el rating no pasaría ese criterio en las autonómicas' in flat and 'cosa de 2023' not in flat
 
 
 def write_rating_check(fs, data):
