@@ -80,7 +80,7 @@ de empezar: el plan argumenta desde él.
 
 **Interfaces:**
 - Produces: `seats_context(context: dict, region=None) -> dict` en `escanos.py`. Recibe el contexto común ya resuelto de un evento y devuelve las claves que añade la parte de escaños: `summary`, `calculator`, `csv_links`, `district_table`, `regions`, `territory_levels`, `region`, `region_rows`, `inherited`, y `initial_extra` = `{'dist', 'fan', 'districts', 'scenario'}`. Lanza los mismos `HttpError` que hoy por `region` (400 inválida, 404 desconocida).
-- Produces: `promedios_context(state: dict, region=None) -> dict`. `initial` tiene exactamente estas claves, en este orden: `['state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist', 'fan', 'districts', 'scenario', 'runs', 'cards', 'deltas', 'catalog', 'inks']`. `inks` es la unión de las dos de hoy.
+- Produces: `promedios_context(state: dict, region=None) -> dict`. `initial` tiene exactamente estas claves, en este orden: `['state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href', 'fan', 'districts', 'scenario', 'runs', 'cards', 'deltas', 'catalog', 'inks']`. `inks` es la unión de las dos de hoy. **`dist` no va en el JSON inicial** (decisión de Luis, 2026-11-04, por el peso). `dist_href` es la URL JSON de la parte `dist` del run y del modo mostrados: `api_url(scope, 'dist', mode=mode, run=run)`, la misma ruta que ya usa `csv_links`, pero sin `fmt`. `seats_context` devuelve `dist_href` en `initial_extra`, en lugar de `dist`. El contexto del servidor sigue leyendo `dist` para los nombres de la calculadora (`calculator`).
 - Produces: cada fila de `result_rows` añade `p_seats`, `p_first` y `p_majority`; cada fila de `block_result_rows` añade `p_majority` (`None` en Otros). `seat_rows` y `block_rows` de `escanos.py` dejan de usarse en la plantilla.
 - Produces: `EVENT_SECTIONS = (('promedio', 'Promedio'), ('escanos', 'Escaños'), ('evolucion', 'Evolución'), ('territorio', 'Territorio'), ('tabla', 'Tabla'))`. `event_info(...)['sections']` es una lista de `{'id', 'label', 'href': '#' + id}`. `promedios_context` quita `territorio` si no hay `district_table` y `tabla` si `table_total` es 0. La clave `tabs` desaparece; `EVENT_TABS` sigue existiendo hasta la tarea 4 para que `/es/escanos` no se rompa.
 
@@ -104,7 +104,7 @@ de empezar: el plan argumenta desde él.
   - `test_event_page_merges_promedios_and_escanos_in_order`: en `/es?mode=forecast`, los índices de `id="promedio"`, `id="escanos"`, `id="evolucion"`, `id="territorio"` y `id="tabla"` van en orden. Dentro de cada sección están las tarjetas que le tocan, en el orden de arriba. `id="seats-bar"`, `id="blocks-result-table"`, `id="parties-card"` y la palabra `pestaña` no aparecen.
   - `test_event_page_title_and_index`: `<title>Demoscopio · Encuestas, promedios y escaños · Generales` está en la página. La barra lleva los cinco `href="#…"` con sus etiquetas y ya no lleva `href="/es/escanos`.
   - `test_event_page_results_table_columns`: las cabeceras de `parties-table` son exactamente las 9 de Global Constraints, y las de `blocks-table` las 7.
-  - `test_event_page_initial_keys`: `list(initial(body)) ==` la lista de Interfaces, y `data['dist']['parties'] == ['PP']`.
+  - `test_event_page_initial_keys`: `list(initial(body)) ==` la lista de Interfaces, `'dist' not in data`, y `data['dist_href'] == '/api/v1/forecast/es/forecast/dist?run=' + RUN` (o la forma exacta que produzca `api_url`; el test la fija). Las píldoras de la calculadora siguen saliendo del servidor (`name="coalition" value="PP" checked`).
   - `test_event_page_index_skips_missing_sections`: sin circunscripciones (el escenario de `test_escanos_without_districts_hides_the_section`), no salen ni `id="territorio"` ni `href="#territorio"`.
   - `test_event_page_region`: `/es?mode=forecast&region=8` marca `<option value="8" selected>`; el formulario lleva `name="seccion" value="territorio"` y el `mode`; con `run=` fijado, también `run`. `region=abc` → 400 y `region=999` → 404 (parametrizado como `test_escanos_region_errors`).
   - `test_event_page_texts`: el closing nombra los dos métodos. `evolution` explica las dos métricas («hueco», «no es una serie de sondeos»). `assert_public_wording` pasa sobre la página.
@@ -122,12 +122,22 @@ de empezar: el plan argumenta desde él.
 
 **Interfaces:**
 - Consumes: `mergeHash`, `withSection`, `sectionTarget` y `dropParam` (tarea 1); los ids de la tarea 2.
-- Produces: `wireSeatsPage(initial: object, catalog: Catalog, view: () => 'partidos'|'bloques') -> {redraw: (view) => void}` en `seats-wire.js`. Dibuja la calculadora, el territorio, el detalle de circunscripción, el abanico y las distribuciones. `redraw` lo llama el selector `#results-view` de `promedios.js`, que ya cambia el hemiciclo y ahora también muestra `#seats-parties` o `#seats-blocks` y redibuja las distribuciones si están abiertas.
+- Produces: `wireSeatsPage(initial: object, catalog: Catalog, view: () => 'partidos'|'bloques') -> {redraw: (view) => void}` en `seats-wire.js`. Dibuja la calculadora, el territorio, el detalle de circunscripción, el abanico y las distribuciones. `redraw` lo llama el selector `#results-view` de `promedios.js`, que ya cambia el hemiciclo y ahora también muestra `#seats-parties` o `#seats-blocks` y redibuja las distribuciones si están abiertas. **`dist` llega aparte** (decisión de Luis, 2026-11-04): `wireSeatsPage` dibuja en el acto lo que no
+  necesita las simulaciones (territorio, detalle de circunscripción, abanico) y, después del primer dibujo, pide
+  `initial.dist_href` con `fetch`. Mientras tanto, la calculadora enseña «Cargando las simulaciones…» en
+  `#coalition-result`, y «Ver las distribuciones» y los botones de descarga de esas dos tarjetas esperan. Si la
+  petición falla, el mismo sitio dice «No se han podido cargar las simulaciones.», y el resto de la página sigue
+  funcionando. Se pide una sola vez por carga de página.
+- Produces: `loadDist(href: string, fetchImpl = fetch) -> Promise<object>` en `seats-wire.js` (o en `seats.js` si
+  así se puede probar sin DOM): rechaza la promesa si la respuesta no es OK. La prueba usa un `fetchImpl` falso.
 - Produces: `wireEvolution(initial, catalog, {parties, metrics})`, con `metrics = {pct: {field: 'pct', formatter: fmtPct, total: 100}, seats: {field: 'seats', formatter: fmtInt, total: nSeats}}`. Si hay `#evolution-metric` y más de una métrica, el selector cambia gráfico, tabla de cambios y nombre del fichero de descarga (`…-evolucion-…` para voto, `…-evolucion-escanos-…` para escaños), y vuelve a la selección por defecto. Con una sola métrica funciona como hoy.
 - Produces: `regionRows(districts: object, regionId: number) -> object[]` en `territory.js`, espejo de `region_rows` de Python (quita filas sin `pct`; ordena por `seats` y luego `pct`, ambos descendentes, de forma estable). También `renderRegion(table: HTMLTableElement, rows: object[], region: {name, seats}, catalog)` en `territory-dom.js`, que reescribe el caption («{name} · {seats} escaños») y el tbody con los formatos de la plantilla (`fmtPct`, `fmtRange`, `fmtProb`).
 
 - [ ] **Step 1: Tests que fallan:**
   - `tests/test_js_territory.py::test_region_rows_mirror_python`: con un `districts` de tres filas en la región 8 (una con `pct: null`), devuelve las dos con voto, en el orden esperado. Añade un caso de empate en `seats` que se desempata por `pct`.
+  - `test_load_dist` (en el fichero de tests del módulo donde viva `loadDist`): con un `fetchImpl` falso que
+    devuelve `{ok: true, json: () => ({parties: ['PP']})}`, la promesa resuelve ese objeto. Con `{ok: false,
+    status: 503}`, la promesa se rechaza.
   - `tests/test_js_evolution.py::test_wire_evolution_switches_metric`: comprueba con el arnés de DOM mínimo que ya usa el fichero o, si no lo hay, con la función pura que elige `field`/`total`/`formatter` por métrica. Con `metrics` de dos entradas, al cambiar a `seats` las vistas usan `field: 'seats'` y `total: nSeats`.
 - [ ] **Step 2:** `python -m pytest tests/test_js_territory.py tests/test_js_evolution.py -q` → FAIL.
 - [ ] **Step 3:** Implementa `regionRows` + `renderRegion` y las métricas de `wireEvolution`. Después, `seats-wire.js` y `promedios.js`:

@@ -103,8 +103,12 @@ y no tiene sentido obligarle a cambiar de pestaña para responderla.
   Promedios de hoy sola, y sobre un run de producción de 10.000 simulaciones (leído del bucket publicado), no
   sobre el run local del 8-10 (1.000 simulaciones: `dist` de 33 KB, cuando con 10.000 rondará los ~340 KB sin
   comprimir). Si el `/es` unido pesa más del doble que la Promedios de hoy con gzip, o el dibujo inicial se nota
-  más lento en el móvil, se le cuenta a Luis antes de seguir. La salida natural en ese caso es pedir `dist` a la
-  API la primera vez que se abre la calculadora o las distribuciones.
+  más lento en el móvil, se le cuenta a Luis antes de seguir. **Saltó (2026-11-04):** con el run
+  `20261104-120225` (10.000 simulaciones) la Promedios de hoy pesa 68 KB con gzip y la unida rondaría los
+  ~170 KB (2,5×). Casi todo es `dist` (86 KB con gzip). **Decisión de Luis:** `dist` no va en el JSON inicial. La
+  página la pide a la API (`/api/v1/forecast/{scope}/{mode}/dist?run=…`) justo después del primer dibujo. La
+  calculadora y las distribuciones muestran «cargando» mientras llega y un aviso si la petición falla. Sin
+  `dist` la página queda en ~85 KB (1,25×).
 - **Trabajo en paralelo de Luis:** `promedios.html` y `escanos.html` han cambiado en disco mientras se escribía
   este diseño. El plan se hace sobre su estado en el momento de empezar.
 - **Barra inferior del móvil** (`TABBAR`): Promedios y Escaños se convierten en una sola entrada, así que quedan
