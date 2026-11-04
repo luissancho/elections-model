@@ -974,12 +974,14 @@ def test_event_page_index_skips_missing_sections(api, fresh_app):
     assert call(api, '/es', query='region=28')[0] == 404
 
 
-def test_event_page_index_skips_the_table_without_polls(api, fresh_app, monkeypatch):
+def test_event_page_index_keeps_the_table_without_polls(api, fresh_app, monkeypatch):
+    # the table section also holds the fan and the downloads: it stays in the index without polls
     from mtpy.lib.pages import promedios
     real = promedios.bundle_part
     monkeypatch.setattr(promedios, 'bundle_part', lambda read, scope, run, name: None if name == 'polls' else real(read, scope, run, name))
     page = html(call(api, '/es')[2])
-    assert 'href="#tabla"' not in page and 'id="polls"' not in page and 'href="#promedio"' in page
+    assert 'href="#tabla"' in page and 'id="tabla"' in page and 'id="polls"' not in page and 'href="#promedio"' in page
+    assert 'Los sondeos se descargan en CSV' not in page
 
 
 def test_event_page_region(api, fresh_app):

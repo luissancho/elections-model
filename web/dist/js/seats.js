@@ -212,3 +212,23 @@ export function parseCoalition(hash, parties) {
 export function coalitionHash(names) {
   return names.length ? `#${COALITION_KEY}${names.map(encodeURIComponent).join(',')}` : '';
 }
+
+/**
+ * Ask for the dist part of a run, which the event page does not embed (too heavy: Luis, 2026-11-04).
+ *
+ * @param {string} href the JSON route of the part (`initial.dist_href`)
+ * @param {function} [fetchImpl] `fetch` or a stand-in with its signature (the tests)
+ * @returns {Promise<object>} the part (the `data` of the envelope of the API); rejected when the request fails, the
+ *   response is not OK or its body has no `data`
+ */
+export async function loadDist(href, fetchImpl = fetch) {
+  const response = await fetchImpl(href, {headers: {Accept: 'application/json'}});
+  if (!response.ok) {
+    throw new Error(`Could not load the simulations: HTTP ${response.status}`);
+  }
+  const body = await response.json();
+  if (!body || typeof body.data !== 'object' || body.data === null) {
+    throw new Error('Could not load the simulations: no data in the response');
+  }
+  return body.data;
+}

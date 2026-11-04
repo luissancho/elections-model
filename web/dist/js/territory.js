@@ -1,5 +1,6 @@
-// Pure logic of "Resultados por territorio" of Escaños: rows by province or by community, in seats or in vote,
-// winners, cell tints and sorting. The page script only reads the controls, calls these functions and writes the DOM.
+// Pure logic of "Resultados por territorio" of the event page: rows by province or by community, in seats or in
+// vote, winners, cell tints, sorting and the party rows of one district. The page script only reads the controls,
+// calls these functions and writes the DOM.
 import {fmtRange} from './format.js';
 
 /** Highest alpha of a cell tint. */
@@ -210,4 +211,17 @@ export function sortTerritory(rows, key, asc) {
     }
     return sign * (x - y) || a.name.localeCompare(b.name, 'es');
   });
+}
+
+/**
+ * Party rows of one district, the mirror of `region_rows` of `pages/escanos.py`.
+ *
+ * @param {object} districts the districts part (`rows`)
+ * @param {number} regionId district id
+ * @returns {object[]} the rows of that district with a vote (those with `pct` null are dropped: the party does not
+ *   stand there), by `seats` and then `pct`, both descending; a stable sort, so full ties keep the order of the part
+ */
+export function regionRows(districts, regionId) {
+  const rows = (districts.rows || []).filter((row) => row.region_id === regionId && isNumber(row.pct));
+  return rows.sort((a, b) => ((b.seats || 0) - (a.seats || 0)) || ((b.pct || 0) - (a.pct || 0)));
 }

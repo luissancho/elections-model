@@ -174,3 +174,22 @@ def test_chart_containers_have_aria_labels():
         # the class `chart` itself, not a wrapper whose class only starts with it (`chart-scroll`)
         for tag in re.findall(r'<div[^>]*class="chart(?: [^"]*)?"[^>]*>', text):
             assert 'aria-label="' in tag and 'role="img"' in tag, (os.path.basename(path), tag)
+
+
+def test_event_page_js_finds_its_elements_and_shares_the_seats_wiring():
+    """Every id the event page looks up by name exists in its templates, and the seats wiring lives in one module,
+    imported by the event page and by the old seats page."""
+    names = ('promedios.html', 'base.html', '_polls_table.html', '_event_bar.html')
+    text = ''.join(open(os.path.join(TEMPLATES, name), encoding='utf-8').read() for name in names)
+    ids = set(re.findall(r'id="([\w-]+)"', text)) | set(re.findall(r"download_button\('([\w-]+)'", text))
+    pages = os.path.join(DIST, 'js', 'pages')
+    missing = []
+    for name in ('promedios.js', 'seats-wire.js', 'evolution-wire.js', 'series-wire.js', 'polls-wire.js'):
+        with open(os.path.join(pages, name), encoding='utf-8') as fh:
+            missing += [(name, ref) for ref in re.findall(r"getElementById\('([\w-]+)'\)", fh.read()) if ref not in ids]
+    assert missing == []
+    for name in ('promedios.js', 'escanos.js'):
+        with open(os.path.join(pages, name), encoding='utf-8') as fh:
+            text = fh.read()
+        assert "from './seats-wire.js'" in text, name
+        assert 'function wireCoalition' not in text and 'function wireTerritory' not in text, name

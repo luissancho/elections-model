@@ -131,3 +131,23 @@ def test_community_vote_counts_a_province_where_the_party_does_not_stand_as_zero
     out = run_js('t.territoryRows(d, s, u, {level: "ccaa", mode: "pct"})', districts)
     canarias = next(row for row in out['rows'] if row['name'] == 'Canarias')
     assert canarias['values']['VOX'] == 6.0 and canarias['values']['PP'] == 25.0
+
+
+def test_region_rows_mirror_python():
+    """`regionRows` es el espejo de `region_rows` de Python: sin las filas sin voto y por escaños, luego por voto."""
+    from mtpy.lib.pages.escanos import region_rows
+
+    def row(name, pct, seats):
+        return dict(_row(8, 'Barcelona', name, pct, 0, 1), seats=seats)
+
+    rows = [row('VOX', 12.5, 2), row('PSOE', None, None), row('PP', 25.0, 5), _row(17, 'Girona', 'PP', 20, 1, 3)]
+    districts = dict(DISTRICTS, rows=rows)
+    out = run_js('t.regionRows(d, 8)', districts)
+    assert [r['name'] for r in out] == ['PP', 'VOX']
+    assert out == region_rows(districts, 8)
+    # a tie in seats is broken by the vote, the order of the input kept on a full tie (stable)
+    tied = [row('A', 10.0, 2), row('B', 15.0, 2), row('C', 10.0, 2), row('D', 5.0, 3)]
+    districts = dict(DISTRICTS, rows=tied)
+    out = run_js('t.regionRows(d, 8)', districts)
+    assert [r['name'] for r in out] == ['D', 'B', 'A', 'C'] and out == region_rows(districts, 8)
+    assert run_js('t.regionRows(d, 99)', districts) == []

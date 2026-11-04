@@ -66,3 +66,15 @@ def test_coalition_caption_gives_the_simulations_the_central_seats_and_the_range
     caption = run_js('s.coalitionCaption({n: 1000, median: 201, lo: 181, hi: 220.5, pMajority: 0.992}, 202)')
     assert caption == [{'label': 'Simulaciones', 'value': '1.000'}, {'label': 'Reparto central', 'value': '202'},
                        {'label': 'Rango 95%', 'value': '181–221'}]
+
+
+def test_load_dist():
+    """`loadDist` resuelve con la parte (el `data` del sobre de la API) de una respuesta correcta y rechaza la promesa con
+    una que no lo es."""
+    ok = run_js('await s.loadDist("/x", async (href) => ({ok: true, json: () => ({schema: "dist@1", data: {parties: ["PP"], href}})}))')
+    assert ok == {'parties': ['PP'], 'href': '/x'}
+    failed = run_js('await s.loadDist("/x", async () => ({ok: false, status: 503})).then(() => "resolved", (error) => error.message)')
+    assert failed != 'resolved' and '503' in failed
+    # a network failure, or a body without the envelope, rejects too
+    assert run_js('await s.loadDist("/x", async () => { throw new Error("offline"); }).then(() => "resolved", () => "rejected")') == 'rejected'
+    assert run_js('await s.loadDist("/x", async () => ({ok: true, json: () => ({parties: ["PP"]})})).then(() => "resolved", () => "rejected")') == 'rejected'

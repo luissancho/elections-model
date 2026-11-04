@@ -516,7 +516,7 @@
           bloque, los escaños de cada simulación, las circunscripciones, el reparto central y el abanico.
         </p>
         <p>Los datos son los del run que ves, así que cambian si cambias el modo o fijas otro run.</p>
-        <p>Los sondeos se descargan en CSV desde la tabla «Todas las encuestas».</p>
+        {% if table_total %}<p>Los sondeos se descargan en CSV desde la tabla «Todas las encuestas».</p>{% endif %}
         {% endcall %}
       {{ m.card_end() }}
       </section>
