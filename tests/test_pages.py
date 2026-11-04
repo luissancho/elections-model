@@ -2835,6 +2835,10 @@ def test_metodo_rating_check_card_shows_the_live_figures(api, fresh_app):
     assert 'la correlación de rango es negativa y su intervalo no llega a 0' in flat
     assert 'el intervalo de la diferencia incluye el 0' in flat and 'con 2.000 réplicas' in flat
     assert 'id="rating-check-download"' in page and initial['rating_check']['fit'] is None
+    # the line of the live-model backtest (method 16, test 1a) carries its run date and figures, no marker
+    assert '{fecha}' not in page and '{cifras}' not in page
+    assert 'pruebas históricas del modelo completo, el 4 de noviembre de 2026,' in flat
+    assert 'pasa de 2,37 a 2,39 puntos por partido en las generales (28 casos de cinco elecciones)' in flat
 
 
 def write_rating_check(fs, data):

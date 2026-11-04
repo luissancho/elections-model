@@ -1,6 +1,6 @@
 # Fase C: ¿sirve el rating de encuestadoras? Validación fuera de muestra y publicación
 
-Fecha: 2026-11-04. Estado: APROBADA por Luis el 2026-11-04 (enfoque B; tarjeta «Cómo lo comprobamos» fusionada).
+Fecha: 2026-11-04. Estado: CONSTRUIDA en dev el 2026-11-04 (aprobada por Luis el mismo día, enfoque B; tarjeta «Cómo lo comprobamos» fusionada). Resultados al final y en `docs/analisis-2026-09/metodo-16-rating.md`.
 
 ## Intención
 
@@ -355,3 +355,59 @@ tarea (`rating_pool` de 18 ámbitos ya lo paga `compute ratings`; estimación: 1
 - La parte se publica sólo en el análisis nacional; la tarjeta va en /metodo/rating tras «Un ranking global».
 - Las cifras del backtest del modelo vivo (D1) van al método 16 y a una línea de la tarjeta, no al bundle.
 - La tarjeta publica el resultado aunque sea neutro o negativo (lo aprobado en el enfoque B).
+
+## Resultados (2026-11-04)
+
+Detalle, tablas por ámbito y horizonte y salvedades en `docs/analisis-2026-09/metodo-16-rating.md`. La parte
+`rating-check` del análisis nacional se publicó en el sitio real el 2026-11-04 a las 18:26.
+
+**Prueba 1a (modelo vivo, `results_rated` frente a `results_flat`, misma base y semilla, `n_sim` 1.000).**
+Diferencia plano − con rating, media de los casos; mejor / peor cuenta los casos en que gana o pierde el plano.
+
+| Población | MAE de voto | CRPS de escaños | Brier de mayorías | Cobertura del 95 % |
+|---|---|---|---|---|
+| Generales (28 casos, 5 elecciones) | 2,3737 → 2,3926 (+0,8 %, 13 / 15) | 7,2361 → 7,3061 (+1,0 %, 10 / 12) | 0,0775 → 0,0706 (−8,9 %, 10 / 12) | 0,856 → 0,863 |
+| Autonómicas (66 casos, 11 elecciones) | 2,5102 → 2,5208 (+0,4 %, 32 / 33) | 2,6430 → 2,6612 (+0,7 %, 30 / 33) | 0,0209 → 0,0215 (+3,3 %, 16 / 20) | 0,852 → 0,847 |
+
+El Brier de las generales lo decide 2023 (sus seis casos son los seis mayores a favor del plano; sin 2023 el plano
+empeora: voto +1,6 %, CRPS +3,1 %, Brier +16,4 %). MAE de voto de `es` por horizonte (con rating / plano): 6 días
+1,699 / 1,702; 14: 1,976 / 1,929; 30: 2,168 / 2,198; 60: 2,803 / 2,911; 90: 2,838 / 2,859; 180: 3,015 / 2,999.
+Frente a las líneas base sin rating (último sondeo 2,452 y media de 4 semanas 2,382 en las generales; 2,717 y 2,634
+en las autonómicas), el modelo gana con y sin rating salvo el plano de las generales frente a la media de 4 semanas
+(+0,010). Juicio: dentro del ±2 % en voto y escaños en las dos poblaciones; el Brier y la cobertura se mueven en
+sentidos opuestos por población, sobre diferencias que no se distinguen del ruido. Lectura declarada: **el rating es
+cosmético para la predicción del modelo vivo.**
+
+**Prueba 1b (promedio simple de los 30 días anteriores, con rating − sin rating, IC 95 % por bootstrap de elecciones).**
+
+| Población | Elecciones | Sin / con rating | Diferencia (IC 95 %) | Mejor / peor con rating |
+|---|---|---|---|---|
+| Todas | 71 | 1,929 / 1,940 | +0,011 (−0,020 a +0,048), +0,5 % | 37 / 34 |
+| Generales | 13 | 1,657 / 1,661 | +0,004 (−0,058 a +0,066) | 7 / 6 |
+| Autonómicas | 58 | 1,990 / 2,002 | +0,012 (−0,020 a +0,060) | 30 / 28 |
+
+**Prueba 2 (942 pares casa-elección, 112 casas, 78 elecciones; IC 95 % por bootstrap de casas).**
+
+| Población | Spearman | β | Acierto del rating | Acierto de la calidad previa | Cuarto con más / menos rating (puntos) |
+|---|---|---|---|---|---|
+| Todas | −0,18 (−0,24 a −0,08) | 0,44 (−0,02 a 0,72) | −3,7 % | −16,1 % | 2,71 / 3,28 |
+| Generales | −0,12 (−0,23 a +0,02) | 0,06 (−0,45 a 0,50) | −13,1 % | −24,4 % | 2,68 / 3,23 |
+| Autonómicas | −0,21 (−0,28 a −0,08) | 0,55 (−0,01 a 0,92) | +0,5 % | −12,4 % | 2,72 / 3,29 |
+
+Lectura: el rating ordena un poco a las casas (sobre todo en las autonómicas; en las generales solas no se
+distingue), con una contracción que se queda corta (β < 1); no predice el tamaño de la desviación de una casa
+(acierto relativo nulo o negativo) y no mejora ni el promedio simple ni el modelo vivo. Defiende el ranking como
+orden aproximado, no como predicción.
+
+**Decisión propuesta sobre C2 (la decide Luis).** Nada antes del 29-N. Tras el 29-N, con la sexta general en las
+cifras (`compute ratings` + `publish analysis` de `es` con `rating_check`), un C2 acotado a τ (o k) y, como mucho,
+al peso de la calidad previa, con la prueba 2 como juez (ECM fuera de muestra de `d_obs` predicho con −τ·Φ⁻¹(R),
+bootstrap por casa; condiciones: intervalo de β que incluya el 1 y acierto relativo del rating no negativo), tras
+medir cuánto de β < 1 es atenuación por la contracción de `d_obs` por sondeo. El peso del rating en el promedio se
+queda como está: la prueba 1a no da cifra que pida cambiarlo, en ningún sentido. La mezcla 0,7/0,3, el 0,5
+autonómico y el 0,9 por año no se tocan: nada aquí apunta a ellos.
+
+**Pasos de Luis que quedan.** Revisar /metodo/rating con el bundle real (`check_app_s3.py`); integrar `dev` y
+desplegar antes del 17-11 o tras el 29-N; tras el 29-N, `compute '{"what":["compute","ratings"],"scopes":"all"}'`
+y de nuevo `publish '{"what":["analysis"],"scopes":["es"],"rating_check":true}'` (y, al cambiar las cifras del
+backtest del modelo vivo, la línea fechada de la tarjeta).

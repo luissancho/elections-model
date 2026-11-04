@@ -746,9 +746,15 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         </div>
         {% endif %}
         <p>
-          También repetimos las pruebas históricas del modelo completo, el {fecha}, con el rating y con todas las
-          encuestadoras pesando lo mismo, con el mismo código y los mismos datos: {cifras}. Los periodos, las métricas y los
-          cortes de evaluación se detallan en <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
+          También repetimos las pruebas históricas del modelo completo, el 4 de noviembre de 2026, con el rating y
+          con todas las encuestadoras pesando lo mismo, con el mismo código y los mismos datos. Sin el rating, el error
+          medio del voto pasa de 2,37 a 2,39 puntos por partido en las generales (28 casos de cinco elecciones) y de
+          2,51 a 2,52 en las autonómicas (66 casos de once elecciones), y el CRPS de los escaños sube un 1% o menos: dentro del 2%
+          con el que juzgamos cualquier cambio del modelo, con casi tantos casos mejores como peores, y las bandas del
+          95% cubren casi lo mismo. El Brier de la probabilidad de mayoría baja un 9% sin el rating en las generales,
+          pero es cosa de 2023: sin esa elección, sube un 16%. En las autonómicas sube un 3%. En el modelo completo,
+          el rating apenas mueve la predicción. Los periodos, las métricas y los cortes de evaluación se detallan en
+          <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
         </p>
         {% call m.how() %}
         <p>

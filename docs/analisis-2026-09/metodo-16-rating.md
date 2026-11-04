@@ -55,9 +55,9 @@ Los pares pesan igual (cada elección pesa por sus casas); no se aplica `weight_
 
 Coste: `rating_check_data` sobre 18 ámbitos, 188 s, y el resumen con sus bootstraps, 58 s (medida del 04-11-2026 en el portátil, contra la base de AWS, sólo lectura). Por eso la parte sólo se recalcula con `rating_check: true` del job `publish`, nunca desde `update`.
 
-## ¿Mejora el promedio? (modelo vivo, prueba 1a)
+## ¿Mejora el promedio? (modelo vivo, prueba 1a, 04-11-2026)
 
-**Pendiente de las corridas.** Las cuatro corridas están en marcha en el portátil (04-11-2026), en dos carpetas hermanas ignoradas por git:
+Las cuatro corridas del 04-11-2026 en el portátil, en dos carpetas hermanas ignoradas por git, con la misma base (`es`: 3.753 sondeos hasta el 01-11-2026), `n_sim` 1.000 y semilla 42:
 
 ```bash
 python backtest/run_backtest.py --scope es --out backtest/results_rated
@@ -66,7 +66,72 @@ python backtest/run_backtest.py --scopes es-md es-an es-ct es-vc es-ga --out bac
 python backtest/run_backtest.py --scopes es-md es-an es-ct es-vc es-ga --flat-ratings --out backtest/results_flat
 ```
 
-Cuando acaben: `run.json` de `results_flat` con `flat_ratings: true` y el de `results_rated` con `false`; las tablas de `by_horizon.csv` y `metrics.csv` emparejadas por (`event_date`, `horizon`), con las diferencias de `mae_shares`, `crps_seats`, `brier_vs` y `cov_shares95` en % y en puntos o escaños, el recuento mejor / peor por métrica, la comparación con `mae_last_poll` / `mae_mean_4w` y el juicio del criterio 17, por ámbito y horizonte. Esas tablas y la línea con fecha de la tarjeta («También repetimos las pruebas históricas del modelo completo…», hoy con los marcadores `{fecha}` y `{cifras}`) son la Task 8b.
+Comprobaciones: `run.json` con `flat_ratings: true` en las seis carpetas de `results_flat` y `false` en las seis de `results_rated`; 28 casos en `es` (5 generales; 2016 y noviembre de 2019 sin el horizonte de 180 días) y 66 en los autonómicos (18 de `es-md`, 12 de cada uno de los otros cuatro; 11 elecciones); ningún `OperationalError` en el log. Los `run.json` llevan los commits 64b6233, 6b97648 y 6e9d2b9 según la hora de cada corrida: entre ellos sólo cambian documentos, la web y sus tests, no el modelo. La corrida de `es` con rating se rehízo entera al final tras un corte de red. Las líneas base `mae_last_poll`, `mae_mean_4w` y `mae_prev_result` salen idénticas en las dos carpetas, caso a caso (no dependen del rating).
+
+Emparejado por (ámbito, `event_date`, `horizon`), la diferencia es plano − con rating (positiva: quitar el rating empeora), media sobre los casos con la métrica; «mejor / peor» cuenta los casos en que el plano gana o pierde (en la cobertura, gana si cubre más); los empates aparte.
+
+### Por población
+
+| Población | Métrica | Casos | Con rating | Plano | Diferencia | Plano mejor / peor (empates) |
+|---|---|---|---|---|---|---|
+| Generales (5 elecciones) | MAE de voto (puntos) | 28 | 2,3737 | 2,3926 | +0,019 (+0,8 %) | 13 / 15 |
+| | CRPS de escaños | 22 | 7,2361 | 7,3061 | +0,070 escaños (+1,0 %) | 10 / 12 |
+| | Brier de mayorías | 22 | 0,0775 | 0,0706 | −0,0069 (−8,9 %) | 10 / 12 |
+| | Cobertura del 95 % | 28 | 0,8560 | 0,8631 | +0,7 pp | 1 / 0 (27) |
+| Autonómicas (11 elecciones) | MAE de voto (puntos) | 66 | 2,5102 | 2,5208 | +0,011 (+0,4 %) | 32 / 33 (1) |
+| | CRPS de escaños | 66 | 2,6430 | 2,6612 | +0,018 escaños (+0,7 %) | 30 / 33 (3) |
+| | Brier de mayorías | 66 | 0,0209 | 0,0215 | +0,0007 (+3,3 %) | 16 / 20 (30) |
+| | Cobertura del 95 % | 66 | 0,8515 | 0,8470 | −0,45 pp | 3 / 4 (59) |
+| Todas (94 casos) | MAE de voto (puntos) | 94 | 2,4695 | 2,4826 | +0,013 (+0,5 %) | 45 / 48 (1) |
+| | CRPS de escaños | 88 | 3,7913 | 3,8225 | +0,031 escaños (+0,8 %) | 40 / 45 (3) |
+| | Brier de mayorías | 88 | 0,0350 | 0,0338 | −0,0012 (−3,4 %) | 26 / 32 (30) |
+| | Cobertura del 95 % | 94 | 0,8528 | 0,8518 | −0,1 pp | 4 / 4 (86) |
+
+**El Brier de las generales lo decide 2023.** El plano gana en menos casos de los que pierde (10 / 12) y aun así su media mejora un 8,9 %: los seis casos de 2023 son los seis mayores a su favor (de −0,028 a −0,052 cada uno; Brier medio de la elección, 0,187 → 0,146), y de los otros 16 pierde 12, con el mayor en noviembre de 2019 a 90 días (+0,044). Sin 2023 (22 casos, 16 con Brier), el plano empeora en voto, escaños y mayorías (la cobertura sube 0,9 puntos porcentuales): MAE de voto 2,370 → 2,407 (+1,6 %, 8 / 14), CRPS 7,42 → 7,65 (+3,1 %, 4 / 12) y Brier 0,036 → 0,042 (+16,4 %, 4 / 12). En 2023 el plano también acierta más en voto (2,389 → 2,340) y en escaños (CRPS 6,75 → 6,39). Por elección, el MAE de voto con rating / plano: 2015 2,496 / 2,447; 2016 2,482 / 2,584; abril de 2019 2,197 / 2,243; noviembre de 2019 2,312 / 2,378; 2023 2,389 / 2,340. La de 2015 no tiene escaños válidos ni Brier.
+
+**El Brier de las autonómicas es pequeño y lo mueven pocos casos.** 30 de los 66 casos empatan (probabilidades de mayoría de 0 o 1 que aciertan con los dos pesos: casi todos los de `es-ct` y `es-an`); la media sube de 0,0209 a 0,0215, con las mayores diferencias en `es-md` 2021 a 30 días (+0,027) y 2019 (−0,041 a 14 días, +0,020 a 6), Galicia 2024 y Valencia 2023. La cobertura baja 0,45 puntos porcentuales con sólo 7 casos que cambian (3 / 4), el mayor en Galicia 2020 (0,750 → 0,667 de media en la elección).
+
+### Por ámbito (autonómicos)
+
+| Ámbito | Casos | MAE de voto (con / plano, %) | CRPS de escaños (con / plano, %) | Brier (con / plano) | Cobertura del 95 % (con / plano) |
+|---|---|---|---|---|---|
+| `es-md` | 18 | 2,889 / 2,927 (+1,3 %, 6 / 12) | 3,671 / 3,746 (+2,0 %, 4 / 14) | 0,0392 / 0,0380 | 0,815 / 0,806 |
+| `es-an` | 12 | 1,754 / 1,739 (−0,8 %, 6 / 6) | 1,964 / 1,976 (+0,6 %, 5 / 7) | 0,0000 / 0,0000 | 0,911 / 0,942 |
+| `es-ct` | 12 | 2,162 / 2,165 (+0,1 %, 6 / 6) | 2,632 / 2,603 (−1,1 %, 8 / 4) | 0 / 0 | 0,833 / 0,833 |
+| `es-vc` | 12 | 1,947 / 1,926 (−1,0 %, 10 / 2) | 1,956 / 1,937 (−1,0 %, 9 / 3) | 0,0333 / 0,0359 | 0,958 / 0,958 |
+| `es-ga` | 12 | 3,610 / 3,644 (+0,9 %, 4 / 7) | 2,477 / 2,503 (+1,0 %, 4 / 5) | 0,0227 / 0,0256 | 0,758 / 0,717 |
+
+Ningún ámbito pasa del ±2 % en el MAE de voto; en el CRPS, `es-md` llega al +2,0 % (4 / 14).
+
+### Por horizonte (MAE de voto, en puntos)
+
+| Días | Generales: con rating / plano | % | Plano mejor / peor | Autonómicas: con rating / plano | % | Plano mejor / peor |
+|---|---|---|---|---|---|---|
+| 6 | 1,699 / 1,702 | +0,2 % | 2 / 3 | 1,559 / 1,558 | −0,0 % | 4 / 7 |
+| 14 | 1,976 / 1,929 | −2,4 % | 4 / 1 | 1,985 / 2,008 | +1,2 % | 5 / 6 |
+| 30 | 2,168 / 2,198 | +1,4 % | 2 / 3 | 2,309 / 2,372 | +2,7 % | 2 / 9 |
+| 60 | 2,803 / 2,911 | +3,8 % | 1 / 4 | 2,943 / 2,928 | −0,5 % | 8 / 3 |
+| 90 | 2,838 / 2,859 | +0,7 % | 2 / 3 | 2,878 / 2,913 | +1,2 % | 6 / 5 |
+| 180 | 3,015 / 2,999 | −0,6 % | 2 / 1 | 3,389 / 3,346 | −1,2 % | 7 / 3 |
+
+Con cinco casos por horizonte en las generales (tres a 180 días) y once en las autonómicas, ningún horizonte separa nada: el signo cambia de un horizonte al siguiente. El CRPS de las generales va igual (+1,1 %, −2,4 %, +1,2 %, +3,6 %, +1,5 %, −1,4 %) y su Brier mejora con el plano en todos los horizontes salvo 90 días, por 2023.
+
+### Frente a los promedios sin rating
+
+| Población | Modelo con rating | Modelo plano | Último sondeo | Media de 4 semanas | Casos en que gana al último sondeo (con / plano) | A la media de 4 semanas (con / plano) |
+|---|---|---|---|---|---|---|
+| Generales | 2,374 | 2,393 | 2,452 | 2,382 | 14 / 15 de 28 | 17 / 15 de 28 |
+| Autonómicas | 2,510 | 2,521 | 2,717 | 2,634 | 43 / 44 de 66 | 42 / 42 de 66 |
+
+Las dos líneas base ya son promedios sin rating. En las autonómicas el modelo les gana con y sin rating, por 0,1-0,2 puntos. En las generales el modelo con rating queda 0,009 puntos por debajo de la media de 4 semanas y el plano 0,010 por encima: la ventaja del modelo sobre esa media en las generales es del mismo tamaño que lo que mueve el rating, una centésima de punto, y con 28 casos ninguna de las dos se distingue de 0 (17 / 11 y 15 / 13 casos).
+
+### Juicio (criterio 17)
+
+Leído como el cambio «quitar el rating»: en el MAE de voto y el CRPS de escaños, el plano queda dentro del ±2 % en las dos poblaciones (+0,8 % y +1,0 % en las generales; +0,4 % y +0,7 % en las autonómicas), con los casos mejor / peor casi a la par. El Brier se mueve en sentidos opuestos: −8,9 % en las generales (por 2023; sin ella, +16 %) y +3,3 % en las autonómicas, fuera del ±2 % pero sobre un error de 0,02 con la mitad de los casos empatados. La cobertura del 95 % sube 0,7 puntos porcentuales en las generales y baja 0,45 en las autonómicas. Estrictamente, el plano no pasa el criterio 17 en las autonómicas (Brier y cobertura); con este tamaño de las diferencias, ni lo pasa ni lo suspende por algo que se distinga del ruido.
+
+La lectura declarada de antemano se cumple: **plano ≈ con rating dentro del ±2 % en voto y escaños, así que el rating es cosmético para la predicción del modelo vivo.** El signo, si acaso, favorece al rating por muy poco (+0,5 % de error de voto sin él en los 94 casos), salvo en 2023, la general en la que también el promedio simple con rating falló más que sin él (+0,125 puntos en la prueba 1b). Coincide con la prueba 1b (+0,5 % en el promedio simple, con rating peor; aquí, sin rating peor): en los dos casos, el rating mueve el error del promedio un 0,5 %, en un sentido o en otro.
+
+Las tablas salen de un script de scratch (no commiteado) que lee `metrics.csv` de las dos carpetas y empareja los casos; en `es`, el `by_horizon.csv` de cada carpeta da las mismas medias por horizonte (en los autonómicos, `by_horizon.csv` es por ámbito).
 
 ## Resultados (pruebas 1b y 2, 04-11-2026)
 
@@ -124,8 +189,9 @@ Las generales, una a una (diferencia con rating − sin rating, en puntos): 1986
 - **La contracción se queda corta.** β = 0,44 y el intervalo no llega a 1 (0,72 como mucho): la desviación prevista exagera las diferencias, aunque ya va muy contraída. El intervalo toca el 0 (−0,02), así que no se puede descartar que la desviación prevista no anticipe nada. En las generales β = 0,06 (−0,45 a 0,50): no se distingue de no anticipar nada, y el intervalo descarta el 1.
 - **El acierto relativo es nulo.** Predecir la desviación con el rating es un 3,7 % peor que predecir 0 (un 13 % peor en las generales, un 0,5 % mejor en las autonómicas). No contradice al Spearman: el rating ordena algo, pero exagera el tamaño de las desviaciones (β < 1), y lo que gana con el orden lo pierde con la exageración. La calidad previa sola es **peor que nada** (−16 %; −24 % en las generales): leída como desviación con −τ·Φ⁻¹(*Q*), la rúbrica predice mal. Una explicación probable, no medida: la previsión de la calidad previa es asimétrica. *Q* va de 0,05 a 0,64, así que −τ·Φ⁻¹(*Q*) va de +0,016 a −0,0036: prevé desviaciones positivas, a veces grandes, y nunca negativas de más de 0,0036. *R* también baja a 0,05 (+0,016), pero sube hasta 0,85 (−0,010), así que el rating prevé a los dos lados de 0. Las medias no lo explican: 0,42 la de *Q* y 0,43 la de *R*.
 - **El promedio no mejora con el rating.** En 71 elecciones, el promedio simple de la última campaña con el rating yerra 0,011 puntos más que sin él, un 0,5 %, con un intervalo de −0,020 a +0,048 que incluye el 0, y 37 elecciones mejoran frente a 34 que empeoran. La diferencia media queda dentro del ±2 % en las tres poblaciones. Es lo esperable con un orden débil: aunque los pesos por rating difieren bastante (en 2023, 0,57 el CIS y 2,36 GAD3), el error de cada promedio lo domina lo que fallan todas las casas a la vez, y el orden del rating explica una parte pequeña de lo que se separan.
+- **El modelo vivo tampoco cambia (prueba 1a).** Sin el rating, el MAE de voto del backtest sube un 0,8 % en las generales y un 0,4 % en las autonómicas, y el CRPS de escaños un 1,0 % y un 0,7 %, con los casos mejor / peor casi a la par: dentro del ±2 %. El Brier de mayorías baja un 8,9 % en las generales sólo por 2023 (sin ella, sube un 16 %) y sube un 3,3 % en las autonómicas, sobre un error de 0,02 con la mitad de los casos empatados. Es la prueba 1b con el modelo entero: el rating mueve el error del promedio un 0,5 % (aquí a su favor, allí en contra), sin un signo que se distinga del ruido.
 
-En una frase: el rating discrimina un poco entre casas, sobre todo en las autonómicas, con una contracción que se queda corta; no sirve para predecir el tamaño de la desviación de una casa y no mejora el promedio. Defiende el ranking como orden aproximado, no como predicción.
+En una frase: el rating discrimina un poco entre casas, sobre todo en las autonómicas, con una contracción que se queda corta; no sirve para predecir el tamaño de la desviación de una casa y no mejora el promedio, ni el simple ni el del modelo. Defiende el ranking como orden aproximado, no como predicción.
 
 ## Decisión (propuesta)
 
@@ -133,17 +199,17 @@ La fase C2 (afinar parámetros del rating con la verosimilitud fuera de muestra 
 
 - **La pendiente dice en qué dirección**: β = 0,44 con el intervalo por debajo de 1 pide una contracción más fuerte, es decir, un τ menor (y con él k = (σ/τ)² mayor). Coincide con lo que ya dice la tarjeta «Qué límites tiene el rating» (τ = 0,01 parece ancha frente a la dispersión real de las medias de casa: unos 0,0034 descontado el ruido, como en el Problema; 0,006 sin descontarlo, en las casas con cinco o más elecciones). Es el único parámetro sobre el que hay una cifra que apunte.
 - **El acierto negativo de la calidad previa cuestiona el peso de la rúbrica** (k·*Q* en `R = (W·R_aj + k·Q)/(W + k)`, unas 2 elecciones de evidencia) o su traducción a desviación. Pero el Spearman de las casas con poca evidencia (−0,18), en cuyo rating el prior pesa cerca de la mitad o más (k = 1,96 frente a W < 2), dice que la rúbrica ordena algo: el problema es de escala, no de orden.
-- **Nada dice que el promedio fuera a mejorar.** El rating mueve el promedio simple un 0,5 %, dentro del ruido. Un C2 cambiaría el orden y las notas del ranking, no la predicción. La mezcla 0,7/0,3, el 0,5 autonómico y el 0,9 por año no tienen ninguna cifra aquí: afinarlos sería una búsqueda a ciegas que perseguiría ruido.
+- **Nada dice que el promedio fuera a mejorar.** El rating mueve el promedio simple un 0,5 % y el error de voto del modelo vivo otro 0,5 % (en sentido contrario), dentro del ruido las dos veces. Un C2 cambiaría el orden y las notas del ranking, no la predicción. La mezcla 0,7/0,3, el 0,5 autonómico y el 0,9 por año no tienen ninguna cifra aquí: afinarlos sería una búsqueda a ciegas que perseguiría ruido.
 
 Recomendación, sin decidir:
 
 1. **Nada antes del 29-N.** Cambiar el orden del ranking en campaña es un anti-objetivo de la spec, y las cifras no dan una mejora de la predicción que lo justifique.
 2. **Tras el 29-N**, con la sexta general en las cifras (`compute '{"what":["compute","ratings"],"scopes":"all"}'` y `publish analysis` de `es` con `rating_check`), un C2 **acotado** a τ (o k) y, como mucho, al peso de la calidad previa, con este juez: el ECM fuera de muestra de `d_obs` predicho con −τ·Φ⁻¹(*R*) sobre todos los pares (o su verosimilitud normal), bootstrap por casa, y como condiciones que el intervalo de β incluya el 1 y que el acierto relativo del rating no sea negativo. Antes de afinar τ con β hay que medir cuánto de β < 1 es la atenuación por la contracción de `d_obs` sondeo a sondeo (Salvedades): por ejemplo β por tramos del número de sondeos de la elección (10 no separa nada; 30 o más sí separaría).
-3. **El peso del rating en el promedio se queda como está** mientras la prueba 1a no diga otra cosa: si el backtest plano queda dentro del ±2 %, el rating es cosmético para la predicción, y quitarlo o dejarlo es una decisión de presentación, no de acierto.
+3. **El peso del rating en el promedio se queda como está.** La prueba 1a dio lo declarado de antemano: el backtest plano queda dentro del ±2 % en voto y escaños, así que el rating es cosmético para la predicción, y quitarlo o dejarlo es una decisión de presentación, no de acierto. Quitarlo tampoco pasa limpio el criterio 17 (en las autonómicas, Brier +3,3 % y cobertura −0,45 puntos), y sin 2023 el plano empeora en las generales en voto, escaños y mayorías: no hay cifra que pida el cambio. Tampoco hay que buscar en C2 una mejora del promedio: el juez de C2 es la prueba 2, no el backtest.
 
 ## Salvedades
 
-- **Pocas generales.** 13 elecciones con pares (1986-2023) y 238 pares; en la prueba 1a, 5 generales (28 casos). Todos los intervalos de las generales cruzan el 0, y una sola campaña con pocas casas (1989, 1993) mueve su promedio simple. Las cifras del conjunto las deciden las autonómicas.
+- **Pocas generales.** 13 elecciones con pares (1986-2023) y 238 pares; en la prueba 1a, 5 generales (28 casos). Todos los intervalos de las generales cruzan el 0, y una sola campaña con pocas casas (1989, 1993) mueve su promedio simple. En la prueba 1a, una sola elección (2023) da la vuelta al Brier y al CRPS de las generales. Las cifras del conjunto las deciden las autonómicas.
 - **Autonómicas.** 704 de los 942 pares y 58 de las 71 elecciones del promedio simple, desde 2009. Su rating incluye evidencia de todos los ámbitos con el peso autonómico (0,5), y dos autonómicas del mismo día son dos elecciones que no se ven entre sí. En la prueba 1a sólo entran las cinco de la parte B y las elecciones `featured` desde 2019.
 - **`d_obs` contraída por sondeo y atenuación de β.** `d_obs` es la evidencia del rating, no la desviación cruda (que no se guarda): cada sondeo se contrae con N(0, τ) frente al error de la regresión local, más en las fechas con pocos sondeos. β compara en esa misma escala, la de `d_prev` y la de σ y τ, así que 1 sigue siendo la referencia; pero la contracción variable atenúa β hacia abajo en las elecciones poco sondeadas. La comprobación prevista (`slope_polled`, elecciones con 10 o más sondeos) no separa nada, porque todas los tienen; un corte más alto está en la recomendación.
 - **El consenso de cada fecha incluye a la propia casa.** La línea del error medio frente a la que se mide cada sondeo incluye los sondeos de la casa: en las fechas con pocos sondeos su desviación se acerca a 0 por partida doble (por la línea y por la contracción). Afecta igual a `d_obs` y a la evidencia del rating.
@@ -151,7 +217,7 @@ Recomendación, sin decidir:
 - **La calidad media del respaldo.** Para las casas sin fila de rating, la prueba 1b usa `log1p(q) / log1p(media de q)` con la media de las **casas de esa elección**, mientras que el `Forecaster` usa la media de **todo el catálogo** (`self.pollsters.quality.mean()`). La diferencia sólo afecta a las casas sin rating, que en las elecciones valoradas son pocas, pero el promedio simple no es exactamente el peso del modelo.
 - **Intervalos.** El bootstrap de la prueba 2 remuestrea casas, no elecciones: los pares de una misma elección comparten el error común y el consenso, y esa dependencia no entra en el intervalo, que puede quedarse estrecho. El de la prueba 1b remuestrea elecciones.
 - **`slope_polled` idéntico a `slope`.** Ver arriba: con los datos de hoy es redundante; se conserva en la parte por si una elección futura con pares tuviera menos de 10 sondeos.
-- **Referencia emparejada.** La prueba 1a compara `results_flat` con `results_rated`, corridas el mismo día con el mismo código y la misma base. `backtest/results` (45aaa8b, 01-11-2026) es otro código y otra base (sondeos, ratings, Compromís): se cita sólo como contexto, nunca como par.
+- **Referencia emparejada.** La prueba 1a compara `results_flat` con `results_rated`, corridas el mismo día con el mismo modelo (commits 64b6233 a 6e9d2b9, que sólo difieren en documentos y web) y la misma base. La prueba 1a no tiene intervalos: con 5 generales y 11 autonómicas, los recuentos mejor / peor son la medida de su ruido. `backtest/results` (45aaa8b, 01-11-2026) es otro código y otra base (sondeos, ratings, Compromís): se cita sólo como contexto, nunca como par.
 
 ## Reproducción
 
