@@ -90,8 +90,9 @@ def local_level(polls: pd.DataFrame, index, name: str, window: int, exclude: lis
     Parameters
     ----------
     polls : pandas.DataFrame
-        The polls of the cycle with a ``pollster`` column, an ``end`` column (end of fieldwork as ``Timestamp``) and
-        one float column per party; every published poll counts, with or without sample.
+        The polls of the cycle with ``pollster``, ``weight`` and ``end`` (end of fieldwork as ``Timestamp``) columns
+        and one float column per party; the polls with a weight above zero count, with or without sample (those
+        without weight never entered the average).
     index
         Label of the poll in ``polls``.
     name : str
@@ -104,12 +105,14 @@ def local_level(polls: pd.DataFrame, index, name: str, window: int, exclude: lis
     Returns
     -------
     float or None
-        The plain mean of the shares of the polls of houses other than the poll's and not in ``exclude``, ending
-        within ``± window`` days of it with a finite share; ``None`` with fewer than two such polls.
+        The plain mean of the shares of the polls with weight (a NaN weight counts as zero) of houses other than the
+        poll's and not in ``exclude``, ending within ``± window`` days of it with a finite share; ``None`` with fewer
+        than two such polls.
     """
     own = polls.loc[index]
     near = (polls['end'] - own['end']).abs() <= pd.Timedelta(days=window)
-    others = polls[near & (polls['pollster'] != own['pollster']) & ~polls['pollster'].isin(exclude)][name].dropna()
+    other = (polls['pollster'] != own['pollster']) & ~polls['pollster'].isin(exclude)
+    others = polls[near & other & (polls['weight'] > 0)][name].dropna()
 
     return float(others.mean()) if len(others) >= 2 else None
 

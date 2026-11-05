@@ -109,6 +109,20 @@ def test_local_level_needs_two_other_polls(cycles):
     assert stats.local_level(polls, 0, 'PP', 10, ['CIS', 'Sigma Dos']) is None
 
 
+def test_local_consensus_leaves_out_the_polls_without_weight(cycles):
+    # un sondeo de una cuarta casa con peso 0 y cifras lejanas no mueve el consenso local
+    cycle = cycles['2019-11-10']
+    extra = cycle.polls.iloc[[0]].assign(pollster='Panel X', pollster_id=5, date='2019-11-04',
+                                         start_date='2019-11-04', end_date='2019-11-04', weight=0.0, PP=50.0)
+    polls = pd.concat([cycle.polls, extra], ignore_index=True)
+    dropped = data.Cycle(event_date=cycle.event_date, label=cycle.label, current=cycle.current, polls=polls,
+                         parties=list(cycle.parties), curve=None, errors=dict(cycle.errors),
+                         inputs=dict(cycle.inputs))
+    rows = _rows(dropped)
+    rows = rows[rows['pollster'] != 'CIS']
+    assert stats.dispersion(stats.in_days(rows, 0, 55)) == {'k': 3, 'ratio': 0.96}
+
+
 def test_curve_level_falls_back_to_the_last_day_before():
     curve = pd.DataFrame({'PP': [30.0, 31.0]}, index=pd.to_datetime(['2023-07-01', '2023-07-02']))
     assert stats.curve_level(curve, 'PP', pd.Timestamp('2023-07-09')) == 31.0
