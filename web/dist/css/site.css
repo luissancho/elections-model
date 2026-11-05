@@ -959,9 +959,10 @@ tr.now td { background: var(--color-accent-soft); }
 .shade-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .shade-legend i { width: 14px; height: 10px; border-radius: 3px; }
 #matrix-table td + td { text-align: center; }
-/* the colours of the chart (`matrixOption` with `center: 1`) at a value inside each band: 0,4, 0,6, 0,8, 1,4 and 2 */
+/* the colours of the chart (`matrixOption` with `center: 1`) at a value inside each band: 0,4, 0,6, 0,8, 1,4 and 2;
+   the label in white from the opacity 0,6, as in the chart */
 :is(#matrix-table td, .shade-legend i).h1 { background: rgba(214,39,40,0.90); color: #fff; }
-:is(#matrix-table td, .shade-legend i).h2 { background: rgba(214,39,40,0.75); }
+:is(#matrix-table td, .shade-legend i).h2 { background: rgba(214,39,40,0.75); color: #fff; }
 :is(#matrix-table td, .shade-legend i).h3 { background: rgba(214,39,40,0.45); }
 :is(#matrix-table td, .shade-legend i).h4 { background: #f4f5f8; }
 .shade-legend i.h4 { border: 1px solid var(--color-line-strong); }

@@ -20,7 +20,6 @@
 {%- endmacro %}
 {% set v1, v2, v3 = verdicts %}
 {% set t_below, t_mean, t_sign = tests %}
-{% set params = study_meta.get('params') or {} %}
 {% set n = summary.get('n_cycles') %}
 {% set k1 = summary.get('k_narrowed') %}
 {% set k2 = summary.get('k_below_one') %}
@@ -42,12 +41,14 @@
       <header id="study-head">
         <div class="tags">
           <span class="pill brand">Análisis</span>
-          {% if has_run %}
+          {% if has_run and held %}
+          <span class="pill ok">Página viva · elección celebrada, pendiente del escrutinio</span>
+          {% elif has_run %}
           <span class="pill ok">Página viva · se recalcula con cada actualización{% if veda_date and not after_veda %} hasta la veda del {{ veda_date }}{% endif %}</span>
           {% else %}
           <span class="pill">Evidencia histórica · {{ n|int }} generales</span>
           {% endif %}
-          <span class="pill">{{ n|int }} generales desde {{ since_year or '–' }}{% if has_run and election_day %} · a {{ days_left|int }} días del {{ election_day }}{% endif %}</span>
+          <span class="pill">{{ n|int }} generales desde {{ since_year or '–' }}{% if has_run and election_day and not held %} · a {{ days_left|int }} días del {{ election_day }}{% endif %}</span>
         </div>
         <h1 class="study-title">{{ study_meta.get('title') or '¿Se copian las encuestadoras en la recta final?' }}</h1>
         {% if study_meta.get('subtitle') %}<p class="study-subtitle">{{ study_meta.subtitle }}</p>{% endif %}
@@ -96,14 +97,14 @@
         <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
         <p class="lead">
           Para cada sondeo con muestra publicada medimos cuánto se separa del promedio de su fecha en los
-          {{ params.get('n_series') or 4 }} partidos principales, y lo comparamos con el error que permitiría su
+          {{ n_series|int }} partidos principales, y lo comparamos con el error que permitiría su
           muestra. El cociente es la dispersión: 1 significa que los sondeos difieren entre sí sólo lo que difieren
           sus muestras; 2, el doble. La curva de cada ciclo va de un año antes a la víspera.
         </p>
         <div class="grid2">
           <div>
             <p class="ctitle">Dispersión de los sondeos por semanas hasta la elección</p>
-            <p class="csub">{{ n|int }} generales desde {{ since_year or '–' }}{% if live %} y el ciclo de {{ label_now }}, que se completa cada día{% endif %} · sin el CIS · los {{ params.get('n_series') or 4 }} partidos principales de cada ciclo</p>
+            <p class="csub">{{ n|int }} generales desde {{ since_year or '–' }}{% if live %} y el ciclo de {{ label_now }}, que se completa cada día{% endif %} · sin el CIS · los {{ n_series|int }} partidos principales de cada ciclo</p>
             <div class="chart" id="weeks-chart" role="img" aria-label="Dispersión de los sondeos por semanas hasta la elección en {{ n|int }} generales desde {{ since_year or '–' }}: la media de los ciclos pasados pasa de {{ r(mb) }} en el resto del ciclo a {{ r(mf) }} en las últimas {{ fw }} semanas{% if has_run %}; {{ label_now }}, {{ r((now.get('cycle') or {}).get('ratio')) }} en todo el ciclo{% endif %}"></div>
           </div>
           <div>
@@ -224,7 +225,7 @@
         <div class="grid2">
           <div>
             {% if has_run %}
-            <p class="ctitle">Últimas {{ ww }} semanas de {{ label_now }} · a {{ days_left|int }} días del {{ election_day or '–' }}</p>
+            <p class="ctitle">Últimas {{ ww }} semanas de {{ label_now }} · {% if held %}al cierre de los sondeos{% else %}a {{ days_left|int }} días del {{ election_day or '–' }}{% endif %}</p>
             <p class="csub">Se completa con cada actualización; entran las casas al llegar a {{ min_polls|int }} sondeos con muestra{% if window_start %} desde el {{ window_start }}{% endif %}</p>
             <div class="table-wrap">
               <table id="houses-table">
@@ -312,7 +313,7 @@
           <div>
             <p class="ctitle">Método</p>
             <div class="tech">
-              Para cada sondeo con muestra <i>n</i> y cada uno de los {{ params.get('n_series') or 4 }} partidos principales
+              Para cada sondeo con muestra <i>n</i> y cada uno de los {{ n_series|int }} partidos principales
               del ciclo, el residuo es su cifra menos el promedio en la fecha de fin de campo; la varianza esperada,
               <i>p</i>(1 − <i>p</i>)/<i>n</i> al nivel del promedio. La <b>dispersión</b> de un grupo de sondeos es
               √(media de residuos² / media de varianzas). Las semanas cuentan hasta la elección por la fecha de fin de
@@ -321,7 +322,7 @@
               <i>k</i> − 1 grados de libertad. Se diferencia de la de Método en dos cosas: la referencia es la curva
               publicada, con los sondeos de la propia casa dentro, y la ventana.
               {%- if local %} En {{ names(local) }}, sin curva publicada, el promedio es la media de las demás casas en
-              ±{{ params.get('local_window') or 10 }} días.{% endif %}
+              ±{{ local_window|int }} días.{% endif %}
             </div>
           </div>
         </div>

@@ -78,8 +78,10 @@ function signed(value) {
  * @param {object} opts `cap` (error, in points, of the darkest shade), `positive` and `negative` (hex colours);
  *   with `center` the cells are shaded around it instead: `positive` below with the darkest shade at
  *   `caps.below` from it, `negative` above at `caps.above`, and grey inside `neutral` (`[lo, hi]`); `label` writes
- *   the value inside each cell and `cellText(house, event, value)` gives the text of the tooltip; `bold(event)` says
- *   which columns are named in bold (by default the general elections, `GEN …`) and `rotate` turns their names
+ *   the value inside each cell and `cellText(house, event, cell)` gives the text of the tooltip, `cell` being the
+ *   whole value array of the cell (`[event index, house index, value, ...]`, with the extra items the data carries);
+ *   `bold(event)` says which columns are named in bold (by default the general elections, `GEN …`) and `rotate`
+ *   turns their names
  * @returns {object} the option
  */
 export function matrixOption({events, houses, cells}, {
@@ -125,7 +127,7 @@ export function matrixOption({events, houses, cells}, {
       formatter(params) {
         const [x, y, value] = params.value;
         if (cellText) {
-          return escapeHtml(cellText(houses[y], events[x], value));
+          return escapeHtml(cellText(houses[y], events[x], params.value));
         }
         return `${escapeHtml(houses[y])} · ${escapeHtml(events[x].label)}: `
           + `error en el bloque de izquierdas ${escapeHtml(signed(value))}`;

@@ -21,6 +21,20 @@ function drawWeeks(weeks) {
   }
 }
 
+/**
+ * The tooltip of a cell of the matrix (spec D7): «{casa} · {ciclo}: rebaño {h} ({k} sondeos, p {p})», without the p
+ * when the cell has none.
+ *
+ * @param {string} house the pollster
+ * @param {{label: string}} event the cycle
+ * @param {Array} cell `[x, y, h, k, p]` (`matrix` of `mtpy/lib/pages/herd.py`)
+ * @returns {string} the text
+ */
+function herdText(house, event, [, , h, k, p]) {
+  const polls = p === null || p === undefined ? `${k} sondeos` : `${k} sondeos, p ${fmtNum(p, 3)}`;
+  return `${house} · ${event.label}: rebaño ${fmtNum(h, 2)} (${polls})`;
+}
+
 /** Question 3: the herd of each house in the final weeks of each cycle; once drawn, its table without JavaScript leaves. */
 function drawMatrix(matrix) {
   const el = container('matrix-chart', matrix && matrix.houses && matrix.houses.length);
@@ -30,7 +44,7 @@ function drawMatrix(matrix) {
   const drawn = tryDraw(() => renderMatrix(el, matrix, {
     center: 1,
     label: true,
-    cellText: (house, event, h) => `${house} · ${event.label}: rebaño ${fmtNum(h, 2)}`,
+    cellText: herdText,
     bold: (event) => event.current,
     rotate: 0,
   }), 'the matrix of the houses');

@@ -771,8 +771,8 @@ def metodo_section_context(state: dict, section: str) -> dict:
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
         ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``),
         ``herd_published`` (whether the ``rebano`` study is published, so the herding card links to it) and
-        ``rating_check`` (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island (``state`` and the
-        ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
+        ``rating_check`` (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island
+        (``state`` and the ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
         ``errors`` (``error_example``, ``None`` without one). The ``promedio`` subpage adds
         ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
         ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``), ``lean_published`` (whether the ``sesgo-cis`` study is published, so

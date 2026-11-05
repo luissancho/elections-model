@@ -3512,10 +3512,11 @@ def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site,
     # the two studies, published so their pages render (the fixture of the events does not write them)
     publish_study(fresh_app.fs)
     publish_study(fresh_app.fs, study='sesgo-cis')
+    publish_study(fresh_app.fs, study='rebano')
     for path, query in (('/', ''), ('/es', ''), ('/elecciones', ''),
                         ('/elecciones', 'scope=es&date=2023-07-23'), ('/metodo', ''), ('/metodo/promedio', ''),
                         ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', ''),
-                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', '')):
+                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', ''), ('/analisis/rebano', '')):
         status, _, body = call(events_site, path, query=query)
         assert status == 200 or not path.startswith('/analisis'), path
         assert_public_wording(html(body), path + '?' + query)
@@ -5533,14 +5534,20 @@ def test_lean_page_structure_and_wording(api, fresh_app):
     assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
 
 
+def herd_today(monkeypatch, day):
+    """Fix the day the texts of /analisis/rebano count from (``pages.herd.today``)."""
+    monkeypatch.setattr(pages.herd, 'today', lambda: day)
 
-def test_herd_page_structure_and_wording(api, fresh_app):
+
+def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 5))
     publish_study(fresh_app.fs, study='rebano')
     status, _, body = call(api, '/analisis/rebano'); page = html(body)
     assert status == 200 and '<h1 class="study-title">¿Se copian las encuestadoras en la recta final?</h1>' in page
     assert '/dist/js/pages/analisis-rebano.js' in page and 'id="initial-data"' in page
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'EN 3 DE 7', '3 CASAS']
-    assert page.count('<div class="kpi">') == 3 and '7 de 7' in page and 'Casas en rebaño en las últimas 8 semanas' in page
+    assert page.count('<div class="kpi">') == 3 and '7 de 7' in page
+    assert 'Casas en rebaño en las últimas 8 semanas' in page
     for chart in ('weeks-chart', 'matrix-chart'):
         assert re.search(r'<div class="chart[^"]*" id="%s" role="img" aria-label="[^"]+"></div>' % chart, page), chart
     assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 3
@@ -5548,14 +5555,92 @@ def test_herd_page_structure_and_wording(api, fresh_app):
     assert 'SocioMétrica' in page and '/casas/sociometrica' in page and 'aún sin sondeos suficientes' in page
     assert 'NC Report' in visible_text(page) and 'Las de siempre' in page
     assert_public_wording(page, '/analisis/rebano')
-    assert 'empresa' not in visible_text(page).lower() and 'publicación' not in visible_text(page).lower() and 'max-width' not in page
+    text = visible_text(page).lower()
+    assert 'empresa' not in text and 'publicación' not in text and 'max-width' not in page
+
+
+def test_herd_page_counts_the_days_from_today_after_the_veda(api, fresh_app, monkeypatch):
+    """Inside the veda the forecast is refused and the page keeps the last run (``days_left`` 24 in the fixture):
+    the days are those from today, and the pill drops «hasta la veda»."""
+    herd_today(monkeypatch, date(2026, 11, 25))
+    publish_study(fresh_app.fs, study='rebano')
+    page = html(call(api, '/analisis/rebano')[2])
+    assert '<span class="pill ok">Página viva · se recalcula con cada actualización</span>' in page
+    assert 'hasta la veda' not in page and 'a 24 días' not in page
+    assert '7 generales desde 2008 · a 4 días del 29 de noviembre</span>' in page
+    assert 'Últimas 8 semanas de 2026 · a 4 días del 29 de noviembre</p>' in page
+    assert '<div class="l">Dispersión de los sondeos de 2026, hoy</div>' in page
+    assert '<div class="s">a 4 días del 29 de noviembre · en el resto del ciclo' in page
+
+
+def test_herd_page_once_the_election_is_held(api, fresh_app, monkeypatch):
+    """After the election, until ``publish event`` moves the cycle to the past: no days left, the pill says the
+    scrutiny is pending, KPI 2 loses «hoy» and speaks of the close of the polls; the third question keeps its year."""
+    herd_today(monkeypatch, date(2026, 11, 30))
+    publish_study(fresh_app.fs, study='rebano')
+    page = html(call(api, '/analisis/rebano')[2])
+    assert '<span class="pill ok">Página viva · elección celebrada, pendiente del escrutinio</span>' in page
+    assert 'se recalcula con cada actualización' not in page and ' días del ' not in page
+    assert '<span class="pill">7 generales desde 2008</span>' in page
+    assert '<div class="l">Dispersión de los sondeos de 2026</div>' in page and ', hoy</div>' not in page
+    assert '<div class="s">al cierre de los sondeos · en el resto del ciclo, el 2.º más bajo de los 8' in page
+    assert 'Últimas 8 semanas de 2026 · al cierre de los sondeos</p>' in page
+    assert '<h2 class="qt">¿Quién va en rebaño en 2026?</h2>' in page
+    assert_public_wording(page, '/analisis/rebano')
+
+
+def test_herd_page_lists_the_cis_last_in_the_matrix_and_apart_in_the_window(api, fresh_app):
+    """The fixture has a CIS row for 2023 (``cis: True``): the matrix table without JavaScript lists it last, and
+    the houses of 2026 do not list it as a measured house (only the row «aparte», with its polls)."""
+    publish_study(fresh_app.fs, study='rebano')
+    page = html(call(api, '/analisis/rebano')[2])
+    table = re.search(r'<table id="matrix-table">(.*?)</table>', page, re.S).group(1)
+    names = re.findall(r'<tr><td><a href="[^"]+"><b>([^<]+)</b></a></td>', table)
+    assert names[-1] == 'CIS' and names.count('CIS') == 1
+    houses = re.search(r'<table id="houses-table">(.*?)</table>', page, re.S).group(1)
+    measured = re.findall(r'<tr><td><a href="[^"]+"><b>([^<]+)</b></a></td>', houses)
+    assert measured == ['SocioMétrica', 'NC Report', 'Sigma Dos'] and '/casas/cis' not in houses
+    assert '<td class="mut">CIS</td>' in houses and 'aparte: ver la pregunta 2' in houses
+
+
+def test_herd_matrix_island_and_shades(api, fresh_app):
+    """The island cells carry ``[x, y, h, k, p]`` for the tooltip (spec D7); the shade classes of the table without
+    JavaScript match the bands of ``matrix.js``, the neutral one from 0,9 to 1,2 both included."""
+    publish_study(fresh_app.fs, study='rebano')
+    context = pages.herd_context(pages.parse_state({}))
+    cells = context['initial']['matrix']['cells']
+    assert cells and all(len(cell) == 5 for cell in cells)
+    houses = context['initial']['matrix']['houses']
+    noxa = next(cell for cell in cells if houses[cell[1]] == 'Noxa')
+    assert noxa == [0, houses.index('Noxa'), 0.32, 8, 0.046]
+    shade = pages.herd.shade_class
+    assert [shade(h) for h in (0.49, 0.5, 0.69, 0.7, 0.89, 0.9, 1.0, 1.2, 1.21, 1.6, 1.61, None)] == [
+        'h1', 'h2', 'h2', 'h3', 'h3', 'h4', 'h4', 'h4', 'h5', 'h5', 'h6', 'z']
+
+
+def test_herd_page_without_a_run_names_the_lowest_house_by_its_figure(api, fresh_app):
+    """Without a run, KPI 3 speaks of the last past cycle: «Casa más en rebaño» only when its lowest house went
+    below 1; otherwise «Casa que menos oscila»."""
+    summary = fixture_data('rebano-summary') | {'current': None, 'houses_now': None, 'cis': None}
+    publish_study(fresh_app.fs, study='rebano', meta={'election': None}, parts={'summary': summary})
+    labels = [kpi['label'] for kpi in pages.herd_context(pages.parse_state({}))['kpis']]
+    assert labels[2] == 'Casa más en rebaño en las últimas 8 semanas de 2023'
+    houses = fixture_data('rebano-houses')
+    houses['rows'] = [row for row in houses['rows'] if row['event_date'] != '2023-07-23' or row['h'] >= 1]
+    publish_study(fresh_app.fs, study='rebano', meta={'election': None}, parts={'summary': summary, 'houses': houses})
+    kpi = pages.herd_context(pages.parse_state({}))['kpis'][2]
+    assert kpi['label'] == 'Casa que menos oscila en las últimas 8 semanas de 2023'
+    assert kpi['value'] == '1,00' and kpi['support'].startswith('SocioMétrica, con 8 sondeos con muestra')
 
 
 def test_herd_page_conditions_follow_the_figures(api, fresh_app):
-    summary = fixture_data('rebano-summary') | {'k_narrowed': 5, 'narrowed': ['2008', '2011', '2015', '2016', '2023'], 'mean_final': 1.3,
-                                                 'k_below_one': 0, 'below_one': [], 'current': fixture_data('rebano-summary')['current'] | {'like_final': False, 'rank_before': 3}}
+    current = fixture_data('rebano-summary')['current'] | {'like_final': False, 'rank_before': 3}
+    summary = fixture_data('rebano-summary') | {'k_narrowed': 5, 'narrowed': ['2008', '2011', '2015', '2016', '2023'],
+                                                 'mean_final': 1.3, 'k_below_one': 0, 'below_one': [],
+                                                 'current': current}
     # the lead is the published subtitle, composed at publish time: the one of these figures
-    meta = {'subtitle': 'En 5 de las 7 generales desde 2008, los sondeos se han parecido más entre sí cuanto más cerca estaba la elección.'}
+    meta = {'subtitle': 'En 5 de las 7 generales desde 2008, los sondeos se han parecido más entre sí cuanto más '
+                        'cerca estaba la elección.'}
     publish_study(fresh_app.fs, study='rebano', meta=meta, parts={'summary': summary})
     page = html(call(api, '/analisis/rebano')[2])
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['EN 5 DE 7', 'NO', '3 CASAS']
@@ -5564,10 +5649,12 @@ def test_herd_page_conditions_follow_the_figures(api, fresh_app):
 
 
 def test_herd_page_without_houses_in_the_window(api, fresh_app):
-    summary = fixture_data('rebano-summary') | {'houses_now': {'n': 0, 'k': 0, 'herd': [], 'pending': [{'pollster': 'GAD3', 'k': 2}]}}
+    houses_now = {'n': 0, 'k': 0, 'herd': [], 'pending': [{'pollster': 'GAD3', 'k': 2}]}
+    summary = fixture_data('rebano-summary') | {'houses_now': houses_now}
     publish_study(fresh_app.fs, study='rebano', parts={'summary': summary})
     page = html(call(api, '/analisis/rebano')[2])
-    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page)[2] == 'NINGUNA' and '0 de 0' in page and 'GAD3 (2)' in page
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page)[2] == 'NINGUNA'
+    assert '0 de 0' in page and 'GAD3 (2)' in page
 
 
 def test_herd_page_without_a_run_speaks_of_the_past_cycles(api, fresh_app):
@@ -5592,6 +5679,7 @@ def test_analisis_index_lists_rebano_when_published(api, fresh_app):
     publish_study(fresh_app.fs, study='rebano')
     page = html(call(api, '/analisis')[2])
     assert '/analisis/rebano' in page and '¿Se copian las encuestadoras en la recta final?' in page
+
 
 # a ranking where the CIS leads: two houses behind it, one of them with the same share as the next
 LEAN_HOUSES = [{'pollster': 'GAD3', 'n': 30, 'k_left': 12, 'share_left': 0.4, 'mean_lean': -1.0, 'cis': False},

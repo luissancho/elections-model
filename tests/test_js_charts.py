@@ -33,6 +33,7 @@ RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
+FORMAT_JS = pathlib.Path(DIST, 'js', 'format.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -47,8 +48,8 @@ ROWS = [
 def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
-    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk` ranking, `ds` distancia), el del estudio del
-    rebaño (`wk` semanas) y `rows` definidos y devuelve su JSON (las
+    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
+    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas) y `rows` definidos y devuelve su JSON (las
     funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
@@ -831,27 +832,49 @@ def test_matrix_option_colours_by_sign_and_bolds_the_general_elections():
     assert colours[0].startswith('rgba(214,39,40') and colours[1].startswith('rgba(29,79,134')
 
 
-
 def test_weeks_option_draws_the_cycles_the_mean_and_the_current_one_over_the_chance_line():
+    def row(event_date, label, current, lo, hi, k, ratio):
+        return {'event_date': event_date, 'label': label, 'current': current, 'lo': lo, 'hi': hi, 'k': k,
+                'ratio': ratio}
+
     data = {'buckets': [{'lo': 27, 'hi': 52, 'label': '27-52 sem.'}, {'lo': 0, 'hi': 1, 'label': '0-1 sem.'}],
-            'rows': [{'event_date': '2023-07-23', 'label': '2023', 'current': False, 'lo': 27, 'hi': 52, 'k': 1, 'ratio': 1.31},
-                     {'event_date': '2023-07-23', 'label': '2023', 'current': False, 'lo': 0, 'hi': 1, 'k': 3, 'ratio': 1.11},
-                     {'event_date': '2026-11-29', 'label': '2026', 'current': True, 'lo': 27, 'hi': 52, 'k': 2, 'ratio': 1.01},
-                     {'event_date': '2026-11-29', 'label': '2026', 'current': True, 'lo': 0, 'hi': 1, 'k': 0, 'ratio': None}],
+            'rows': [row('2023-07-23', '2023', False, 27, 52, 1, 1.31), row('2023-07-23', '2023', False, 0, 1, 3, 1.11),
+                     row('2026-11-29', '2026', True, 27, 52, 2, 1.01), row('2026-11-29', '2026', True, 0, 1, 0, None)],
             'mean': [{'lo': 27, 'hi': 52, 'k': 1, 'ratio': 1.31}, {'lo': 0, 'hi': 1, 'k': 1, 'ratio': 1.11}]}
     option = run_js('wk.weeksOption(%s)' % json.dumps(data))
     names = [s['name'] for s in option['series']]
     assert names == ['2023', 'Media de los 1', '2026'] and option['xAxis']['data'] == ['27-52 sem.', '0-1 sem.']
     assert option['series'][2]['data'] == [1.01, None] and option['series'][2]['lineStyle']['width'] == 3.5
-    assert option['series'][1]['markLine']['data'][0]['yAxis'] == 1 and option['series'][1]['markArea']['data'][0][1]['yAxis'] == 1
+    assert option['series'][1]['markLine']['data'][0]['yAxis'] == 1
+    assert option['series'][1]['markArea']['data'][0][1]['yAxis'] == 1
     assert option['yAxis']['max'] == 3 and option['yAxis']['interval'] == 0.5
 
 
+HERD_MATRIX_JS = ('{events: [{short: "2023", label: "2023"}], houses: ["GAD3", "NC Report", "IMOP"], '
+                  'cells: [[0, 0, 0.32, 3, 0.0975], [0, 1, 1.97, 3, null], [0, 2, 1.0, 9, 0.275]]}')
+# the tooltip of the page script (`herdText` of `pages/analisis-rebano.js`, which needs the DOM to load)
+HERD_TEXT_JS = ('(house, event, [, , h, k, p]) => { const polls = p === null || p === undefined ? `${k} sondeos` : '
+                '`${k} sondeos, p ${fmt.fmtNum(p, 3)}`; return `${house} · ${event.label}: rebaño ${fmt.fmtNum(h, 2)} '
+                '(${polls})`; }')
+
+
 def test_matrix_option_with_a_centre_shades_around_one_and_labels_the_cells():
-    option = run_js('mx.matrixOption({events: [{short: "2023", label: "2023"}], houses: ["GAD3", "NC Report", "IMOP"], cells: [[0, 0, 0.32], [0, 1, 1.97], [0, 2, 1.0]]}, {center: 1, label: true})')
+    option = run_js('mx.matrixOption(%s, {center: 1, label: true})' % HERD_MATRIX_JS)
     colors = [cell['itemStyle']['color'] for cell in option['series'][0]['data']]
     assert colors[0].startswith('rgba(214,39,40') and colors[1].startswith('rgba(29,79,134') and colors[2] == '#f4f5f8'
     assert option['series'][0]['label']['show'] is True
+    # `cellText` gets the whole value array of the cell (spec D7: `[x, y, h, k, p]`)
+    joined = run_js('mx.matrixOption(%s, {center: 1, cellText: (house, event, cell) => [house, event.label, ...cell]'
+                    '.join("|")}).tooltip.formatter({value: [0, 0, 0.32, 3, 0.0975]})' % HERD_MATRIX_JS)
+    assert joined == 'GAD3|2023|0|0|0.32|3|0.0975'
+    texts = run_js('await (async () => { const fmt = await import("%s"); const o = mx.matrixOption(%s, {center: 1, '
+                   'cellText: %s}); return [o.tooltip.formatter({value: [0, 0, 0.32, 3, 0.0975]}), '
+                   'o.tooltip.formatter({value: [0, 1, 1.97, 3, null]})]; })()'
+                   % (FORMAT_JS, HERD_MATRIX_JS, HERD_TEXT_JS))
+    assert texts == ['GAD3 · 2023: rebaño 0,32 (3 sondeos, p 0,098)', 'NC Report · 2023: rebaño 1,97 (3 sondeos)']
+    page = pathlib.Path(DIST, 'js', 'pages', 'analisis-rebano.js').read_text(encoding='utf-8')
+    assert 'cellText: herdText' in page and 'rebaño ${fmtNum(h, 2)} (${polls})' in page
+    assert '`${k} sondeos, p ${fmtNum(p, 3)}`' in page
 
 
 def test_matrix_option_bolds_the_columns_asked_for_and_can_keep_them_upright():
@@ -859,13 +882,16 @@ def test_matrix_option_bolds_the_columns_asked_for_and_can_keep_them_upright():
     general elections in bold and the names rotated, as in the CIS bias study."""
     events = '[{short: "2023", label: "2023", current: false}, {short: "2026", label: "2026", current: true}]'
     data = '{events: %s, houses: ["GAD3"], cells: [[0, 0, 0.5], [1, 0, 1.4]]}' % events
-    axis = run_js('(() => { const a = mx.matrixOption(%s, {center: 1, bold: (event) => event.current, rotate: 0}).xAxis; '
-                  'return {rotate: a.axisLabel.rotate, labels: a.data.map((text, i) => a.axisLabel.formatter(text, i))}; })()' % data)
+    labels = ('return {rotate: a.axisLabel.rotate, '
+              'labels: a.data.map((text, i) => a.axisLabel.formatter(text, i))}; })()')
+    axis = run_js('(() => { const a = mx.matrixOption(%s, {center: 1, bold: (event) => event.current, rotate: 0})'
+                  '.xAxis; ' % data + labels)
     assert axis == {'rotate': 0, 'labels': ['2023', '{g|2026}']}
-    axis = run_js('(() => { const a = mx.matrixOption({events: [{short: "AN 18", label: "Andalucía 2018"}, {short: "GEN 23", label: "Generales 2023"}], '
-                  'houses: ["CIS"], cells: [[0, 0, 1.0]]}).xAxis; '
-                  'return {rotate: a.axisLabel.rotate, labels: a.data.map((text, i) => a.axisLabel.formatter(text, i))}; })()')
+    axis = run_js('(() => { const a = mx.matrixOption({events: [{short: "AN 18", label: "Andalucía 2018"}, '
+                  '{short: "GEN 23", label: "Generales 2023"}], houses: ["CIS"], cells: [[0, 0, 1.0]]}).xAxis; '
+                  + labels)
     assert axis == {'rotate': 90, 'labels': ['AN 18', '{g|GEN 23}']}
+
 
 def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():
     rows = [{'x': 93, 'y': 8.0, 'name': 'CIS', 'k': 38, 'n': 41, 'cis': True}, {'x': 77, 'y': 1.6, 'name': 'Sigma Dos', 'k': 23, 'n': 30, 'cis': False}]

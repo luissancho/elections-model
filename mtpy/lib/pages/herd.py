@@ -6,11 +6,12 @@ the ``initial`` island with what the two charts draw.
 ``analisis.herd_context`` assembles them from the published parts; each function takes the data it reads and returns
 what the template renders, with ``None`` or an empty structure for what the parts do not have, never an error.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from .cera import MONTHS_LONG, _get
-from .filters import DASH, fmt_int, fmt_num
+from .common import days_left as days_to
+from .filters import DASH, _madrid_tz, fmt_int, fmt_num
 from .lean import house_href
 
 HERD = 'rebano'
@@ -22,14 +23,18 @@ QUESTIONS = ('¿Se acercan los sondeos cuando llega la elección?',
 URN_RATIO = 1.1
 # Days between the start of the LOREG ban on polls and the election
 VEDA_DAYS = 6
-# Upper bounds (exclusive) of the shade classes of the matrix; ``SHADE_TOP`` closes ``h5`` inclusive, above it ``h6``
-SHADES = ((0.5, 'h1'), (0.7, 'h2'), (0.9, 'h3'), (1.2, 'h4'))
+# Upper bounds (exclusive) of the red shade classes of the matrix; from 0,9 to ``NEUTRAL_TOP`` inclusive the neutral
+# ``h4`` (the grey band of ``matrix.js``, ``neutral = [0.9, 1.2]``), up to ``SHADE_TOP`` inclusive ``h5``, above ``h6``
+SHADES = ((0.5, 'h1'), (0.7, 'h2'), (0.9, 'h3'))
+NEUTRAL_TOP = 1.2
 SHADE_TOP = 1.6
 # Dispersion of the rest of the cycle above which «each house has its own recipe», and the top of the final ratios
 # that «still differ, but little»
 COOKING_RATIO, CLOSE_RATIO = 1.2, 1.3
-# Defaults of the windows when ``meta.params`` lacks them (spec D4)
+# Defaults of the windows, of the parties measured and of the days of the local consensus when ``meta.params`` lacks
+# them (spec D4)
 WINDOW_DAYS, FINAL_DAYS, MIN_POLLS = 56, 21, 3
+N_SERIES, LOCAL_WINDOW = 4, 10
 LUCK = '1 = lo que permite el azar de las muestras'
 
 
@@ -70,9 +75,17 @@ def short_day(iso: Optional[str]) -> Optional[str]:
     return '{}-{}'.format(day.day, MONTHS_LONG[day.month - 1][0].upper()) if day else None
 
 
+def today() -> date:
+    """Today in Europe/Madrid, the day the texts of the page count from (the tests replace it)."""
+    return datetime.now(_madrid_tz()).date()
+
+
 def flags(summary: Optional[dict], meta: Optional[dict]) -> dict:
     """
     The conditions and the dates of the texts of the page (spec D6).
+
+    The days to the election count from ``today()``, not from the ``as_of`` of the run: inside the veda the forecast
+    is refused and the daily republication keeps the last run, so its ``days_left`` would stay frozen.
 
     Parameters
     ----------
@@ -87,17 +100,18 @@ def flags(summary: Optional[dict], meta: Optional[dict]) -> dict:
         ``has_run`` (the summary has the cycle in progress), ``like_final`` (its whole cycle already as low as the
         final weeks of the past ones), ``all_narrowed`` (every past cycle narrowed), ``final_like_chance``
         (``mean_final <= URN_RATIO``), ``year`` (of the election in progress, ``None`` without it), ``election_day``
-        («29 de noviembre»), ``election_short`` («29-N»), ``days_left``, ``veda_date`` (the election minus
-        ``VEDA_DAYS``, «23 de noviembre»), ``after_veda``, ``since_year``, ``window_weeks``, ``final_weeks``,
-        ``min_polls``, ``window_start`` (the first day of the final window of the cycle in progress) and the thresholds
-        of the texts (``shade_top``, ``cooking_ratio``, ``close_ratio``).
+        («29 de noviembre»), ``election_short`` («29-N»), ``days_left`` (from ``today()`` to the election, ``None``
+        without its date), ``veda_date`` (the election minus ``VEDA_DAYS``, «23 de noviembre»), ``after_veda``
+        (``days_left <= VEDA_DAYS``), ``held`` (``days_left <= 0``: the election is held, its scrutiny pending),
+        ``since_year``, ``window_weeks``, ``final_weeks``, ``min_polls``, ``n_series``, ``local_window``,
+        ``window_start`` (the first day of the final window of the cycle in progress) and the thresholds of the texts
+        (``shade_top``, ``cooking_ratio``, ``close_ratio``).
     """
     current = _get(summary, 'current')
     election = _get(meta, 'election') or {}
     params = _get(meta, 'params') or {}
     day = _date(election.get('date'))
-    days_left = _get(current, 'days_left')
-    days_left = days_left if _is_num(days_left) else election.get('days_left')
+    days_left = days_to(election.get('date'), today())
     n, k = _get(summary, 'n_cycles'), _get(summary, 'k_narrowed')
     mean_final = _get(summary, 'mean_final')
     window = params.get('window_days') or WINDOW_DAYS
@@ -113,10 +127,13 @@ def flags(summary: Optional[dict], meta: Optional[dict]) -> dict:
         'days_left': days_left,
         'veda_date': day_month((day - timedelta(days=VEDA_DAYS)).isoformat()) if day else None,
         'after_veda': _is_num(days_left) and days_left <= VEDA_DAYS,
+        'held': _is_num(days_left) and days_left <= 0,
         'since_year': (params.get('since') or '')[:4] or None,
         'window_weeks': window // 7,
         'final_weeks': (params.get('final_days') or FINAL_DAYS) // 7,
         'min_polls': params.get('min_polls') or MIN_POLLS,
+        'n_series': params.get('n_series') or N_SERIES,
+        'local_window': params.get('local_window') or LOCAL_WINDOW,
         'window_start': day_month((day - timedelta(days=window)).isoformat()) if day else None,
         'shade_top': SHADE_TOP, 'cooking_ratio': COOKING_RATIO, 'close_ratio': CLOSE_RATIO,
     }
@@ -207,19 +224,24 @@ def kpis(summary: Optional[dict], meta: Optional[dict], cycles: list = (), house
         last = past[-1] if past else {}
         house = _last_house(list(houses), list(cycles))
         label = last.get('label') or '–'
+        # «en rebaño» only when the lowest house of the window went below 1
+        third = ('Casa más en rebaño en las últimas {} semanas de {}' if house and house['h'] < 1 else
+                 'Casa que menos oscila en las últimas {} semanas de {}').format(f['window_weeks'], label)
 
         return [first,
                 dict(row, label='Dispersión de {}, últimas {} semanas'.format(label, f['window_weeks']),
                      value=_num(_get(last, 'last', 'ratio')),
                      support='en el resto del ciclo, {} · {}'.format(_num(_get(last, 'before', 'ratio')), LUCK)),
-                dict(row, label='Casa más en rebaño en las últimas {} semanas de {}'.format(f['window_weeks'], label),
-                     value=_num(house['h']) if house else DASH,
-                     support='{}, con {} sondeos con muestra · {}'.format(house['pollster'], fmt_int(house['k']), LUCK)
+                dict(row, label=third, value=_num(house['h']) if house else DASH,
+                     support='{}, con {} sondeos con muestra · {}'.format(house['pollster'], fmt_int(house.get('k')),
+                                                                          LUCK)
                      if house else 'ninguna casa con {} sondeos con muestra en esa ventana'.format(f['min_polls']))]
 
-    second = 'a {} días del {} · en el resto del ciclo, el {}.º más bajo de los {}'.format(
-        fmt_int(f['days_left']), f['election_day'] or '–', fmt_int(current.get('rank_before')),
-        fmt_int((n or 0) + 1))
+    # once the election is held the days no longer count: the figure is the one of the close of the polls
+    when = 'al cierre de los sondeos' if f['held'] else 'a {} días del {}'.format(fmt_int(f['days_left']),
+                                                                                  f['election_day'] or '–')
+    second = '{} · en el resto del ciclo, el {}.º más bajo de los {}'.format(
+        when, fmt_int(current.get('rank_before')), fmt_int((n or 0) + 1))
     now = _get(summary, 'houses_now') or {}
     herd = ['{} {}'.format(house.get('pollster'), _num(house.get('h'))) for house in now.get('herd') or []]
     cis = _get(summary, 'cis', 'current', 'ratio')
@@ -234,7 +256,8 @@ def kpis(summary: Optional[dict], meta: Optional[dict], cycles: list = (), house
         herd.append('el CIS, aparte: ' + _num(cis, 1))
 
     return [first,
-            dict(row, label='Dispersión de los sondeos de {}, hoy'.format(f['year'] or current.get('label') or '–'),
+            dict(row, label=('Dispersión de los sondeos de {}' if f['held'] else
+                             'Dispersión de los sondeos de {}, hoy').format(f['year'] or current.get('label') or '–'),
                  value=_num(_get(current, 'cycle', 'ratio')),
                  support=second + (' · ya como una recta final' if f['like_final'] else '')),
             dict(row, label='Casas en rebaño en las últimas {} semanas'.format(f['window_weeks']),
@@ -391,11 +414,18 @@ def cycle_ratio_text(houses: list, summary: Optional[dict]) -> Optional[str]:
 
 
 def shade_class(h) -> str:
-    """The class of a cell of the matrix: ``h1``..``h6`` by ``h`` (``SHADES``, ``SHADE_TOP``), ``z`` without it."""
+    """
+    The class of a cell of the matrix: ``h1``..``h3`` below 0,9 (``SHADES``), the neutral ``h4`` from 0,9 to 1,2 both
+    included (``NEUTRAL_TOP``, as the grey band of ``matrix.js``), ``h5`` up to ``SHADE_TOP`` included, ``h6`` above;
+    ``z`` without ``h``.
+    """
     if not _is_num(h):
         return 'z'
 
-    return next((name for top, name in SHADES if h < top), 'h5' if h <= SHADE_TOP else 'h6')
+    if h <= NEUTRAL_TOP:
+        return next((name for top, name in SHADES if h < top), 'h4')
+
+    return 'h5' if h <= SHADE_TOP else 'h6'
 
 
 def _below_counts(houses: list) -> dict:
@@ -421,14 +451,16 @@ def matrix(houses: list, cycles: list) -> dict:
     dict
         ``events`` (``{'label', 'short', 'current'}`` per cycle, in the order of ``cycles``), ``houses`` (the houses of
         the cycle in progress first by ``h``, then by cycles below 1 descending and name, the CIS last) and ``cells``
-        (``[x, y, h]`` per row with ``h``).
+        (``[x, y, h, k, p]`` per row with ``h``: the column, the row, the measure, the polls and the p value, for the
+        tooltip).
     """
     columns = {row.get('event_date'): x for x, row in enumerate(cycles)}
     counts = _below_counts(houses)
     now = sorted((row for row in houses if row.get('current') and not row.get('cis') and _is_num(row.get('h'))),
                  key=lambda row: row['h'])
     order = [row['pollster'] for row in now]
-    order += sorted((name for name in counts if name not in order), key=lambda name: (-counts[name][0], name.casefold()))
+    order += sorted((name for name in counts if name not in order),
+                    key=lambda name: (-counts[name][0], name.casefold()))
     order += sorted({row['pollster'] for row in houses if row.get('cis') and row.get('pollster')} - set(order))
     y_of = {name: y for y, name in enumerate(order)}
 
@@ -436,14 +468,15 @@ def matrix(houses: list, cycles: list) -> dict:
         'events': [{'label': row.get('label'), 'short': row.get('label'), 'current': bool(row.get('current'))}
                    for row in cycles],
         'houses': order,
-        'cells': [[columns[row['event_date']], y_of[row['pollster']], row['h']] for row in houses
+        'cells': [[columns[row['event_date']], y_of[row['pollster']], row['h'], row.get('k'), row.get('p')]
+                  for row in houses
                   if row.get('event_date') in columns and row.get('pollster') in y_of and _is_num(row.get('h'))],
     }
 
 
 def matrix_rows(data: dict) -> list:
     """The rows of the matrix table: ``{'name', 'href', 'cells': [{'h', 'shade'}]}`` with a cell per column."""
-    grid = {(x, y): h for x, y, h in data.get('cells') or []}
+    grid = {(cell[0], cell[1]): cell[2] for cell in data.get('cells') or []}
     width = len(data.get('events') or [])
 
     return [{'name': name, 'href': house_href(name),
@@ -549,7 +582,8 @@ def result_text(houses: list, cycles: list, meta: Optional[dict]) -> Optional[st
 
 
 def biggest_drops(cycles: list, count: int = 2) -> list:
-    """The past cycles with the largest falls of the dispersion into the final window (``change < 0``), largest first."""
+    """The past cycles with the largest falls of the dispersion into the final window (``change < 0``), largest
+    first."""
     rows = [row for row in past_rows(cycles) if _is_num(row.get('change')) and row['change'] < 0]
 
     return sorted(rows, key=lambda row: row['change'])[:count]
