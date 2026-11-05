@@ -384,6 +384,7 @@ def run_case(
     tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
+    rating_exponent: float = 1.0,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -413,7 +414,9 @@ def run_case(
     (`drift_scale_rows`, 0 when not fitted). `tail_dof` fixes the degrees of freedom of the Student t of the draw
     of the `Simulator` for every party (`None`, the default, `nobs - 2` per party, at least 3); `meta` records it
     (`tail_dof`, NaN when unset). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the
-    polls with ratings recomputed in memory (the string `'flat'` weighs every poll with rating 1).
+    polls with ratings recomputed in memory (the string `'flat'` weighs every poll with rating 1). `rating_exponent`
+    is passed to the `Simulator` (phase C2a): the rating weight of every poll is raised to it (1, the default, is the
+    model as it is; 0 weighs every poll with rating 1, as `'flat'`); `meta` records it (`rating_exponent`).
 
     `config` is a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search,
     validated by the backtest job): its `reg_params`, `he_params` and `disp_params` (with its `herding`) go to the
@@ -454,7 +457,7 @@ def run_case(
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
             disp_params=disp_params | {'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
             error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings,
-            **tuned
+            rating_exponent=rating_exponent, **tuned
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         n_overrides = matched_overrides(sim.model, tuned['weight_overrides']) if config is not None else np.nan
@@ -587,7 +590,7 @@ def run_case(
         'n_polls': int(polls.shape[0]), 'last_poll': str(last_date.date()), 'n_parties': len(names),
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1),
         'config': config['label'] if config is not None else np.nan, 'n_overrides': n_overrides,
-        'flat_ratings': isinstance(weight_ratings, str)
+        'flat_ratings': isinstance(weight_ratings, str), 'rating_exponent': float(rating_exponent)
     }])
 
     calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df,
@@ -833,12 +836,14 @@ def run_backtest(
     tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
+    rating_exponent: float = 1.0,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
-    `error_model`, `drift_scale`, `tail_dof`, `weight_ratings` and `config` are passed to every case
-    (`weight_ratings` may be the string `'flat'`: every poll weighs with rating 1).
+    `error_model`, `drift_scale`, `tail_dof`, `weight_ratings`, `config` and `rating_exponent` are passed to every
+    case (`weight_ratings` may be the string `'flat'`: every poll weighs with rating 1; `rating_exponent` raises the
+    rating weight of every poll to that power, phase C2a).
 
     Returns
     -------
@@ -863,7 +868,7 @@ def run_backtest(
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
                     error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
-                    weight_ratings=weight_ratings, config=config
+                    weight_ratings=weight_ratings, config=config, rating_exponent=rating_exponent
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
@@ -1132,6 +1137,7 @@ def backtest_scope(
     config: Optional[dict[str, Any]] = None,
     recompute_ratings: bool = False,
     flat_ratings: bool = False,
+    rating_exponent: float = 1.0,
     verbose: int = 0,
     runner=None,
     stats=None,
@@ -1166,6 +1172,9 @@ min_events, error_model, drift_scale, tail_dof
     flat_ratings : bool, default False
         Weigh every poll with rating 1 (`weight_ratings='flat'`, the average without the rating, phase C); recorded
         in `run.json` and in the `meta.csv` of every case. Exclusive with `recompute_ratings`.
+    rating_exponent : float, default 1.0
+        Power the rating weight of every poll is raised to (phase C2a: 1 is the model as it is, 0 the flat rating);
+        passed to every case and recorded in `run.json` and in the `meta.csv` of every case.
     verbose : int, default 0
         Verbosity of `run_backtest` (1 prints one line per case).
     runner : callable, optional
@@ -1198,7 +1207,7 @@ min_events, error_model, drift_scale, tail_dof
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                   regional_noise=regional_noise, min_events=min_events, error_model=error_model,
-                  drift_scale=drift_scale, tail_dof=tail_dof, config=config)
+                  drift_scale=drift_scale, tail_dof=tail_dof, config=config, rating_exponent=rating_exponent)
     if config is not None:
         params.update({key: config[key] for key in CONFIG_SWITCHES})
     weight_ratings = 'flat' if flat_ratings else (rating_overrides(scope) if recompute_ratings else None)

@@ -3,6 +3,7 @@ import json
 import math
 
 from ..core.worker import SequenceJob
+from ..lib.forecaster import check_rating_exponent
 from ..lib.publish import resolve_scopes
 
 # Keys of a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search) and the type
@@ -84,8 +85,8 @@ class Backtest(SequenceJob):
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
             regional_noise=True, min_events=None, error_model='polls', drift_scale=None, tail_dof=None, config=None,
-            recompute_ratings=False, flat_ratings=False, out=None, verbose=1, runner=None, stats=None, stop_on_error=None, action='run',
-            **kwargs):
+            recompute_ratings=False, flat_ratings=False, rating_exponent=1.0, out=None, verbose=1, runner=None, stats=None,
+            stop_on_error=None, action='run', **kwargs):
         """
         Run the backtest of the requested scopes.
 
@@ -154,6 +155,9 @@ class Backtest(SequenceJob):
         flat_ratings : bool, default False
             Weigh every poll with rating 1 (the average without the rating, phase C); exclusive with
             ``recompute_ratings``.
+        rating_exponent : float, default 1.0
+            Power the rating weight of every poll is raised to (phase C2a): 1 is the model as it is, 0 the flat
+            rating; a finite number of at least 0 (``meta.csv`` and ``run.json`` record it).
         out : str, optional
             Local results folder (a relative path is taken from the working directory). For ``run`` the app
             file system (``backtest/results``, S3 in ECS) by default; for ``push`` (its origin) and ``pull`` (its
@@ -186,7 +190,8 @@ class Backtest(SequenceJob):
             are exclusive``), ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, ``error_model`` is not ``'polls'``
             or ``'average'``, ``drift_scale`` is not ``'auto'``, a positive number or ``None``, ``tail_dof`` is not
             an integer of at least 2 or ``None``, ``config`` is not a valid configuration nor the path of a JSON file
-            with one (``backtest: config ...``) or one of ``house_effects``, ``dispersion``, ``herding`` and
+            with one (``backtest: config ...``), ``rating_exponent`` is not a finite number of at least 0
+            (``rating_exponent: expected a finite number >= 0``) or one of ``house_effects``, ``dispersion``, ``herding`` and
             ``max_fc`` contradicts it (``backtest: <flag> contradicts the config ...``), there are no scopes to run
             (``backtest: no scopes to run``), ``action`` is not ``run``, ``push`` or ``pull`` or ``stop_on_error`` is not true or false
             (``stop_on_error must be true or false``).
@@ -201,6 +206,7 @@ class Backtest(SequenceJob):
         error_model = self._error_model(error_model)
         drift_scale = self._drift_scale(drift_scale)
         tail_dof = self._tail_dof(tail_dof)
+        rating_exponent = check_rating_exponent(rating_exponent)
         config = self._config(config)
         if config is not None:
             house_effects, dispersion, herding, max_fc = self._config_switches(
@@ -214,7 +220,7 @@ class Backtest(SequenceJob):
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, error_model=error_model,
                     drift_scale=drift_scale, tail_dof=tail_dof, config=config, recompute_ratings=recompute_ratings,
-                    flat_ratings=flat_ratings, out=out, verbose=verbose, runner=runner, stats=stats)
+                    flat_ratings=flat_ratings, rating_exponent=rating_exponent, out=out, verbose=verbose, runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 
