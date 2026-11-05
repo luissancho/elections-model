@@ -14,7 +14,7 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
 from mtpy.lib.forecaster import NoPollsError
 from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
-                         synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
+                         synthetic_backtest, synthetic_ban, synthetic_cycle, synthetic_legal, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
                          synthetic_rating_check)
 
 
@@ -1297,7 +1297,7 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
                                 prov=fake_prov, **event_readers(ev))
     assert out['n_polls'] == 3 and out['n_pollsters'] == 3 and out['has_model'] is True
     written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
-    assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 6 and sum(p.endswith('.csv') for p in written) == 7
+    assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 7 and sum(p.endswith('.csv') for p in written) == 9
     meta = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))
     assert meta['schema'] == 'event-meta@1' and meta['data']['name'] == 'Generales 2023' and meta['data']['horizons'] == [6, 30]
     assert meta['data']['featured'] is True
@@ -1324,6 +1324,41 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
     assert {r['event_date'] for r in model['shares']} == {'2023-07-23'} and model['horizons'] == [6, 30]
     assert bundle.BundleReader(fs).list_events('es') == ['2023-07-23']
     assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))  # el backtest sintético no trae serie
+
+
+def test_export_event_ban_keeps_the_poll_shape_and_the_last_legal_of_each_house():
+    data, frames = publish.export_event_ban(synthetic_ban().reset_index(), synthetic_legal().reset_index(), NAMES)
+    assert data['columns'] == publish.BAN_COLUMNS and data['parties'] == list(NAMES)
+    assert [(p['pollster'], p['days']) for p in data['polls']] == [('GAD3', 2), ('ElectoPanel', 2), ('GAD3', 1)]
+    assert data['polls'][2]['error_avg'] == 2.1 and data['polls'][2]['sample_size'] == 10004
+    assert [(p['pollster'], p['days']) for p in data['legal']] == [('GAD3', 7), ('ElectoPanel', 9)]  # 40dB and CIS have no clandestine poll
+    assert set(frames) == {'ban', 'ban-legal'} and list(frames['ban'].columns[:len(publish.BAN_COLUMNS)]) == publish.BAN_COLUMNS
+
+
+def test_export_event_ban_without_polls_is_empty():
+    data, frames = publish.export_event_ban(synthetic_ban().iloc[:0].reset_index(), synthetic_legal().reset_index(), NAMES)
+    assert data['polls'] == [] and data['legal'] == [] and frames['ban'].empty and frames['ban-legal'].empty
+
+
+def test_publish_event_writes_the_ban_part_and_counts_it_in_meta(tmp_path):
+    ev = synthetic_event()
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = RecordingFileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(fs)
+    comp = FakeComputer()
+    out = publish.publish_event('es', '2023-07-23', writer, computer=comp, source=str(tmp_path / 'bt'),
+                                prov=fake_prov, **event_readers(ev))
+    parts = [p.rsplit('/', 1)[-1] for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/') and p.endswith('.json')]
+    assert parts.index('cycle.json') + 1 == parts.index('ban.json') and parts.index('ban.json') + 1 == parts.index('results.json')
+    read = lambda path: writer.read_json(path)
+    ban = read(bundle.path_event('es', '2023-07-23', 'ban'))['data']
+    assert len(ban['polls']) == 3 and {row['pollster'] for row in ban['legal']} == {'GAD3', 'ElectoPanel'}
+    assert read(bundle.path_event('es', '2023-07-23', 'meta'))['data']['n_ban'] == 3 and out['n_ban'] == 3
+    assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'ban')) and writer.exists(bundle.path_event_csv('es', '2023-07-23', 'ban-legal'))
+    cycle = read(bundle.path_event('es', '2023-07-23', 'cycle'))['data']['polls']
+    assert len(cycle) == 3  # the ban polls stay out of the cycle
+    assert ('filter_polls', 'results', {'drop_ctypes': ['exit']}) in comp.calls
+    assert ('filter_polls', 'results', {'drop_mtypes': [], 'drop_ctypes': ['wban', 'exit']}) in comp.calls
 
 
 def test_publish_event_without_backtest_has_an_empty_model(tmp_path):

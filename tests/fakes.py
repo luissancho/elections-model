@@ -331,7 +331,7 @@ def synthetic_event():
         'party_id': [1, 2, 3, 4], 'party': ['PP', 'PSOE', 'VOX', 'Cs'],
         'votes': [8160837, 7760970, 3033744, 18054], 'pct': [33.05612, 31.43912, 12.28781, 0.13], 'seats': [160, 150, 40, 0],
     })
-    pollsters = pd.DataFrame({'id': [1, 2, 3], 'name': ['CIS', 'GAD3', '40dB']})
+    pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['CIS', 'GAD3', '40dB', 'ElectoPanel']})
     return types.SimpleNamespace(events=events, results=results, pollsters=pollsters)
 
 
@@ -351,6 +351,41 @@ def synthetic_cycle():
         'PP': [33.5, 31.2, 34.1], 'PSOE': [29.9, 32.4, 30.3], 'VOX': [13.1, 14.0, np.nan],
     })
     return frame.set_index(['event_date', 'date', 'pollster_id', 'sponsor_id']).sort_index()
+
+
+def _ban_poll(date, pollster_id, sponsor_id, pollster, sponsor, mtype, days, sample_size, shares, **errors):
+    """One row with the index and columns of `synthetic_cycle()` and the stored errors."""
+    row = {'event_date': pd.Timestamp('2023-07-23'), 'date': pd.Timestamp(date), 'pollster_id': pollster_id,
+           'sponsor_id': sponsor_id, 'start_date': pd.Timestamp(date) - pd.Timedelta(days=3), 'end_date': pd.Timestamp(date),
+           'pollster': pollster, 'sponsor': sponsor, 'mtype': mtype, 'ctype': 'wban', 'computed': True, 'featured': True,
+           'sample_size': sample_size, 'parties': 3, 'days': days, 'proc_sample': sample_size, 'rating': 0.8,
+           'weight_sample': 1.0, 'weight_over': 1.0, **dict(zip(NAMES, shares)), **errors}
+    return row
+
+
+def synthetic_ban():
+    """Sondeos de la semana de veto de `2023-07-23` (`ctype 'wban'`) con los errores guardados: GAD3 a 1 y 2 días y
+    ElectoPanel (id 4, online, patrocinador Electomanía) a 2, indexados como `synthetic_cycle()`."""
+    frame = pd.DataFrame([
+        _ban_poll('2023-07-22', 2, 0, 'GAD3', None, 'cati', 1, 10004, [35.5, 28.6, 12.7],
+                  error_avg=2.1, error_blocks=6.96, bias_blocks=15.16),
+        _ban_poll('2023-07-21', 2, 0, 'GAD3', None, 'cati', 2, 3000, [34.8, 29.0, 12.8],
+                  error_avg=2.3, error_blocks=6.2, bias_blocks=12.0),
+        _ban_poll('2023-07-21', 4, 30, 'ElectoPanel', 'Electomanía', 'online', 2, 1250, [34.0, 29.5, 13.0],
+                  error_avg=1.6, error_blocks=3.1, bias_blocks=-2.0),
+    ])
+    return frame.set_index(['event_date', 'date', 'pollster_id', 'sponsor_id']).sort_index()
+
+
+def synthetic_legal():
+    """Sondeos legales de `2023-07-23` con paneles online incluidos: `synthetic_cycle()` y un ElectoPanel a 9 días."""
+    panel = pd.DataFrame([_ban_poll('2023-07-14', 4, 30, 'ElectoPanel', 'Electomanía', 'online', 9, 1250,
+                                    [33.0, 30.0, 13.5], error_avg=1.4, error_blocks=3.0, bias_blocks=-1.0)])
+    panel['ctype'] = None
+    panel = panel.set_index(['event_date', 'date', 'pollster_id', 'sponsor_id'])
+    cycle = synthetic_cycle()
+    cycle['pollster'] = cycle['pollster'].astype(object)
+    return pd.concat([cycle, panel]).sort_index()
 
 
 RATING_HOUSES = {'CIS': (1, .8), 'GAD3': (2, .6), '40dB': (3, .4)}  # casa -> (pollster_id, rating)
@@ -421,7 +456,9 @@ class FakeComputer:
 
         def filter_polls(featured=True, **kw):
             self.calls.append(('filter_polls', featured, kw))
-            return synthetic_cycle()
+            if kw.get('drop_ctypes') == ['exit']:
+                return pd.concat([synthetic_cycle().assign(pollster=lambda d: d['pollster'].astype(object)), synthetic_ban()])
+            return synthetic_legal() if kw.get('drop_mtypes') == [] else synthetic_cycle()
 
         comp.build_series = lambda: comp
         comp.load_herding, comp.herding_summary, comp.get_polls_metric = load_herding, herding_summary, get_polls_metric

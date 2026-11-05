@@ -14,7 +14,7 @@ from ..data import get_event_results, get_events, get_pollsters
 from ..forecaster import published_seats
 from .analysis import export_poll_errors
 from .backtest import BACKTEST_FILES, backtest_source, export_backtest_table
-from .common import NothingToPublish, provenance, PublishRefused, REPO_ROOT, round_cols, _iso_dates, _iso_day, _today, _weighted_mean
+from .common import NothingToPublish, PCT_DECIMALS, provenance, PublishRefused, REPO_ROOT, round_cols, _iso_dates, _iso_day, _today, _weighted_mean
 from .forecast import export_poll_rows, POLL_COLUMNS
 
 
@@ -67,7 +67,8 @@ def export_event_polls(frame: pd.DataFrame, blocks: Sequence[str], ids: dict) ->
     return {'blocks': data['blocks'], 'rows': _records(table)}, table
 
 
-def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optional[dict] = None) -> tuple:
+def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optional[dict] = None,
+                       order: Sequence[str] = ('date', 'pollster_id')) -> tuple:
     """Export the polls of the cycle of a past election as they were published, the oldest first.
 
     Parameters
@@ -81,6 +82,8 @@ def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optiona
         Party names to export, in column order; one missing from the frame is skipped.
     seats : dict, optional
         Seat projections by ``(date, pollster_id, sponsor_id)`` (``published_seats``); none by default.
+    order : sequence of str, optional
+        Columns to sort by; ascending by date and pollster by default.
 
     Returns
     -------
@@ -98,10 +101,66 @@ def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optiona
         table['sample_size'] = table['sample_size'].where(table['sample_size'] > 0).astype('Int64')
     if 'weight' not in table.columns and {'weight_over', 'weight_sample'} <= set(table.columns):
         table['weight'] = table['weight_over'].astype(float) * table['weight_sample'].astype(float)
-    table = table.sort_values(['date', 'pollster_id'], kind='stable', ignore_index=True)
+    table = table.sort_values(list(order), kind='stable', ignore_index=True)
     records, polls = export_poll_rows(table, names, seats)
 
     return {'parties': list(names), 'columns': list(POLL_COLUMNS), 'polls': records}, polls
+
+
+BAN_COLUMNS = POLL_COLUMNS + ['days', 'error_avg', 'error_blocks', 'bias_blocks']
+BAN_EXTRA_COLUMNS = BAN_COLUMNS[len(POLL_COLUMNS):]
+
+
+def _ban_rows(frame: pd.DataFrame, names: Sequence[str], order: Sequence[str] = ('date', 'pollster_id')) -> tuple:
+    """Records and CSV table of polls sorted by ``order`` with the ``BAN_COLUMNS``: the poll shape of the cycle plus
+    ``days`` and the errors."""
+    data, table = export_event_cycle(frame, names, order=order)
+    extras = frame.reset_index().sort_values(list(order), kind='stable', ignore_index=True)
+    extras = extras.reindex(columns=BAN_EXTRA_COLUMNS)
+    extras['days'] = extras['days'].astype('Int64')
+    for column in BAN_EXTRA_COLUMNS[1:]:
+        extras[column] = extras[column].astype(float).round(PCT_DECIMALS)
+    records = data['polls']
+    for record, extra in zip(records, extras.astype(object).where(extras.notna(), None).to_dict(orient='records')):
+        record.update(extra)
+        record.pop('seats', None)
+    columns = POLL_COLUMNS + BAN_EXTRA_COLUMNS
+    table = pd.concat([table[POLL_COLUMNS], extras, table[[n for n in names if n in table.columns]]], axis=1)
+    return records, table[columns + [c for c in table.columns if c not in columns]]
+
+
+def export_event_ban(polls: pd.DataFrame, legal: pd.DataFrame, names: Sequence[str]) -> tuple:
+    """Export the polls published during the electoral ban of a past election and the last legal poll of each house.
+
+    Parameters
+    ----------
+    polls : pandas.DataFrame
+        Polls of the ban (``ctype == 'wban'``), as ``Computer.filter_polls`` gives them, with ``date`` and
+        ``pollster_id`` as columns or index levels (see ``export_event_cycle``), plus ``days``, ``error_avg``,
+        ``error_blocks`` and ``bias_blocks``.
+    legal : pandas.DataFrame
+        Legal polls of the election (without the ban and the exit polls, online panels included), same shape.
+    names : sequence of str
+        Party names to export, in column order; one missing from the frame is skipped.
+
+    Returns
+    -------
+    tuple of (dict, dict of pandas.DataFrame)
+        Data for the ``event-ban`` schema (``parties``, ``columns``, ``polls`` and ``legal``) and the CSV twins
+        ``{'ban': ..., 'ban-legal': ...}``. ``polls`` ascend by date and pollster; ``legal`` ascends by pollster id and has the poll with
+        the fewest ``days`` of each house that has a poll of the ban (ties: the latest ``date``). ``days`` are
+        integers and the errors are rounded to ``PCT_DECIMALS`` (null when missing); no seat projections.
+    """
+    polls = polls.reset_index() if 'date' not in polls.columns else polls
+    legal = legal.reset_index() if 'date' not in legal.columns else legal
+    legal = legal[legal['pollster_id'].isin(polls['pollster_id'].unique())]
+    legal = legal.sort_values(['days', 'date'], ascending=[True, False]).drop_duplicates('pollster_id')
+    legal = legal.sort_values('pollster_id')  # the houses in the order of their ids, not of their dates
+    names = [name for name in names if name in polls.columns]
+    ban_records, ban_table = _ban_rows(polls, names)
+    legal_records, legal_table = _ban_rows(legal, names, order=('pollster_id', 'date'))
+    data = {'parties': list(names), 'columns': list(BAN_COLUMNS), 'polls': ban_records, 'legal': legal_records}
+    return data, {'ban': ban_table, 'ban-legal': legal_table}
 
 
 def export_event_pollsters(frame: pd.DataFrame, blocks: Sequence[str], ids: dict) -> tuple:
@@ -291,7 +350,8 @@ def event_summary(frame: pd.DataFrame, blocks: Sequence[str]) -> dict:
 
 
 def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: dict, main: Sequence[str],
-                      summary: dict, model: dict, prov: dict, seconds: dict, featured: bool = True) -> dict:
+                      summary: dict, model: dict, prov: dict, seconds: dict, featured: bool = True,
+                      n_ban: int = 0) -> dict:
     """Build the ``event-meta`` document describing a published past election.
 
     Parameters
@@ -317,6 +377,8 @@ def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: 
     featured : bool, optional
         Whether the election is analysed (``featured``: it feeds the model, the ratings and the backtest) or only
         published (it has an official result but too few useful polls).
+    n_ban : int, optional
+        Number of polls published during the electoral ban (the ``ban`` part).
 
     Returns
     -------
@@ -327,7 +389,7 @@ def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: 
             'n_pollsters': summary['n_pollsters'], 'blocks': {k: list(v) for k, v in blocks.items()},
             'main': list(main), 'summary': summary, 'has_model': bool(model['horizons']), 'featured': bool(featured),
             'horizons': list(model['horizons']), 'commit': prov['commit'], 'dirty': bool(prov['dirty']),
-            'versions': prov['versions'], 'seconds': seconds}
+            'versions': prov['versions'], 'seconds': seconds, 'n_ban': int(n_ban)}
 
 
 def event_dates_to_publish(scope: str, event_date, events: Optional[Callable] = None,
@@ -372,7 +434,7 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
                   force: bool = False) -> dict:
     """Write one past election of a scope into the bundle, overwriting the previous publication.
 
-    The parts are written in the order ``pollsters``, ``polls``, ``cycle``, ``results``, ``model`` and ``series`` (each JSON
+    The parts are written in the order ``pollsters``, ``polls``, ``cycle``, ``ban``, ``results``, ``model`` and ``series`` (each JSON
     with its CSV twins) and ``meta`` last, so a failure halfway leaves the previous ``meta.json`` in place. Any
     election with an official result is published, ``featured`` or not (``meta.featured`` tells which). The polls
     errors come from a ``Computer`` of the election alone (``get_polls_metric('error', bmap='vs',
@@ -411,7 +473,7 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     Returns
     -------
     dict
-        ``{'scope', 'event_date', 'n_polls', 'n_pollsters', 'has_model', 'has_series', 'seconds'}``;
+        ``{'scope', 'event_date', 'n_polls', 'n_pollsters', 'n_ban', 'has_model', 'has_series', 'seconds'}``;
         ``has_series`` is whether the backtest had the daily series of the election (``export_event_series``):
         without it the part ``series`` and its CSV are not written, and those of a previous publication are
         removed.
@@ -454,6 +516,9 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
         blocks, main = bmaps['vs'], list(bmaps.get('main', []))
         errors = comp.get_polls_metric('error', bmap='vs', featured='results')
         cycle = comp.filter_polls('results')
+        ban = comp.filter_polls('results', drop_ctypes=['exit'])
+        ban = ban[ban['ctype'] == 'wban']
+        legal = comp.filter_polls('results', drop_mtypes=[], drop_ctypes=['wban', 'exit'])
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
     if errors.empty:
@@ -489,6 +554,9 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     names = [name for name in comp.names if name in cycle.columns]
     data, frame = export_event_cycle(cycle, names, (seats or published_seats)(scope, event_date, names))
     write('cycle', data, {'cycle': frame})
+    data, frames = export_event_ban(ban, legal, names)
+    write('ban', data, frames)
+    n_ban = len(data['polls'])
     seconds['polls'] = lap()
     data, frame = export_event_results(official)
     write('results', data, {'results': frame})
@@ -509,9 +577,10 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     seconds['total'] = time.perf_counter() - start
     seconds = {step: round(value, 1) for step, value in seconds.items()}
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
-    meta = export_event_meta(scope, event_date, name, blocks, main, summary, model, prov(), seconds, featured=featured)
+    meta = export_event_meta(scope, event_date, name, blocks, main, summary, model, prov(), seconds, featured=featured,
+                             n_ban=n_ban)
     write('meta', meta, {})
 
     return {'scope': scope, 'event_date': event_date, 'n_polls': summary['n_polls'],
             'n_pollsters': summary['n_pollsters'], 'has_model': meta['has_model'],
-            'has_series': series_data is not None, 'seconds': seconds}
+            'has_series': series_data is not None, 'n_ban': n_ban, 'seconds': seconds}
