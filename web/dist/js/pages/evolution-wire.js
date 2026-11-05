@@ -58,8 +58,9 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
 /**
  * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the Partidos/Bloques radios
  * (`#evolution-view`, shown only when the scope has blocks), the pill legend (`#evolution-legend`), which selects
- * the names through the hidden ECharts legend, the table of changes (`#evolution-changes`, hidden with fewer than
- * two days), whose rows follow the selection, and the download button (`#evolution-download`), which saves the
+ * the names through the hidden ECharts legend, the table of changes (`#evolution-changes`), with every name of the
+ * view whatever the legend shows, shown only on demand by its button (`#evolution-changes-toggle`, «Ver los datos» /
+ * «Ocultar los datos», hidden with fewer than two days; Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the
  * chart as shown, with the table under it, as a signed image (`share.js`). Changing the view resets the selection.
  *
  * @param {object} initial the page's initial data (`runs`, the history part, and `inks`, the text colour over
@@ -75,9 +76,10 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
   }
   const legendEl = document.getElementById('evolution-legend');
   const changesEl = document.getElementById('evolution-changes');
+  const toggleEl = document.getElementById('evolution-changes-toggle');
   const viewSet = document.getElementById('evolution-view');
   const views = evolutionViews((initial.runs || {}).runs || [], catalog, {parties, field, total});
-  const state = {view: 'partidos', selected: null};
+  const state = {view: 'partidos', selected: null, listOpen: false};
   let chart = null;
 
   /** Data of the chart (`evolutionOption`) in the view and selection of `chartState`. */
@@ -95,28 +97,19 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     };
   }
 
-  /** Names shown in the current view and selection. */
-  const shownNames = () => state.selected ?? views[state.view].defaults ?? views[state.view].parties;
-
-  /** Fill the table of changes of the current view (empty and hidden with fewer than two days). */
+  /** Fill the table of changes of the current view and show it if open; button and table hidden without changes. */
   function fillChanges() {
     if (!changesEl) {
       return;
     }
     const current = views[state.view];
     const changes = evolutionChanges(current.runs, current.parties, field);
-    changesEl.innerHTML = changes ? changesTableHtml(changes, current, {field, formatter, shown: shownNames()}) : '';
-    changesEl.hidden = !changes;
-  }
-
-  /** Show only the rows of the table of the names shown. */
-  function markChanges() {
-    if (!changesEl) {
-      return;
-    }
-    const shown = shownNames();
-    for (const row of changesEl.querySelectorAll('tr[data-name]')) {
-      row.hidden = !shown.includes(row.dataset.name);
+    changesEl.innerHTML = changes ? changesTableHtml(changes, current, {field, formatter}) : '';
+    changesEl.hidden = !changes || !state.listOpen;
+    if (toggleEl) {
+      toggleEl.hidden = !changes;
+      toggleEl.textContent = state.listOpen ? 'Ocultar los datos' : 'Ver los datos';
+      toggleEl.setAttribute('aria-expanded', String(state.listOpen));
     }
   }
 
@@ -130,7 +123,6 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
         if (legendEl) {
           markLegend(legendEl, event.selected);
         }
-        markChanges();
       });
     }
     fillLegend(legendEl, views[state.view], state.selected, chart, initial.inks || {});
@@ -145,6 +137,13 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
   wireDownload(document.getElementById('evolution-download'), () => evolutionImageOption(dataOf(state), chartZoom(chart)), showError, {
     bottom: changesEl ? () => (changesEl.hidden ? null : tableImage(changesEl.querySelector('table'))) : null,
   });
+
+  if (toggleEl && changesEl) {
+    toggleEl.addEventListener('click', () => {
+      state.listOpen = !state.listOpen;
+      fillChanges();
+    });
+  }
 
   // The selector only works with JavaScript, so the server renders it hidden.
   if (viewSet && views.bloques) {

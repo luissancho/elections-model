@@ -4,11 +4,11 @@
             "parties": {
                 "event": [
                     "PP", "PSOE", "VOX", "FA", "UP", "SALF",
-                    "ERC", "JxCat", "EHB", "PNV", "BNG", "CC", "ADELANTE"
+                    "ERC", "JxCat", "EHB", "PNV", "BNG", "CC", "AA"
                 ],
                 "polls": [
                     "PP", "PSOE", "VOX", "FA", "UP", "SALF",
-                    "ERC", "JxCat", "EHB", "PNV", "BNG", "CC", "ADELANTE",
+                    "ERC", "JxCat", "EHB", "PNV", "BNG", "CC", "AA",
                     "SUMAR", "UPN", "AC"
                 ]
             },
@@ -28,7 +28,7 @@
                 "blocks": {
                     "Derecha": ["PP", "VOX", "SALF"],
                     "Izquierda": ["PSOE", "SUMAR", "FA", "UP"],
-                    "Regionalista": ["PNV", "BNG", "ADELANTE", "CC", "UPN"],
+                    "Regionalista": ["PNV", "BNG", "AA", "CC", "UPN"],
                     "Separatista": ["ERC", "JxCat", "EHB", "AC"]
                 },
                 "vs": {
@@ -505,20 +505,20 @@
         "2026-05-17": {
             "parties": {
                 "event": [
-                    "PP", "PSOE", "VOX", "ADELANTE", "PorA", "SALF"
+                    "PP", "PSOE", "VOX", "AA", "PorA", "SALF"
                 ],
                 "polls": [
-                    "PP", "PSOE", "VOX", "ADELANTE", "PorA", "SALF", "UP", "Cs"
+                    "PP", "PSOE", "VOX", "AA", "PorA", "SALF", "UP", "Cs"
                 ]
             },
             "bmaps": {
                 "main": [
-                    "PP", "PSOE", "VOX", "ADELANTE", "PorA"
+                    "PP", "PSOE", "VOX", "AA", "PorA"
                 ],
                 "blocks": {
                     "Derecha": ["PP", "VOX", "SALF", "Cs"],
                     "Izquierda": ["PSOE", "PorA", "UP"],
-                    "Regionalista": ["ADELANTE"]
+                    "Regionalista": ["AA"]
                 },
                 "vs": {
                     "Derecha": ["PP", "VOX", "SALF", "Cs"],
@@ -532,20 +532,20 @@
         "2022-06-19": {
             "parties": {
                 "event": [
-                    "PP", "PSOE", "VOX", "PorA", "ADELANTE", "Cs", "PACMA", "JM+"
+                    "PP", "PSOE", "VOX", "PorA", "AA", "Cs", "PACMA", "JM+"
                 ],
                 "polls": [
-                    "PP", "PSOE", "VOX", "PorA", "ADELANTE", "Cs", "PACMA", "JM+", "UP"
+                    "PP", "PSOE", "VOX", "PorA", "AA", "Cs", "PACMA", "JM+", "UP"
                 ]
             },
             "bmaps": {
                 "main": [
-                    "PP", "PSOE", "VOX", "PorA", "ADELANTE", "Cs"
+                    "PP", "PSOE", "VOX", "PorA", "AA", "Cs"
                 ],
                 "blocks": {
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "PorA", "PACMA", "UP"],
-                    "Regionalista": ["ADELANTE", "JM+"]
+                    "Regionalista": ["AA", "JM+"]
                 },
                 "vs": {
                     "Derecha": ["PP", "VOX", "Cs"],
@@ -554,7 +554,7 @@
             },
             "smap": {
                 "PorA": {"type": "agg", "names": ["UP"]},
-                "ADELANTE": {"type": "sub", "names": ["PorA"]}
+                "AA": {"type": "sub", "names": ["PorA"]}
             }
         },
         "2018-12-02": {
