@@ -188,7 +188,7 @@ def in_days(rows: pd.DataFrame, lo: int, hi: int) -> pd.DataFrame:
     return rows[(rows['days'] >= lo) & (rows['days'] <= hi)]
 
 
-def dispersion(rows: pd.DataFrame) -> dict:
+def dispersion(rows: pd.DataFrame, round_to: Optional[int] = 2) -> dict:
     """
     Dispersion of a set of residuals relative to the sampling error.
 
@@ -196,12 +196,14 @@ def dispersion(rows: pd.DataFrame) -> dict:
     ----------
     rows : pandas.DataFrame
         Rows of ``residual_rows``.
+    round_to : int, optional
+        Decimals of the ratio; ``None`` keeps it unrounded (for means and comparisons rounded later).
 
     Returns
     -------
     dict
-        ``k`` (distinct polls) and ``ratio`` (``sqrt(mean(resid²) / mean(var))`` rounded to 2 decimals, ``None``
-        without polls).
+        ``k`` (distinct polls) and ``ratio`` (``sqrt(mean(resid²) / mean(var))`` rounded to ``round_to`` decimals,
+        ``None`` without polls).
     """
     k = int(rows['poll'].nunique())
 
@@ -210,7 +212,7 @@ def dispersion(rows: pd.DataFrame) -> dict:
 
     ratio = math.sqrt(float((rows['resid'] ** 2).mean()) / float(rows['var'].mean()))
 
-    return {'k': k, 'ratio': round(ratio, 2)}
+    return {'k': k, 'ratio': ratio if round_to is None else round(ratio, round_to)}
 
 
 def house_ratio(rows: pd.DataFrame) -> dict:
