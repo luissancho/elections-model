@@ -8,7 +8,8 @@ from scipy.stats import norm
 
 from mtpy.lib.rating_check import (
     POPULATIONS, bootstrap_ci, discrimination, fit_line, population_of, quarters,
-    rating_check_summary, scatter_rows, simple_average_errors, skill, slope, summarize_simple_average,
+    rating_check_summary, scatter_rows, simple_average_curve, simple_average_errors, skill, slope,
+    summarize_simple_average,
 )
 
 HOUSES = {'A': (1, .8), 'B': (2, .6), 'C': (3, .4), 'D': (4, .2)}
@@ -210,3 +211,14 @@ def test_slope_and_fit_line_ignore_infinite_d_prev_and_share_one_fit():
     assert slope(pairs, replicas=10)['n'] == 8 and len(scatter_rows(pairs)) == 8
     (x0, y0), (x1, y1) = fit_line(pairs)
     assert (y1 - y0) / (x1 - x0) == pytest.approx(slope(pairs, replicas=10)['value'])
+
+
+def test_simple_average_curve_reference_and_flat_rows():
+    curve = simple_average_curve(POLLS, [0.0, 1.0, 2.0], replicas=50).set_index(['exponent', 'population'])
+    elections = simple_average_errors(POLLS)
+    assert curve.loc[(1.0, 'all'), 'diff'] == 0 and curve.loc[(1.0, 'all'), 'mae'] == pytest.approx(elections['mae_rated'].mean())
+    assert curve.loc[(0.0, 'all'), 'mae'] == pytest.approx(elections['mae_flat'].mean())
+    assert curve.loc[(0.0, 'all'), 'diff'] == pytest.approx((elections['mae_flat'] - elections['mae_rated']).mean())
+    assert set(curve.index.get_level_values('population')) == set(POPULATIONS)
+    row = curve.loc[(2.0, 'all')]
+    assert row['lo'] <= row['diff'] <= row['hi'] and row['better'] + row['worse'] <= row['n']
