@@ -966,6 +966,13 @@ tr.now td { background: var(--color-accent-soft); }
 .shade-legend i.h4 { border: 1px solid var(--color-line-strong); }
 :is(#matrix-table td, .shade-legend i).h5 { background: #dbeafe; }
 :is(#matrix-table td, .shade-legend i).h6 { background: #93c5fd; }
+/* its two charts: the dispersion by weeks, lower on phones, and the matrix scrolling sideways in its column (few
+   cycles, so narrower than the matrix of the CIS bias study, which is not in a `.grid2`) */
+.qcard .chart#weeks-chart { height: 340px; }
+.grid2 .chart-scroll > .chart#matrix-chart { min-width: 420px; }
+@media (max-width: 699px) {
+  .qcard .chart#weeks-chart { height: 280px; }
+}
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {

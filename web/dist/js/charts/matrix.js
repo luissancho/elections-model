@@ -1,5 +1,6 @@
 // Matrix of signs: one row per pollster, one column per election, each cell shaded by the error of the poll on
-// the left block (red when the poll gave the left more than the result, blue when less; the CIS bias study).
+// the left block (red when the poll gave the left more than the result, blue when less; the CIS bias study). With a
+// `center` it shades a ratio around it instead (the herd study: red below 1, blue above, grey near it).
 import {baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtNum} from '../format.js';
 
@@ -8,6 +9,9 @@ const EXTRA_HEIGHT = 70;
 const MIN_ALPHA = 0.15;
 const ALPHA_SPAN = 0.75;
 const LABEL_SIZE = 9.5;
+// The cells near the centre, and the opacity from which the label inside a cell is written in white.
+const NEUTRAL_COLOR = '#f4f5f8';
+const WHITE_LABEL_ALPHA = 0.6;
 
 /**
  * Colour of a cell: the positive or the negative one, more opaque the larger the error is (up to `cap`).
@@ -20,6 +24,19 @@ const LABEL_SIZE = 9.5;
 function shade(value, cap, [positive, negative]) {
   const alpha = MIN_ALPHA + ALPHA_SPAN * Math.min(Math.abs(value), cap) / cap;
   return `rgba(${value > 0 ? positive : negative},${alpha.toFixed(2)})`;
+}
+
+/**
+ * Opacity of a cell shaded around `center`: grows with the distance to it, relative to the cap of its side.
+ *
+ * @param {number} value the ratio
+ * @param {number} center the value of no colour
+ * @param {{below: number, above: number}} caps distance, on each side, of the darkest shade
+ * @returns {number} the opacity
+ */
+function alphaAround(value, center, caps) {
+  const reach = value < center ? (center - value) / caps.below : (value - center) / caps.above;
+  return MIN_ALPHA + ALPHA_SPAN * Math.min(reach, 1);
 }
 
 /**
@@ -48,11 +65,47 @@ function signed(value) {
  *
  * @param {{events: object[], houses: string[], cells: number[][]}} data `events` as `{label, short}`, `cells` as
  *   `[event index, house index, error]`
- * @param {object} opts `cap` (error, in points, of the darkest shade), `positive` and `negative` (hex colours)
+ * @param {object} opts `cap` (error, in points, of the darkest shade), `positive` and `negative` (hex colours);
+ *   with `center` the cells are shaded around it instead: `positive` below with the darkest shade at
+ *   `caps.below` from it, `negative` above at `caps.above`, and grey inside `neutral` (`[lo, hi]`); `label` writes
+ *   the value inside each cell and `cellText(house, event, value)` gives the text of the tooltip
  * @returns {object} the option
  */
-export function matrixOption({events, houses, cells}, {cap = 8, positive = '#d62728', negative = '#1d4f86'} = {}) {
+export function matrixOption({events, houses, cells}, {
+  cap = 8, positive = '#d62728', negative = '#1d4f86', center = null, caps = {below: 0.5, above: 1},
+  neutral = [0.9, 1.2], label = false, cellText = null,
+} = {}) {
   const rgb = [channels(positive), channels(negative)];
+  const centred = center !== null && center !== undefined;
+  const item = (cell) => {
+    const value = cell[2];
+    if (!centred) {
+      return {value: cell, itemStyle: {color: shade(value, cap, rgb), borderColor: '#fff', borderWidth: 2}};
+    }
+    if (value >= neutral[0] && value <= neutral[1]) {
+      return {value: cell, itemStyle: {color: NEUTRAL_COLOR, borderColor: '#fff', borderWidth: 2}};
+    }
+    const alpha = alphaAround(value, center, caps);
+    const color = `rgba(${value < center ? rgb[0] : rgb[1]},${alpha.toFixed(2)})`;
+    const out = {value: cell, itemStyle: {color, borderColor: '#fff', borderWidth: 2}};
+    if (label && alpha >= WHITE_LABEL_ALPHA) {
+      out.label = {color: '#fff'};
+    }
+    return out;
+  };
+  const series = {
+    type: 'heatmap',
+    data: cells.map(item),
+    emphasis: {itemStyle: {borderColor: THEME.textColor, borderWidth: 1.5}},
+  };
+  if (label) {
+    series.label = {
+      show: true,
+      fontSize: 10.5,
+      color: THEME.textColor,
+      formatter: (params) => fmtNum(params.value[2], 2),
+    };
+  }
   return {
     ...baseOption(),
     grid: {left: 8, right: 8, top: 8, bottom: 8, containLabel: true},
@@ -60,6 +113,9 @@ export function matrixOption({events, houses, cells}, {cap = 8, positive = '#d62
       ...tooltipStyle(),
       formatter(params) {
         const [x, y, value] = params.value;
+        if (cellText) {
+          return escapeHtml(cellText(houses[y], events[x], value));
+        }
         return `${escapeHtml(houses[y])} · ${escapeHtml(events[x].label)}: `
           + `error en el bloque de izquierdas ${escapeHtml(signed(value))}`;
       },
@@ -87,14 +143,7 @@ export function matrixOption({events, houses, cells}, {cap = 8, positive = '#d62
       axisLine: {show: false},
       axisLabel: {fontSize: 11.5, color: THEME.textColor, fontWeight: 500},
     },
-    series: [{
-      type: 'heatmap',
-      data: cells.map((cell) => ({
-        value: cell,
-        itemStyle: {color: shade(cell[2], cap, rgb), borderColor: '#fff', borderWidth: 2},
-      })),
-      emphasis: {itemStyle: {borderColor: THEME.textColor, borderWidth: 1.5}},
-    }],
+    series: [series],
   };
 }
 

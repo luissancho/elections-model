@@ -32,6 +32,7 @@ MATRIX_JS = pathlib.Path(DIST, 'js', 'charts', 'matrix.js').as_uri()
 RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
+WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -46,7 +47,8 @@ ROWS = [
 def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
-    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk` ranking, `ds` distancia) y `rows` definidos y devuelve su JSON (las
+    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk` ranking, `ds` distancia), el del estudio del
+    rebaño (`wk` semanas) y `rows` definidos y devuelve su JSON (las
     funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
@@ -57,11 +59,12 @@ def run_js(expr, rows=ROWS):
         'const sw = await import("{}"); const c = await import("{}"); '
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
-        'const rk = await import("{}"); const ds = await import("{}"); const rows = {}; '
+        'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
+        'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, json.dumps(rows), expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -827,6 +830,28 @@ def test_matrix_option_colours_by_sign_and_bolds_the_general_elections():
     colours = [cell['itemStyle']['color'] for cell in option['series'][0]['data']]
     assert colours[0].startswith('rgba(214,39,40') and colours[1].startswith('rgba(29,79,134')
 
+
+
+def test_weeks_option_draws_the_cycles_the_mean_and_the_current_one_over_the_chance_line():
+    data = {'buckets': [{'lo': 27, 'hi': 52, 'label': '27-52 sem.'}, {'lo': 0, 'hi': 1, 'label': '0-1 sem.'}],
+            'rows': [{'event_date': '2023-07-23', 'label': '2023', 'current': False, 'lo': 27, 'hi': 52, 'k': 1, 'ratio': 1.31},
+                     {'event_date': '2023-07-23', 'label': '2023', 'current': False, 'lo': 0, 'hi': 1, 'k': 3, 'ratio': 1.11},
+                     {'event_date': '2026-11-29', 'label': '2026', 'current': True, 'lo': 27, 'hi': 52, 'k': 2, 'ratio': 1.01},
+                     {'event_date': '2026-11-29', 'label': '2026', 'current': True, 'lo': 0, 'hi': 1, 'k': 0, 'ratio': None}],
+            'mean': [{'lo': 27, 'hi': 52, 'k': 1, 'ratio': 1.31}, {'lo': 0, 'hi': 1, 'k': 1, 'ratio': 1.11}]}
+    option = run_js('wk.weeksOption(%s)' % json.dumps(data))
+    names = [s['name'] for s in option['series']]
+    assert names == ['2023', 'Media de los 1', '2026'] and option['xAxis']['data'] == ['27-52 sem.', '0-1 sem.']
+    assert option['series'][2]['data'] == [1.01, None] and option['series'][2]['lineStyle']['width'] == 3.5
+    assert option['series'][1]['markLine']['data'][0]['yAxis'] == 1 and option['series'][1]['markArea']['data'][0][1]['yAxis'] == 1
+    assert option['yAxis']['max'] == 3 and option['yAxis']['interval'] == 0.5
+
+
+def test_matrix_option_with_a_centre_shades_around_one_and_labels_the_cells():
+    option = run_js('mx.matrixOption({events: [{short: "2023", label: "2023"}], houses: ["GAD3", "NC Report", "IMOP"], cells: [[0, 0, 0.32], [0, 1, 1.97], [0, 2, 1.0]]}, {center: 1, label: true})')
+    colors = [cell['itemStyle']['color'] for cell in option['series'][0]['data']]
+    assert colors[0].startswith('rgba(214,39,40') and colors[1].startswith('rgba(29,79,134') and colors[2] == '#f4f5f8'
+    assert option['series'][0]['label']['show'] is True
 
 def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():
     rows = [{'x': 93, 'y': 8.0, 'name': 'CIS', 'k': 38, 'n': 41, 'cis': True}, {'x': 77, 'y': 1.6, 'name': 'Sigma Dos', 'k': 23, 'n': 30, 'cis': False}]

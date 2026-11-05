@@ -257,7 +257,9 @@
             <p class="ctitle">Las últimas {{ ww }} semanas de cada ciclo, casa a casa</p>
             <p class="csub">Rebaño de cada encuestadora con {{ min_polls|int }} o más sondeos con muestra en esa ventana; en blanco, menos de {{ min_polls|int }}</p>
             <div class="shade-legend"><span><i class="h1"></i>&lt; 0,5</span><span><i class="h2"></i>0,5-0,7</span><span><i class="h3"></i>0,7-0,9</span><span><i class="h4"></i>0,9-1,2</span><span><i class="h5"></i>1,2-1,6</span><span><i class="h6"></i>&gt; 1,6</span></div>
-            <div class="chart" id="matrix-chart" role="img" aria-label="Rebaño de {{ (matrix.get('houses') or [])|length }} encuestadoras en las últimas {{ ww }} semanas de {{ (matrix.get('events') or [])|length }} ciclos{% if repeaters %}; repiten {{ repeaters|length }} casas{% endif %}"></div>
+            <div class="chart-scroll">
+              <div class="chart" id="matrix-chart" role="img" aria-label="Rebaño de {{ (matrix.get('houses') or [])|length }} encuestadoras en las últimas {{ ww }} semanas de {{ (matrix.get('events') or [])|length }} ciclos{% if repeaters %}; repiten {{ repeaters|length }} casas{% endif %}"></div>
+            </div>
             <div class="table-wrap">
               <table id="matrix-table">
                 <caption class="sr-only">Rebaño de cada encuestadora en las últimas {{ ww }} semanas de cada ciclo; vacía la celda con menos de {{ min_polls|int }} sondeos.</caption>
