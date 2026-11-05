@@ -708,3 +708,23 @@ def test_publish_results_are_keyed_by_scope_and_study(fresh_app, tmp_path, patch
     fs = FileSystem(str(tmp_path))
     result = Publish().run(what=['analysis', 'study'], scopes=['es'], study='voto-cera', fs=fs)
     assert set(result) == {'es', 'voto-cera'} and result['es']['status'] == 'published'
+
+
+def test_publish_studies_action_runs_once_and_needs_no_study_slug(fresh_app, tmp_path, patched, monkeypatch, capsys):
+    """`studies` republica los estudios vivos una vez, sin `study` ni ámbitos, y después de `analysis`."""
+    from mtpy.jobs.Publish import Publish
+
+    def no_db(scopes, catalogue=None):
+        raise RuntimeError('db')
+
+    monkeypatch.setattr(publish, 'publish_study', lambda study, writer, **kw: {
+        'study': study, 'registered_at': None, 'checked': False, 'seconds': {'total': 1.0}})
+    fs = FileSystem(str(tmp_path))
+    with monkeypatch.context() as m:
+        m.setattr(publish, 'resolve_scopes', no_db)
+        result = Publish().run(what=['studies'], fs=fs)
+    assert result['studies']['status'] == 'published' and set(result['studies']['studies']) == {'sesgo-cis', 'rebano'}
+    capsys.readouterr()
+    result = Publish().run(what=['studies', 'analysis'], scopes=['es'], fs=fs)
+    out = capsys.readouterr().out
+    assert set(result) == {'es', 'studies'} and out.index('es: analysis published') < out.index('studies: ')

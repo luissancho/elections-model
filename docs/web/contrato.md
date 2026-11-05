@@ -454,7 +454,7 @@ que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` d
 ## Estudios
 
 Enmienda 2026-10-19 (estudio del voto CERA). Un estudio vive en `studies/{study}/` (en `site/v1/`, o en `site-dry/v1/` con
-`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay dos: `voto-cera` y `sesgo-cis`.
+`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay tres: `voto-cera`, `sesgo-cis` y `rebano`.
 Como el análisis, **se sobrescribe** en cada publicación: sin `run_id` y fuera de `history.json`. Su única huella en
 el manifest es su entrada en `manifest.studies` (ver «Punteros»).
 
@@ -527,6 +527,22 @@ Gemelos CSV:
 | `houses` | `houses` |
 | `matrix` | `matrix` (largo: `pollster`, `scope`, `event_date`, `Izquierda`) |
 | `election` | `election-houses` |
+
+### `rebano`
+
+«¿Se copian las encuestadoras en la recta final?». Cinco partes, sin `slug`; se calcula con las partes ya publicadas
+del paquete y no se registra. Los estudios con `live` en `publish.STUDY_RUNNERS` (`sesgo-cis` y `rebano`) los
+republica la acción `studies` del publicador y, como último paso, `update`:
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `rebano-meta@1` | `study`, `title`, `subtitle`, `scope`, `election` (dict o `null`), `params` (dict), `inputs` (dict), `sources` (lista de `{label, url}`), `commit` (texto o `null`), `dirty`, `versions` (dict), `seconds` (dict) |
+| `summary` | `rebano-summary@1` | `n_cycles`, `k_narrowed`, `narrowed` (lista), `mean_before`, `mean_last`, `mean_final` (número o `null`), `k_below_one`, `below_one` (lista), `sign`, `current`, `houses_now`, `cis`, `accuracy` (dicts o `null`) |
+| `cycles` | `rebano-cycles@1` | `rows` (lista) |
+| `weeks` | `rebano-weeks@1` | `buckets`, `rows`, `mean` (listas) |
+| `houses` | `rebano-houses@1` | `rows` (lista) |
+
+Gemelos CSV: `cycles`, `weeks` y `houses`, con el nombre de la parte.
 
 `meta`, `summary` no tienen gemelo.
 
@@ -804,7 +820,7 @@ sobrescriben en cada publicación.
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
-| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`) |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `cycles`, `weeks`, `houses`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `cycles`, `weeks`, `houses` |
 
 - `meta`, `placement` y `summary` no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
   no pertenece a la parte.
