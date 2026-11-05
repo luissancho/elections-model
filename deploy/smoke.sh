@@ -7,7 +7,7 @@
 #             files/ montado en /app/files).
 #
 # Comprueba: imagen sin *.env, /healthz, rutas de la API (deploy/check-api.sh),
-# paginas (/, /es, /es/escanos, /elecciones, /metodo y sus cuatro subpaginas; /casas con ENV_FILE)
+# paginas (/, /es, /elecciones, /metodo y sus cuatro subpaginas; /casas con ENV_FILE)
 # y cabeceras de cache (tambien de las fuentes de /dist/vendor/fonts/). Avisa (WARN, sin fallar) si `docker
 # logs` no tiene lineas de acceso de nginx o si `docker stop` tarda 10 s o mas.
 # El contenedor se elimina siempre al terminar.
@@ -64,7 +64,6 @@ check_static() {
 }
 check_static / text/html
 check_static /es text/html
-check_static /es/escanos text/html
 check_static "/elecciones?scope=es" text/html
 check_static "/metodo/backtest?scope=es" text/html
 check_static /metodo text/html

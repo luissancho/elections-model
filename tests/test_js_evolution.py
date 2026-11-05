@@ -17,6 +17,7 @@ BLOCKS_JS = pathlib.Path(DIST, 'js', 'blocks.js').as_uri()
 WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'evolution-wire.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 CHANGES_JS = pathlib.Path(DIST, 'js', 'evolution-changes.js').as_uri()
+FORMAT_JS = pathlib.Path(DIST, 'js', 'format.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -135,6 +136,28 @@ def test_evolution_views_without_blocks_or_main_parties():
     assert views['bloques'] is None and views['partidos']['defaults'] is None
     seats = run_js('ew.evolutionViews(runs, new c.Catalog(%s), {field: "seats", total: 350}).bloques.runs[0].nowcast.parties' % json.dumps(META))
     assert seats == [{'name': 'Derecha', 'seats': 203}, {'name': 'Izquierda', 'seats': 107}, {'name': 'Otros', 'seats': 40}]
+
+
+def test_wire_evolution_switches_metric():
+    """The Voto / Escaños switch picks `{field, formatter, total}` by metric, and the views are built with it."""
+    metrics = '{pct: {field: "pct", formatter: f.fmtPct, total: 100}, seats: {field: "seats", formatter: f.fmtInt, total: 350}}'
+    head = 'const f = await import("%s"); const m = %s; ' % (FORMAT_JS, metrics)
+    out = run_js('await (async () => { %s const s = ew.evolutionMetric(m, "seats"), p = ew.evolutionMetric(m, "pct"), '
+                 'x = ew.evolutionMetric(m, "nope"); return [s.field, s.total, s.formatter === f.fmtInt, p.field, p.total, '
+                 'p.formatter === f.fmtPct, x.field]; })()' % head)
+    assert out == ['seats', 350, True, 'pct', 100, True, 'pct']  # an unknown metric falls back to the first one
+    views = run_js('await (async () => { %s return ew.evolutionViews(runs, new c.Catalog(%s), {parties: ["PP", "PSOE", "VOX"], '
+                   '...ew.evolutionMetric(m, "seats")}); })()' % (head, json.dumps(META)))
+    assert views['bloques']['runs'][0]['nowcast']['parties'] == [
+        {'name': 'Derecha', 'seats': 203}, {'name': 'Izquierda', 'seats': 107}, {'name': 'Otros', 'seats': 40}]
+    # the file of the image follows the metric: the voto name as the template writes it, «-evolucion-escanos-» for seats
+    file = 'demoscopio-evolucion-es-2026-11-04.png'
+    assert run_js('[ew.evolutionFile(%s, "pct"), ew.evolutionFile(%s, "seats"), ew.evolutionFile(ew.evolutionFile(%s, "seats"), "seats")]'
+                  % ((json.dumps(file),) * 3)) == [file, 'demoscopio-evolucion-escanos-es-2026-11-04.png',
+                                                   'demoscopio-evolucion-escanos-es-2026-11-04.png']
+    labels = run_js('[ew.evolutionLabel("pct"), ew.evolutionLabel("seats")]')
+    assert labels == ['Evolución de las actualizaciones: el voto de cada partido en cada actualización',
+                      'Evolución de las actualizaciones: los escaños de cada partido en cada actualización']
 
 
 def day_runs(field, values, name='VOX'):

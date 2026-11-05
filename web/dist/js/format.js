@@ -1,6 +1,6 @@
 // Number and date formatting (es-ES).
 
-const DASH = '–';
+export const DASH = '–';
 
 function isMissing(x) {
   return x === null || x === undefined || Number.isNaN(x);

@@ -231,8 +231,8 @@
         </p>
         <p>
           La deriva no tiene dirección: no mueve el voto estimado, que es el mismo en los dos modos, sólo abre los
-          intervalos. Es lo que dibuja el abanico de voto en la página de escaños: en el horizonte 0 está la
-          estimación de hoy, y cuanto más lejos, más ancho. Mira Hoy para saber cómo están las cosas y Elección para
+          intervalos. Es lo que dibuja el «Abanico de voto por horizonte» de la página de encuestas: en el horizonte 0
+          está la estimación de hoy, y cuanto más lejos, más ancho. Mira Hoy para saber cómo están las cosas y Elección para
           saber qué puede pasar el día de la votación. Un aviso para Hoy: el error histórico es el de los sondeos de
           la última semana de campaña, aunque la votación quede lejos. La nota{{ m.note('deriva', note_keys) }}
           recoge cómo se ajusta <var>k</var> y el factor de los jóvenes.
@@ -761,7 +761,7 @@
       {% endcall %}
       {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
                    'Cómo se mide el acierto de cada encuestadora en las elecciones pasadas y cuánto pesa ese rating en el promedio.',
-                   [{'href': '/es/escanos', 'label': 'Escaños de las elecciones generales'},
+                   [{'href': '/es#escanos', 'label': 'Escaños de las elecciones generales'},
                     {'href': method_href('backtest'), 'label': '¿Cuánto acierta el modelo?'}]) }}
     </div>
 {% endblock %}

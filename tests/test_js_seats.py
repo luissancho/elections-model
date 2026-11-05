@@ -1,6 +1,7 @@
 """Paridad entre `web/dist/js/seats.js` y la regla de cuantiles de `Stat` (se salta sin `node`)."""
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 
@@ -66,3 +67,60 @@ def test_coalition_caption_gives_the_simulations_the_central_seats_and_the_range
     caption = run_js('s.coalitionCaption({n: 1000, median: 201, lo: 181, hi: 220.5, pMajority: 0.992}, 202)')
     assert caption == [{'label': 'Simulaciones', 'value': '1.000'}, {'label': 'Reparto central', 'value': '202'},
                        {'label': 'Rango 95%', 'value': '181–221'}]
+
+
+def test_load_dist():
+    """`loadDist` resuelve con la parte (el `data` del sobre de la API) de una respuesta correcta y rechaza la promesa con
+    una que no lo es."""
+    ok = run_js('await s.loadDist("/x", async (href) => ({ok: true, json: () => ({schema: "dist@1", data: {parties: ["PP"], seats: [[140]], href}})}))')
+    assert ok == {'parties': ['PP'], 'seats': [[140]], 'href': '/x'}
+    failed = run_js('await s.loadDist("/x", async () => ({ok: false, status: 503})).then(() => "resolved", (error) => error.message)')
+    assert failed != 'resolved' and '503' in failed
+    # a network failure, or a body without the envelope, rejects too
+    assert run_js('await s.loadDist("/x", async () => { throw new Error("offline"); }).then(() => "resolved", () => "rejected")') == 'rejected'
+    assert run_js('await s.loadDist("/x", async () => ({ok: true, json: () => ({parties: ["PP"]})})).then(() => "resolved", () => "rejected")') == 'rejected'
+    # a part without the columns the calculator reads (`parties` and the simulations, `seats`) rejects as well
+    for data in ('{seats: [[140]]}', '{parties: "PP", seats: [[140]]}', '{parties: ["PP"]}', '{parties: ["PP"], seats: null}'):
+        assert run_js('await s.loadDist("/x", async () => ({ok: true, json: () => ({data: %s})})).then(() => "resolved", () => "rejected")' % data) == 'rejected', data
+
+
+WIRE_JS = pathlib.Path(ROOT, 'web', 'dist', 'js', 'pages', 'seats-wire.js').as_uri()
+CATALOG_JS = pathlib.Path(ROOT, 'web', 'dist', 'js', 'catalog.js').as_uri()
+ECHARTS = os.path.join(ROOT, 'web', 'dist', 'vendor', 'echarts-5.6.0.min.js')
+
+
+def chip_after_load(summary_parties, fetch_body):
+    """Texto de la franja de la calculadora y estado de sus píldoras tras la petición de las simulaciones de
+    `wireSeatsPage`, con un documento mínimo (sólo la franja y sus píldoras; el resto de la página no está) y `fetch`
+    sustituido por uno que responde `fetch_body`."""
+    script = (
+        'import {{createRequire}} from "node:module"; '
+        'const echarts = createRequire(import.meta.url)({}); '
+        'const el = (extra = {{}}) => ({{hidden: false, disabled: false, textContent: "", querySelectorAll: () => [], '
+        'addEventListener() {{}}, setAttribute() {{}}, classList: {{add() {{}}, remove() {{}}, toggle() {{}}}}, ...extra}}); '
+        'const nodes = {{"coalition-parties": el(), "coalition-result": el()}}; '
+        'globalThis.window = {{echarts, location: {{pathname: "/es", search: "", hash: ""}}, history: {{replaceState() {{}}}}, '
+        'innerWidth: 1200, addEventListener() {{}}}}; '
+        'globalThis.document = {{getElementById: (id) => nodes[id] || null, querySelector: () => null, '
+        'querySelectorAll: () => [], addEventListener() {{}}}}; '
+        'globalThis.fetch = async () => ({{ok: true, json: () => ({})}}); '
+        'console.error = () => {{}}; process.on("unhandledRejection", () => {{}}); '
+        'const w = await import("{}"); const {{Catalog}} = await import("{}"); '
+        'const meta = {{majority: 176, n_seats: 350, parties: [{{name: "PP", color: "#1e5aa8"}}], bmaps: {{}}}}; '
+        'w.wireSeatsPage({{state: {{scope: "es", mode: "forecast"}}, meta, summary: {{parties: {}}}, dist_href: "/x"}}, new Catalog(meta)); '
+        'await new Promise((resolve) => setTimeout(resolve, 50)); '
+        'const chip = nodes["coalition-result"]; '
+        'console.log(JSON.stringify({{text: chip.textContent, disabled: nodes["coalition-parties"].disabled}})); process.exit(0);'
+    ).format(json.dumps(ECHARTS), json.dumps(fetch_body), WIRE_JS, CATALOG_JS, json.dumps(summary_parties))
+    out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
+    return json.loads(out.stdout)
+
+
+def test_calculator_says_the_simulations_failed_when_the_success_path_throws():
+    """Una excepción al preparar la calculadora con las simulaciones ya recibidas no deja la franja en «Cargando las
+    simulaciones…» con las píldoras desactivadas: dice que no se han podido cargar, como un fallo de la petición."""
+    body = {'data': {'parties': ['PP'], 'seats': [[140], [150]]}}
+    # `summary.parties` that is not a list makes the preparation of the calculator throw
+    assert chip_after_load({'PP': 140}, body) == {'text': 'No se han podido cargar las simulaciones.', 'disabled': True}
+    # a part without the simulations is a failed load too
+    assert chip_after_load([], {'data': {'parties': ['PP']}}) == {'text': 'No se han podido cargar las simulaciones.', 'disabled': True}

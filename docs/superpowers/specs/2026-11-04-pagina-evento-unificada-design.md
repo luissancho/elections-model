@@ -103,8 +103,12 @@ y no tiene sentido obligarle a cambiar de pestaña para responderla.
   Promedios de hoy sola, y sobre un run de producción de 10.000 simulaciones (leído del bucket publicado), no
   sobre el run local del 8-10 (1.000 simulaciones: `dist` de 33 KB, cuando con 10.000 rondará los ~340 KB sin
   comprimir). Si el `/es` unido pesa más del doble que la Promedios de hoy con gzip, o el dibujo inicial se nota
-  más lento en el móvil, se le cuenta a Luis antes de seguir. La salida natural en ese caso es pedir `dist` a la
-  API la primera vez que se abre la calculadora o las distribuciones.
+  más lento en el móvil, se le cuenta a Luis antes de seguir. **Saltó (2026-11-04):** con el run
+  `20261104-120225` (10.000 simulaciones) la Promedios de hoy pesa 68 KB con gzip y la unida rondaría los
+  ~170 KB (2,5×). Casi todo es `dist` (86 KB con gzip). **Decisión de Luis:** `dist` no va en el JSON inicial. La
+  página la pide a la API (`/api/v1/forecast/{scope}/{mode}/dist?run=…`) justo después del primer dibujo. La
+  calculadora y las distribuciones muestran «cargando» mientras llega y un aviso si la petición falla. Sin
+  `dist` la página queda en ~85 KB (1,25×).
 - **Trabajo en paralelo de Luis:** `promedios.html` y `escanos.html` han cambiado en disco mientras se escribía
   este diseño. El plan se hace sobre su estado en el momento de empezar.
 - **Barra inferior del móvil** (`TABBAR`): Promedios y Escaños se convierten en una sola entrada, así que quedan
@@ -129,7 +133,7 @@ y no tiene sentido obligarle a cambiar de pestaña para responderla.
 ## Lo decidido sobre el cómo
 
 - Enfoque A, con el orden del punto 2 (promedio primero).
-- El 301 de `/{scope}/escanos` conserva la query y añade el ancla.
+- El 301 de `/{scope}/escanos` conserva la query y añade `seccion=escanos`, sin fragmento (§5).
 - La barra apilada sale y el hemiciclo es el único dibujo del reparto central.
 - La tabla de resultados es única y lleva P(primero) y P(mayoría).
 
@@ -151,3 +155,41 @@ y no tiene sentido obligarle a cambiar de pestaña para responderla.
 ## Abierto para Luis
 
 Nada. El nombre de la página y las secciones sin título los decidió Luis el 2026-11-04.
+
+## Cierre
+
+Hecho el 2026-11-05 en la rama `feat/pagina-evento`. Commits desde `1384172`:
+
+```
+9cf4e6f web: /{scope}/escanos redirige a la página del evento; barra inferior de 4 entradas («Encuestas»)
+008f5ef web: los botones «Ver las distribuciones» y «Ver los datos» se ocultan de verdad con hidden; píldoras de la calculadora atenuadas mientras no hay simulaciones
+3974aef web: el JS de escaños (seats-wire.js) se carga en la página del evento, con la evolución Voto/Escaños y el detalle de circunscripción sin recarga
+aba9edd web: la página del evento junta Promedios y Escaños por secciones (plantilla y contexto)
+7eee9a6 docs: dist se pide aparte a la API (decisión de Luis por el peso)
+2cd72f5 web: estado compartido del fragmento de la URL (url-state.js) para los controles de la página del evento
+```
+
+**Peso** (run `20261104-120225` de `es`, `mode=forecast`, producción vía servidor local):
+
+| Página | Sin comprimir | gzip -9 |
+|---|---:|---:|
+| `/es` antes (Promedios) | 683.862 B | 67.909 B |
+| `/es/escanos` antes | 820.826 B | 121.495 B |
+| `/es` ahora (unificada) | 904.624 B | 84.132 B |
+| `dist` pedido aparte (`dist_href`) | 338.156 B | 85.755 B |
+
+La página unificada pesa 1,24 veces la Promedios de partida (el límite era 2 veces) y 31 % menos en gzip que la antigua
+Escaños (84,1 KB frente a 121,5 KB); frente a las dos páginas por separado (189,4 KB) es un 56 % menos. La petición diferida de `dist` añade 85,8 KB tras el primer pintado (total 169,9 KB si se
+consume todo, frente a los 121,5 KB de Escaños: ese coste extra sólo lo paga quien abre la calculadora o las
+distribuciones, y la primera pintura no lo espera).
+
+**Maquetación:** `hemi-grid` queda en `minmax(0, 1fr) minmax(0, 1.4fr)` con `align-items: start`; la tabla de
+resultados cabe entera desde ~1200 px y por debajo de 1100 px las dos tarjetas se apilan (medidas en el ledger).
+
+**Revisión en navegador:** el índice de 5 enlaces, `/es/escanos#coalition=PP,VOX`, el formulario sin JavaScript y la
+consola, en `/es` y `/es-md`, en los dos modos, a 1280 y 390 px, sin fallos. Sin JavaScript, enviar el formulario
+muestra la circunscripción elegida pero la página se queda arriba (sin JS no hay quien desplace a la sección).
+
+**Respuestas de Luis tras el cierre (2026-11-05):** el `<title>` lleva el año de la elección («Encuestas, promedios y
+escaños · Elecciones generales 2026», `event_bar.year`); la canonical quita `region` además de `seccion`, una por
+ámbito; el índice de secciones no se fija al hacer scroll (corrige el «la barra se queda fija» del objetivo 3).

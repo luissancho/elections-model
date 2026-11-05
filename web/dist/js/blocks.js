@@ -12,6 +12,8 @@ const SELECTED_KEY = 'sel';
 const LAYERS_KEY = 'mostrar';
 const LAYERS = ['sondeos', 'promedio', 'ambos'];
 const DEFAULT_LAYERS = 'ambos';
+/** Keys of the URL fragment owned by the average controls, to merge them with the other state of the page. */
+export const SERIES_KEYS = [WINDOW_KEY, VIEW_KEY, SELECTED_KEY, LAYERS_KEY];
 /** Name of the block that holds the rest of the vote (what Izquierda and Derecha leave out). */
 export const REST_BLOCK = 'Otros';
 const PARTIES_VIEW = 'partidos';

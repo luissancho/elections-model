@@ -1,6 +1,6 @@
-// DOM builders of the "Resultados por territorio" table of Escaños: header and body, built with
-// `createElement`/`textContent` (never HTML with data).
-import {fmtInt, fmtNum} from '../format.js';
+// DOM builders of "Resultados por territorio" of the event page: the header and body of the territory table and the
+// detail of one district, built with `createElement`/`textContent` (never HTML with data).
+import {DASH, fmtInt, fmtNum, fmtPct, fmtProb, fmtRange} from '../format.js';
 import {columnRange, tintAlpha, winnerOf} from '../territory.js';
 
 /**
@@ -139,4 +139,32 @@ export function renderBody(tbody, data, mode, catalog, hrefOf) {
   }
   foot.appendChild(el('td', mode === 'pct' ? data.total.total : cellText(data.total.total, 'esc')));
   tbody.replaceChildren(...body, foot);
+}
+
+/**
+ * Rewrite the detail of one district (`#region-table`) as the template draws it: the caption
+ * («{name} · {seats} escaños») and one row per party with its vote, the 95% range of the vote, its seats, the 95%
+ * range of the seats and P(escaño).
+ *
+ * @param {HTMLTableElement} table the detail table
+ * @param {object[]} rows the party rows of the district (`regionRows`)
+ * @param {{name: string, seats: number}} region the district
+ * @param {Catalog} catalog party catalogue
+ */
+export function renderRegion(table, rows, region, catalog) {
+  const caption = table.querySelector('caption') || table.insertBefore(el('caption'), table.firstChild);
+  caption.textContent = `${region.name} · ${region.seats} escaños`;
+  const body = table.tBodies[0] || table.appendChild(el('tbody'));
+  body.replaceChildren(...rows.map((row) => {
+    const first = el('td');
+    first.title = catalog.fullname(row.name);
+    const dot = el('span', '', 'dot');
+    dot.style.backgroundColor = catalog.color(row.name);
+    first.append(dot, row.name);
+    const voteRange = fmtRange(row.pct_lo, row.pct_hi, 1);
+    const tr = el('tr');
+    tr.append(first, el('td', fmtPct(row.pct)), el('td', voteRange === DASH ? voteRange : `${voteRange}%`),
+      el('td', fmtInt(row.seats)), el('td', fmtRange(row.seats_lo, row.seats_hi, 0)), el('td', fmtProb(row.p_seats)));
+    return tr;
+  }));
 }
