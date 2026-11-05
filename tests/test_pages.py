@@ -838,6 +838,19 @@ def test_event_page_region_detail_skips_parties_that_do_not_stand(api, fresh_app
     assert '34,0–44,0%' in detail
 
 
+def test_event_page_vote_and_seats_switches_and_headers_share_their_labels(api, fresh_app):
+    """Luis, 2026-11-05: todos los selectores de la página del evento dicen «% Voto» y «Escaños» (Evolución decía
+    «Voto» y la tabla de sondeos «% de voto»); la tabla del territorio titula «% Voto», como las demás tablas."""
+    write_districts(fresh_app.fs)
+    page = html(call(api, '/es', query='mode=forecast&region=28')[2])
+    radios = re.findall(r'<input type="radio" name="(\w+)" value="(pct|esc|seats)"( checked)?> ([^<]+)</label>', page)
+    assert {name for name, *_ in radios} == {'evmetric', 'tmode'}
+    assert [label for _, value, _, label in radios if value == 'pct'] == ['% Voto'] * 2
+    assert [label for _, value, _, label in radios if value != 'pct'] == ['Escaños'] * 2
+    assert '<th scope="col">Voto</th>' not in page and '<th scope="col">% Voto</th>' in page[page.index('id="region-table"'):]
+    assert 'con «% Voto», el voto de cada partido; con «Escaños», sus escaños' in re.sub(r'\s+', ' ', page)
+
+
 def test_event_page_district_form_keeps_the_pinned_run(api, fresh_app):
     write_districts(fresh_app.fs)
     page = html(call(api, '/es', query='mode=forecast&run=' + RUN)[2])
@@ -1033,8 +1046,8 @@ def test_event_page_texts(api):
     sections = event_sections(page)
     evolution = re.sub(r'\s+', ' ', sections['evolucion'])
     metric = re.search(r'<fieldset id="evolution-metric" class="seg" hidden>(.*?)</fieldset>', evolution).group(1)
-    assert re.findall(r'<input type="radio" name="evmetric" value="(\w+)"( checked)?> (\w+)</label>', metric) == [
-        ('pct', ' checked', 'Voto'), ('seats', '', 'Escaños')]
+    assert re.findall(r'<input type="radio" name="evmetric" value="(\w+)"( checked)?> ([^<]+)</label>', metric) == [
+        ('pct', ' checked', '% Voto'), ('seats', '', 'Escaños')]
     assert evolution.index('id="evolution-metric"') < evolution.index('id="evolution-view"')
     assert 'hueco' in evolution and 'no es una serie de sondeos' in evolution.lower()
     assert 'Voto' in evolution and 'escaños' in evolution
@@ -1140,7 +1153,7 @@ def test_evolution_cards_share_the_markup_and_explain_the_revision(api):
     assert 'hasta 100 en el voto, o hasta completar la cámara en los escaños' in text
 
 
-def test_result_rows_and_block_result_rows_follow_the_summary_and_the_block_order():
+def test_result_rows_and_block_result_rows_carry_the_summary_fields_and_the_block_order():
     summary = {'parties': [{'name': 'PP', 'pct': 32.66, 'seats': 139, 'p_first': 0.95, 'p_majority': 0.0}],
                'blocks': [{'name': 'Izquierda', 'pct': 35.4, 'seats': 117, 'p_majority': 0.0},
                           {'name': 'Derecha', 'pct': 52.5, 'seats': 203, 'p_majority': 0.995},
@@ -1150,6 +1163,21 @@ def test_result_rows_and_block_result_rows_follow_the_summary_and_the_block_orde
     rows = pages.block_result_rows(summary, fixture_data('meta'), pages.Catalog(fixture_data('meta')))
     assert [r['name'] for r in rows] == ['Izquierda', 'Derecha'] and rows[1]['p_majority'] == 0.995 and rows[0]['color'].startswith('#')
     assert pages.result_rows({}) == [] and pages.block_result_rows({}, fixture_data('meta'), pages.Catalog(fixture_data('meta'))) == []
+
+
+def test_result_rows_order_the_parties_by_seats_and_then_by_vote():
+    """Luis, 2026-11-05: la tabla «Resultados» de la página del evento va por escaños y el voto para los empates,
+    como las tarjetas, el listado de territorios y las curvas de las distribuciones, no en el orden del resumen."""
+    summary = {'parties': [{'name': 'PP', 'seats': 135, 'pct': 33.1}, {'name': 'CC', 'seats': 1, 'pct': 0.4},
+                           {'name': 'UPN', 'seats': None, 'pct': 0.5}, {'name': 'BNG', 'seats': 1, 'pct': 0.9},
+                           {'name': 'PSOE', 'seats': 110, 'pct': 26.4}, {'name': 'PACMA', 'seats': 0, 'pct': 0.7}]}
+    assert [row['name'] for row in pages.result_rows(summary)] == ['PP', 'PSOE', 'BNG', 'CC', 'PACMA', 'UPN']
+
+
+def test_event_page_results_card_says_its_order_like_the_territory_card(events_site):
+    page = html(call(events_site, '/es')[2])
+    card = page[page.index('id="parties-table"'):page.index('id="coalition-parties"')]
+    assert 'Los partidos van por escaños y, a igual número, por voto' in card
 
 
 def test_the_rest_block_name_of_the_pages_is_the_one_of_the_model():
@@ -3326,7 +3354,8 @@ def test_backtest_subpage_has_the_seats_chart_and_the_subnav(api, fresh_app):
 
 def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
     page = html(call(api, '/es')[2])
-    assert page.count('>Método</a>') == 2 and '>Histórico Errores</a>' in page and '>Modelo</a>' not in page
+    # menu, footer and the tab bar of the phones (2026-11-05)
+    assert page.count('>Método</a>') == 3 and '>Histórico Errores</a>' in page and '>Modelo</a>' not in page
 
 
 def test_frozen_manifest_marks_every_page(api, fresh_app):
@@ -3780,6 +3809,7 @@ def test_polls_table_offers_the_seats_view_only_when_a_poll_publishes_seats(api,
     page = html(body).replace('\n', ' ')
     assert re.search(r'<fieldset id="polls-mode" class="seg">', page)
     assert 'name="pmode" value="pct" checked' in page and 'name="pmode" value="esc"' in page
+    assert 'value="pct" checked> % Voto</label>' in page and '% de voto' not in page  # Luis, 2026-11-05: como los demás
     assert 'en las encuestadoras que los dan, los escaños' in page and 'En la vista Escaños' in page
     assert initial(body)['polls']['polls'][0]['seats'] == {'PP': [140, 142]}
 
@@ -3830,16 +3860,18 @@ def test_card_subtitle_is_a_pill(api):
     assert '<span class="pill">pronóstico para el 29 nov 2026' in page and 'mode-subtitle' not in page
 
 
-def test_tabbar_links_the_four_sections_and_marks_the_active_one():
-    """Promedios and Escaños are one page since 2026-11-04: the bottom bar has one entry, «Encuestas», for it."""
+def test_tabbar_links_the_five_sections_and_marks_the_active_one():
+    """Promedios and Escaños are one page since 2026-11-04: the bottom bar has one entry, «Encuestas», for it; the
+    method is the fifth entry since 2026-11-05 (lit on its pages); the Análisis pages light none."""
     bar = pages.tabbar('es', None, True, '?mode=forecast')
-    assert [row['href'] for row in bar] == ['/', '/es?mode=forecast', '/elecciones?scope=es', '/casas']
-    assert [row['label'] for row in bar] == ['Inicio', 'Encuestas', 'Histórico', 'Ranking']
-    assert [row['active'] for row in bar] == [False, True, False, False]
-    assert [row['icon'] for row in bar] == ['home', 'line', 'target', 'trophy']
+    assert [row['href'] for row in bar] == ['/', '/es?mode=forecast', '/elecciones?scope=es', '/casas', '/metodo']
+    assert [row['label'] for row in bar] == ['Inicio', 'Encuestas', 'Histórico', 'Ranking', 'Método']
+    assert [row['active'] for row in bar] == [False, True, False, False, False]
+    assert [row['icon'] for row in bar] == ['home', 'line', 'target', 'trophy', 'help']
     bar = pages.tabbar('es-md', '/casas', False, '')
     assert bar[1]['href'] == '/es-md' and bar[2]['href'] == '/elecciones?scope=es-md' and bar[3]['active']
-    assert not any(row['active'] for row in pages.tabbar('es', '/metodo', False, ''))
+    assert [row['active'] for row in pages.tabbar('es', '/metodo', False, '')] == [False, False, False, False, True]
+    assert not any(row['active'] for row in pages.tabbar('es', '/analisis', False, ''))
     assert pages.chamber_text('es', {'n_seats': 350}) == 'Congreso, 350 escaños'
     assert pages.chamber_text('es-md', {'n_seats': 135}) == 'Parlamento, 135 escaños'
     assert pages.chamber_text('es', {}) is None
@@ -3849,17 +3881,18 @@ def test_header_is_compact_and_the_pages_carry_the_tabbar_and_the_icons(api):
     page = html(call(api, '/es')[2])
     assert 'brand-tagline' not in page and '<meta name="description"' in page
     assert '<svg hidden aria-hidden="true"' in page and page.index('<symbol id="i-home"') < page.index('<main')
-    assert 'class="ico-btn" href="/metodo" aria-label="Método"' in page
+    assert 'ico-btn' not in page  # the method moved from the round button of the header to the tab bar (2026-11-05)
     bar = re.search(r'<nav class="tabbar" aria-label="Secciones">(.*?)</nav>', page, re.S).group(1)
-    assert bar.count('<a ') == 4 and '/escanos' not in bar and '<use href="#i-trophy"' in bar
+    assert bar.count('<a ') == 5 and '/escanos' not in bar and '<use href="#i-trophy"' in bar
+    assert '<a href="/metodo"><svg aria-hidden="true"><use href="#i-help"/></svg>Método</a>' in bar
     assert re.search(r'<a class="on" href="/es\?mode=forecast" aria-current="page"><svg[^>]*><use href="#i-line"/></svg>'
                      r'Encuestas</a>', bar)
     assert page.index('</footer>') < page.index('<nav class="tabbar"')
 
 
-def test_tabbar_has_four_entries(houses):
-    """In the event page the bottom bar has Inicio, Encuestas, Histórico and Ranking, Encuestas lit; in /casas,
-    Ranking."""
+def test_tabbar_has_five_entries(houses):
+    """In the event page the bottom bar has Inicio, Encuestas, Histórico, Ranking and Método, Encuestas lit; in
+    /casas, Ranking."""
     def entries(path):
         page = html(call(houses, path)[2])
         bar = re.search(r'<nav class="tabbar" aria-label="Secciones">(.*?)</nav>', page, re.S).group(1)
@@ -3867,7 +3900,7 @@ def test_tabbar_has_four_entries(houses):
                           r'([^<]+)</a>', bar)
 
     assert entries('/es') == [('', '', 'Inicio'), (' class="on"', ' aria-current="page"', 'Encuestas'),
-                              ('', '', 'Histórico'), ('', '', 'Ranking')]
+                              ('', '', 'Histórico'), ('', '', 'Ranking'), ('', '', 'Método')]
     assert [label for on, _, label in entries('/casas') if on] == ['Ranking']
 
 
@@ -5299,8 +5332,8 @@ def test_menu_has_analisis_between_ranking_and_metodo(api):
     nav = nav[:nav.index('</nav>')]
     assert re.findall(r'href="([^"]+)"', nav) == ['/', '/elecciones', '/casas', '/analisis', '/metodo']
     assert '>Análisis</a>' in nav and 'aria-current' not in nav.split('/analisis')[1].split('</a>')[0]
-    # the tab bar of the phones keeps its four entries: the Análisis pages light none
-    assert [row['key'] for row in pages.TABBAR] == ['inicio', 'event', 'historico', 'ranking']
+    # the tab bar of the phones keeps its five entries: the Análisis pages light none
+    assert [row['key'] for row in pages.TABBAR] == ['inicio', 'event', 'historico', 'ranking', 'metodo']
     assert '/analisis' not in pages.common.TABBAR_ACTIVE
     page = html(call(api, '/analisis')[2])
     tabbar = page[page.index('class="tabbar'):]

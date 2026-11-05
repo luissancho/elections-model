@@ -41,16 +41,18 @@ EVENT_SECTIONS = (
     ('territorio', 'Territorio'),
     ('tabla', 'Tabla'),
 )
-# Bottom tab bar of the phones: four entries with an icon of the sprite (``_svg.html``), ``event`` being the event page
-# of the scope («Encuestas», 2026-11-04); the method goes in the round button of the header
+# Bottom tab bar of the phones: five entries with an icon of the sprite (``_svg.html``), ``event`` being the event page
+# of the scope («Encuestas», 2026-11-04) and the method the fifth (2026-11-05, in place of the round button the
+# header had); the Análisis pages have no entry
 TABBAR = (
     {'key': 'inicio', 'label': 'Inicio', 'icon': 'home'},
     {'key': 'event', 'label': 'Encuestas', 'icon': 'line'},
     {'key': 'historico', 'label': 'Histórico', 'icon': 'target'},
     {'key': 'ranking', 'label': 'Ranking', 'icon': 'trophy'},
+    {'key': 'metodo', 'label': 'Método', 'icon': 'help'},
 )
-# Entry of the tab bar lit by each global page (``PAGES`` href); the method and the Análisis pages light none
-TABBAR_ACTIVE = {'/': 'inicio', '/elecciones': 'historico', '/casas': 'ranking'}
+# Entry of the tab bar lit by each global page (``PAGES`` href); the Análisis pages light none
+TABBAR_ACTIVE = {'/': 'inicio', '/elecciones': 'historico', '/casas': 'ranking', '/metodo': 'metodo'}
 # Blocks of the hemicycle from left to right (the mirror of ``BLOCK_ORDER`` of ``catalog.js``)
 HEMICYCLE_BLOCKS = ('Izquierda', 'Separatista', 'Regionalista', 'Derecha')
 # Chamber of a scope, for the event bar and the home ("Congreso, 350 escaños")
@@ -586,15 +588,16 @@ def tabbar(scope: str, active: Optional[str], event: bool, query: str) -> list:
     -------
     list of dict
         One entry per row of ``TABBAR``: ``key``, ``label``, ``icon``, ``href`` and ``active``. Encuestas links the
-        event page of ``scope`` (with ``query`` on an event page), Histórico keeps the scope in its query and Ranking
-        goes to ``/casas``; the active one is Encuestas on an event page and the global page of ``TABBAR_ACTIVE``
-        otherwise (none for the method).
+        event page of ``scope`` (with ``query`` on an event page), Histórico keeps the scope in its query, Ranking
+        goes to ``/casas`` and Método to ``/metodo``; the active one is Encuestas on an event page and the global
+        page of ``TABBAR_ACTIVE`` otherwise (none for Análisis).
     """
     hrefs = {
         'inicio': '/',
         'event': '/' + scope + (query if event else ''),
         'historico': '/elecciones' + scope_query(scope),
         'ranking': '/casas',
+        'metodo': '/metodo',
     }
     lit = 'event' if event else TABBAR_ACTIVE.get(active)
 

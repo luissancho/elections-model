@@ -101,7 +101,7 @@ function paintResults(initial, catalog, onView) {
 }
 
 /**
- * Draw the evolution of the updates with its Voto/Escaños switch: the vote by default, the seats of the central
+ * Draw the evolution of the updates with its % Voto/Escaños switch: the vote by default, the seats of the central
  * allocation on the other side.
  *
  * @param {object} initial the page's initial data

@@ -1813,5 +1813,16 @@ arrancar; `scipy` sí, a través de `dask`, que importa `mtpy.core.data` desde `
 la primera tarea de ECS (la métrica de memoria de la tarea en CloudWatch) para ajustar los 4 GB de la definición de
 jobs.
 
-Primera tarea de ECS (`python deploy/ecs/job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":10000}' --follow`):
-duración ___ y memoria máxima ___ (pendiente de anotar).
+Primera tarea de ECS (2026-11-01, `python deploy/ecs/job.py publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}' --follow`):
+18 min 19 s, frente a unos 10 min desde el portátil (el bucle de simulación usa un solo núcleo). Memoria máxima
+pendiente de anotar.
+
+`update` de `es` en ECS (2026-11-05, `python deploy/ecs/job.py update '{"scopes":["es"],"n_sim":10000,"verbose":2}'
+--follow`, sin sondeos nuevos): 26 min 8 s en total. La carga tarda 2 s (530 leídos, 0 guardados), el compute se salta
+y el forecast lleva 25 min 18 s (simulador 3,9 s; ajuste del promedio 131 s; simulación de hoy 688 s y de la elección
+690 s; exportaciones 5 s). El análisis tarda 45 s y el catálogo de partidos menos de 1 s. Cada simulación de 10.000
+tarda en ECS unos 11,5 min, frente a los 5 min del portátil. A eso hay que sumar unos 40 s desde el lanzamiento
+hasta que arranca el contenedor.
+
+Relleno de `es` desde el portátil (2026-11-05, `backfill` del 5-10 al 4-11 con `replace` y `n_sim=1000`, 31 días):
+1 h 14 min, unos 130 s por día (227 s el día más lento).

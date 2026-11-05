@@ -1,5 +1,5 @@
 // Wiring of the "Todas las encuestas" table (Promedios and the detail of a past election): party and pollster
-// dropdowns, month range, the % de voto / Escaños switch, sortable headers and pages of `PAGE_SIZE` rows, all
+// dropdowns, month range, the % Voto / Escaños switch, sortable headers and pages of `PAGE_SIZE` rows, all
 // computed in the browser from the polls of the page (`polls-table.js`) and drawn with `polls-dom.js`.
 import {PAGE_SIZE, filterPolls, fixedRows, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
 import {markSegments} from './common.js';
