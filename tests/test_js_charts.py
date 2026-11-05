@@ -853,6 +853,20 @@ def test_matrix_option_with_a_centre_shades_around_one_and_labels_the_cells():
     assert colors[0].startswith('rgba(214,39,40') and colors[1].startswith('rgba(29,79,134') and colors[2] == '#f4f5f8'
     assert option['series'][0]['label']['show'] is True
 
+
+def test_matrix_option_bolds_the_columns_asked_for_and_can_keep_them_upright():
+    """The herd matrix (spec D7): the cycle in progress in bold and the few short names upright; by default the
+    general elections in bold and the names rotated, as in the CIS bias study."""
+    events = '[{short: "2023", label: "2023", current: false}, {short: "2026", label: "2026", current: true}]'
+    data = '{events: %s, houses: ["GAD3"], cells: [[0, 0, 0.5], [1, 0, 1.4]]}' % events
+    axis = run_js('(() => { const a = mx.matrixOption(%s, {center: 1, bold: (event) => event.current, rotate: 0}).xAxis; '
+                  'return {rotate: a.axisLabel.rotate, labels: a.data.map((text, i) => a.axisLabel.formatter(text, i))}; })()' % data)
+    assert axis == {'rotate': 0, 'labels': ['2023', '{g|2026}']}
+    axis = run_js('(() => { const a = mx.matrixOption({events: [{short: "AN 18", label: "Andalucía 2018"}, {short: "GEN 23", label: "Generales 2023"}], '
+                  'houses: ["CIS"], cells: [[0, 0, 1.0]]}).xAxis; '
+                  'return {rotate: a.axisLabel.rotate, labels: a.data.map((text, i) => a.axisLabel.formatter(text, i))}; })()')
+    assert axis == {'rotate': 90, 'labels': ['AN 18', '{g|GEN 23}']}
+
 def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():
     rows = [{'x': 93, 'y': 8.0, 'name': 'CIS', 'k': 38, 'n': 41, 'cis': True}, {'x': 77, 'y': 1.6, 'name': 'Sigma Dos', 'k': 23, 'n': 30, 'cis': False}]
     option = run_js('rk.rankingOption(%s)' % json.dumps(rows))

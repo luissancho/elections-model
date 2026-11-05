@@ -31,6 +31,8 @@ function drawMatrix(matrix) {
     center: 1,
     label: true,
     cellText: (house, event, h) => `${house} · ${event.label}: rebaño ${fmtNum(h, 2)}`,
+    bold: (event) => event.current,
+    rotate: 0,
   }), 'the matrix of the houses');
   const table = document.getElementById('matrix-table');
   if (drawn && table) {

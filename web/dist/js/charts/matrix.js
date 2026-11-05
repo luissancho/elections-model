@@ -40,6 +40,16 @@ function alphaAround(value, center, caps) {
 }
 
 /**
+ * Whether a column is a general election (its short name starts with `GEN`): the columns in bold by default.
+ *
+ * @param {{short: string}} event the column
+ * @returns {boolean} whether it is
+ */
+function isGeneral(event) {
+  return String(event.short).startsWith('GEN');
+}
+
+/**
  * `#rrggbb` as `'r,g,b'`.
  *
  * @param {string} hex colour
@@ -68,12 +78,13 @@ function signed(value) {
  * @param {object} opts `cap` (error, in points, of the darkest shade), `positive` and `negative` (hex colours);
  *   with `center` the cells are shaded around it instead: `positive` below with the darkest shade at
  *   `caps.below` from it, `negative` above at `caps.above`, and grey inside `neutral` (`[lo, hi]`); `label` writes
- *   the value inside each cell and `cellText(house, event, value)` gives the text of the tooltip
+ *   the value inside each cell and `cellText(house, event, value)` gives the text of the tooltip; `bold(event)` says
+ *   which columns are named in bold (by default the general elections, `GEN …`) and `rotate` turns their names
  * @returns {object} the option
  */
 export function matrixOption({events, houses, cells}, {
   cap = 8, positive = '#d62728', negative = '#1d4f86', center = null, caps = {below: 0.5, above: 1},
-  neutral = [0.9, 1.2], label = false, cellText = null,
+  neutral = [0.9, 1.2], label = false, cellText = null, bold = isGeneral, rotate = 90,
 } = {}) {
   const rgb = [channels(positive), channels(negative)];
   const centred = center !== null && center !== undefined;
@@ -127,11 +138,11 @@ export function matrixOption({events, houses, cells}, {
       axisTick: {show: false},
       axisLine: {show: false},
       axisLabel: {
-        rotate: 90,
+        rotate,
         interval: 0,
         fontSize: LABEL_SIZE,
         color: THEME.mutedColor,
-        formatter: (text) => (text.startsWith('GEN') ? `{g|${text}}` : text),
+        formatter: (text, index) => (bold(events[index]) ? `{g|${text}}` : text),
         rich: {g: {fontWeight: 'bold', color: THEME.textColor, fontSize: LABEL_SIZE}},
       },
     },
