@@ -14,7 +14,9 @@ import pandas as pd
 from .. import bundle
 from ..bundle import BundleWriter
 from ...core.io import FileSystem
-from .common import PCT_DECIMALS, PROB_DECIMALS, provenance, PublishRefused, REPO_ROOT, round_cols, _iso_dates, _today
+from .common import (
+    NothingToPublish, PCT_DECIMALS, PROB_DECIMALS, provenance, PublishRefused, REPO_ROOT, round_cols, _iso_dates, _today
+)
 from .pointers import update_manifest
 
 
@@ -30,7 +32,10 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                 # The subtitle is a template rendered from the summary (the clauses depend on its figures)
                 'rebano': ('¿Se copian las encuestadoras en la recta final?',
                            'En las {n_words} generales desde {since_year}, los sondeos se han parecido más entre sí '
-                           'cuanto más cerca estaba la elección{final_clause}.{current}')}
+                           'cuanto más cerca estaba la elección{final_clause}.{current}'),
+                # Stub until the study is built (the subtitle is replaced by a template rendered from its summary)
+                'andorra': ('El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última hora?',
+                            'Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y en las redes circulan como precios de la fruta. En las cinco generales desde 2015, el consenso de esos sondeos estuvo más cerca del resultado que el promedio congelado en cuatro, y quedó más cerca del resultado en 19 de las 24 cifras de partido. Lo que no vio nadie, tampoco lo vio la fruta: en 2023 dejó al PSOE tres puntos por debajo de lo que sacó.')}
 
 REGISTRATION_KEYS = ('registered_at', 'registered_commit', 'registered', 'registered_changed_at')
 
@@ -576,6 +581,11 @@ from .herd import (  # noqa: E402
     export_herd_summary, export_herd_weeks
 )
 
+def _study_not_built(*args, **kwargs):
+    """Placeholder of the compute and the meta of a study declared but not built yet: nothing to publish."""
+    raise NothingToPublish('andorra: study not built yet')
+
+
 STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation': export_study_participation,
                                  'vote': export_study_vote, 'placement': export_study_placement,
                                  'prediction': export_study_prediction, 'sensitivity': export_study_sensitivity,
@@ -584,15 +594,18 @@ STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation':
                                  'houses': export_lean_houses, 'matrix': export_lean_matrix,
                                  'election': export_lean_election},
                    'rebano': {'summary': export_herd_summary, 'cycles': export_herd_cycles,
-                              'weeks': export_herd_weeks, 'houses': export_herd_houses}}
+                              'weeks': export_herd_weeks, 'houses': export_herd_houses},
+                   'andorra': {}}
 
-STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 'rebano': export_herd_meta}
+STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 'rebano': export_herd_meta,
+              'andorra': _study_not_built}
 
 # How each study is computed (``compute(data, writer)``), whether it has a registered prediction and whether its page
 # is live (recomputed with the data) rather than a fixed piece
 STUDY_RUNNERS = {'voto-cera': {'compute': _cera_compute, 'registrable': True, 'live': False},
                  'sesgo-cis': {'compute': compute_for_publish, 'registrable': False, 'live': True},
-                 'rebano': {'compute': compute_herd_for_publish, 'registrable': False, 'live': True}}
+                 'rebano': {'compute': compute_herd_for_publish, 'registrable': False, 'live': True},
+                 'andorra': {'compute': _study_not_built, 'registrable': False, 'live': False}}
 
 
 def publish_study(study_id: str, writer: BundleWriter, register: bool = False, force: bool = False,

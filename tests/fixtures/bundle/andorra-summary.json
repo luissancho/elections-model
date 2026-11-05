@@ -58,8 +58,8 @@
     "cells": {
       "n": 24,
       "k_closer": 19,
-      "k_direction": 21,
-      "k_crossed": 2,
+      "k_direction": 20,
+      "k_crossed": 3,
       "k_half": 6,
       "missed": [
         {

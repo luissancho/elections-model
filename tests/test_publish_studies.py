@@ -194,3 +194,12 @@ def test_study_runners_declare_which_studies_register():
     assert publish.STUDY_RUNNERS["voto-cera"]["registrable"] is True
     assert publish.STUDY_RUNNERS["sesgo-cis"]["registrable"] is False
     assert set(publish.STUDY_RUNNERS) == set(publish.STUDY_EXPORTERS) == set(publish.STUDY_META) == set(bundle.STUDIES)
+
+
+def test_publish_study_andorra_is_not_built_yet(tmp_path):
+    """El estudio `andorra` está declarado pero aún no se calcula: no hay nada que publicar y no se escribe nada."""
+    writer = make_writer(tmp_path)
+    with pytest.raises(publish.NothingToPublish):
+        publish.publish_study('andorra', writer, data=FileSystem(str(tmp_path)), prov=fake_prov)
+    assert not writer.study_exists('andorra') and not any(tmp_path.iterdir())
+    assert publish.STUDY_RUNNERS['andorra']['live'] is False
