@@ -122,7 +122,8 @@ def export_herd_houses(study) -> tuple:
 
 
 def _subtitle(template: str, study) -> str:
-    """Render the subtitle template from the summary: the clauses that depend on the figures appear only if they hold."""
+    """Render the subtitle template from the summary: the clauses that depend on the figures appear only if they
+    hold."""
     summary = study.summary
     k, n = summary['k_narrowed'], summary['n_cycles']
     mean_final = summary['mean_final']
@@ -135,10 +136,18 @@ def _subtitle(template: str, study) -> str:
     current = ''
     now, houses = summary['current'], summary['houses_now']
 
-    if now and now['like_final'] and houses and houses['n'] > 0:
-        current = (f" En {study.election['date'][:4]} ya van así desde el principio, y {houses['k']} de las "
-                   f"{houses['n']} casas con sondeos suficientes publican cifras que oscilan menos de lo que permite "
-                   f"el azar de sus muestras.")
+    if now and now['like_final'] and houses and houses['n'] > 0 and houses['k'] > 0:
+        k_now, n_now = houses['k'], houses['n']
+
+        if k_now == n_now == 1:
+            who = 'la única casa con sondeos suficientes publica'
+        elif k_now == n_now:
+            who = f'las {n_now} casas con sondeos suficientes publican'
+        else:
+            who = f'{k_now} de las {n_now} casas con sondeos suficientes publican'
+
+        current = (f" En {study.election['date'][:4]} ya van así desde el principio, y {who} cifras que oscilan "
+                   f"menos de lo que permite el azar de sus muestras.")
 
     return template.format(n_words=str(n) if k == n else f'{k} de las {n}', since_year=study.params['since'][:4],
                            final_clause=final_clause, current=current)

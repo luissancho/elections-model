@@ -183,8 +183,8 @@ def test_importing_publish_does_not_load_the_study_package():
     import subprocess
     import sys
     code = ("import sys, mtpy.lib.publish; "
-            "print(sorted(m for m in ('mtpy.lib.studies.cera', 'mtpy.lib.studies.lean', 'mtpy.lib.studies.herd', 'statsmodels.api') "
-            "if m in sys.modules))")
+            "print(sorted(m for m in ('mtpy.lib.studies.cera', 'mtpy.lib.studies.lean', 'mtpy.lib.studies.herd', "
+            "'statsmodels.api') if m in sys.modules))")
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, cwd=ROOT, check=True)
     assert out.stdout.strip() == '[]'
 

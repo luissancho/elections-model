@@ -1,4 +1,5 @@
 """Tests de `mtpy/lib/publish/herd.py`: los exportadores del estudio del rebano y su publicación genérica."""
+import dataclasses
 import os
 from unittest.mock import ANY
 
@@ -37,7 +38,8 @@ def test_export_herd_parts_validate(study):
     assert frames == {}
     assert meta['subtitle'].startswith('En las 2 generales desde 2008, los sondeos se han parecido más entre sí')
     assert 'misma urna' in meta['subtitle']
-    assert 'En 2026 ya van así desde el principio, y 1 de las 1 casas' in meta['subtitle']
+    assert meta['subtitle'].endswith(' En 2026 ya van así desde el principio, y la única casa con sondeos suficientes '
+                                     'publica cifras que oscilan menos de lo que permite el azar de sus muestras.')
     assert meta['election'] == {'date': '2026-11-29', 'days_left': 24, 'as_of': '2026-11-05'}
     assert meta['params']['window_days'] == 56
     assert [s['url'] for s in meta['sources']][:2] == ['/elecciones', '/casas']
@@ -51,6 +53,21 @@ def test_export_herd_meta_drops_the_conditioned_clauses(tmp_path):
     meta, _ = publish.export_herd_meta(study, prov=fake_prov())
     assert 'misma urna' not in meta['subtitle'] and 'ya van así' not in meta['subtitle']
     assert meta['election'] is None
+
+
+def test_export_herd_meta_counts_the_houses_of_the_current_clause(study):
+    """La frase de 2026 del subtítulo: «la única casa» con una sola, «las n casas» con todas, «k de las n» si no, y
+    ninguna frase cuando ninguna casa baja de 1."""
+    def subtitle(houses_now):
+        changed = dataclasses.replace(study, summary=study.summary | {'houses_now': houses_now})
+        return publish.export_herd_meta(changed, prov=fake_prov())[0]['subtitle']
+
+    two_of_three = subtitle({'n': 3, 'k': 2, 'herd': [], 'pending': []})
+    assert 'y 2 de las 3 casas con sondeos suficientes publican cifras que oscilan' in two_of_three
+    assert 'y las 2 casas con sondeos suficientes publican cifras' in subtitle({'n': 2, 'k': 2, 'herd': [],
+                                                                                'pending': []})
+    none = subtitle({'n': 1, 'k': 0, 'herd': [], 'pending': []})
+    assert 'ya van así' not in none and none.endswith('misma urna.')
 
 
 def test_export_herd_frames_follow_the_study(study):

@@ -5,8 +5,9 @@ dispersion of the polls around the average in the rest of the cycle, the final w
 the election, the herding of each house in the final window, and the summary over the past cycles. `HerdStudy` carries
 the results; this module only reads and wires, every figure comes from `data` and `stats`.
 
-Ratios enter the rows rounded to 2 decimals; the means over cycles and the comparisons between ratios use the
-unrounded ratios and round last. The houses of ``params['exclude']`` (the CIS) stay out of every pooled figure and are
+Ratios enter the rows rounded to 2 decimals; the means over cycles use the unrounded ratios and round last, while
+the verdicts (``narrowed``, ``below_one``, ``rank_before``) compare the rounded ratios, the ones the page prints, so a
+printed 1,00 is never «below 1». The houses of ``params['exclude']`` (the CIS) stay out of every pooled figure and are
 measured apart.
 """
 from dataclasses import dataclass
@@ -177,9 +178,11 @@ def _houses_now(now: dict) -> dict:
 def _summary(past: list, now: Optional[dict], houses: list, days_left: Optional[int]) -> dict:
     """The summary of spec D3 from the measures of the past cycles and the one in progress."""
     comparable = [cycle for cycle in past if cycle['raw']['last'] is not None and cycle['raw']['before'] is not None]
-    narrowed = [cycle['row']['label'] for cycle in comparable if cycle['raw']['last'] < cycle['raw']['before']]
+    # the verdicts compare the printed (rounded) ratios; the means below use the unrounded ones
+    narrowed = [cycle['row']['label'] for cycle in comparable
+                if cycle['row']['last']['ratio'] < cycle['row']['before']['ratio']]
     below_one = [cycle['row']['label'] for cycle in past
-                 if cycle['raw']['final'] is not None and cycle['raw']['final'] < 1]
+                 if cycle['row']['final']['ratio'] is not None and cycle['row']['final']['ratio'] < 1]
     means = {window: _mean([cycle['raw'][window] for cycle in past]) for window in ('before', 'last', 'final')}
 
     summary = {'n_cycles': len(past), 'k_narrowed': len(narrowed), 'narrowed': narrowed,

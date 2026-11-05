@@ -25,9 +25,11 @@ def test_read_cycles_reads_the_published_generals(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
     cycles, inputs = data.read_cycles(bundle.BundleReader(fs), PARAMS)
-    assert [c.event_date for c in cycles] == ['2019-11-10', '2023-07-23'] and [c.label for c in cycles] == ['2019', '2023']
+    assert [c.event_date for c in cycles] == ['2019-11-10', '2023-07-23']
+    assert [c.label for c in cycles] == ['2019', '2023']
     assert cycles[0].curve is None and cycles[1].curve.index.min() == pd.Timestamp('2022-07-23')
-    assert cycles[1].polls.shape[0] == 14 and cycles[1].errors['GAD3'] == {'last_error_avg': 1.5, 'last_error_blocks': -2.0}
+    assert cycles[1].polls.shape[0] == 14
+    assert cycles[1].errors['GAD3'] == {'last_error_avg': 1.5, 'last_error_blocks': -2.0}
     assert cycles[0].errors['NC Report']['last_error_blocks'] == -1.0
     assert inputs['2023-07-23']['series'] and inputs['2019-11-10']['series'] is None
 
@@ -67,7 +69,8 @@ def test_read_current_reads_the_latest_run(fresh_app, tmp_path):
     write_herd_bundle(fs)
     current, inputs = data.read_current(bundle.BundleReader(fs), PARAMS)
     assert current.current and current.event_date == '2026-11-29' and current.label == '2026'
-    assert current.polls.shape[0] == 7 and current.curve.index.max() == pd.Timestamp('2026-11-05') and current.errors == {}
+    assert current.polls.shape[0] == 7 and current.curve.index.max() == pd.Timestamp('2026-11-05')
+    assert current.errors == {}
     assert inputs == {'run_id': '20261105-120000', 'as_of': '2026-11-05', 'event_date': '2026-11-29'}
     assert current.parties == ['PP', 'PSOE', 'VOX', 'FA', 'Cs'] and current.inputs == inputs
 
@@ -76,7 +79,8 @@ def test_read_current_is_none_without_a_run_or_once_the_election_is_published(fr
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
     writer = bundle.BundleWriter(fs)   # the election of the run published with results
-    writer.write_json(bundle.path_event('es', '2026-11-29', 'results'), 'event-results', {'n_seats': 350, 'rows': []}, 'es')
+    writer.write_json(bundle.path_event('es', '2026-11-29', 'results'), 'event-results', {'n_seats': 350, 'rows': []},
+                      'es')
     assert data.is_published(bundle.BundleReader(fs), 'es', '2026-11-29')
     assert data.read_current(bundle.BundleReader(fs), PARAMS) == (None, {'skipped': 'election published'})
     writer.remove(bundle.path_manifest())
