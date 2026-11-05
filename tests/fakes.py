@@ -555,3 +555,125 @@ def write_lean_bundle(fs):
         'summary_election': {'cis_dist': 4.18, 'consensus_dist': 2.67, 'closer': 2, 'rank': 3, 'n': 5},
         'houses': ['GAD3', 'Sigma Dos', 'CIS'],
     }
+
+
+HERD_RUN = '20261105-120000'
+HERD_IDS = {'GAD3': 1, 'NC Report': 2, 'Sigma Dos': 3, 'CIS': 4, 'Panel X': 5, 'Celeste Tel': 6, 'SocioMétrica': 7}
+HERD_LEVELS = (33.0, 30.0, 13.0, 12.0)  # curvas constantes de PP, PSOE, VOX y SUMAR (FA en el run)
+HERD_POLLS = {  # elección o run -> [(casa, fin de campo, residuos sobre la curva o cifras sin ella, cambios)]
+    '2023-07-23': [
+        ('GAD3', '2023-03-01', (2, -2, 2, -2), {}),
+        ('NC Report', '2023-04-15', (2, -2, -2, 2), {}),
+        ('Sigma Dos', '2023-05-20', (-2, 2, 2, -2), {}),
+        ('GAD3', '2023-06-10', (1, -1, 1, -1), {}),
+        ('NC Report', '2023-06-15', (3, -3, -3, 3), {}),
+        ('NC Report', '2023-06-25', (1, -1, -1, 1), {}),
+        ('GAD3', '2023-07-05', (2, -2, 1, -1), {}),
+        ('Sigma Dos', '2023-07-12', (-1, 1, 1, -1), {}),
+        ('GAD3', '2023-07-17', (1, -1, 1, -1), {}),
+        ('NC Report', '2023-07-17', (-2, 2, 2, -2), {}),
+        ('CIS', '2023-02-01', (3, -3, 1, -1), {'sample_size': 4000}),
+        ('CIS', '2023-07-13', (4, -4, 2, -2), {'sample_size': 4000}),
+        ('Panel X', '2023-07-10', (0, 0, 0, 0), {'sample_size': None, 'weight': 0.5}),
+        ('Celeste Tel', '2023-07-01', (1, -1, 1, -1), {'weight': 0}),
+    ],
+    '2019-11-10': [  # sin curva: cifras publicadas
+        ('GAD3', '2019-08-01', (36, 27, 16, 9), {}),
+        ('NC Report', '2019-08-01', (30, 33, 10, 15), {}),
+        ('Sigma Dos', '2019-08-01', (33, 30, 13, 12), {}),
+        ('GAD3', '2019-11-04', (34, 29, 14, 11), {}),
+        ('NC Report', '2019-11-04', (32, 31, 12, 13), {}),
+        ('Sigma Dos', '2019-11-04', (33, 30, 13, 12), {}),
+        ('CIS', '2019-11-04', (40, 25, 13, 12), {'sample_size': 4000}),
+    ],
+    HERD_RUN: [
+        ('SocioMétrica', '2026-06-01', (1, -1, 1, -1), {}),
+        ('Sigma Dos', '2026-08-15', (1, -1, -1, 1), {}),
+        ('SocioMétrica', '2026-10-10', (1, -1, 1, -1), {}),
+        ('SocioMétrica', '2026-10-20', (1, -1, 1, -1), {}),
+        ('SocioMétrica', '2026-11-02', (1, -1, 1, -1), {}),
+        ('Sigma Dos', '2026-10-25', (1, -1, -1, 1), {}),
+        ('CIS', '2026-10-30', (5, -5, 1, -1), {'sample_size': 4000}),
+    ],
+}
+HERD_ERRORS = {  # fecha -> {casa: (last_error_avg, last_error_blocks)}
+    '2023-07-23': {'GAD3': (1.5, -2.0), 'NC Report': (2.5, 1.0), 'Sigma Dos': (2.0, 0.5), 'CIS': (4.0, -6.0)},
+    '2019-11-10': {'GAD3': (1.0, 0.5), 'NC Report': (3.0, -1.0), 'Sigma Dos': (2.0, 1.5)},
+}
+HERD_EVENTS = [{'event_date': '2026-11-29', 'pollster': 'SocioMétrica', 'n': 10, 'ratio': 0.78, 'p_value': 0.12},
+               {'event_date': '2023-07-23', 'pollster': 'GAD3', 'n': 8, 'ratio': 0.61, 'p_value': 0.05}]
+
+
+def write_herd_bundle(fs):
+    """
+    Paquete sintético con las entradas del estudio del rebaño (sin base de datos).
+
+    Escribe, para `es`, los eventos `2019-11-10` (`meta`, `cycle`, `results` y `pollsters`, sin `series`: ciclo de
+    consenso local) y `2023-07-23` (lo mismo más `series`); el manifest con el run `HERD_RUN` como `latest` y su `meta`
+    (elección del 2026-11-29, `as_of` 2026-11-05), `polls` y `series`; y el análisis `herding` de `es` con su `meta`.
+    Los sondeos son los de `HERD_POLLS`: cada uno con `weight` 1, `sample_size` 1000 y `start_date = end_date = date`
+    salvo los cambios de su tupla, y sus cifras el nivel de la curva más el residuo (en 2019, sin curva, las cifras
+    tal cual), con `Cs` a 1,5 en todos. Las curvas son constantes: PP 33, PSOE 30, VOX 13 y SUMAR (FA en el run) 12.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        Raíz del paquete de prueba.
+
+    Returns
+    -------
+    dict
+        `dates` (las elecciones pasadas escritas) y `run_id` (el run en curso).
+    """
+    from mtpy.lib import bundle
+    from mtpy.lib.publish import POLL_COLUMNS
+
+    writer = bundle.BundleWriter(fs)
+
+    def poll(names, house, end, figures, extra, curve):
+        shares = [level + figure for level, figure in zip(HERD_LEVELS, figures)] if curve else list(figures)
+        record = {'date': end, 'pollster_id': HERD_IDS[house], 'pollster': house, 'sponsor': None, 'start_date': end,
+                  'end_date': end, 'sample_size': 1000, 'mtype': None, 'rating': None, 'weight': 1}
+        return record | extra | {name: float(share) for name, share in zip(names, shares)} | {'Cs': 1.5}
+
+    def series(names, start, end):
+        dates = [d.strftime('%Y-%m-%d') for d in pd.date_range(start, end, freq='D')]
+        mean = {name: [level] * len(dates) for name, level in zip(names, HERD_LEVELS)}
+        return {'dates': dates, 'parties': list(names), 'mean': mean, 'lo': mean, 'hi': mean}
+
+    past = ['PP', 'PSOE', 'VOX', 'SUMAR']
+    dates = ['2019-11-10', '2023-07-23']
+    for date in dates:
+        curve = date == '2023-07-23'
+        meta = bundle_fixture('event-meta') | {'scope': 'es', 'event_date': date, 'name': f'Generales {date[:4]}'}
+        cycle = {'parties': past + ['Cs'], 'columns': list(POLL_COLUMNS),
+                 'polls': [poll(past, *row, curve) for row in HERD_POLLS[date]]}
+        pollsters = {'blocks': ['Derecha', 'Izquierda'], 'rows': [
+            {'pollster_id': HERD_IDS[house], 'pollster': house, 'last_error_avg': avg, 'last_error_blocks': blocks}
+            for house, (avg, blocks) in HERD_ERRORS[date].items()
+        ]}
+        parts = [('meta', 'event-meta', meta), ('cycle', 'event-cycle', cycle),
+                 ('results', 'event-results', {'n_seats': 350, 'rows': []}),
+                 ('pollsters', 'event-pollsters', pollsters)]
+        if curve:
+            parts.append(('series', 'event-series', {'horizon': 6} | series(past, '2022-07-23', '2023-07-17')))
+        for part, schema, content in parts:
+            writer.write_json(bundle.path_event('es', date, part), schema, content, 'es')
+
+    names = ['PP', 'PSOE', 'VOX', 'FA']
+    run_meta = bundle_fixture('meta') | {'scope': 'es', 'event_date': '2026-11-29', 'as_of': '2026-11-05',
+                                         'run_id': HERD_RUN}
+    run_polls = {'parties': names + ['Cs'], 'columns': list(POLL_COLUMNS),
+                 'polls': [poll(names, *row, True) for row in HERD_POLLS[HERD_RUN]], 'results': []}
+    run_series = series(names, '2025-11-05', '2026-11-05')
+    for part, content in (('meta', run_meta), ('polls', run_polls), ('series', run_series)):
+        writer.write_json(bundle.path_part('es', HERD_RUN, part), part, content, 'es', run_id=HERD_RUN)
+    headline = bundle_fixture('headline') | {'run_id': HERD_RUN, 'event_date': '2026-11-29', 'as_of': '2026-11-05'}
+    publish.update_manifest(writer, {'es': publish.latest_entry(headline)})
+
+    writer.write_json(bundle.path_analysis('es', 'herding'), 'analysis-herding', {'rows': [], 'events': HERD_EVENTS},
+                      'es')
+    writer.write_json(bundle.path_analysis('es', 'meta'), 'analysis-meta',
+                      bundle_fixture('analysis-meta') | {'scope': 'es', 'events': dates + ['2026-11-29']}, 'es')
+
+    return {'dates': dates, 'run_id': HERD_RUN}

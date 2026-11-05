@@ -20,7 +20,7 @@
       "since": "2008-01-01",
       "max_days": 365,
       "window_days": 56,
-      "final_days": 20,
+      "final_days": 21,
       "local_window": 10,
       "n_series": 4,
       "min_polls": 3,
