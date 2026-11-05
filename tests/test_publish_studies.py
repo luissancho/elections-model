@@ -183,7 +183,7 @@ def test_importing_publish_does_not_load_the_study_package():
     import subprocess
     import sys
     code = ("import sys, mtpy.lib.publish; "
-            "print(sorted(m for m in ('mtpy.lib.studies.cera', 'mtpy.lib.studies.lean', 'statsmodels.api') "
+            "print(sorted(m for m in ('mtpy.lib.studies.cera', 'mtpy.lib.studies.lean', 'mtpy.lib.studies.herd', 'statsmodels.api') "
             "if m in sys.modules))")
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, cwd=ROOT, check=True)
     assert out.stdout.strip() == '[]'
@@ -193,4 +193,4 @@ def test_study_runners_declare_which_studies_register():
     """Sólo el estudio CERA tiene una predicción que registrar; cada estudio declara su cálculo y sus exportadores."""
     assert publish.STUDY_RUNNERS["voto-cera"]["registrable"] is True
     assert publish.STUDY_RUNNERS["sesgo-cis"]["registrable"] is False
-    assert set(publish.STUDY_RUNNERS) == set(publish.STUDY_EXPORTERS) == set(publish.STUDY_META) == set(bundle.STUDIES) - {"rebano"}  # rebano: its runner arrives with the study's compute task
+    assert set(publish.STUDY_RUNNERS) == set(publish.STUDY_EXPORTERS) == set(publish.STUDY_META) == set(bundle.STUDIES)
