@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mtpy.lib.backtest import (_quantile_cols, brier, covered, crps_from_samples, log_score, majority_reliability, pit,
-                               summarize_calibration, summarize_case)
+from mtpy.lib.backtest import (_quantile_cols, brier, compare_markdown, compare_paired, covered, crps_from_samples,
+                               load_results, log_score, majority_reliability, pair_results, pit, summarize_calibration,
+                               summarize_case)
 
 
 def test_crps_point_mass_equals_absolute_error():
@@ -853,3 +854,48 @@ def test_run_backtest_script_passes_the_config_path_to_the_job(fresh_app, monkey
     assert seen['config'] == 'backtest/tuning/best.json' and seen['scopes'] == ['es']
     text = open(os.path.join(root, 'backtest', 'run_backtest.py'), encoding='utf-8').read()
     assert '[--config backtest/tuning/best.json]' in text
+
+
+PAIRED = pd.DataFrame({
+    'scope': ['es', 'es', 'es-md'], 'event_date': ['2023-07-23'] * 3, 'horizon': [6, 30, 6],
+    'mae_shares_a': [2.0, 2.0, 3.0], 'mae_shares_b': [1.0, 2.0, 4.0],
+    'crps_seats_a': [np.nan, 8., 2.], 'crps_seats_b': [7., 8., 2.],
+    'brier_vs_a': [.1, .2, .0], 'brier_vs_b': [.1, .2, .0],
+    'cov_shares95_a': [.9, .8, .9], 'cov_shares95_b': [.95, .8, .9]})
+
+
+def test_pair_results_drops_unpaired_cases():
+    a = pd.DataFrame({'scope': ['es', 'es', 'es-md'], 'event_date': ['2023-07-23'] * 3, 'horizon': [6, 30, 6],
+                      'mae_shares': [2.0, 2.5, 3.0], 'crps_seats': [7., 8., 2.], 'brier_vs': [.1, .2, .0], 'cov_shares95': [.9, .8, .9]})
+    b = a.iloc[:2].assign(mae_shares=[1.9, 2.6])
+    paired = pair_results(a, b)
+    assert len(paired) == 2 and paired['mae_shares_b'].tolist() == [1.9, 2.6]
+
+
+def test_compare_paired_counts_coverage_upwards():
+    table = compare_paired(PAIRED).set_index(['population', 'metric'])
+    assert table.loc[('all', 'mae_shares'), ['n', 'better', 'worse', 'ties']].tolist() == [3, 1, 1, 1]
+    assert table.loc[('all', 'mae_shares'), 'pct'] == pytest.approx(0.0)        # 7/3 vs 7/3
+    assert table.loc[('all', 'crps_seats'), 'n'] == 2                           # el NaN no cuenta
+    assert table.loc[('generales', 'cov_shares95'), ['better', 'worse']].tolist() == [1, 0]
+    assert table.loc[('autonomicas', 'mae_shares'), ['n', 'worse']].tolist() == [1, 1]
+
+
+def test_compare_paired_empty_population_has_zero_cases():
+    table = compare_paired(PAIRED.loc[PAIRED['scope'].eq('es')]).set_index(['population', 'metric'])
+    assert table.loc[('autonomicas', 'mae_shares'), 'n'] == 0 and np.isnan(table.loc[('autonomicas', 'mae_shares'), 'mean_a'])
+
+
+def test_compare_markdown_has_one_row_per_population_and_metric():
+    md = compare_markdown(compare_paired(PAIRED), 'γ = 1', 'γ = 2')
+    assert md.count('| MAE de voto') == 3 and md.count('| Cobertura del 95 %') == 3
+    assert '| Generales | MAE de voto (puntos) | 2 |' in md and 'γ = 2' in md.splitlines()[0]
+
+
+def test_load_results_reads_root_and_subfolders_and_warns_on_missing(tmp_path):
+    pd.DataFrame({'event_date': ['2023-07-23'], 'horizon': [6]}).to_csv(tmp_path / 'metrics.csv', index=False)
+    (tmp_path / 'es-md').mkdir()
+    pd.DataFrame({'event_date': ['2023-05-28'], 'horizon': [6]}).to_csv(tmp_path / 'es-md' / 'metrics.csv', index=False)
+    with pytest.warns(UserWarning, match='es-ct'):
+        df = load_results(str(tmp_path), ['es', 'es-md', 'es-ct'])
+    assert df['scope'].tolist() == ['es', 'es-md']

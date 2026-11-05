@@ -17,7 +17,7 @@ import time
 import warnings
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -747,6 +747,143 @@ def summarize_calibration(
     out['group'] = out['group'].astype(str)
 
     return out[columns]
+
+
+COMPARE_METRICS = ('mae_shares', 'crps_seats', 'brier_vs', 'cov_shares95')
+HIGHER_IS_BETTER = ('cov_shares95',)
+COMPARE_KEYS = ('scope', 'event_date', 'horizon')
+COMPARE_POPULATIONS = ('generales', 'autonomicas', 'all')
+COMPARE_LABELS = {
+    'mae_shares': 'MAE de voto (puntos)', 'crps_seats': 'CRPS de escaños', 'brier_vs': 'Brier de mayorías',
+    'cov_shares95': 'Cobertura del 95 %', 'generales': 'Generales', 'autonomicas': 'Autonómicas', 'all': 'Todas'}
+
+
+def load_results(folder: str, scopes: Sequence[str]) -> pd.DataFrame:
+    """
+    Concatenate the `metrics.csv` of several scopes of a results folder.
+
+    Parameters
+    ----------
+    folder : str
+        Results folder: the national scope `es` writes at its root, every other scope in `folder/{scope}`.
+    scopes : sequence of str
+        Scopes to read; one without `metrics.csv` is skipped with a warning.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The rows of every `metrics.csv` found with a `scope` column first (empty when none was found).
+    """
+    frames = []
+    for scope in scopes:
+        path = os.path.join(folder, 'metrics.csv' if scope == 'es' else os.path.join(scope, 'metrics.csv'))
+        if not os.path.isfile(path):
+            warnings.warn('no metrics.csv for scope {} in {}'.format(scope, folder))
+            continue
+        frames.append(pd.read_csv(path).assign(scope=scope))
+    if not frames:
+        return pd.DataFrame(columns=['scope'])
+    df = pd.concat(frames, ignore_index=True)
+    return df[['scope'] + [c for c in df.columns if c != 'scope']]
+
+
+def pair_results(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    metrics: Sequence[str] = COMPARE_METRICS,
+    keys: Sequence[str] = COMPARE_KEYS
+) -> pd.DataFrame:
+    """
+    Pair the cases of two backtest results (inner join on the case keys).
+
+    Parameters
+    ----------
+    a, b : pandas.DataFrame
+        Rows of the `metrics.csv` of two runs (see `load_results`), with the `keys` and `metrics` columns.
+    metrics : sequence of str, default COMPARE_METRICS
+        Metrics to keep.
+    keys : sequence of str, default COMPARE_KEYS
+        Columns that identify a case; the cases that are only in one of the two frames are left out.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per case: the `keys`, then `{metric}_a` and `{metric}_b` for every metric.
+    """
+    keys, metrics = list(keys), list(metrics)
+    return a[keys + metrics].merge(b[keys + metrics], on=keys, how='inner', suffixes=('_a', '_b'))
+
+
+def compare_paired(paired: pd.DataFrame, metrics: Sequence[str] = COMPARE_METRICS) -> pd.DataFrame:
+    """
+    Summarise paired cases per population and metric, from the point of view of the candidate `b`.
+
+    Parameters
+    ----------
+    paired : pandas.DataFrame
+        Output of `pair_results`.
+    metrics : sequence of str, default COMPARE_METRICS
+        Metrics to summarise; those in `HIGHER_IS_BETTER` win with the larger value, the rest with the smaller.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per population (`generales` is `scope == 'es'`, `autonomicas` the rest, `all`) and metric:
+        `n` (cases where both values are finite), `mean_a`, `mean_b`, `diff` (`mean_b - mean_a`), `pct`
+        (`100 * diff / mean_a`, NaN when `mean_a` is 0) and `better`, `worse`, `ties` (cases of `b` against `a`).
+        A population without cases has `n = 0` and NaN in the rest.
+    """
+    is_national = paired['scope'].eq('es')
+    masks = {'generales': is_national, 'autonomicas': ~is_national, 'all': pd.Series(True, index=paired.index)}
+    rows = []
+    for population in COMPARE_POPULATIONS:
+        for metric in metrics:
+            va = paired.loc[masks[population], metric + '_a'].astype(float)
+            vb = paired.loc[masks[population], metric + '_b'].astype(float)
+            ok = np.isfinite(va) & np.isfinite(vb)
+            va, vb = va[ok], vb[ok]
+            n = int(ok.sum())
+            row = {'population': population, 'metric': metric, 'n': n, 'mean_a': np.nan, 'mean_b': np.nan,
+                   'diff': np.nan, 'pct': np.nan, 'better': np.nan, 'worse': np.nan, 'ties': np.nan}
+            if n:
+                mean_a, mean_b = float(va.mean()), float(vb.mean())
+                gain = (vb - va) if metric in HIGHER_IS_BETTER else (va - vb)
+                row.update(mean_a=mean_a, mean_b=mean_b, diff=mean_b - mean_a,
+                           pct=100 * (mean_b - mean_a) / mean_a if mean_a != 0 else np.nan,
+                           better=int((gain > 0).sum()), worse=int((gain < 0).sum()), ties=int((gain == 0).sum()))
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def compare_markdown(table: pd.DataFrame, label_a: str, label_b: str) -> str:
+    """
+    Render the output of `compare_paired` as a markdown table.
+
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Output of `compare_paired`.
+    label_a, label_b : str
+        Names of the two runs for the headers of their means.
+
+    Returns
+    -------
+    str
+        Markdown table, one row per population and metric: cases, mean of each run, difference with its
+        percentage and cases where `b` is better / worse (ties); 4 decimals in the means, 1 in the percentage.
+    """
+    def num(x, fmt):
+        return fmt.format(x) if np.isfinite(x) else '–'
+
+    lines = ['| Población | Métrica | Casos | {} | {} | Diferencia (%) | Mejor / peor (empates) |'.format(label_a, label_b),
+             '|---|---|---:|---:|---:|---:|---:|']
+    for r in table.itertuples():
+        counts = '{} / {} ({})'.format(int(r.better), int(r.worse), int(r.ties)) if r.n else '–'
+        diff = '{} ({}%)'.format(num(r.diff, '{:+.4f}'), num(r.pct, '{:+.1f}')) if r.n else '–'
+        lines.append('| {} | {} | {} | {} | {} | {} | {} |'.format(
+            COMPARE_LABELS[r.population], COMPARE_LABELS.get(r.metric, r.metric), r.n,
+            num(r.mean_a, '{:.4f}'), num(r.mean_b, '{:.4f}'), diff, counts))
+    return '\n'.join(lines)
 
 
 def majority_reliability(blocks: pd.DataFrame, bins: tuple = (0, .1, .3, .5, .7, .9, 1.)) -> pd.DataFrame:
