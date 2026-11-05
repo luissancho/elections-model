@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maqueta v1 · /analisis/rebano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<style>
+html, body { margin: 0; }
+body { background: #d9dce3; font-family: 'DM Sans', system-ui, sans-serif; }
+#bar { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 8px 16px; background: #1a1c22; color: #fff; font-size: 13px; }
+#bar strong { font-family: Outfit, sans-serif; font-weight: 800; font-size: 15px; }
+#bar .note { margin-left: auto; color: #9298ac; font-size: 12px; }
+.q { max-width: 1100px; margin: 18px auto 0; padding: 0 16px; font-size: 13.5px; color: #3a3f4f; }
+.q b { color: #1a1c22; }
+#stage { padding: 12px 0 60px; }
+
+.page {
+  --bg: #f4f5f8; --card: #fff; --soft: #eceef2; --soft2: #e3e6ec;
+  --line: rgba(0,0,0,.08); --line2: rgba(0,0,0,.15);
+  --ink: #1a1c22; --text2: #5a5f72; --text3: #9298ac;
+  --brand: #1d4f86; --brand-soft: #e7eef8; --hover: #eff4ff;
+  --green: #2e9e5b; --green-soft: #ecfdf3; --red: #ce3b3b; --red-soft: #fef2f2; --amber: #e8912b; --amber-soft: #fff7ed;
+  --r: 18px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+  --pad: 32px;
+  position: relative; background: var(--bg); color: var(--ink); max-width: 1180px; margin: 0 auto;
+  font: 15px/1.5 'DM Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+}
+.page * { box-sizing: border-box; }
+.page a { color: inherit; text-decoration: none; }
+.page h1, .page h2, .page h3, .page h4 { font-family: Outfit, sans-serif; margin: 0; line-height: 1.15; }
+.hdr { position: sticky; top: 41px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 var(--pad); background: var(--card); border-bottom: 1px solid var(--line); }
+.wm { font: 800 24px/1 Outfit, sans-serif; letter-spacing: -.02em; }
+.wm i { display: inline-block; width: 16px; height: 16px; border: 3px solid var(--brand); border-radius: 50%; margin-left: 3px; vertical-align: -1px; }
+.hdr nav { display: flex; gap: 4px; }
+.hdr nav a { display: inline-flex; align-items: center; height: 56px; padding: 0 12px; font-size: 13.5px; font-weight: 500; color: var(--text2); }
+.hdr nav a.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--brand); }
+.hdr .help { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--line2); display: grid; place-items: center; font-weight: 700; color: var(--text2); }
+.main { padding: 24px var(--pad) 48px; }
+.stack > * + * { margin-top: 16px; }
+.hero { padding: 6px 0 4px; }
+.hero .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.hero h1 { font: 800 36px/1.12 Outfit, sans-serif; letter-spacing: -.02em; max-width: 34ch; margin: 0 0 12px; }
+.hero p { margin: 0; font: 500 18px/1.4 Outfit, sans-serif; color: var(--text2); max-width: 70ch; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.toc a { padding: 5px 11px; border-radius: 999px; background: var(--card); border: 1px solid var(--line2); font-size: 12.5px; font-weight: 600; color: var(--text2); }
+.toc a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.toc a.g { border-color: var(--green); color: var(--green); } .toc a.o { border-color: var(--amber); color: #c2410c; } .toc a.b { border-color: var(--brand); color: var(--brand); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px 18px; min-width: 0; }
+.card-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 8px; }
+.card-t { display: flex; align-items: center; gap: 9px; font: 700 16px/1.2 Outfit, sans-serif; }
+.card-t::before { content: ""; width: 4px; height: 18px; border-radius: 3px; background: var(--brand); }
+.lead { margin: 0 0 12px; font-size: 13.5px; color: var(--text2); max-width: 100ch; }
+.how { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.how::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--brand-soft); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--text2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill.ok { background: var(--green-soft); color: #15803d; }
+.pill.warn { background: var(--amber-soft); color: #c2410c; }
+.pill.brand { background: var(--brand-soft); color: var(--brand); }
+.pill.bad { background: var(--red-soft); color: #b91c1c; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.kpi { padding: 14px 16px; border-right: 1px solid var(--line); }
+.kpi:last-child { border-right: 0; }
+.kpi .l { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.kpi .v { font: 800 26px/1.1 Outfit, sans-serif; margin: 4px 0 2px; letter-spacing: -.01em; }
+.kpi .s { font-size: 12.5px; color: var(--text2); }
+.dlt { font-weight: 700; white-space: nowrap; }
+.dlt.up { color: #d62728; } .dlt.down { color: #2ca02c; } .dlt.flat { color: var(--text2); }
+.tw { overflow-x: auto; }
+.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t th { padding: 6px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); text-align: right; white-space: nowrap; border-bottom: 1.5px solid var(--line2); }
+.t td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.t th:first-child, .t td:first-child { text-align: left; }
+.t tbody tr:hover td { background: var(--hover); }
+.t .b { font-weight: 700; } .t .mut { color: var(--text3); }
+.t tr.now td { background: var(--brand-soft); font-weight: 600; }
+.t td.h1 { background: #b91c1c; color: #fff; font-weight: 700; } .t td.h2 { background: #fca5a5; } .t td.h3 { background: #fee2e2; } .t td.h4 { background: #f4f5f8; } .t td.h5 { background: #dbeafe; } .t td.h6 { background: #93c5fd; }
+.t td.z { background: #fff; color: var(--text3); }
+.bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--red); vertical-align: middle; margin-left: 6px; }
+.chart { height: 340px; }
+.chart.short { height: 240px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid2 > * { min-width: 0; }
+
+.qcard { position: relative; border-left: 8px solid var(--qc); padding-left: 22px; }
+.qcard .qh { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.qcard .qn { width: 36px; height: 36px; border-radius: 999px; background: var(--qc); color: #fff; display: grid; place-items: center; font: 800 18px Outfit, sans-serif; flex: none; }
+.qcard .qt { font: 800 22px/1.15 Outfit, sans-serif; letter-spacing: -.01em; flex: 1; }
+.qcard .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px Outfit, sans-serif; white-space: nowrap; }
+.qcard .verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.qcard .sum { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--qc) 9%, #fff); font-size: 14px; font-weight: 500; }
+.qcard .sum b { font-weight: 800; }
+.q1 { --qc: #2e9e5b; } .q2 { --qc: #e8912b; } .q3 { --qc: #ce3b3b; } .qb { --qc: #1d4f86; }
+.ctitle { font: 600 13px/1.3 Outfit, sans-serif; margin: 0 0 2px; }
+.csub { font-size: 11.5px; color: var(--text2); margin: 0 0 4px; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.three a { display: block; border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line2); border-top: 5px solid var(--qc); background: var(--bg); }
+.three .k { font: 800 12px Outfit, sans-serif; letter-spacing: .04em; color: var(--qc); }
+.three .tt { font: 700 15px/1.25 Outfit, sans-serif; margin: 4px 0 6px; }
+.three .vv { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 13px Outfit, sans-serif; margin-bottom: 6px; }
+.three p { margin: 0; font-size: 13px; color: var(--text2); }
+.note { padding: 10px 12px; border-radius: 10px; background: var(--amber-soft); font-size: 13px; }
+.note.blue { background: var(--brand-soft); } .note.ok { background: var(--green-soft); }
+.tests { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.test { border: 1px solid var(--line2); border-radius: 12px; padding: 12px 14px; background: var(--bg); }
+.test .k { font: 800 11px Outfit, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.test .v { font: 800 24px/1.1 Outfit, sans-serif; margin: 4px 0; }
+.test .v small { font-size: 13px; font-weight: 600; color: var(--text2); }
+.test p { margin: 4px 0 0; font-size: 12.5px; color: var(--text2); }
+.test.hi { border-color: var(--red); background: var(--red-soft); }
+.test.ok { border-color: var(--green); background: var(--green-soft); }
+.ask { background: #fff8e6; border: 1px dashed #e8912b; border-radius: 10px; padding: 8px 12px; font-size: 12.5px; color: #7c3a00; margin: 10px 0 0; }
+.ask b { color: #7c3a00; }
+.tech { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 12.5px; color: var(--text2); }
+.tech b { color: var(--ink); }
+.foot { padding: 20px var(--pad) 28px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text2); }
+.src-list { font-size: 13px; } .src-list li { margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: var(--text2); margin: 4px 0 8px; }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+details.more { margin-top: 10px; } details.more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--brand); }
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>Maqueta v1 · /analisis/rebano</strong>
+  <span class="note">cifras reales del bundle (run 20261105-103609, 5 de noviembre) · las cajas naranjas son las decisiones que quedan</span>
+</div>
+<p class="q">Estructura propuesta: <b>titular + entradilla</b>, tres cifras, <b>tres preguntas</b> con veredicto (como el sesgo del CIS), <b>P1</b> con el gráfico de la convergencia por semanas (2026 en vivo), <b>P2</b> con la prueba frente al azar y el CIS aparte, <b>P3</b> casa a casa (2026 en vivo + las últimas 8 semanas de cada ciclo pasado), datos y método. Página viva: se recalcula con cada actualización del promedio hasta la veda.</p>
+
+<div id="stage">
+<div class="page">
+  <header class="hdr">
+    <a class="wm" href="#">Demoscopio<i></i></a>
+    <nav><a>Inicio</a><a>Histórico Errores</a><a>Ranking Encuestadoras</a><a class="on">Análisis</a><a>Método</a></nav>
+    <span class="help">?</span>
+  </header>
+
+  <main class="main stack">
+    <div class="hero">
+      <div class="tags">
+        <span class="pill brand">Análisis</span>
+        <span class="pill ok">Página viva · se recalcula con cada actualización hasta la veda del 23-N</span>
+        <span class="pill">7 generales desde 2008 · a 24 días del 29-N</span>
+      </div>
+      <h1>¿Se copian las encuestadoras en la recta final?</h1>
+      <p>En las siete generales desde 2008, los sondeos se han parecido más entre sí cuanto más cerca estaba la elección: en las últimas tres semanas, tanto como si todas las casas sacaran sus muestras de la misma urna. En 2026 ya van así desde el principio, y las tres casas con más sondeos publican cifras que oscilan menos de lo que permite el azar de sus muestras.</p>
+    </div>
+
+    <nav class="toc">
+      <a class="on">Resumen</a><a class="g">1 · ¿Se acercan?</a><a class="o">2 · ¿Más de lo que permite el azar?</a><a class="b">3 · ¿Quién va en rebaño en 2026?</a><a>Datos y método</a>
+    </nav>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Ciclos en que los sondeos se acercaron en la recta final</div><div class="v">7 de 7</div><div class="s">la dispersión media de los sondeos pasa de 1,7 en el resto del ciclo a 1,2 en las últimas 8 semanas y a 1,05 en las últimas 3 · 1 = lo que permite el azar de las muestras</div></div>
+      <div class="kpi"><div class="l">Dispersión de los sondeos de 2026, hoy</div><div class="v">1,06</div><div class="s">a 24 días del 29-N; el ciclo con los sondeos más parecidos entre sí desde 2008, de principio a fin (2008: 1,05 · 2023: 1,62 · 2015: 2,67)</div></div>
+      <div class="kpi"><div class="l">Casas en rebaño en las últimas 8 semanas</div><div class="v">3 de 3</div><div class="s">SocioMétrica 0,36 · NC Report 0,44 · Sigma Dos 0,57, las tres con sondeos suficientes para medirlo · el CIS, aparte: 10,7</div></div>
+    </div>
+
+    <section class="card" id="resumen">
+      <div class="card-h"><h2 class="card-t">Tres preguntas, tres respuestas</h2></div>
+      <p class="lead">Cada semana de campaña se repite la sospecha: los sondeos se parecen demasiado. Lo medimos con los datos de siete generales y con los de este ciclo, que se actualizan a diario.</p>
+      <div class="three">
+        <a class="q1"><div class="k">PREGUNTA 1</div><div class="tt">¿Se acercan los sondeos cuando llega la elección?</div><div class="vv">SÍ</div><p>En los 7 ciclos la dispersión de las últimas 8 semanas fue menor que la del resto del ciclo. En 2016 cayó de 2,3 a 1,0; en 2015, de 2,7 a 1,6.</p></a>
+        <a class="q2"><div class="k">PREGUNTA 2</div><div class="tt">¿Más de lo que permite el azar de sus muestras?</div><div class="vv">EN 3 DE 7</div><p>En las últimas 3 semanas de 2008, 2016 y noviembre de 2019 los sondeos variaron menos de lo que sus muestras permiten: eso no pasa sin mirar al vecino. En los otros cuatro, justo lo que permite el azar.</p></a>
+        <a class="qb"><div class="k">PREGUNTA 3</div><div class="tt">¿Quién va en rebaño en 2026?</div><div class="vv">3 CASAS</div><p>SocioMétrica (0,36), NC Report (0,44) y Sigma Dos (0,57) en las últimas 8 semanas. El CIS va por libre: su sesgo lo deja a 10 errores de muestra del promedio.</p></a>
+      </div>
+      <p class="note blue" style="margin-top:12px">Medimos cuánto varían las cifras publicadas alrededor del promedio, comparado con lo que variarían sólo por el azar de las muestras. No medimos intenciones: ir en rebaño puede ser copiar, ponderar por recuerdo de voto o repetir panel. Para el promedio da igual: esos sondeos aportan menos información de la que sugiere su muestra.</p>
+    </section>
+
+    <!-- PREGUNTA 1 -->
+    <section class="card qcard q1" id="p1">
+      <div class="qh"><div class="qn">1</div><h2 class="qt">¿Se acercan los sondeos cuando llega la elección?</h2><span class="verdict">SÍ <i></i></span></div>
+      <p class="lead">Para cada sondeo con muestra publicada medimos cuánto se separa del promedio de su fecha en los cuatro partidos principales, y lo comparamos con el error que permitiría su muestra. El cociente es la dispersión: 1 significa que los sondeos difieren entre sí sólo lo que difieren sus muestras; 2, el doble. La curva de cada ciclo va de un año antes a la víspera.</p>
+      <div class="grid2">
+        <div>
+          <p class="ctitle">Dispersión de los sondeos por semanas hasta la elección</p>
+          <p class="csub">Siete generales desde 2008 y el ciclo de 2026, que se completa cada día · sin el CIS · cuatro partidos principales de cada ciclo</p>
+          <div class="chart" id="c-weeks"></div>
+        </div>
+        <div>
+          <p class="ctitle">Resto del ciclo frente a la recta final</p>
+          <p class="csub">Sondeos con muestra publicada; cambio de la dispersión al entrar en las últimas 8 semanas</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Ciclo</th><th>Sondeos</th><th>Resto del ciclo</th><th>Últimas 8 sem.</th><th>Últimas 3 sem.</th><th>Cambio</th></tr></thead>
+            <tbody>
+              <tr><td class="b">2008</td><td class="mut">45</td><td>1,05</td><td>0,95</td><td>0,82</td><td><span class="dlt down">▼ −0,10</span></td></tr>
+              <tr><td class="b">2011</td><td class="mut">84</td><td>1,43</td><td>1,13</td><td>1,20</td><td><span class="dlt down">▼ −0,30</span></td></tr>
+              <tr><td class="b">2015</td><td class="mut">110</td><td>2,67</td><td>1,64</td><td>1,29</td><td><span class="dlt down">▼ −1,03</span></td></tr>
+              <tr><td class="b">2016</td><td class="mut">91</td><td>2,27</td><td>1,01</td><td>0,68</td><td><span class="dlt down">▼ −1,26</span></td></tr>
+              <tr><td class="b">2019 abr.</td><td class="mut">97</td><td>1,56</td><td>1,43</td><td>1,27</td><td><span class="dlt down">▼ −0,13</span></td></tr>
+              <tr><td class="b">2019 nov.</td><td class="mut">58</td><td>1,17</td><td>0,94</td><td>0,85</td><td><span class="dlt down">▼ −0,23</span></td></tr>
+              <tr><td class="b">2023</td><td class="mut">157</td><td>1,62</td><td>1,28</td><td>1,25</td><td><span class="dlt down">▼ −0,34</span></td></tr>
+              <tr><td class="b">Media de los 7</td><td></td><td class="b">1,68</td><td class="b">1,20</td><td class="b">1,05</td><td><span class="dlt down">▼ −0,48</span></td></tr>
+              <tr class="now"><td class="b">2026 · hoy</td><td class="mut">96</td><td>1,06</td><td>1,06</td><td class="mut">sin sondeos aún</td><td><span class="dlt flat">= 0,00</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+      <div class="sum"><b>En los 7 ciclos los sondeos se acercaron al entrar en las últimas 8 semanas</b>, y en las últimas 3 la dispersión media quedó en 1,05: a esas alturas, las casas difieren entre sí poco más de lo que difieren sus muestras. El resto del ciclo cada casa lleva su cocina; en la recta final la cocina desaparece. 2026 es distinto: la dispersión lleva un año en 1,0-1,1, como si la recta final hubiera empezado con el ciclo.</div>
+      <span class="how">Cómo leerlo</span>
+      <div class="ask"><b>Decisión:</b> ¿el gráfico de semanas o un «antes → después» por ciclo (puntos unidos, como el dumbbell del hilo de la ventaja)? La curva enseña el camino y deja que 2026 avance a diario; el dumbbell es más limpio pero estático.</div>
+    </section>
+
+    <!-- PREGUNTA 2 -->
+    <section class="card qcard q2" id="p2">
+      <div class="qh"><div class="qn">2</div><h2 class="qt">¿Más de lo que permite el azar de sus muestras?</h2><span class="verdict">EN 3 DE 7 <i></i></span></div>
+      <p class="lead">Que los sondeos se acerquen puede ser normal: la opinión se asienta y los indecisos deciden. Lo que no es normal es que difieran <b>menos</b> de lo que difieren sus propias muestras. Una casa que repite una encuesta con otra muestra obtiene cifras algo distintas; si varias casas, con muestras de mil entrevistas, publican cifras más parecidas que eso, alguien ha mirado al vecino.</p>
+      <div class="tests">
+        <div class="test hi"><div class="k">1 · Ciclos por debajo de 1 en las últimas 3 semanas</div><div class="v">3 de 7</div><p>2008 (0,82), 2016 (0,68) y noviembre de 2019 (0,85): menos variación de la que permiten las muestras. Los dos últimos, ciclos cortos de elección repetida.</p></div>
+        <div class="test"><div class="k">2 · Media de los 7 ciclos, últimas 3 semanas</div><div class="v">1,05 <small>desde 1,68</small></div><p>Las diferencias entre casas, que el resto del ciclo son casi el doble del azar, desaparecen en la recta final: queda sólo el ruido de las muestras.</p></div>
+        <div class="test"><div class="k">3 · Probabilidad de una caída así por azar</div><div class="v">&lt; 1 entre 100</div><p>Siete de siete ciclos a la baja: una moneda lo hace una vez entre 128. <span style="color:#b91c1c">Cifra provisional: la prueba definitiva la fija la spec.</span></p></div>
+      </div>
+      <div class="grid2">
+        <div>
+          <p class="ctitle">El CIS, aparte</p>
+          <p class="csub">Su distancia al promedio, en errores de su muestra, en las últimas 8 semanas de cada ciclo; fuera del cálculo del resto de la página porque lo dominaría</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Ciclo</th><th>Sondeos (8 sem.)</th><th>Distancia al promedio</th><th>Oscilación propia</th></tr></thead>
+            <tbody>
+              <tr><td class="b">2008</td><td class="mut">1</td><td>4,4</td><td class="mut">–</td></tr>
+              <tr><td class="b">2011</td><td class="mut">1</td><td>3,8</td><td class="mut">–</td></tr>
+              <tr><td class="b">2015</td><td class="mut">1</td><td>3,0</td><td class="mut">–</td></tr>
+              <tr><td class="b">2016</td><td class="mut">1</td><td>2,4</td><td class="mut">–</td></tr>
+              <tr><td class="b">2019 abr.</td><td class="mut">1</td><td>7,8</td><td class="mut">–</td></tr>
+              <tr><td class="b">2019 nov.</td><td class="mut">2</td><td>6,3</td><td class="mut">–</td></tr>
+              <tr><td class="b">2023</td><td class="mut">4</td><td>6,9</td><td>2,0</td></tr>
+              <tr class="now"><td class="b">2026 · hoy</td><td class="mut">1</td><td>10,7</td><td class="mut">– (8,3 y 3,2 en el ciclo)</td></tr>
+            </tbody>
+          </table></div>
+          <p class="csub" style="margin-top:6px">«Distancia al promedio»: la misma medida que el resto de la página, sólo con sus sondeos. «Oscilación propia»: descontado su sesgo, cuánto varía de un sondeo al siguiente; con un solo sondeo no se puede medir.</p>
+        </div>
+        <div>
+          <p class="ctitle">Qué significa la cifra</p>
+          <div class="tech" style="margin-top:0">
+            <b>1,0</b> · los sondeos difieren entre sí lo que difieren sus muestras: ninguna cocina propia, o la misma para todos.<br>
+            <b>Por encima de 1</b> · cada casa aporta algo distinto: su ponderación, su panel, su estimación. El resto del ciclo la media es 1,7.<br>
+            <b>Por debajo de 1</b> · imposible sin mirar al vecino: una muestra de 1.000 entrevistas no puede dar dos veces casi la misma cifra, y menos dos casas distintas.<br>
+            <b>El CIS a 10,7</b> · su cifra se separa del promedio diez veces el error de su muestra de 4.000 entrevistas: no es rebaño, es sesgo, y lo cuenta <a href="#" style="color:var(--brand);font-weight:600">El sesgo del CIS de Tezanos</a>.
+          </div>
+          <div class="sum" style="margin-top:12px"><b>Sí en tres ciclos; en los otros cuatro, en el límite.</b> En las últimas tres semanas de 2008, 2016 y noviembre de 2019 los sondeos se parecieron más de lo que permite el azar de sus muestras. En 2011, 2015, abril de 2019 y 2023 quedaron entre 1,2 y 1,3: las casas aún difieren, pero poco.</div>
+        </div>
+      </div>
+      <div class="ask"><b>Decisión:</b> veredicto de P2. «EN 3 DE 7» es lo que dicen los datos; alternativas: «A VECES», o reformular la pregunta como «¿Desaparecen las diferencias entre casas?» con veredicto «SÍ» (1,05 en las últimas 3 semanas). La prueba 3 (probabilidad) queda por fijar: signo de los 7 ciclos (1 entre 128) o la prueba χ² de cada ciclo.</div>
+    </section>
+
+    <!-- PREGUNTA 3 -->
+    <section class="card qcard qb" id="p3">
+      <div class="qh"><div class="qn">3</div><h2 class="qt">¿Quién va en rebaño en 2026?</h2><span class="verdict">3 CASAS <i></i></span></div>
+      <p class="lead">Casa a casa, la medida del modelo: cuánto oscilan los sondeos de una encuestadora alrededor del promedio, descontada su inclinación propia, frente a lo que permiten sus muestras. Aquí, sólo en las últimas 8 semanas de cada ciclo y con tres o más sondeos con muestra publicada. El p-valor es la probabilidad de una oscilación tan baja sin rebaño.</p>
+      <div class="grid2">
+        <div>
+          <p class="ctitle">Últimas 8 semanas de 2026 · a 24 días del 29-N</p>
+          <p class="csub">Se completa con cada actualización; entran las casas al llegar a tres sondeos con muestra desde el 4 de octubre</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Encuestadora</th><th>Sondeos</th><th>Rebaño</th><th>p-valor</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="b">SocioMétrica</td><td class="mut">3</td><td class="b" style="color:#b91c1c">0,36</td><td>0,12</td><td style="text-align:left"><span class="bar" style="width:92px"></span></td></tr>
+              <tr><td class="b">NC Report</td><td class="mut">3</td><td class="b" style="color:#b91c1c">0,44</td><td>0,18</td><td style="text-align:left"><span class="bar" style="width:80px"></span></td></tr>
+              <tr><td class="b">Sigma Dos</td><td class="mut">4</td><td class="b" style="color:#b91c1c">0,57</td><td>0,19</td><td style="text-align:left"><span class="bar" style="width:62px"></span></td></tr>
+              <tr><td class="mut">GAD3, 40dB, DYM, Hamalgama, Celeste Tel…</td><td class="mut">1-2</td><td class="mut">–</td><td class="mut">–</td><td class="mut" style="text-align:left">aún sin sondeos suficientes</td></tr>
+              <tr><td class="mut">CIS</td><td class="mut">1</td><td class="mut">–</td><td class="mut">–</td><td class="mut" style="text-align:left">aparte: ver la pregunta 2</td></tr>
+            </tbody>
+          </table></div>
+          <p class="csub" style="margin-top:6px">La barra crece hacia la derecha cuanto más por debajo de 1. En el ciclo entero (desde 2023), la misma medida da SocioMétrica 0,78, NC Report 0,58 y Sigma Dos 0,88: la recta final acentúa lo que ya se veía.</p>
+        </div>
+        <div>
+          <p class="ctitle">Las últimas 8 semanas de cada ciclo, casa a casa</p>
+          <p class="csub">Rebaño de cada encuestadora con tres o más sondeos con muestra en esa ventana; en blanco, menos de tres</p>
+          <div class="legend"><span><i style="background:#b91c1c"></i>&lt; 0,5</span><span><i style="background:#fca5a5"></i>0,5-0,7</span><span><i style="background:#fee2e2"></i>0,7-0,9</span><span><i style="background:#f4f5f8;border:1px solid #ddd"></i>0,9-1,2</span><span><i style="background:#dbeafe"></i>1,2-1,6</span><span><i style="background:#93c5fd"></i>&gt; 1,6</span></div>
+          <div class="tw"><table class="t" id="matrix">
+            <thead><tr><th>Encuestadora</th><th>2008</th><th>2011</th><th>2015</th><th>2016</th><th>19 abr.</th><th>19 nov.</th><th>2023</th><th>2026</th></tr></thead>
+            <tbody>
+              <tr><td class="b">SocioMétrica</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h1">0,43</td><td class="h4">1,00</td><td class="h1">0,36</td></tr>
+              <tr><td class="b">NC Report</td><td class="z"></td><td class="h2">0,56</td><td class="z"></td><td class="h1">0,35</td><td class="h1">0,49</td><td class="z"></td><td class="h3">0,73</td><td class="h1">0,44</td></tr>
+              <tr><td class="b">Sigma Dos</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h2">0,57</td></tr>
+              <tr><td class="b">Celeste Tel</td><td class="z"></td><td class="h1">0,49</td><td class="h3">0,72</td><td class="h4">0,91</td><td class="h2">0,53</td><td class="h1">0,39</td><td class="z"></td><td class="z"></td></tr>
+              <tr><td class="b">GAD3</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h1">0,48</td><td class="z"></td><td class="h4">0,91</td><td class="h2">0,68</td><td class="z"></td></tr>
+              <tr><td class="b">Hamalgama</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h1">0,40</td><td class="z"></td><td class="z"></td></tr>
+              <tr><td class="b">Data10</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h2">0,65</td><td class="z"></td></tr>
+              <tr><td class="b">DYM</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h2">0,65</td><td class="z"></td></tr>
+              <tr><td class="b">Encuestamos</td><td class="z"></td><td class="z"></td><td class="h5">1,35</td><td class="h1">0,34</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td></tr>
+              <tr><td class="b">Metroscopia</td><td class="z"></td><td class="z"></td><td class="h5">1,60</td><td class="h3">0,89</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td></tr>
+              <tr><td class="b">Demoscopia</td><td class="z"></td><td class="z"></td><td class="h3">0,80</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td></tr>
+              <tr><td class="b">IMOP</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h4">1,01</td><td class="z"></td></tr>
+              <tr><td class="b">InvyMark</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h4">1,08</td><td class="z"></td></tr>
+              <tr><td class="b">40dB</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h4">1,09</td><td class="z"></td></tr>
+              <tr><td class="b">Ipsos</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h4">1,02</td><td class="z"></td><td class="z"></td></tr>
+              <tr><td class="b">Noxa</td><td class="h1">0,32</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td></tr>
+              <tr><td class="b">CIS</td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="z"></td><td class="h6">2,02</td><td class="z"></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+      <div class="sum"><b>Las de siempre.</b> NC Report ha ido en rebaño en la recta final de cuatro de sus cinco ciclos, Celeste Tel en cuatro de cinco, SocioMétrica en dos de tres. Ninguna casa con tres ciclos o más se ha librado siempre. El CIS es el único que oscila de más.</div>
+      <span class="how">Cómo leerlo</span>
+      <div class="ask"><b>Decisiones:</b> umbral de tres sondeos (con dos entrarían más casas pero el p-valor pierde sentido); ventana de 8 semanas; ¿la matriz entera o sólo las casas con sondeos en 2026? ¿Enlace al perfil de cada casa?</div>
+    </section>
+
+    <section class="card" id="despues">
+      <div class="card-h"><h2 class="card-t">Después del 29-N</h2></div>
+      <p class="lead">Cuando haya escrutinio, la página añade una tarjeta: ¿acertaron más las casas que iban en rebaño o las que no? En 2016 las casas se acercaron por debajo del azar y el resultado se les escapó a todas (PP +3 sobre el promedio); en 2023, con las casas más dispersas, el error fue el de siempre. Con siete ciclos no hay prueba, pero sí una cuenta que hacer.</p>
+      <div class="ask"><b>Decisión:</b> ¿registra una predicción comprobable tras la veda («en las últimas 3 semanas la dispersión de 2026 quedará por debajo de 1»), como el voto CERA? Propuesta: sin registro, como el sesgo del CIS; la comprobación de después es esta tarjeta.</div>
+    </section>
+
+    <section class="card" id="datos">
+      <div class="card-h"><h2 class="card-t">Datos y método</h2></div>
+      <div class="grid2">
+        <div>
+          <p class="ctitle">Datos</p>
+          <ul class="src-list">
+            <li>Los sondeos de cada ciclo de las generales desde 2008, tal como se publicaron, con su muestra y sus fechas de campo: los mismos que enseña cada elección en Histórico.</li>
+            <li>La curva del promedio de cada ciclo, la que dibujan las páginas de cada elección, y la del ciclo actual de la última actualización.</li>
+            <li>Sólo sondeos con muestra publicada; sin agregadores ni paneles abiertos; el CIS aparte.</li>
+            <li>CSV: dispersión por ciclo y semana · resumen por ciclo · casas por ciclo (últimas 8 semanas) · el CIS por ciclo.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="ctitle">Método</p>
+          <div class="tech" style="margin-top:0">
+            Para cada sondeo con muestra <i>n</i> y cada uno de los cuatro partidos principales del ciclo, el residuo es su cifra menos el promedio en la fecha de fin de campo; la varianza esperada, <i>p</i>(1 − <i>p</i>)/<i>n</i> al nivel del promedio. La <b>dispersión</b> de un grupo de sondeos es √(media de residuos² / media de varianzas). Las semanas cuentan hasta la elección por la fecha de fin de campo. El <b>rebaño por casa</b> es la medida de Método, acotada a la ventana: residuos centrados en la media de la casa, factor 1 − 1/<i>k</i>, p-valor de la χ² con <i>k</i> − 1 grados de libertad. En 2008 y 2011, sin curva publicada, el promedio es la media de las demás casas en ±10 días.
+          </div>
+        </div>
+      </div>
+      <div class="ask"><b>Decisión:</b> ¿sólo generales (propuesta) o también las autonómicas con ciclo largo? Y el ancho de la ventana final: 8 semanas (tu idea) o las 4 que usan los estudios de EE. UU.; los cortes de semanas del gráfico son del constructor.</div>
+    </section>
+  </main>
+  <footer class="foot">Demoscopio · Análisis · «¿Se copian las encuestadoras en la recta final?» · actualizado el 5 de noviembre de 2026 con la actualización 20261105-103609 · @luis_sancho</footer>
+</div>
+</div>
+
+<script>
+const WEEKS = ['27-52', '18-26', '12-17', '8-11', '6-7', '4-5', '2-3', '0-1'];
+const CYCLES = [
+  ['2008', [1.22, 0.72, 0.86, 1.81, 0.81, 1.18, 1.10, 0.82]],
+  ['2011', [1.52, 1.40, 1.59, 0.93, 0.90, 1.37, 1.15, 1.14]],
+  ['2015', [2.83, 2.42, 2.27, 2.65, 2.13, 1.68, 1.66, 1.30]],
+  ['2016', [null, 2.00, 2.32, 2.45, 2.33, 0.65, 0.72, 0.71]],
+  ['2019 abr.', [1.67, 1.29, 1.56, 1.50, 1.73, 1.40, 1.43, 1.27]],
+  ['2019 nov.', [null, 1.43, 1.02, 0.86, 1.18, 0.84, 0.92, 0.82]],
+  ['2023', [1.31, 1.17, 2.47, 2.59, 1.64, 0.90, 1.06, 1.37]],
+];
+const NOW = [1.01, 1.05, 1.28, 1.04, 1.07, 1.05, null, null];
+const MEAN = WEEKS.map((_, i) => { const v = CYCLES.map(c => c[1][i]).filter(x => x != null); return +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2); });
+const GREYS = ['#9aa3b2', '#8d96a6', '#7f8898', '#aab2bf', '#737c8c', '#b5bcc8', '#67707f'];
+const fmt = x => x == null ? '–' : x.toFixed(2).replace('.', ',');
+const chart = echarts.init(document.getElementById('c-weeks'));
+chart.setOption({
+  textStyle: { fontFamily: 'DM Sans' },
+  grid: { left: 44, right: 16, top: 36, bottom: 44 },
+  legend: { top: 0, left: 0, itemWidth: 16, itemHeight: 3, textStyle: { fontSize: 11, color: '#5a5f72' },
+            data: CYCLES.map(c => c[0]).concat(['Media de los 7', '2026 · en vivo']) },
+  tooltip: { trigger: 'axis', valueFormatter: fmt, backgroundColor: '#1a1c22', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
+  xAxis: { type: 'category', data: WEEKS, name: 'semanas antes de la elección', nameLocation: 'middle', nameGap: 28,
+           nameTextStyle: { fontSize: 11, color: '#5a5f72' }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#d9dce3' } },
+           axisLabel: { fontSize: 11, color: '#5a5f72' } },
+  yAxis: { type: 'value', min: 0, max: 3, interval: 0.5, axisLabel: { fontSize: 11, color: '#5a5f72', formatter: v => fmt(v) },
+           splitLine: { lineStyle: { color: '#eceef2' } } },
+  series: CYCLES.map((c, i) => ({ name: c[0], type: 'line', data: c[1], connectNulls: true, symbol: 'circle', symbolSize: 4,
+                                  lineStyle: { width: 1.4, color: GREYS[i] }, itemStyle: { color: GREYS[i] }, emphasis: { focus: 'series' } }))
+    .concat([
+      { name: 'Media de los 7', type: 'line', data: MEAN, symbol: 'none', lineStyle: { width: 2.5, color: '#1a1c22', type: 'dashed' }, itemStyle: { color: '#1a1c22' },
+        markLine: { silent: true, symbol: 'none', data: [{ yAxis: 1 }], lineStyle: { color: '#ce3b3b', width: 1.2, type: 'solid' },
+                    label: { formatter: 'lo que permite el azar de las muestras', position: 'insideEndTop', fontSize: 10.5, color: '#ce3b3b' } },
+        markArea: { silent: true, itemStyle: { color: 'rgba(206,59,59,.06)' }, data: [[{ yAxis: 0 }, { yAxis: 1 }]] } },
+      { name: '2026 · en vivo', type: 'line', data: NOW, symbol: 'circle', symbolSize: 7, lineStyle: { width: 3.5, color: '#1d4f86' }, itemStyle: { color: '#1d4f86', borderColor: '#fff', borderWidth: 1.5 },
+        endLabel: { show: true, formatter: '2026 · {c}', fontSize: 11, fontWeight: 700, color: '#1d4f86', valueAnimation: false, formatter: p => '2026 · ' + fmt(p.value) } },
+    ]),
+});
+window.addEventListener('resize', () => chart.resize());
+</script>
+</body>
+</html>
