@@ -58,6 +58,11 @@ CSV_LABELS = {
         'matrix': 'Matriz casa por elección',
         'election-houses': 'Últimos sondeos de las generales de 2023 por bloques',
     },
+    'rebano': {
+        'cycles': 'Dispersión por ciclo: resto del ciclo, últimas 8 y últimas 3 semanas',
+        'weeks': 'Dispersión por ciclo y semanas hasta la elección',
+        'houses': 'Rebaño por casa en las últimas 8 semanas de cada ciclo',
+    },
 }
 
 

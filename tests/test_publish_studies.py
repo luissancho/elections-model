@@ -193,4 +193,4 @@ def test_study_runners_declare_which_studies_register():
     """Sólo el estudio CERA tiene una predicción que registrar; cada estudio declara su cálculo y sus exportadores."""
     assert publish.STUDY_RUNNERS["voto-cera"]["registrable"] is True
     assert publish.STUDY_RUNNERS["sesgo-cis"]["registrable"] is False
-    assert set(publish.STUDY_RUNNERS) == set(publish.STUDY_EXPORTERS) == set(publish.STUDY_META) == set(bundle.STUDIES)
+    assert set(publish.STUDY_RUNNERS) == set(publish.STUDY_EXPORTERS) == set(publish.STUDY_META) == set(bundle.STUDIES) - {"rebano"}  # rebano: its runner arrives with the study's compute task

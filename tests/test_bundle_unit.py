@@ -84,7 +84,7 @@ def test_analysis_exists_needs_the_meta(tmp_path):
 
 
 def test_study_registry_is_per_study():
-    assert bundle.STUDIES == ('voto-cera', 'sesgo-cis')
+    assert bundle.STUDIES == ('voto-cera', 'sesgo-cis', 'rebano')
     assert bundle.STUDY_PARTS['voto-cera'] == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
     assert bundle.STUDY_PARTS['sesgo-cis'] == ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')
     assert bundle.STUDY_SCHEMAS['voto-cera'] == {part: 'study-' + part for part in bundle.STUDY_PARTS['voto-cera']}
@@ -96,6 +96,13 @@ def test_study_registry_is_per_study():
     assert bundle.STUDY_CSV['sesgo-cis'] == ('elections', 'houses', 'matrix', 'election-houses')
     assert bundle.path_study('sesgo-cis', 'matrix') == 'studies/sesgo-cis/matrix.json'
     assert bundle.path_study_csv('sesgo-cis', 'election-houses') == 'studies/sesgo-cis/csv/election-houses.csv'
+    assert bundle.STUDY_PARTS['rebano'] == ('meta', 'summary', 'cycles', 'weeks', 'houses')
+    assert bundle.STUDY_SCHEMAS['rebano'] == {part: 'rebano-' + part for part in bundle.STUDY_PARTS['rebano']}
+    assert bundle.STUDY_CSV['rebano'] == ('cycles', 'weeks', 'houses')
+    assert bundle.path_study('rebano', 'weeks') == 'studies/rebano/weeks.json'
+    assert bundle.path_study_csv('rebano', 'houses') == 'studies/rebano/csv/houses.csv'
+    with pytest.raises(ValueError):
+        bundle.path_study('rebano', 'matrix')
     assert bundle.path_study('voto-cera', 'meta') == 'studies/voto-cera/meta.json'
     assert bundle.path_study_csv('voto-cera', 'last-seat') == 'studies/voto-cera/csv/last-seat.csv'
     for call in (lambda: bundle.path_study('nope', 'meta'), lambda: bundle.path_study('voto-cera', 'summary'),
