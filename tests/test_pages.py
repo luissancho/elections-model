@@ -3094,6 +3094,18 @@ def test_metodo_rating_check_card_shows_the_live_figures(api, fresh_app):
     assert 'quitar el rating no pasaría ese criterio en las autonómicas' in flat and 'cosa de 2023' not in flat
 
 
+def test_metodo_rating_herding_card_links_to_rebano_only_when_published(api, fresh_app):
+    """La tarjeta «El rebaño, aparte» enlaza a /analisis/rebano sólo con el estudio publicado."""
+    page = html(call(api, '/metodo/rating')[2])
+    assert '/analisis/rebano' not in page
+    publish_study(fresh_app.fs, study='rebano')
+    page = html(call(api, '/metodo/rating')[2])
+    card = page[page.index('id="herding"'):]
+    card = card[:card.index('id="comprobacion"')]
+    assert '<a href="/analisis/rebano">¿Se copian las encuestadoras en la recta final?</a>' in card
+    assert_public_wording(page, '/metodo/rating')
+
+
 def write_rating_check(fs, data):
     """La parte `rating-check` de `es` con `data` en lugar de la del fixture (el resto del análisis, el del fixture)."""
     write_analysis(fs)
