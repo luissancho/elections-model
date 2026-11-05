@@ -729,3 +729,9 @@ def test_query_pollster_path_reads_both_tables_once_per_pollster(fresh_app, monk
                     'events': [{'event_scope': 'es', 'event_date': '2023-07-23', 'n_polls': 14}]}
     assert webapi.query_pollster_path(2) == path and webapi.query_pollster_path(3)['ratings'][0]['pollster_id'] == 3
     assert calls == [('ratings', 2), ('events', 2), ('ratings', 3), ('events', 3)]
+
+
+def test_csv_labels_cover_every_csv_of_andorra():
+    """Cada CSV del estudio `andorra` tiene su etiqueta pública, y sólo esos."""
+    from mtpy.lib import pages
+    assert set(pages.analisis.CSV_LABELS['andorra']) == set(bundle.STUDY_CSV['andorra'])

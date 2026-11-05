@@ -1,0 +1,86 @@
+{
+  "schema": "andorra-meta@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "study": "andorra",
+    "title": "El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última hora?",
+    "subtitle": "Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y en las redes circulan como precios de la fruta. En las cinco generales desde 2015, el consenso de esos sondeos estuvo más cerca del resultado que el promedio congelado en cuatro, y quedó más cerca del resultado en 19 de las 24 cifras de partido. Lo que no vio nadie, tampoco lo vio la fruta: en 2023 dejó al PSOE tres puntos por debajo de lo que sacó.",
+    "params": {
+      "national": "es",
+      "since": "1996-01-01",
+      "chart_since": "2015-01-01",
+      "max_days": 42,
+      "frozen_horizon": 6,
+      "min_pairs": 3,
+      "big_sample": 5000,
+      "exclude_mtypes_pairs": [
+        "aggr"
+      ],
+      "exclude_mtypes_consensus": [
+        "aggr",
+        "online"
+      ],
+      "half": 0.5
+    },
+    "inputs": {
+      "es": {
+        "read": [
+          "2015-12-20",
+          "2016-06-26",
+          "2019-04-28",
+          "2019-11-10",
+          "2023-07-23"
+        ],
+        "skipped": {
+          "2026-11-29": "no results"
+        }
+      },
+      "es-an": {
+        "read": [
+          "2026-02-08"
+        ],
+        "skipped": {}
+      },
+      "es-ct": {
+        "read": [
+          "2021-02-14"
+        ],
+        "skipped": {}
+      }
+    },
+    "next": {
+      "event_date": "2026-11-29",
+      "open": false
+    },
+    "sources": [
+      {
+        "label": "El Confidencial: la frutería de Andorra",
+        "url": "https://www.elconfidencial.com/",
+        "date": "2017-12-18"
+      },
+      {
+        "label": "Onda Cero: el mercado de la fruta",
+        "url": "https://www.ondacero.es/",
+        "date": "2019-11-06"
+      },
+      {
+        "label": "Heraldo de Aragón: el mercado de Zaragoza",
+        "url": "https://www.heraldo.es/",
+        "date": "2026-02-05"
+      }
+    ],
+    "commit": "0123abc",
+    "dirty": false,
+    "versions": {
+      "python": "3.12.0",
+      "pandas": "2.2.0"
+    },
+    "seconds": {
+      "total": 1.2
+    }
+  }
+}

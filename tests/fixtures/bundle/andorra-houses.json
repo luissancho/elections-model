@@ -1,0 +1,221 @@
+{
+  "schema": "andorra-houses@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "rows": [
+      {
+        "pollster_id": 19,
+        "pollster": "Celeste Tel",
+        "slug": "celeste-tel",
+        "n": 4,
+        "k": 4,
+        "share": 1.0,
+        "mean_d": -0.72
+      },
+      {
+        "pollster_id": 3,
+        "pollster": "GAD3",
+        "slug": "gad3",
+        "n": 20,
+        "k": 16,
+        "share": 0.8,
+        "mean_d": -0.57
+      },
+      {
+        "pollster_id": 6,
+        "pollster": "Sigma Dos",
+        "slug": "sigma-dos",
+        "n": 13,
+        "k": 10,
+        "share": 0.77,
+        "mean_d": -0.42
+      },
+      {
+        "pollster_id": 24,
+        "pollster": "Sondaxe",
+        "slug": "sondaxe",
+        "n": 4,
+        "k": 3,
+        "share": 0.75,
+        "mean_d": -0.34
+      },
+      {
+        "pollster_id": 28,
+        "pollster": "ElectoPanel",
+        "slug": "electopanel",
+        "n": 21,
+        "k": 15,
+        "share": 0.71,
+        "mean_d": -0.14
+      },
+      {
+        "pollster_id": 14,
+        "pollster": "NC Report",
+        "slug": "nc-report",
+        "n": 7,
+        "k": 5,
+        "share": 0.71,
+        "mean_d": -0.41
+      },
+      {
+        "pollster_id": 16,
+        "pollster": "Demoscopia",
+        "slug": "demoscopia",
+        "n": 3,
+        "k": 2,
+        "share": 0.67,
+        "mean_d": -0.63
+      },
+      {
+        "pollster_id": 25,
+        "pollster": "Gizaker",
+        "slug": "gizaker",
+        "n": 3,
+        "k": 2,
+        "share": 0.67,
+        "mean_d": -0.42
+      },
+      {
+        "pollster_id": 5,
+        "pollster": "SocioMétrica",
+        "slug": "sociometrica",
+        "n": 12,
+        "k": 8,
+        "share": 0.67,
+        "mean_d": 0.01
+      },
+      {
+        "pollster_id": 11,
+        "pollster": "GESOP",
+        "slug": "gesop",
+        "n": 9,
+        "k": 5,
+        "share": 0.56,
+        "mean_d": -0.32
+      },
+      {
+        "pollster_id": 26,
+        "pollster": "Feedback",
+        "slug": "feedback",
+        "n": 3,
+        "k": 0,
+        "share": 0.0,
+        "mean_d": 0.22
+      }
+    ],
+    "big_rows": [
+      {
+        "label": "2023",
+        "pollster": "Sigma Dos",
+        "sponsor": "RTVE",
+        "sample_size": 17550,
+        "error_legal": 2.51,
+        "error_ban": 1.7,
+        "d": -0.81
+      },
+      {
+        "label": "2019 nov.",
+        "pollster": "GAD3",
+        "sponsor": "RTVE",
+        "sample_size": 13000,
+        "error_legal": 0.77,
+        "error_ban": 0.86,
+        "d": 0.09
+      },
+      {
+        "label": "2019 abr.",
+        "pollster": "GAD3",
+        "sponsor": "RTVE",
+        "sample_size": 12000,
+        "error_legal": 2.48,
+        "error_ban": 1.23,
+        "d": -1.25
+      },
+      {
+        "label": "2023",
+        "pollster": "GAD3",
+        "sponsor": "Mediaset",
+        "sample_size": 10004,
+        "error_legal": 2.72,
+        "error_ban": 2.1,
+        "d": -0.62
+      },
+      {
+        "label": "And. 2022",
+        "pollster": "GAD3",
+        "sponsor": "Canal Sur",
+        "sample_size": 9214,
+        "error_legal": 1.47,
+        "error_ban": 1.06,
+        "d": -0.41
+      },
+      {
+        "label": "And. 2026",
+        "pollster": "Sigma Dos",
+        "sponsor": "RTVA",
+        "sample_size": 9050,
+        "error_legal": 2.37,
+        "error_ban": 1.94,
+        "d": -0.43
+      },
+      {
+        "label": "Mad. 2021",
+        "pollster": "GAD3",
+        "sponsor": "Telemadrid",
+        "sample_size": 8500,
+        "error_legal": 1.72,
+        "error_ban": 0.97,
+        "d": -0.75
+      },
+      {
+        "label": "Cat. 2021",
+        "pollster": "GAD3",
+        "sponsor": "CCMA",
+        "sample_size": 8500,
+        "error_legal": 2.43,
+        "error_ban": 1.46,
+        "d": -0.97
+      },
+      {
+        "label": "2015",
+        "pollster": "GAD3",
+        "sponsor": "Antena 3",
+        "sample_size": 7000,
+        "error_legal": 1.51,
+        "error_ban": 0.87,
+        "d": -0.64
+      },
+      {
+        "label": "2023",
+        "pollster": "SocioMétrica",
+        "sponsor": "El Español",
+        "sample_size": 6000,
+        "error_legal": 1.66,
+        "error_ban": 1.45,
+        "d": -0.21
+      },
+      {
+        "label": "Cat. 2024",
+        "pollster": "Sigma Dos",
+        "sponsor": "CCMA",
+        "sample_size": 5930,
+        "error_legal": 1.81,
+        "error_ban": 1.34,
+        "d": -0.47
+      },
+      {
+        "label": "CyL 2022",
+        "pollster": "GAD3",
+        "sponsor": "ABC",
+        "sample_size": 5500,
+        "error_legal": 2.57,
+        "error_ban": 1.19,
+        "d": -1.38
+      }
+    ]
+  }
+}

@@ -64,6 +64,13 @@ CSV_LABELS = {
         'weeks': 'Dispersión por ciclo y semanas hasta la elección',
         'houses': 'Rebaño por casa en las últimas 8 semanas de cada ciclo',
     },
+    'andorra': {
+        'pairs': 'Pares casa a casa: último legal frente a sondeo clandestino',
+        'elections': 'Resumen por elección',
+        'cells': 'Cifra a cifra: promedio congelado, consenso clandestino y resultado',
+        'houses': 'Casas y sondeos de la jornada',
+        'latest-polls': 'Sondeos clandestinos de la última elección',
+    },
 }
 
 

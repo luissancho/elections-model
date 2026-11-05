@@ -84,7 +84,7 @@ def test_analysis_exists_needs_the_meta(tmp_path):
 
 
 def test_study_registry_is_per_study():
-    assert bundle.STUDIES == ('voto-cera', 'sesgo-cis', 'rebano')
+    assert bundle.STUDIES == ('voto-cera', 'sesgo-cis', 'rebano', 'andorra')
     assert bundle.STUDY_PARTS['voto-cera'] == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
     assert bundle.STUDY_PARTS['sesgo-cis'] == ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')
     assert bundle.STUDY_SCHEMAS['voto-cera'] == {part: 'study-' + part for part in bundle.STUDY_PARTS['voto-cera']}
@@ -99,6 +99,15 @@ def test_study_registry_is_per_study():
     assert bundle.STUDY_PARTS['rebano'] == ('meta', 'summary', 'cycles', 'weeks', 'houses')
     assert bundle.STUDY_SCHEMAS['rebano'] == {part: 'rebano-' + part for part in bundle.STUDY_PARTS['rebano']}
     assert bundle.STUDY_CSV['rebano'] == ('cycles', 'weeks', 'houses')
+    assert bundle.EVENT_PARTS == ('meta', 'pollsters', 'polls', 'cycle', 'ban', 'results', 'model', 'series')
+    assert 'ban' in bundle.EVENT_CSV and 'ban-legal' in bundle.EVENT_CSV and 'model-ban' in bundle.EVENT_CSV
+    assert bundle.SCHEMAS['event-ban'] == {'parties': list, 'columns': list, 'polls': list, 'legal': list}
+    assert bundle.STUDIES[-1] == 'andorra'
+    assert bundle.STUDY_PARTS['andorra'] == ('meta', 'summary', 'pairs', 'elections', 'cells', 'houses', 'latest')
+    assert bundle.STUDY_SCHEMAS['andorra'] == {part: 'andorra-' + part for part in bundle.STUDY_PARTS['andorra']}
+    assert bundle.STUDY_CSV['andorra'] == ('pairs', 'elections', 'cells', 'houses', 'latest-polls')
+    assert bundle.path_study('andorra', 'pairs') == 'studies/andorra/pairs.json'
+    assert bundle.path_event('es', '2023-07-23', 'ban') == 'events/es/2023-07-23/ban.json'
     assert bundle.path_study('rebano', 'weeks') == 'studies/rebano/weeks.json'
     assert bundle.path_study_csv('rebano', 'houses') == 'studies/rebano/csv/houses.csv'
     with pytest.raises(ValueError):
@@ -129,7 +138,6 @@ def test_study_exists_needs_the_meta(tmp_path):
 
 
 def test_event_paths_follow_the_published_layout_and_reject_bad_input():
-    assert bundle.EVENT_PARTS == ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
     assert all(schema in bundle.SCHEMAS for schema in bundle.EVENT_SCHEMAS.values())
     assert bundle.path_event_csv('es', '2023-07-23', 'series') == 'events/es/2023-07-23/csv/series.csv'
     assert bundle.SCHEMAS['event-series'] == {'horizon': int, 'dates': list, 'parties': list, 'mean': dict, 'lo': dict, 'hi': dict}

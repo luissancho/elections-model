@@ -26,10 +26,11 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             csv/
                 metrics.csv by-horizon.csv blocks.csv shares.csv seats.csv
         events/{scope}/{date}/                  one past election of a scope, overwritten on each publication
-            meta.json pollsters.json polls.json results.json model.json
+            meta.json pollsters.json polls.json cycle.json ban.json results.json model.json series.json
             csv/
-                pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
-        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano), overwritten on each publication
+                pollsters.csv polls.csv cycle.csv ban.csv ban-legal.csv results.csv
+                model-shares.csv model-seats.csv model-blocks.csv model-ban.csv series.csv
+        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano, andorra), overwritten on each publication
             meta.json {part}.json               the parts of STUDY_PARTS[study]
             csv/
                 {name}.csv                      the tables of STUDY_CSV[study]
@@ -73,20 +74,24 @@ ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'er
 BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats', 'calibration')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
-EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
+EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'ban', 'results', 'model', 'series')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
-EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks', 'series')
-STUDIES = ('voto-cera', 'sesgo-cis', 'rebano')
+EVENT_CSV = ('pollsters', 'polls', 'cycle', 'ban', 'ban-legal', 'results', 'model-shares', 'model-seats', 'model-blocks',
+             'model-ban', 'series')
+STUDIES = ('voto-cera', 'sesgo-cis', 'rebano', 'andorra')
 STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
                'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election'),
-               'rebano': ('meta', 'summary', 'cycles', 'weeks', 'houses')}
+               'rebano': ('meta', 'summary', 'cycles', 'weeks', 'houses'),
+               'andorra': ('meta', 'summary', 'pairs', 'elections', 'cells', 'houses', 'latest')}
 STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['voto-cera']},
                  'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']},
-                 'rebano': {part: 'rebano-' + part for part in STUDY_PARTS['rebano']}}
+                 'rebano': {part: 'rebano-' + part for part in STUDY_PARTS['rebano']},
+                 'andorra': {part: 'andorra-' + part for part in STUDY_PARTS['andorra']}}
 STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
                            'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
              'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses'),
-             'rebano': ('cycles', 'weeks', 'houses')}
+             'rebano': ('cycles', 'weeks', 'houses'),
+             'andorra': ('pairs', 'elections', 'cells', 'houses', 'latest-polls')}
 STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'census-countries'),
                               'participation': ('participation',), 'vote': ('vote', 'ecological'),
                               'prediction': ('last-seat',),
@@ -94,7 +99,9 @@ STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'c
                               'check': ('check',)},
                 'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
                               'election': ('election-houses',)},
-                'rebano': {'cycles': ('cycles',), 'weeks': ('weeks',), 'houses': ('houses',)}}
+                'rebano': {'cycles': ('cycles',), 'weeks': ('weeks',), 'houses': ('houses',)},
+                'andorra': {'pairs': ('pairs',), 'elections': ('elections',), 'cells': ('cells',), 'houses': ('houses',),
+                            'latest': ('latest-polls',)}}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
@@ -149,6 +156,7 @@ SCHEMAS = {
     'event-pollsters': {'blocks': list, 'rows': list},
     'event-polls': {'blocks': list, 'rows': list},
     'event-cycle': {'parties': list, 'columns': list, 'polls': list},
+    'event-ban': {'parties': list, 'columns': list, 'polls': list, 'legal': list},
     'event-results': {'n_seats': int, 'rows': list},
     'event-model': {'horizons': list, 'shares': list, 'seats': list, 'blocks': list},
     'event-series': {'horizon': int, 'dates': list, 'parties': list, 'mean': dict, 'lo': dict, 'hi': dict},
@@ -184,6 +192,17 @@ SCHEMAS = {
     'rebano-cycles': {'rows': list},
     'rebano-weeks': {'buckets': list, 'rows': list, 'mean': list},
     'rebano-houses': {'rows': list},
+    'andorra-meta': {'study': str, 'title': str, 'subtitle': str, 'params': dict, 'inputs': dict,
+                     'next': (dict, type(None)), 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                     'versions': dict, 'seconds': dict},
+    'andorra-summary': {'pairs': dict, 'elections': (dict, type(None)), 'cells': dict, 'big': dict,
+                        'exception': (dict, type(None))},
+    'andorra-pairs': {'rows': list},
+    'andorra-elections': {'rows': list, 'period': dict},
+    'andorra-cells': {'rows': list},
+    'andorra-houses': {'rows': list, 'big_rows': list},
+    'andorra-latest': {'scope': str, 'event_date': str, 'label': str, 'parties': list, 'polls': list,
+                       'consensus': (dict, type(None)), 'frozen': (dict, type(None)), 'official': dict, 'error': dict},
 }
 
 
