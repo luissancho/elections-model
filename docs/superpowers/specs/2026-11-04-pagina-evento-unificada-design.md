@@ -189,3 +189,7 @@ resultados cabe entera desde ~1200 px y por debajo de 1100 px las dos tarjetas s
 **Revisión en navegador:** el índice de 5 enlaces, `/es/escanos#coalition=PP,VOX`, el formulario sin JavaScript y la
 consola, en `/es` y `/es-md`, en los dos modos, a 1280 y 390 px, sin fallos. Sin JavaScript, enviar el formulario
 muestra la circunscripción elegida pero la página se queda arriba (sin JS no hay quien desplace a la sección).
+
+**Respuestas de Luis tras el cierre (2026-11-05):** el `<title>` lleva el año de la elección («Encuestas, promedios y
+escaños · Elecciones generales 2026», `event_bar.year`); la canonical quita `region` además de `seccion`, una por
+ámbito; el índice de secciones no se fija al hacer scroll (corrige el «la barra se queda fija» del objetivo 3).

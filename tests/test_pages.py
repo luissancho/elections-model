@@ -88,7 +88,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
     page = html(body)
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'public, max-age=60' and headers['etag'].startswith('"')
-    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales</title>' in page
+    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026</title>' in page
     assert 'pronóstico para el' in page and '<a href="#promedio">Promedio</a>' in page
     # `?mode=` switches the page, but no control is rendered: only the district form keeps it hidden
     assert page.count('name="mode"') == 1 and '<input type="hidden" name="mode" value="forecast">' in page
@@ -194,7 +194,7 @@ def test_event_pages_live_under_the_scope_and_default_to_the_forecast_near_the_e
     status, headers, body = call(api, '/es')
     page = html(body)
     assert status == 200 and headers['cache-control'] == 'public, max-age=60'
-    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales</title>' in page
+    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026</title>' in page
     assert 'pronóstico para el 29 nov 2026' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
     assert 'estimación a' not in page and '<input type="hidden" name="mode" value="forecast">' in page
     assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=territorio#territorio"' in page and 'id="controls"' not in page
@@ -288,6 +288,7 @@ def test_event_bar_days_text():
     scopes = [{'code': 'es', 'name': 'España'}, {'code': 'es-md', 'name': 'Madrid'}]
     info = pages.event_info('es', meta, state, today=date(2026, 10, 13), scopes=scopes)
     assert info['title'] == 'Elecciones generales' and info['days_text'] == 'Faltan 47 días'
+    assert info['year'] == '2026'
     assert info['sections'] == [{'id': 'promedio', 'label': 'Promedio', 'href': '#promedio'},
                                 {'id': 'escanos', 'label': 'Escaños', 'href': '#escanos'},
                                 {'id': 'evolucion', 'label': 'Evolución', 'href': '#evolucion'},
@@ -308,7 +309,7 @@ def test_event_info_counts_one_day_and_unknown_dates_and_lists_the_sections():
     assert [entry['href'] for entry in info['sections']] == ['#promedio', '#escanos', '#evolucion', '#territorio', '#tabla']
     assert 'tabs' not in info
     unknown = pages.event_info('es', {}, state, today=date(2026, 11, 28), scopes=scopes)
-    assert unknown['days_left'] is None and unknown['days_text'] is None
+    assert unknown['days_left'] is None and unknown['days_text'] is None and unknown['year'] is None
     assert pages.event_query({'mode': 'nowcast', 'run': RUN, 'pinned': False}) == '?mode=nowcast'
     assert pages.scope_query('es-md') == '?scope=es-md'
     assert pages.default_mode(None) == 'nowcast' and pages.default_mode(6) == 'forecast'
@@ -385,7 +386,7 @@ def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
     assert '<link rel="icon" href="/dist/img/favicon.ico" sizes="16x16 32x32 48x48">' in page
     assert '<link rel="apple-touch-icon" href="/dist/img/apple-touch-icon.png">' in page
     assert '<meta property="og:site_name" content="Demoscopio">' in page
-    assert '<meta property="og:title" content="Demoscopio · Encuestas, promedios y escaños · Elecciones generales">' in page
+    assert '<meta property="og:title" content="Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026">' in page
     assert '<link rel="canonical" href="https://demoscopio.es/es">' in page
     assert '<meta property="og:url" content="https://demoscopio.es/es">' in page
     description = re.search(r'<meta name="description" content="([^"]+)">', page).group(1)
@@ -398,12 +399,13 @@ def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fre
     demás parámetros que eligen el contenido, y el origen sale de `web.site_url` (`WEB_SITE_URL`)."""
     status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
+    # ``region`` (the district of the detail table) and ``seccion`` (the 301 of the old seats page, the district
+    # form without JS) are views of the same page: one canonical per scope, not one per district (Luis, 2026-11-05)
     status, headers, body = call(api, '/es', query='region=28&mode=forecast')
-    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es?region=28">' in html(body)
-    # ``seccion`` (the 301 of the old seats page, the district form without JS) only says where to scroll
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
     status, headers, body = call(api, '/es', query='mode=forecast&region=28&seccion=territorio')
-    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es?region=28">' in html(body)
-    assert '<meta property="og:url" content="https://demoscopio.es/es?region=28">' in html(body)
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
+    assert '<meta property="og:url" content="https://demoscopio.es/es">' in html(body)
     status, headers, body = call(api, '/es', query='seccion=escanos')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
     status, headers, body = call(api, '/metodo', query='scope=es')
@@ -891,7 +893,7 @@ def test_event_page_merges_promedios_and_escanos_in_order(api):
 
 def test_event_page_title_and_index(api):
     page = html(call(api, '/es', query='mode=forecast')[2])
-    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales</title>' in page
+    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026</title>' in page
     assert re.search(r'<meta name="description" content="Encuestas, [^"]*Elecciones generales\.">', page)
     bar = page[page.index('id="event-bar"'):page.index('<main')]
     index = re.search(r'<nav class="seg lg event-index" aria-label="Secciones de la página">(.*?)</nav>', bar, re.S).group(1)

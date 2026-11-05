@@ -26,10 +26,11 @@ class Promedios(Page):
         -------
         str
             The HTML of ``promedios.html``; the ``region`` query parameter chooses the district of the detail table
-            (400 when invalid, 404 when unknown). Its canonical drops ``seccion`` too: it only says where to scroll
-            (the 301 of ``/{scope}/escanos``, the district form without JavaScript).
+            (400 when invalid, 404 when unknown). Its canonical drops ``region`` and ``seccion`` too: one canonical per
+            scope (Luis, 2026-11-05), since the district only changes a table and ``seccion`` only says where to
+            scroll (the 301 of ``/{scope}/escanos``, the district form without JavaScript).
         """
         scope = pages.resolve_event_scope(scope)
         context = pages.promedios_context(self.state(scope), region=self.request.query.get('region'))
 
-        return self.render('promedios.html', canonical=self.canonical_url('seccion'), **context)
+        return self.render('promedios.html', canonical=self.canonical_url('region', 'seccion'), **context)
