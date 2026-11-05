@@ -1,31 +1,40 @@
-// Promedios tab of an event: the poll average with its window, party and block views (wired by
-// `series-wire.js`, shared with the detail of a past election), one house against the average, the hemicycle,
-// the evolution and the filterable, sortable table of all the polls, drawn from the data embedded by the server.
-// The state of the average controls lives in the URL hash (`blocks.js`), written only when a control changes;
-// the pill legend of the average selects the parties.
+// The event page (`/{scope}`, «Encuestas»): the poll average with its window, party and block views (wired by
+// `series-wire.js`, shared with the detail of a past election), the hemicycle with the one Partidos/Bloques switch of
+// the results, the seats (`seats-wire.js`: calculator, distributions, territory and fan), the evolution of the updates
+// in vote or seats, one house against the average and the filterable, sortable table of all the polls, drawn from the
+// data embedded by the server. The state of the controls lives in the URL fragment, each control rewriting only its
+// own keys (`url-state.js`); the index of the sections scrolls in place and a `seccion` of the query (the old seats
+// URLs) scrolls to its section on load.
 import {Catalog} from '../catalog.js';
 import {parseSeriesHash} from '../blocks.js';
 import {hemicycleOption, renderHemicycle} from '../charts/hemicycle.js';
 import {chartZoom, renderSeries, seriesImageOption, setWindow} from '../charts/series.js';
+import {fmtInt, fmtPct} from '../format.js';
 import {sparklineSvg} from '../sparkline.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 import {markLegend} from './legend-dom.js';
 import {wireEvolution} from './evolution-wire.js';
 import {wirePollsTable} from './polls-wire.js';
+import {wireSeatsPage} from './seats-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, wireAverage} from './series-wire.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
+import {dropParam, sectionTarget, withSection} from '../url-state.js';
 
 /** Size of the hemicycle image: landscape, the hemicycle at the left and its results table at the right. */
 const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
 
 /**
- * Draw the hemicycle, wire its Partidos/Bloques switch (which also shows the matching results table) and its
- * download button (the view drawn beside its results table, as a signed image) and draw the evolution.
+ * Draw the hemicycle and wire the one Partidos/Bloques switch of the results (`#results-view`): it draws the
+ * hemicycle of the view and tells `onView`, which shows its results table and redraws its distributions when they
+ * are open (`wireSeatsPage`, wired apart by `paint` so that a failure here does not stop the seats). The download
+ * button draws the hemicycle of the view shown beside its results table, as a signed image.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
+ * @param {function} onView called with the view chosen in the switch: `(name) => void`
+ * @returns {{view: function}} `view()`, the view shown: `'partidos'|'bloques'`
  */
-function paintResults(initial, catalog) {
+function paintResults(initial, catalog, onView) {
   const {meta, headline, summary} = initial;
   const mode = initial.state.mode;
   const current = headline[mode];
@@ -47,7 +56,7 @@ function paintResults(initial, catalog) {
       deltas: deltas.parties,
       order: (list) => catalog.order(list),
       label: 'Hemiciclo con los escaños previstos por partido',
-      card: 'parties-card',
+      table: '#seats-parties table',
     },
     bloques: {
       seats: Object.fromEntries(blocks.map((row) => [row.name, row.seats])),
@@ -55,46 +64,59 @@ function paintResults(initial, catalog) {
       deltas: deltas.blocks,
       order: (list) => catalog.orderBlocks(list),
       label: 'Hemiciclo con los escaños previstos por bloque',
-      card: 'blocks-card',
+      table: '#seats-blocks table',
     },
   };
   const el = document.getElementById('hemicycle');
+  let view = 'partidos';
   let shown = views.partidos;  // the view drawn, the one the download button exports
 
-  /** Draw the hemicycle of `view` and show its results table, hiding the other one. */
-  function draw(view) {
-    const chosen = views[view];
-    shown = chosen;
-    el.setAttribute('aria-label', chosen.label);
-    tryDraw(() => renderHemicycle(el, chosen.seats, {
-      colors: chosen.colors, order: chosen.order, nSeats, majority, deltas: chosen.deltas, year: deltas.year,
+  /** Draw the hemicycle of `name`. */
+  function draw(name) {
+    view = name;
+    shown = views[name];
+    el.setAttribute('aria-label', shown.label);
+    tryDraw(() => renderHemicycle(el, shown.seats, {
+      colors: shown.colors, order: shown.order, nSeats, majority, deltas: shown.deltas, year: deltas.year,
     }), 'the hemicycle');
-    for (const [name, item] of Object.entries(views)) {
-      const card = document.getElementById(item.card);
-      if (card) {
-        card.hidden = name !== view;
-      }
-    }
   }
 
   draw('partidos');
   wireDownload(document.getElementById('hemicycle-download'), (box) => hemicycleOption(shown.seats, {
     colors: shown.colors, order: shown.order, nSeats, majority, deltas: shown.deltas, year: deltas.year,
     width: box.width, height: box.height,
-  }), showError, {...HEMICYCLE_IMAGE, side: () => tableImage(document.querySelector(`#${shown.card} table`))});
+  }), showError, {...HEMICYCLE_IMAGE, side: () => tableImage(document.querySelector(shown.table))});
   const fieldset = document.getElementById('results-view');
   if (fieldset) {
     fieldset.hidden = false;
     fieldset.addEventListener('change', (event) => {
       if (event.target.matches('input[name=rview]') && views[event.target.value]) {
         draw(event.target.value);
+        onView(event.target.value);
         markSegments(fieldset);
       }
     });
   }
+  return {view: () => view};
+}
 
+/**
+ * Draw the evolution of the updates with its Voto/Escaños switch: the vote by default, the seats of the central
+ * allocation on the other side.
+ *
+ * @param {object} initial the page's initial data
+ * @param {Catalog} catalog party catalogue of the run
+ */
+function paintEvolution(initial, catalog) {
+  const nSeats = initial.meta.n_seats ?? initial.summary.n_seats;
   // the same parties, in the same order, as the legend of the average (Luis, 2026-10-30)
-  tryDraw(() => wireEvolution(initial, catalog, {parties: initial.series.parties}), 'the evolution');
+  wireEvolution(initial, catalog, {
+    parties: initial.series.parties,
+    metrics: {
+      pct: {field: 'pct', formatter: fmtPct, total: 100},
+      seats: {field: 'seats', formatter: fmtInt, total: nSeats},
+    },
+  });
 }
 
 /**
@@ -287,6 +309,48 @@ function wireCardsCarousel() {
   update();
 }
 
+/** Ids of the sections of the page (`EVENT_SECTIONS` that it renders). */
+const sectionIds = () => [...document.querySelectorAll('section.event-section[id]')].map((section) => section.id);
+
+/**
+ * Scroll to the section the URL asks for (`seccion` of the query, which the old seats URLs bring, or a loose token
+ * of the fragment such as `#escanos&coalition=PP,VOX`, which the browser does not scroll to by itself) and drop
+ * `seccion` from the query, keeping the fragment.
+ */
+function scrollToSection() {
+  const {pathname, search, hash} = window.location;
+  const target = sectionTarget(search, hash, sectionIds());
+  if (target) {
+    document.getElementById(target).scrollIntoView();
+  }
+  if (new URLSearchParams(search).has('seccion')) {
+    window.history.replaceState(null, '', pathname + dropParam(search, 'seccion') + hash);
+  }
+}
+
+/**
+ * Catch the links of the index of the sections (`.event-index`): scroll to the section and write its anchor in the
+ * fragment without losing the state of the controls (`withSection`). Without JavaScript they are plain anchors.
+ */
+function wireSectionIndex() {
+  const ids = sectionIds();
+  for (const link of document.querySelectorAll('.event-index a[href^="#"]')) {
+    const id = link.getAttribute('href').slice(1);
+    if (!ids.includes(id)) {
+      continue;
+    }
+    link.addEventListener('click', (event) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      document.getElementById(id).scrollIntoView({behavior: 'smooth'});
+      const {pathname, search, hash} = window.location;
+      window.history.replaceState(null, '', pathname + search + withSection(hash, id));
+    });
+  }
+}
+
 /** Draw the page from the embedded data. */
 function paint() {
   const initial = readInitial();
@@ -296,8 +360,24 @@ function paint() {
   tryDraw(() => paintCards(initial), 'the party cards');
   tryDraw(wireCardsCarousel, 'the party carousel');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
-  paintResults(initial, catalog);
+  // the hemicycle and the seats in their own calls: a failure in one does not stop the other, and the seats read the
+  // view of the switch (Partidos until the hemicycle has been drawn)
+  let results = null;
+  let seats = null;
+  tryDraw(() => {
+    results = paintResults(initial, catalog, (name) => {
+      if (seats) {
+        seats.redraw(name);
+      }
+    });
+  }, 'the results');
+  tryDraw(() => {
+    seats = wireSeatsPage(initial, catalog, () => (results ? results.view() : 'partidos'));
+  }, 'the seats');
+  tryDraw(() => paintEvolution(initial, catalog), 'the evolution');
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');
+  tryDraw(wireSectionIndex, 'the index of the sections');
+  tryDraw(scrollToSection, 'the section of the URL');
 }
 
 wireControls();

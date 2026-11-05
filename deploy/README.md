@@ -76,8 +76,8 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
   lleva caché de un año; el resto de `/dist/` (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
 - `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
   `/var/lib/nginx/api_cache`, cabecera `X-Cache`) y `limit_req` de 20 r/s por IP con ráfaga de 40
-  (exceso: 429). Las páginas (`/`, `/{scope}`, `/{scope}/escanos`, `/elecciones`, `/casas`, `/metodo` y
-  `/metodo/*`, más las redirecciones de las URL antiguas) pasan por el mismo bloque que la API: también se cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
+  (exceso: 429). Las páginas (`/`, `/{scope}`, `/elecciones`, `/casas`, `/metodo` y
+  `/metodo/*`, más las redirecciones de las URL antiguas, `/{scope}/escanos` incluida) pasan por el mismo bloque que la API: también se cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
   (URI completa con la query string). Se probó una clave propia sobre `run`/`format` y se descartó: nginx
   y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
   permitía envenenar la caché. Los parámetros de más crean entradas, acotadas por `max_size=100m`,
@@ -87,16 +87,18 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
 
 `nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: controladores de
 `mtpy/controllers/` que heredan de `Page` y usan plantillas Jinja2 de `web/templates/`, con los datos del paquete
-embebidos en la página (`initial-data`); el JS de `web/dist/js/pages/` solo dibuja los gráficos y no hace `fetch`.
+embebidos en la página (`initial-data`); el JS de `web/dist/js/pages/` solo dibuja los gráficos y hace un único `fetch`:
+las simulaciones (`dist`) de la página del evento, que pide a `/api/v1` tras el primer dibujo (2026-11-04, por el peso).
 Las rutas están en `pages.ROUTES` (`mtpy/lib/pages/common.py`), salvo `/`, que es el valor por defecto del router
 (controlador `index`): `Router.handle` devuelve la primera que casa, así que las fijas van antes que `/{scope}`.
 
 Mapa del sitio (enmienda 2026-10-13, fase 7; spec `docs/superpowers/specs/2026-10-13-web-fase-7-diseno-design.md`). Dos
 familias de páginas:
 
-- **De evento** (la próxima elección de un ámbito), bajo el código del ámbito del catálogo: `/{scope}` (Promedios,
-  controlador `Promedios`, `promedios.html`) y `/{scope}/escanos` (Escaños, `Escanos`, `escanos.html`, con
-  `?region=`). Aceptan `?mode=` (`nowcast` o `forecast`) y `?run=`, pero desde la fase 7b ninguna página pinta un
+- **De evento** (la próxima elección de un ámbito), bajo el código del ámbito del catálogo: `/{scope}` («Encuestas»,
+  controlador `Promedios`, `promedios.html`, con `?region=`), que desde el 2026-11-04 junta Promedios y Escaños en
+  una página por secciones con ancla (`#promedio`, `#escanos`, `#evolucion`, `#territorio`, `#tabla`;
+  `pages.EVENT_SECTIONS`). Acepta `?mode=` (`nowcast` o `forecast`) y `?run=`, pero desde la fase 7b no pinta un
   selector de modo: sin `?mode=`, `pages.default_mode(horizon)` muestra Elección (`forecast`) cuando el run mostrado
   está a 60 días o menos de su elección (`pages.run_horizon`: `event_date − as_of`; `pages.FORECAST_HORIZON`, desde el
   2026-10-25, porque convocada la elección la pregunta es el día de la votación) y Hoy (`nowcast`) más lejos; la
@@ -114,14 +116,17 @@ familias de páginas:
   `/modelo`). Donde el contenido depende del ámbito llevan `?scope=` (`es` por defecto).
 
 Redirecciones 301 (`Page.redirect`, desde `Redirect.py` y, para `/?scope=`, desde `Index`; `cache-control: no-store`, sin cuerpo, conservando el resto de la query):
-`/?scope=X` → `/X` (`/` sin `scope` es el Inicio); `/promedio` → `/X` (`/es` sin `scope`); `/escanos` → `/X/escanos`
-(con `region`); `/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
-(`proxy_cache_valid 200 60s`).
+`/?scope=X` → `/X` (`/` sin `scope` es el Inicio); `/promedio` → `/X` (`/es` sin `scope`); `/X/escanos` →
+`/X?…&seccion=escanos`, o `seccion=territorio` si trae `region` (404 si `X` no está publicado; el `Location` nunca
+lleva `#`, así el navegador conserva el fragmento del enlace, como `#coalition=PP,VOX`, y la página hace scroll a la
+sección de `seccion` y lo quita de la URL); `/escanos` va directo a ese mismo destino, sin encadenar dos 301;
+`/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
+(`proxy_cache_valid 200 60s`). La canonical de `/X` no lleva `mode`, `run` ni `seccion`.
 
 Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
 el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
 `event_bar` de `common_context`): nombre del evento ("Elecciones generales" o "Elecciones autonómicas · {nombre}"),
-fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), y, con un run fijado, el chip del run. Desde la fase 7b la barra no
+fecha y días que faltan (Europe/Madrid), el índice de secciones (anclas de la misma página, `pages.EVENT_SECTIONS`) y, con un run fijado, el chip del run. Desde la fase 7b la barra no
 lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
 (Europe/Madrid) en modo Hoy con el último run y "Estimación del {run_at}" con un run fijado anterior; en modo
 Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha}" (congelado, último run) o "Pronóstico
@@ -293,11 +298,11 @@ curl -s http://127.0.0.1:8042/healthz
 bash deploy/check-api.sh http://127.0.0.1:8042
 ```
 
-y abrir `http://127.0.0.1:8042/`, `/es`, `/es/escanos`, `/elecciones`, `/casas`, `/metodo` y sus cuatro subpáginas
+y abrir `http://127.0.0.1:8042/`, `/es`, `/elecciones`, `/casas`, `/metodo` y sus cuatro subpáginas
 (enmienda 2026-10-13, fase 7). `check-api.sh` decide una vez si hay nginx a partir de `/healthz` (solo existe en
 nginx; sin nginx lo marca `n/a`) y si hay base a partir de `/api/v1/parties` (un 503 `no database configured` la da
 por ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `/` (200 HTML),
-`/es?mode=nowcast` y `/es/escanos?mode=forecast` (200 HTML), `/es/escanos?region=abc` (400 HTML), `/promedio` y
+`/es?mode=nowcast` (200 HTML), `/es?region=abc` (400 HTML), `/es/escanos?mode=forecast`, `/promedio` y
 `/modelo` (301), `/es-zz` (404 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
 `/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML), `/elecciones?scope=es&date=2023-07-23` (200 HTML
 si la elección está publicada), `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y
@@ -325,10 +330,10 @@ lente en el sitio de la última "o"; el favicon sale del mismo script y no depen
 
 (Enmienda 2026-10-13, fase 7.) Primero, la familia:
 
-- **De evento** (habla de la próxima elección de un ámbito, como Promedios y Escaños): ruta `/{scope}/<nombre>` en
-  `pages.ROUTES`, después de las fijas; el controlador valida el ámbito con `pages.resolve_event_scope(scope)`, pasa
-  `self.state(scope)` al constructor del contexto y este llama a `common_context(state, None, event=True,
-  active_suffix='/<nombre>')`. El enlace va como pestaña de la barra de evento: una entrada en `pages.EVENT_TABS`.
+- **De evento** (habla de la próxima elección de un ámbito): desde el 2026-11-04 es una sola página, `/{scope}`, por
+  secciones. Lo nuevo va como sección de `promedios.html` (un `<section class="event-section" id="…">` y una entrada
+  en `pages.EVENT_SECTIONS`, que el índice de la barra de evento enlaza como ancla); su contexto lo compone
+  `promedios_context`, que llama a `common_context(state, None, event=True)`.
 - **Global** (vale para todos los ámbitos, como el histórico o el ranking): ruta fija en `pages.ROUTES`, antes de
   `/{scope}`, y entrada en el menú `pages.PAGES`; el contexto llama a `common_context(state, '/<nombre>')` y, si el
   contenido depende del ámbito, la plantilla incluye `_scope_filter.html` (`?scope=`, `es` por defecto).
@@ -397,7 +402,7 @@ inexistente da 404.)
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
   (`max-age=31536000`, también de `/dist/vendor/fonts/SourceSans3-3.052-Regular.woff2`), `/dist/js/pages/promedios.js`
-  (`no-cache`) y `/` (`max-age=60`), que `/`, `/es`, `/es/escanos`, `/elecciones?scope=es`,
+  (`no-cache`) y `/` (`max-age=60`), que `/`, `/es`, `/elecciones?scope=es`,
   `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y `/metodo/rating` devuelven HTML y
   que `/` contiene `initial-data`; con `deploy/elections.env`, también que
   `/casas?scope=es` devuelve HTML (con el paquete local y sin base, `/casas` es un 503 y `check-api.sh` lo
@@ -437,6 +442,12 @@ de `/dist/vendor/fonts/` (solo con nginx); `smoke.sh`, las páginas nuevas y la 
 Contra uvicorn sin nginx, con el paquete local (`S3_BUCKET=` y `DB_HOST=` vacíos), dio 32 OK y 13 `n/a` (sin nginx,
 sin base, sin publicar y `congelación: inactiva`), `todas las rutas OK`. Los pendientes de la fase 7 están en el
 estado al cierre de su spec.
+
+Enmienda 2026-11-04 (página del evento unida, spec `docs/superpowers/specs/2026-11-04-pagina-evento-unificada-design.md`):
+`/{scope}/escanos` ya no es una página sino un 301 a `/{scope}` (controlador `Redirect`, acción `seats`); se borraron
+`Escanos.py`, `escanos.html` y `escanos.js`. `check-api.sh` espera ese 301 y el 400 de `/es?region=abc`, y `smoke.sh`
+ya no pide `/es/escanos`. La barra inferior del móvil (`pages.TABBAR`) tiene cuatro entradas: Inicio · Encuestas ·
+Histórico · Ranking. Sin ejecutar: ni `check-api.sh` ni `smoke.sh` se corrieron con este cambio.
 
 ## Despliegue en ECS
 

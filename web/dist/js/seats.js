@@ -1,8 +1,11 @@
 // Seat simulations: columns, coalition sums, quantiles, histogram bins, the coalition hash and the text of the
 // majority calculator. Pure functions without DOM, shared by the seats page and the parity test.
 import {fmtCount, fmtInt, fmtProb, fmtRange} from './format.js';
+import {mergeHash, withSection} from './url-state.js';
 
 const COALITION_KEY = 'coalition=';
+/** Keys of the URL fragment owned by the coalition calculator, to merge them with the other state of the page. */
+export const COALITION_KEYS = ['coalition'];
 
 /**
  * Seats of one party in every simulation.
@@ -209,4 +212,42 @@ export function parseCoalition(hash, parties) {
  */
 export function coalitionHash(names) {
   return names.length ? `#${COALITION_KEY}${names.map(encodeURIComponent).join(',')}` : '';
+}
+
+/**
+ * Fragment of the page after a change of the majority calculator: its own key replaced (`mergeHash`), the rest of
+ * the state kept, and, with parties marked, the seats section as the loose token, so that a shared link opens on the
+ * calculator (`withSection`). Without parties the section token is left as it is.
+ *
+ * @param {string} current the current fragment (`location.hash`)
+ * @param {string[]} names the parties marked
+ * @returns {string} the new fragment, `''` when nothing is left
+ */
+export function coalitionLocationHash(current, names) {
+  const merged = mergeHash(current, coalitionHash(names), COALITION_KEYS);
+  return names.length ? withSection(merged, 'escanos') : merged;
+}
+
+/**
+ * Ask for the dist part of a run, which the event page does not embed (too heavy: Luis, 2026-11-04).
+ *
+ * @param {string} href the JSON route of the part (`initial.dist_href`)
+ * @param {function} [fetchImpl] `fetch` or a stand-in with its signature (the tests)
+ * @returns {Promise<object>} the part (the `data` of the envelope of the API); rejected when the request fails, the
+ *   response is not OK, its body has no `data` or the part lacks the arrays the calculator reads (`parties`, and
+ *   `seats`, one row per simulation)
+ */
+export async function loadDist(href, fetchImpl = fetch) {
+  const response = await fetchImpl(href, {headers: {Accept: 'application/json'}});
+  if (!response.ok) {
+    throw new Error(`Could not load the simulations: HTTP ${response.status}`);
+  }
+  const body = await response.json();
+  if (!body || typeof body.data !== 'object' || body.data === null) {
+    throw new Error('Could not load the simulations: no data in the response');
+  }
+  if (!Array.isArray(body.data.parties) || !Array.isArray(body.data.seats)) {
+    throw new Error('Could not load the simulations: the part has no parties or seats');
+  }
+  return body.data;
 }

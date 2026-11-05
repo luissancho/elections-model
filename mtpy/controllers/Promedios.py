@@ -1,5 +1,5 @@
 """
-Controller of the Promedios tab of an event (``/{scope}``).
+Controller of the event page of a scope (``/{scope}``, «Encuestas»): the Promedios and the Escaños in one page.
 """
 from ..lib import pages
 from .Page import Page
@@ -7,15 +7,15 @@ from .Page import Page
 
 class Promedios(Page):
     """
-    Promedios tab of the event of a scope: the poll average, headline, vote, seats, majorities, evolution, one
-    house against the average and the polls of the cycle.
+    Event page of a scope: the poll average, the hemicycle and the results table, the coalition calculator, the
+    evolution of the updates, one house against the average, the districts and the polls of the cycle, by sections.
     """
 
     active = None
 
     async def index_action(self, scope: str) -> str:
         """
-        Render the Promedios tab of the event of a scope.
+        Render the event page of a scope.
 
         Parameters
         ----------
@@ -25,9 +25,12 @@ class Promedios(Page):
         Returns
         -------
         str
-            The HTML of ``promedios.html``.
+            The HTML of ``promedios.html``; the ``region`` query parameter chooses the district of the detail table
+            (400 when invalid, 404 when unknown). Its canonical drops ``region`` and ``seccion`` too: one canonical per
+            scope (Luis, 2026-11-05), since the district only changes a table and ``seccion`` only says where to
+            scroll (the 301 of ``/{scope}/escanos``, the district form without JavaScript).
         """
         scope = pages.resolve_event_scope(scope)
-        context = pages.promedios_context(self.state(scope))
+        context = pages.promedios_context(self.state(scope), region=self.request.query.get('region'))
 
-        return self.render('promedios.html', **context)
+        return self.render('promedios.html', canonical=self.canonical_url('region', 'seccion'), **context)

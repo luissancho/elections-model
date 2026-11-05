@@ -1,9 +1,10 @@
 // Wiring of the poll average shared by Promedios and the detail of a past election: the party and block views
 // of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window, view and layers
 // controls (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
-import {blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
+import {SERIES_KEYS, blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
 import {chartZoom, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
+import {mergeHash} from '../url-state.js';
 import {wireDownload} from '../share.js';
 import {mapNames, markSegments, showError, tryDraw} from './common.js';
 import {markLegend, renderLegend} from './legend-dom.js';
@@ -114,7 +115,7 @@ export function wireAverage(views, state, render, {anchor, inks = {}, imageOf = 
   /** Write the state of the controls to the URL hash without adding a history entry. */
   function writeHash() {
     const {pathname, search} = window.location;
-    window.history.replaceState(null, '', pathname + search + seriesHash(state));
+    window.history.replaceState(null, '', pathname + search + mergeHash(window.location.hash, seriesHash(state), SERIES_KEYS));
   }
 
   /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */

@@ -1,7 +1,8 @@
 """
-Context of the Promedios tab of an event (``/{scope}``): the poll average with its window, party and block views,
-the hemicycle and the results by party and by block, the evolution of the publications, one house against the average
-and the polls of the cycle.
+Context of the event page (``/{scope}``, «Encuestas»): the poll average with its window, party and block views, the
+hemicycle and the results by party and by block, the coalition calculator, the evolution of the updates, one house
+against the average, the districts and the polls of the cycle, in the sections of ``EVENT_SECTIONS``. The seats come
+from ``escanos.seats_context``.
 """
 from collections import Counter
 from typing import Optional
@@ -179,14 +180,15 @@ def result_rows(summary: dict, results: Optional[dict] = None) -> list:
     Returns
     -------
     list of dict
-        ``{'name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_first'}`` per party of the summary, in its order
-        and unformatted, plus ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``:
-        ``None`` without results or for a party that was not in them).
+        ``{'name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_seats', 'p_first', 'p_majority'}`` per party of the
+        summary, in its order and unformatted (a missing probability is ``None``), plus ``prev_pct``, ``prev_seats``,
+        ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None`` without results or for a party that was not in them).
     """
     previous = (results or {}).get('parties') or {}
 
     return [
-        {key: row.get(key) for key in ('name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_first')}
+        {key: row.get(key)
+         for key in ('name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_seats', 'p_first', 'p_majority')}
         | _deltas(row, previous.get(row.get('name')))
         for row in (summary or {}).get('parties') or []
     ]
@@ -210,9 +212,10 @@ def block_result_rows(summary: dict, meta: dict, parties: Catalog, results: Opti
     Returns
     -------
     list of dict
-        ``{'name', 'pct', 'seats', 'p_majority', 'color'}`` per block with parties (``seats`` not ``None``),
-        unformatted: the blocks of ``BLOCK_ORDER`` first, in that order, and then the others in the order of
-        the summary; plus ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None``
+        ``{'name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_majority', 'color'}`` per block with parties
+        (``seats`` not ``None``), unformatted: the blocks of ``BLOCK_ORDER`` first, in that order, and then the others
+        in the order of the summary; ``p_majority`` is ``None`` for ``REST_BLOCK``, which is no side that could govern
+        on its own; plus ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None``
         without results or for a block that had no party then).
     """
     blocks = [row for row in (summary or {}).get('blocks') or [] if row.get('seats') is not None]
@@ -220,8 +223,9 @@ def block_result_rows(summary: dict, meta: dict, parties: Catalog, results: Opti
     previous = (results or {}).get('blocks') or {}
 
     return [
-        {key: row.get(key) for key in ('name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_majority')}
-        | {'color': block_color(row['name'], meta, parties)}
+        {key: row.get(key) for key in ('name', 'pct', 'seats', 'seats_lo', 'seats_hi')}
+        | {'p_majority': None if row['name'] == REST_BLOCK else row.get('p_majority'),
+           'color': block_color(row['name'], meta, parties)}
         | _deltas(row, previous.get(row['name']))
         for row in blocks
     ]
@@ -671,41 +675,55 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
     return cards
 
 
-def promedios_context(state: dict) -> dict:
+def promedios_context(state: dict, region=None) -> dict:
     """
-    Template context of the Promedios tab of an event.
+    Template context of the event page (``/{scope}``): the Promedios and the Escaños of the event in one page.
 
     Parameters
     ----------
     state : dict
         Validated page parameters (``parse_state``), the scope taken from the route.
+    region : str, optional
+        ``region`` query parameter: id of the district the detail table shows (the largest by default).
 
     Returns
     -------
     dict
-        ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``result_rows``
-        and ``block_result_rows`` (the tables of results of the summary, with their differences against the last
-        election), ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and ``results_date`` (of the last
-        election with results, for the deltas; ``None`` without one), ``table_parties`` (every party of the
-        polls part), ``table`` (``polls_table``, the ``PAGE_SIZE`` most recent polls the server renders),
-        ``table_total`` (the polls of the polls part), ``months`` (``poll_months``), ``csv_href``,
-        ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
-        them) and ``initial`` (``state``, ``meta``, ``headline``,
-        ``series`` (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered,
-        sorted and paginated in the browser), ``projection``, ``vote``, ``summary``, ``runs``, ``cards`` (name
-        and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``, for the hemicycle), ``inks`` (the ink over the colour of every party
-        and block, for the pills of the legend) and ``catalog`` (``parties``: the run's parties, those of the polls
-        table and those of the last election, ``chart_parties``, with the entries of the page catalogue; ``bmaps``:
-        those of the run; the browser's ``Catalog``)).
+        ``common_context`` of an event page, its ``event_bar['sections']`` without ``territorio`` when the run has no
+        districts (``tabla`` stays without polls: it also holds the fan and the downloads), plus the keys of
+        ``seats_context`` (but ``initial_extra``), ``headline`` (the headline of the mode), ``result_rows`` and ``block_result_rows`` (the
+        one results table of the summary, with its probabilities and its differences against the last election),
+        ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and
+        ``results_date`` (of the last election with results, for the deltas; ``None`` without one),
+        ``table_parties`` (every party of the polls part), ``table`` (``polls_table``, the ``PAGE_SIZE`` most recent
+        polls the server renders), ``table_total`` (the polls of the polls part), ``months`` (``poll_months``),
+        ``csv_href``, ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty
+        without them) and ``initial``, in this order: ``state``, ``meta``, ``headline``, ``series``
+        (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered, sorted and
+        paginated in the browser), ``projection``, ``vote``, ``summary``, the ``initial_extra`` of the seats
+        (``dist_href``, ``fan``, ``districts``, ``scenario``: the simulations themselves are asked for to the API),
+        ``runs``, ``cards`` (name and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``,
+        for the hemicycle), ``catalog`` (``parties``: the run's parties, those of the polls table and those of the
+        last election, ``chart_parties``, with the entries of the page catalogue; ``bmaps``: those of the run; the
+        browser's ``Catalog``) and ``inks`` (the ink over the colour of every party of the run and of the series and
+        of every block, for the pills of the legends).
 
     Raises
     ------
     HttpError
-        503 without a bundle; 404 for an unpublished scope, a missing run or a missing part.
+        503 without a bundle; 404 for an unpublished scope, a missing run, a missing part or an unknown district;
+        400 for an invalid ``region``.
     """
+    # imported here: ``elecciones`` and ``escanos`` import this module
+    from .elecciones import chart_parties, last_results
+    from .escanos import seats_context
+
     context = common_context(state, None, event=True)
     full, meta, parties = context['state'], context['meta'], context['catalog']
     scope, mode, run = full['scope'], full['mode'], full['run']
+    seats = seats_context(context, region)
+    extra = seats.pop('initial_extra')
+    context.update(seats)
     headline = part(scope, run, 'headline')
     current = headline[mode]
     series = part(scope, run, 'series')
@@ -716,9 +734,7 @@ def promedios_context(state: dict) -> dict:
     blocks = bmaps.get('blocks')
 
     context['headline'] = current
-    summary = part(scope, run, 'summary', mode=mode)
-    # imported here: ``elecciones`` imports this module
-    from .elecciones import chart_parties, last_results
+    summary = seats['summary']
     results = last_results(scope, parties)
     # the deltas follow the lineage of the smap: a successor compares with the parties it absorbs
     previous = inherited_results(results, meta)
@@ -740,6 +756,12 @@ def promedios_context(state: dict) -> dict:
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)
     context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
+    # the index offers only the sections the page renders: all but the territory without districts (the table section
+    # always holds the fan and the downloads)
+    missing = {'territorio'} if not context['district_table'] else set()
+    context['event_bar'] = dict(context['event_bar'], sections=[
+        entry for entry in context['event_bar']['sections'] if entry['id'] not in missing])
+    run_parties = [party['name'] for party in meta.get('parties') or []]
     context['initial'] = {
         'state': full,
         'meta': meta,
@@ -749,16 +771,18 @@ def promedios_context(state: dict) -> dict:
         'projection': part(scope, run, 'projection', mode=mode),
         'vote': part(scope, run, 'vote', mode=mode),
         'summary': summary,
+        **extra,
         'runs': bundle.loads(site().history(scope))['data'],
         'cards': [{'name': card['name'], 'color': card['color']} for card in context['cards']],
         'deltas': seat_deltas(summary, meta, parties, previous),
         # the browser's catalogue: the run's parties, those of the polls table and those of the last election, with
         # the colour, name and block of the published catalogue for the ones the run does not simulate
         'catalog': {'parties': [dict(parties[name], name=name) for name in chart_parties(
-            parties, [party['name'] for party in meta.get('parties') or []], context['table_parties'],
-            list((results or {}).get('parties') or []))], 'bmaps': bmaps},
-        # ink of every party and block of the series charts, for the pills of the legend when they are on
-        'inks': {**{name: ink_color(parties[name]['color']) for name in series.get('parties') or []},
+            parties, run_parties, context['table_parties'], list((results or {}).get('parties') or []))],
+            'bmaps': bmaps},
+        # ink of every party and block of the series and the evolution charts, for the pills of their legends
+        'inks': {**{name: ink_color(parties[name]['color'])
+                    for name in run_parties + list(series.get('parties') or [])},
                  **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},
     }
 

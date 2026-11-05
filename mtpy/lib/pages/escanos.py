@@ -1,16 +1,14 @@
 """
-Seats page context.
+The seats of an event: ``seats_context``, the seats part of the event page (``/{scope}``), and its pieces (calculator,
+districts, downloads).
 """
 import unicodedata
 from typing import Optional
 
 from ...core.api import HttpError
-from .. import bundle
-from ..webapi import check_region, site
-from .common import Catalog, api_url, block_color, common_context, ink_color, part
-from .elecciones import last_results
-from .filters import DASH, _is_missing, fmt_int, fmt_prob, fmt_range
-from .promedios import inherited_results, seat_deltas
+from ..webapi import check_region
+from .common import api_url, part
+from .filters import DASH, fmt_range
 
 CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
@@ -19,44 +17,6 @@ CSV_PARTS = (
     ('scenario', 'Reparto central', True),
     ('fan', 'Abanico por horizonte', False),
 )
-
-
-def seat_rows(rows: list) -> list:
-    """
-    Party rows of the summary sorted by seats.
-
-    Parameters
-    ----------
-    rows : list of dict
-        Records of ``summary['parties']`` (``seats`` is an integer or ``None``).
-
-    Returns
-    -------
-    list of dict
-        The same records by ``seats`` descending, ``None`` last; ties keep the input order.
-    """
-    return sorted(rows, key=lambda row: -1 if row.get('seats') is None else row['seats'], reverse=True)
-
-
-def block_rows(rows: list, meta: dict, parties: Catalog) -> list:
-    """
-    Block rows of the summary with their colour.
-
-    Parameters
-    ----------
-    rows : list of dict
-        Records of ``summary['vs']`` or ``summary['blocks']``.
-    meta : dict
-        Data of the meta part.
-    parties : Catalog
-        Party catalogue of the run.
-
-    Returns
-    -------
-    list of dict
-        Copies of the records, in the input order, with ``color`` (``block_color``).
-    """
-    return [dict(row, color=block_color(row['name'], meta, parties)) for row in rows]
 
 
 def default_coalition(meta: dict, summary: dict, names: list) -> list:
@@ -95,7 +55,7 @@ def default_coalition(meta: dict, summary: dict, names: list) -> list:
 
 def csv_links(scope: str, mode: str, run: str) -> list:
     """
-    Download links of the seats page.
+    Download links of the seats of the event page.
 
     Parameters
     ----------
@@ -299,98 +259,63 @@ def region_rows(districts: dict, region_id: int) -> list:
     return sorted(rows, key=lambda item: (-(item['seats'] or 0), -(item['pct'] or 0)))
 
 
-def escanos_context(state: dict, region=None, active: Optional[str] = None, event: bool = False,
-                    active_suffix: str = '') -> dict:
+def seats_context(context: dict, region=None) -> dict:
     """
-    Template context of the seats page.
+    The seats part of an event page, read over its resolved common context: the summary, the coalition calculator,
+    the downloads and the districts of the run and mode shown.
 
     Parameters
     ----------
-    state : dict
-        Validated page parameters (``parse_state``).
+    context : dict
+        ``common_context`` of the event page (``state``, ``meta``, ``catalog``).
     region : str, optional
-        ``region`` query parameter: id of the district the detail table shows (the largest by
-        default).
-    active : str or None, optional
-        ``href`` of the page in the navigation (``None``: the seats are an event page).
-    event : bool, optional
-        Whether it is rendered as an event page (see ``common_context``).
-    active_suffix : str, optional
-        Suffix of the current tab of the event bar (``'/escanos'`` on the event page).
+        ``region`` query parameter: id of the district the detail table shows (the largest by default).
 
     Returns
     -------
     dict
-        The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows``, ``calculator`` (``name``,
-        ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
-        (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels`` (``has_communities``),
-        ``deltas`` (``seat_deltas`` against the last published election, for the «vs {year}» column of the tables),
-        ``results_year`` and ``results_date`` (of that election; ``None`` without one), ``blocks`` (the names of
-        ``meta['bmaps']['blocks']``, the Bloques view of the evolution; ``[]`` without a block map) and ``initial``
-        (``state``, ``meta``, ``summary``, ``dist``, ``fan``, ``districts``, ``scenario``, ``runs``, ``deltas``
-        (``seat_deltas`` against the last published election, for the seats bar) and ``inks`` (the text colour over
-        the colour of each party and block, for the pills of the evolution legend), the data the charts, the
-        calculator and the territory table are drawn from).
+        The keys the seats add to the page: ``summary``, ``calculator`` (``name``, ``fullname``, ``color`` and
+        ``checked`` per party of the ``dist`` part, the pills the server renders), ``csv_links``, the districts keys
+        (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels``
+        (``has_communities``) and ``initial_extra``, the members the seats add to the initial data: ``dist_href``
+        (the JSON route of the ``dist`` part of the run and mode shown, which the browser asks for after the first
+        drawing: the simulations are too heavy for the page, Luis 2026-11-04), ``fan``, ``districts`` and
+        ``scenario``.
 
     Raises
     ------
     HttpError
-        503 without a bundle; 404 for an unpublished scope, a missing run, a missing part or an
-        unknown district; 400 for an invalid ``region``.
+        404 for a missing part or an unknown district; 400 for an invalid ``region``.
     """
     region_id = check_region(region)
-    context = common_context(state, active, event=event, active_suffix=active_suffix)
     full, meta, parties = context['state'], context['meta'], context['catalog']
     scope, mode, run = full['scope'], full['mode'], full['run']
     summary = part(scope, run, 'summary', mode=mode)
-    dist = part(scope, run, 'dist', mode=mode)
-    names = list(dist.get('parties') or [])
+    # the simulations stay out of the page: only the names of the calculator are read from them
+    names = list(part(scope, run, 'dist', mode=mode).get('parties') or [])
     districts = part(scope, run, 'districts', mode=mode)
     scenario = part(scope, run, 'scenario', mode=mode)
-    current = resolve_region(region_id, districts.get('regions') or [])
+    regions = districts.get('regions') or []
+    current = resolve_region(region_id, regions)
     checked = default_coalition(meta, summary, names)
-    suffix = context['title_suffix']
-    results = inherited_results(last_results(scope, parties), meta)
-    deltas = seat_deltas(summary, meta, parties, results)
-    # whom each party is compared with, for the tooltip of its arrow (``inherited_results``)
-    inherited = {name: entry['inherited'] for name, entry in ((results or {}).get('parties') or {}).items()
-                 if entry.get('inherited')}
 
-    context['summary'] = summary
-    context['inherited'] = inherited
-    context['party_rows'] = seat_rows(summary.get('parties') or [])
-    context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
-    context['calculator'] = [
-        {'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
-         'checked': name in checked}
-        for name in names
-    ]
-    context['csv_links'] = csv_links(scope, mode, run)
-    context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
-    context['district_table'] = district_table(districts, scenario, summary)
-    context['regions'] = districts.get('regions') or []
-    context['territory_levels'] = has_communities(context['regions'])
-    context['region'] = current
-    context['region_rows'] = region_rows(districts, current['id']) if current else []
-    context['deltas'] = deltas
-    context['results_year'] = results['year'] if results else None
-    context['results_date'] = results['date'] if results else None
-    # the Bloques view of the evolution, summed in the browser from the block map
-    blocks = (meta.get('bmaps') or {}).get('blocks')
-    context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
-    context['initial'] = {
-        'state': full,
-        'meta': meta,
+    return {
         'summary': summary,
-        'dist': dist,
-        'fan': part(scope, run, 'fan'),
-        'districts': districts,
-        'scenario': scenario,
-        'runs': bundle.loads(site().history(scope))['data'],
-        'deltas': deltas,
-        # ink of every party and block of the evolution, for the pills of its legend when they are on
-        'inks': {**{party['name']: ink_color(party.get('color')) for party in meta.get('parties') or []},
-                 **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},
+        'calculator': [
+            {'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
+             'checked': name in checked}
+            for name in names
+        ],
+        'csv_links': csv_links(scope, mode, run),
+        'district_table': district_table(districts, scenario, summary),
+        'regions': regions,
+        'territory_levels': has_communities(regions),
+        'region': current,
+        'region_rows': region_rows(districts, current['id']) if current else [],
+        'initial_extra': {
+            'dist_href': api_url(scope, 'dist', mode=mode, run=run),
+            'fan': part(scope, run, 'fan'),
+            'districts': districts,
+            'scenario': scenario,
+        },
     }
-
-    return context
