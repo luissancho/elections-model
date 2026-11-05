@@ -155,7 +155,7 @@ inglés; redondeos: cocientes y errores a 2 decimales, p-valores con tres cifras
 | Parte | Contenido (claves obligatorias en el esquema) |
 |---|---|
 | `meta` | `study`, `title`, `subtitle` (con «{k} de {n}» vivo y la frase de 2026 sólo con `current.like_final`), `scope`, `election` (`{date, days_left, as_of}` del ciclo actual o nulo), `params` (D4), `inputs` (por ciclo: parte `cycle`/`series`/`pollsters` leída con su `generated_at` o `skipped`; `current` con `run_id`, `as_of`; `herding` con su `generated_at` o `skipped`), `sources`, `commit`, `dirty`, `versions`, `seconds`. Sin claves de registro. |
-| `summary` | `n_cycles`, `k_narrowed` (ciclos con `last.ratio < before.ratio`), `narrowed` (etiquetas), `mean_before`, `mean_last`, `mean_final` (medias simples de los cocientes de los ciclos pasados), `k_below_one` y `below_one` (ciclos con `final.ratio < 1`, etiquetas), `sign` (`{n, k, p}`: probabilidad binomial de `k` o más ciclos a la baja entre `n` con moneda justa; la «prueba 3» de P2), `current` (`{label, before, last, final, cycle}` con `{k, ratio}` cada uno, `days_left`, `rank_before` = puesto del cociente del resto del ciclo entre los de los ciclos pasados, 1 = el más bajo, empates a dos decimales con el mismo puesto, y `like_final` = `cycle.ratio <= mean_last`, «la dispersión de todo el ciclo ya está donde los pasados sólo llegaron en la recta final»; nulo sin run), `houses_now` (`{n, k, herd: [{pollster, h}], pending: [{pollster, k}]}`: casas medibles en la ventana actual, cuántas por debajo de 1 y cuáles, ordenadas por `h`, y las que tienen entre 1 y `min_polls − 1` sondeos con muestra), `cis` (`{current: {k, ratio}, cycle: {k, ratio}, own: {k, h, p}}` del ciclo actual, nulos sin sondeos), `accuracy` (`{n, herd: {k, error_avg, error_blocks}, rest: {...}}`: las casas de `houses` de ciclos con resultado, partidas por `h < 1`, con la media de `last_error_avg` y la media de `|last_error_blocks|` de cada grupo: el error de su **último sondeo**, el que usan el rating y el Histórico, no la media de todo el año; nulo si alguna mitad está vacía). |
+| `summary` | `n_cycles`, `k_narrowed` (ciclos con `last.ratio < before.ratio`, comparados los cocientes ya redondeados de las filas), `narrowed` (etiquetas), `mean_before`, `mean_last`, `mean_final` (medias simples de los cocientes de los ciclos pasados), `k_below_one` y `below_one` (ciclos con `final.ratio < 1` redondeado a dos decimales, etiquetas: un 1,00 impreso nunca cuenta como «por debajo de 1»), `sign` (`{n, k, p}`: probabilidad binomial de `k` o más ciclos a la baja entre `n` con moneda justa; la «prueba 3» de P2), `current` (`{label, before, last, final, cycle}` con `{k, ratio}` cada uno, `days_left`, `rank_before` = puesto del cociente del resto del ciclo entre los de los ciclos pasados, 1 = el más bajo, empates a dos decimales con el mismo puesto, y `like_final` = `cycle.ratio <= mean_last`, «la dispersión de todo el ciclo ya está donde los pasados sólo llegaron en la recta final»; nulo sin run), `houses_now` (`{n, k, herd: [{pollster, h}], pending: [{pollster, k}]}`: casas medibles en la ventana actual, cuántas por debajo de 1 y cuáles, ordenadas por `h`, y las que tienen entre 1 y `min_polls − 1` sondeos con muestra), `cis` (`{current: {k, ratio}, cycle: {k, ratio}, own: {k, h, p}}` del ciclo actual, nulos sin sondeos), `accuracy` (`{n, herd: {k, error_avg, error_blocks}, rest: {...}}`: las casas de `houses` de ciclos con resultado, partidas por `h < 1`, con la media de `last_error_avg` y la media de `|last_error_blocks|` de cada grupo: el error de su **último sondeo**, el que usan el rating y el Histórico, no la media de todo el año; nulo si alguna mitad está vacía). |
 | `cycles` | Una fila por ciclo, pasados y actual: `event_date`, `label` («2019 abr.» cuando el año se repite, como `_label` del sesgo del CIS), `current` (bool), `names` (las cuatro series), `consensus` (`'curve'` o `'local'`), `polls`, `with_sample`, `houses` (casas con sondeo con muestra), `before` (`{k, ratio}`, días 57-365), `last` (`{k, ratio}`, 0-56), `final` (`{k, ratio}`, 0-20), `change` (`last.ratio − before.ratio`), `cis` (`{last: {k, ratio}, cycle: {k, ratio}, own: {k, h, p}}`). CSV `cycles` (plano: `before_k`, `before_ratio`…). |
 | `weeks` | `buckets` (`[{lo, hi, label}]` en semanas, de la más lejana a la más cercana: `27-52 … 0-1`), `rows` (`[{event_date, label, current, lo, hi, k, ratio}]` por ciclo y cubo, `ratio` nulo sin sondeos) y `mean` (`[{lo, hi, k, ratio}]`: media simple de los cocientes de los ciclos pasados con dato en el cubo, `k` ciclos). CSV `weeks`. |
 | `houses` | Una fila por ciclo y casa con `k >= params.min_polls` sondeos con muestra en la ventana final (CIS incluido, con `cis` verdadero): `event_date`, `label`, `current`, `pollster`, `slug` (perfil), `k`, `h`, `p`, `cis`, `h_cycle` (de `herding`, nulo sin fila), `last_error_avg`, `last_error_blocks` (de `pollsters`: el error del último sondeo de la casa, el de bloques con el signo con que se publica; nulos en el ciclo actual). Orden: ciclo y `h` ascendente, nulos al final. CSV `houses`. |
@@ -224,7 +224,8 @@ y la plantilla lo guarda. Entrega `study_meta`, `summary`, `cycles` (filas, actu
 `matrix` (filas = casas con fila en algún ciclo, en el orden: las de 2026 primero por `h`, luego por número de ciclos
 con `h < 1` descendente, el CIS el último; columnas = ciclos), `accuracy`, `csv_links`, `sources`, `published_at` y la
 isla `initial` con sólo lo que dibujan los gráficos: `weeks` (`{buckets, rows, mean}`) y `matrix` (`{events, houses,
-cells}` para `matrix.js`, `cells` con `h`).
+cells}` para `matrix.js`, `cells` como `[x, y, h, k, p]`: la columna, la fila, la medida, los sondeos y el p-valor, para el
+tooltip).
 
 **Verdictos y textos condicionados** (cada frase fuerte con su condición; el constructor fija las demás):
 
@@ -238,17 +239,24 @@ cells}` para `matrix.js`, `cells` con `h`).
 - P3: «{k} CASAS» con `houses_now.k`; «NINGUNA» con 0; sin run, la tarjeta habla sólo de los ciclos pasados. «Las de
   siempre» (`.sum`) se construye con las casas de la matriz con dos o más ciclos por debajo de 1, nombradas; sin
   ninguna, la frase cambia a «Ninguna casa repite todavía».
-- KPI 2 («1,06 hoy»): subtítulo «a {days_left} días del {election} · en el resto del ciclo, el {rank_before}.º más
-  bajo de los {n + 1}» y, con `like_final`, «· ya como una recta final».
+- KPI 2 («1,06 hoy»): subtítulo «a {días} días del {election} · en el resto del ciclo, el {rank_before}.º más
+  bajo de los {n + 1}» y, con `like_final`, «· ya como una recta final». Los días se cuentan **desde hoy** (Europe/Madrid,
+  `pages.common.days_left(election.date)`), no desde el `as_of` del run: dentro de la veda la previsión se rechaza y la
+  republicación diaria conserva el último run (el del 23-N, `days_left` 6), así que el `days_left` del estudio se queda
+  como dato y la página no lo usa para los textos. Con 0 días o menos (elección celebrada, pendiente de `publish
+  event`): etiqueta «Dispersión de los sondeos de {año}» (sin «hoy») y subtítulo «al cierre de los sondeos · …».
 - KPI 3: «{k} de {n}» de `houses_now`; sin run, «Sin run» no: la KPI pasa a la casa más en rebaño del último ciclo pasado.
 
 **Estructura** (ids de la maqueta; `m.card_start`/`qcard`; botón de descarga por tarjeta con `card_image_button` como
 el sesgo del CIS):
 
 - `#study-head`: pastillas «Análisis», «Página viva · se recalcula con cada actualización hasta la veda del {veda}»
-  (la fecha de la veda = `election.date − 6` días; tras la veda, «se recalcula con cada actualización»; sin run,
-  «Evidencia histórica · {n} generales»), «{n} generales desde {since} · a {days_left} días del {election}»; `h1`
-  y entradilla vivas.
+  (la fecha de la veda = `election.date − 6` días; tras la veda, «se recalcula con cada actualización»; con la
+  elección celebrada, «Página viva · elección celebrada, pendiente del escrutinio», sin fecha; sin run, «Evidencia
+  histórica · {n} generales»), «{n} generales desde {since} · a {días} días del {election}» (sin los días una vez
+  celebrada); `h1` y entradilla vivas. Los días, `after_veda` y la elección celebrada salen de hoy, como en el KPI 2;
+  el título de la tabla de P3 cambia «a {días} días del …» por «al cierre de los sondeos» y la pregunta 3 sigue siendo
+  «¿Quién va en rebaño en {año}?».
 - `nav.toc`: Resumen · 1 · ¿Se acercan? · 2 · ¿Más de lo que permite el azar? · 3 · ¿Quién va en rebaño en {año}? ·
   Datos y método.
 - `m.kpis`: «Ciclos en que los sondeos se acercaron en la recta final» `{k} de {n}` («la dispersión media pasa de
@@ -361,8 +369,8 @@ Construida en la rama `analisis-rebano` (nueve tareas, de `eaba7c9` a este cierr
 
 ### Decisiones tomadas durante la ejecución
 
-- **Ventanas en días**: 0-55 (recta final), 56-365 (resto del ciclo) y 0-20 (últimas semanas, `final_days` 20), en vez
-  de las 0-56/57-365 de D3; los tramos son `lo·7 … hi·7+6`.
+- **Ventanas en días**: 0-55 (recta final), 56-365 (resto del ciclo) y 0-20 (últimas semanas, `final_days` 21: 21
+  días), en vez de las 0-56/57-365 de D3; los tramos son `lo·7 … hi·7+6`.
 - **`charts/weeks.js` es un módulo propio**, no una extensión de `line.js`.
 - **La entradilla se compone una sola vez** en `export_herd_meta`, y el arranque de la página es `meta.subtitle` tal
   como se publicó (sin duplicar la redacción en español en la capa web).
@@ -375,6 +383,10 @@ Construida en la rama `analisis-rebano` (nueve tareas, de `eaba7c9` a este cierr
 - **La columna del ciclo en curso va en negrita** y los rótulos de la matriz van rectos.
 - **La imagen de la tarjeta de la pregunta 1 sale en una columna.**
 - `Cycle.polls` conserva las fechas como texto; `stats.residual_rows` deriva `end` y `days`.
+- **Los veredictos comparan los cocientes redondeados** (corrección tras la revisión final, contra la regla del plan de
+  comparar sin redondear): `narrowed` y `below_one` usan los cocientes a dos decimales de las filas, como `rank_before`
+  y como `h < 1` sobre el `h` redondeado, para que un 1,00 impreso nunca salga como «bajó de 1»; las medias siguen
+  usando los cocientes sin redondear. Los pines no cambian (2019 final 0,96, 2023 1,14; los dos ciclos se acercan).
 
 ### Menores aparcados para la revisión final
 
@@ -397,6 +409,27 @@ Construida en la rama `analisis-rebano` (nueve tareas, de `eaba7c9` a este cierr
   gráfico y exclusivo en la tabla; la serie actual sin `connectNulls`; cobertura de la matriz centrada; E303/E302 en
   `test_js_charts.py`.
 - Ajena a la rama: la advertencia de matplotlib que ya estaba en `dev`.
+
+### Ola de correcciones tras la revisión final
+
+Doce puntos de la revisión de la rama entera, en una ola (todo el conjunto de tests en verde):
+
+1. Los días de la página (pastilla, KPI 2, título de la tabla de P3) se cuentan desde hoy y no desde el `as_of` del run;
+   con la elección celebrada, «Página viva · elección celebrada, pendiente del escrutinio» y «al cierre de los sondeos».
+2. Test de la casa excluida con `k >= min_polls` (el CIS de 2023 real) en el estudio y en la página (último en la
+   matriz, fuera de la tabla de 2026).
+3. `narrowed` y `below_one` comparan los cocientes redondeados (un 1,00 impreso nunca «baja de 1»).
+4. Texto blanco en las celdas `.h2` de la tabla de la matriz, como el gráfico desde la opacidad 0,6.
+5. El tramo neutro de la tabla incluye 1,20 (`h4`), como el gráfico; límites fijados en un test.
+6. La frase de 2026 de la entradilla exige `k > 0` y concuerda en número («la única casa», «las n casas», «k de las n»).
+7. Sin run, el KPI 3 dice «Casa que menos oscila» si la menor `h` del último ciclo es ≥ 1 («Casa más en rebaño» sólo
+   por debajo).
+8. Tooltip de la matriz «{casa} · {ciclo}: rebaño {h} ({k} sondeos, p {p})»: la isla lleva `[x, y, h, k, p]` y
+   `cellText` recibe la celda entera.
+9. Fuera de la plantilla los valores tecleados `or 4`/`or 10`: `n_series` y `local_window` salen de `herd.flags`.
+10. `final_days` 21 (no 20) en este cierre.
+11. Líneas de más de 120 caracteres y líneas en blanco (E302/E303/E305) de los ficheros de la rama.
+12. `/analisis/rebano` entra en el barrido de redacción pública de todas las páginas.
 
 ### Lo que NO se ha verificado
 
