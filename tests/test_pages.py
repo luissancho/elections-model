@@ -118,7 +118,7 @@ def test_nowcast_and_pinned_run_are_reflected(api):
     assert 'name="mode"' not in bar and '<span class="pill event-run">Run del 8 oct 2026</span>' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
     # the mode and the run travel in the links and the form of the districts; the index only has anchors
-    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=28&amp;seccion=territorio"'.format(RUN) in page
+    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=28&amp;seccion=territorio#territorio"'.format(RUN) in page
     assert '<a href="#escanos">Escaños</a>' in bar
 
 
@@ -197,7 +197,7 @@ def test_event_pages_live_under_the_scope_and_default_to_the_forecast_near_the_e
     assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales</title>' in page
     assert 'pronóstico para el 29 nov 2026' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
     assert 'estimación a' not in page and '<input type="hidden" name="mode" value="forecast">' in page
-    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=territorio"' in page and 'id="controls"' not in page
+    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=territorio#territorio"' in page and 'id="controls"' not in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
     status, _, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     assert status == 200 and 'estimación a' in html(body) and 'Run del 8 oct 2026' in html(body)
@@ -235,6 +235,8 @@ def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_def
     ('/escanos', 'scope=es&region=28', '/es?region=28&seccion=territorio'),
     ('/es/escanos', 'mode=forecast', '/es?mode=forecast&seccion=escanos'),
     ('/es/escanos', '', '/es?seccion=escanos'),
+    ('/es/escanos', 'seccion=tabla', '/es?seccion=escanos'),  # an old ``seccion`` gives way to the seats one
+    ('/escanos', '', '/es?seccion=escanos'),  # without scope: the first published one
     ('/es/escanos', 'mode=nowcast&run=' + RUN + '&region=8', '/es?mode=nowcast&run=' + RUN + '&region=8&seccion=territorio'),
     ('/modelo', 'scope=es', '/metodo/backtest?scope=es'),
     ('/modelo', '', '/metodo/backtest'),
@@ -795,12 +797,12 @@ def test_event_page_districts_default_to_the_largest_and_link_the_rows(api, fres
     page = html(call(api, '/es', query='mode=forecast')[2])
     assert 'id="districts"' in page and '<option value="28" selected>Madrid</option>' in page
     assert 'Madrid · 37 escaños' in page  # caption del detalle
-    assert 'href="/es?mode=forecast&amp;region=8&amp;seccion=territorio"' in page
+    assert 'href="/es?mode=forecast&amp;region=8&amp;seccion=territorio#territorio"' in page
     assert '<td title="6–8">7</td>' in page and '<td title="14–18">16</td>' in page
     assert '<td>TOTAL</td>' in page and '140' in page and '<th scope="col" data-key="total">Total</th>' in page
     page = html(call(api, '/es', query='mode=forecast&region=8')[2])
     assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
-    assert '<form id="district-form" method="get" action="/es">' in page
+    assert '<form id="district-form" method="get" action="/es#territorio">' in page
     assert 'name="scope"' not in page  # el ámbito va en la ruta
 
 
@@ -838,7 +840,7 @@ def test_event_page_district_form_keeps_the_pinned_run(api, fresh_app):
     write_districts(fresh_app.fs)
     page = html(call(api, '/es', query='mode=forecast&run=' + RUN)[2])
     assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 1  # sólo el formulario de circunscripción
-    assert 'href="/es?mode=forecast&amp;run={}&amp;region=8&amp;seccion=territorio"'.format(RUN) in page
+    assert 'href="/es?mode=forecast&amp;run={}&amp;region=8&amp;seccion=territorio#territorio"'.format(RUN) in page
 
 
 # Página del evento unida (2026-11-04): Promedios y Escaños en `/{scope}`, una sola página por secciones con ancla
@@ -949,6 +951,29 @@ def test_event_page_initial_keys(api):
     assert nowcast['dist_href'] == '/api/v1/forecast/es/nowcast/dist?run=' + RUN
 
 
+def test_event_page_reads_the_last_results_once(api, monkeypatch):
+    """La página del evento lee el resultado de la última elección una sola vez (las diferencias de las tarjetas y de
+    las tablas); la parte de escaños ya no lo lee para un `inherited` que nadie usaba."""
+    from mtpy.lib.pages import elecciones, escanos
+    calls = []
+    real = elecciones.last_results
+    counted = lambda *args, **kwargs: calls.append(args) or real(*args, **kwargs)  # noqa: E731
+    monkeypatch.setattr(elecciones, 'last_results', counted)
+    monkeypatch.setattr(escanos, 'last_results', counted, raising=False)  # a name bound at import, if any
+    assert call(api, '/es')[0] == 200
+    assert len(calls) == 1
+
+
+def test_event_page_dist_href_resolves_through_the_app(api):
+    """El `dist_href` de la página lo sirve la propia app: 200 con las simulaciones (`parties` y `seats`)."""
+    from urllib.parse import urlsplit
+    href = urlsplit(initial(call(api, '/es')[2])['dist_href'])
+    status, headers, body = call(api, href.path, query=href.query)
+    data = json.loads(body)['data']
+    assert status == 200 and headers['content-type'].startswith('application/json')
+    assert data['parties'] == fixture_data('dist')['parties'] and isinstance(data['seats'], list) and data['seats']
+
+
 def test_event_page_index_skips_missing_sections(api, fresh_app):
     write_districts(fresh_app.fs, districts={'parties': ['PP'], 'regions': [], 'rows': []},
                     scenario={'simulation': 0, 'parties': ['PP'], 'rows': [{'region_id': 0, 'region': 'es-md', 'seats': [70]}]})
@@ -974,15 +999,15 @@ def test_event_page_region(api, fresh_app):
     assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
     form = page[page.index('<form id="district-form"'):]
     form = form[:form.index('</form>')]
-    assert form.startswith('<form id="district-form" method="get" action="/es">')
+    assert form.startswith('<form id="district-form" method="get" action="/es#territorio">')
     assert '<input type="hidden" name="mode" value="forecast">' in form
     assert '<input type="hidden" name="seccion" value="territorio">' in form and 'name="run"' not in form
-    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=territorio"' in page
+    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=territorio#territorio"' in page
     page = html(call(api, '/es', query='mode=nowcast&run=' + RUN)[2])
     form = page[page.index('<form id="district-form"'):]
     form = form[:form.index('</form>')]
     assert '<input type="hidden" name="run" value="{}">'.format(RUN) in form and 'value="nowcast"' in form
-    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=8&amp;seccion=territorio"'.format(RUN) in page
+    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=8&amp;seccion=territorio#territorio"'.format(RUN) in page
     assert '<option value="28" selected>' in page  # the largest district by default
 
 
@@ -2892,6 +2917,8 @@ def test_metodo_promedio_text(api):
     notes = page[page.index('id="notas"'):]
     assert re.search(r'<math display="block" aria-label="[^"]*logaritmo de uno más Q sub c entre cien', notes)
     assert 'href="/metodo/promedio"' in html(call(api, '/metodo')[2])
+    # the closing link names the event page as it is now called, «Encuestas» (2026-11-04)
+    assert '<li><a href="/es">Encuestas de las elecciones generales</a></li>' in page and 'Promedios de las elecciones' not in page
 
 
 def test_metodo_escanos_text(api):

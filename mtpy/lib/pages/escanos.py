@@ -8,9 +8,7 @@ from typing import Optional
 from ...core.api import HttpError
 from ..webapi import check_region
 from .common import api_url, part
-from .elecciones import last_results
 from .filters import DASH, fmt_range
-from .promedios import inherited_results
 
 CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
@@ -279,11 +277,10 @@ def seats_context(context: dict, region=None) -> dict:
         The keys the seats add to the page: ``summary``, ``calculator`` (``name``, ``fullname``, ``color`` and
         ``checked`` per party of the ``dist`` part, the pills the server renders), ``csv_links``, the districts keys
         (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels``
-        (``has_communities``), ``inherited`` (whom each party is compared with in the last election, for the
-        tooltip of its arrow, ``inherited_results``) and ``initial_extra``, the members the seats add to the
-        initial data: ``dist_href`` (the JSON route of the ``dist`` part of the run and mode shown, which the
-        browser asks for after the first drawing: the simulations are too heavy for the page, Luis 2026-11-04),
-        ``fan``, ``districts`` and ``scenario``.
+        (``has_communities``) and ``initial_extra``, the members the seats add to the initial data: ``dist_href``
+        (the JSON route of the ``dist`` part of the run and mode shown, which the browser asks for after the first
+        drawing: the simulations are too heavy for the page, Luis 2026-11-04), ``fan``, ``districts`` and
+        ``scenario``.
 
     Raises
     ------
@@ -301,7 +298,6 @@ def seats_context(context: dict, region=None) -> dict:
     regions = districts.get('regions') or []
     current = resolve_region(region_id, regions)
     checked = default_coalition(meta, summary, names)
-    results = inherited_results(last_results(scope, parties), meta)
 
     return {
         'summary': summary,
@@ -316,8 +312,6 @@ def seats_context(context: dict, region=None) -> dict:
         'territory_levels': has_communities(regions),
         'region': current,
         'region_rows': region_rows(districts, current['id']) if current else [],
-        'inherited': {name: entry['inherited'] for name, entry in ((results or {}).get('parties') or {}).items()
-                      if entry.get('inherited')},
         'initial_extra': {
             'dist_href': api_url(scope, 'dist', mode=mode, run=run),
             'fan': part(scope, run, 'fan'),

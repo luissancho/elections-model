@@ -64,3 +64,15 @@ def test_existing_readers_ignore_the_section_token():
     ctx = '{parties: ["PP"], blocks: [], windows: ["1a", "all"]}'
     assert run_js(f'b.parseSeriesHash("#escanos&ventana=1a", {ctx})')['window'] == '1a'
     assert run_js('s.parseCoalition("#escanos&coalition=PP,VOX", ["PP", "PSOE", "VOX"])') == ['PP', 'VOX']
+
+
+def test_coalition_location_hash_puts_the_page_on_the_seats_section():
+    """Un enlace compartido de la calculadora abre en «Escaños»: con partidos marcados el fragmento lleva la sección
+    `escanos` (la única suelta, primero) y conserva el resto del estado; sin partidos la sección se queda como está."""
+    assert run_js('s.coalitionLocationHash("", ["PP", "VOX"])') == '#escanos&coalition=PP,VOX'
+    assert run_js('s.coalitionLocationHash("#ventana=1a", ["PP"])') == '#escanos&ventana=1a&coalition=PP'
+    assert run_js('s.coalitionLocationHash("#tabla&ventana=1a", ["PP"])') == '#escanos&ventana=1a&coalition=PP'
+    assert run_js('s.coalitionLocationHash("#escanos&coalition=PP&ventana=1a", ["PP", "VOX"])') == \
+        '#escanos&ventana=1a&coalition=PP,VOX'
+    assert run_js('s.coalitionLocationHash("#tabla&coalition=PP&ventana=1a", [])') == '#tabla&ventana=1a'
+    assert run_js('s.coalitionLocationHash("#coalition=PP", [])') == ''

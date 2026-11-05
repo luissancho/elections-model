@@ -14,11 +14,10 @@ import {renderStacked, stackedOption} from '../charts/stacked.js';
 import {canGroup, regionRows, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead, renderRegion} from './territory-dom.js';
 import {
-  COALITION_KEYS, coalitionCaption, coalitionHash, coalitionSeats, coalitionText, loadDist, parseCoalition, summarize,
+  coalitionCaption, coalitionLocationHash, coalitionSeats, coalitionText, loadDist, parseCoalition, summarize,
 } from '../seats.js';
 import {mapNames, markPills, showError, tryDraw} from './common.js';
 import {fileSlug, wireDownload} from '../share.js';
-import {mergeHash} from '../url-state.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
 const LOADING = 'Cargando las simulaciones…';
@@ -65,8 +64,9 @@ function partyBar(initial, dist, catalog, colors) {
  * Wire the majority calculator: restore the selection of the URL fragment, then recompute the text
  * (`coalitionText`), the bar of the central allocation (the marked parties first, in colour, and the rest after
  * them in grey) and the histogram of the marked parties, marked at their central seats, with its caption
- * (`coalitionCaption`) on load and on every change. Only a change rewrites the fragment, and only its own key
- * (`mergeHash`), so the section anchor and the state of the average survive. The download button (disabled without
+ * (`coalitionCaption`) on load and on every change. Only a change rewrites the fragment, and only its own key and,
+ * with parties marked, the section token `escanos` (`coalitionLocationHash`), so a shared link opens on the
+ * calculator and the state of the average survives. The download button (disabled without
  * parties marked) draws the chip, the bar and the histogram of the moment, the parties in the subtitle and in the
  * file name.
  *
@@ -137,7 +137,7 @@ function wireCoalition(dist, majority, bar, nSeats) {
   fieldset.addEventListener('change', () => {
     const names = update();
     const {pathname, search} = window.location;
-    window.history.replaceState(null, '', pathname + search + mergeHash(window.location.hash, coalitionHash(names), COALITION_KEYS));
+    window.history.replaceState(null, '', pathname + search + coalitionLocationHash(window.location.hash, names));
   });
   update();
   wireDownload(download, null, showError, {
@@ -259,14 +259,15 @@ const CAPTION = {
 
 /**
  * Link of a district of the territory table, as the template writes it: the event page on the territory section
- * with that district (what the form sends without JavaScript; with it, the click is caught by `wireRegion`).
+ * with that district (what the form sends without JavaScript; with it, the click is caught by `wireRegion`). The
+ * `#territorio` fragment lands a link opened apart (a new window, a modified click) on the section.
  *
  * @param {object} state the `state` of the initial data (`scope`, `mode`, `run`, `pinned`)
  * @param {number} id district id
  * @returns {string} the URL
  */
 function regionHref({scope, mode, run, pinned}, id) {
-  return `/${scope}?mode=${mode}${pinned ? `&run=${run}` : ''}&region=${id}&seccion=territorio`;
+  return `/${scope}?mode=${mode}${pinned ? `&run=${run}` : ''}&region=${id}&seccion=territorio#territorio`;
 }
 
 /**
@@ -386,8 +387,9 @@ function wireRegion(initial, catalog) {
 /**
  * Draw the seats of an event page: «Resultados por territorio» with the detail of a district and the vote fan at
  * once; then, once the simulations arrive (one request to `initial.dist_href`), the majority calculator and the
- * button of the distributions. Meanwhile the calculator says «Cargando las simulaciones…»; if the request fails it
- * says so, and the rest of the page keeps working.
+ * button of the distributions. Meanwhile the calculator says «Cargando las simulaciones…»; if the request fails, or
+ * the calculator cannot be wired with what came back, it says they could not be loaded, and the rest of the page
+ * keeps working.
  *
  * @param {object} initial the page's initial data (`state`, `meta`, `summary`, `deltas`, `fan`, `districts`,
  *   `scenario` and `dist_href`)
@@ -430,8 +432,19 @@ export function wireSeatsPage(initial, catalog, view = () => 'partidos') {
   showTable(view());
 
   let ridges = null;
+  let failed = false;
+  /** Say the simulations could not be loaded (once): the request failed, or the calculator could not use them. */
+  const fail = (error) => {
+    if (failed) {
+      return;
+    }
+    failed = true;
+    console.error('Could not load the simulations:', error);
+    holdCoalition(LOAD_FAILED);
+  };
   holdCoalition(LOADING);
-  // asked for once per page load
+  // asked for once per page load; an exception while wiring the calculator ends in the same notice as a failed
+  // request, not in a chip stuck on «Cargando…»
   loadDist(initial.dist_href).then((dist) => {
     const names = [...new Set([...dist.parties, ...(summary.parties || []).map((row) => row.name)])];
     const colors = colorsOf(names);
@@ -439,11 +452,10 @@ export function wireSeatsPage(initial, catalog, view = () => 'partidos') {
       ridges = wireRidges(initial, dist, catalog, colors, view);
     }, 'the distributions');
     const bar = partyBar(initial, dist, catalog, colors);
-    tryDraw(() => wireCoalition(dist, majority, bar, nSeats), 'the majority calculator');
-  }, (error) => {
-    console.error('Could not load the simulations:', error);
-    holdCoalition(LOAD_FAILED);
-  });
+    if (!tryDraw(() => wireCoalition(dist, majority, bar, nSeats), 'the majority calculator')) {
+      fail(new Error('the majority calculator could not be wired'));
+    }
+  }).catch(fail);
 
   return {
     redraw(name) {

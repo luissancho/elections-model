@@ -24,15 +24,17 @@ import {dropParam, sectionTarget, withSection} from '../url-state.js';
 const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
 
 /**
- * Draw the hemicycle and the seats (`wireSeatsPage`) and wire the one Partidos/Bloques switch of the results
- * (`#results-view`): it draws the hemicycle of the view, shows its results table and redraws its distributions when
- * they are open. The download button draws the hemicycle of the view shown beside its results table, as a signed
- * image.
+ * Draw the hemicycle and wire the one Partidos/Bloques switch of the results (`#results-view`): it draws the
+ * hemicycle of the view and tells `onView`, which shows its results table and redraws its distributions when they
+ * are open (`wireSeatsPage`, wired apart by `paint` so that a failure here does not stop the seats). The download
+ * button draws the hemicycle of the view shown beside its results table, as a signed image.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
+ * @param {function} onView called with the view chosen in the switch: `(name) => void`
+ * @returns {{view: function}} `view()`, the view shown: `'partidos'|'bloques'`
  */
-function paintResults(initial, catalog) {
+function paintResults(initial, catalog, onView) {
   const {meta, headline, summary} = initial;
   const mode = initial.state.mode;
   const current = headline[mode];
@@ -80,7 +82,6 @@ function paintResults(initial, catalog) {
   }
 
   draw('partidos');
-  const seats = wireSeatsPage(initial, catalog, () => view);
   wireDownload(document.getElementById('hemicycle-download'), (box) => hemicycleOption(shown.seats, {
     colors: shown.colors, order: shown.order, nSeats, majority, deltas: shown.deltas, year: deltas.year,
     width: box.width, height: box.height,
@@ -91,11 +92,12 @@ function paintResults(initial, catalog) {
     fieldset.addEventListener('change', (event) => {
       if (event.target.matches('input[name=rview]') && views[event.target.value]) {
         draw(event.target.value);
-        seats.redraw(event.target.value);
+        onView(event.target.value);
         markSegments(fieldset);
       }
     });
   }
+  return {view: () => view};
 }
 
 /**
@@ -358,7 +360,20 @@ function paint() {
   tryDraw(() => paintCards(initial), 'the party cards');
   tryDraw(wireCardsCarousel, 'the party carousel');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
-  tryDraw(() => paintResults(initial, catalog), 'the results');
+  // the hemicycle and the seats in their own calls: a failure in one does not stop the other, and the seats read the
+  // view of the switch (Partidos until the hemicycle has been drawn)
+  let results = null;
+  let seats = null;
+  tryDraw(() => {
+    results = paintResults(initial, catalog, (name) => {
+      if (seats) {
+        seats.redraw(name);
+      }
+    });
+  }, 'the results');
+  tryDraw(() => {
+    seats = wireSeatsPage(initial, catalog, () => (results ? results.view() : 'partidos'));
+  }, 'the seats');
   tryDraw(() => paintEvolution(initial, catalog), 'the evolution');
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');
   tryDraw(wireSectionIndex, 'the index of the sections');

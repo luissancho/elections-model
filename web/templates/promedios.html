@@ -377,7 +377,7 @@
             <tbody>
               {% for row in district_table.rows %}
               <tr>
-                <td><a href="/{{ state.scope }}{{ query }}&amp;region={{ row.id }}&amp;seccion=territorio">{{ row.name }}</a></td>
+                <td><a href="/{{ state.scope }}{{ query }}&amp;region={{ row.id }}&amp;seccion=territorio#territorio">{{ row.name }}</a></td>
                 {% for cell in row.cells %}
                 <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
                 {% endfor %}
@@ -397,8 +397,9 @@
           </table>
         </div>
         <p class="scroll-hint">Desliza para ver más →</p>
-        {#- without JavaScript the form reloads the page on this section (`seccion`); with it, the detail is drawn in place -#}
-        <form id="district-form" method="get" action="/{{ state.scope }}">
+        {#- without JavaScript the form reloads the page on this section (`seccion`, and the `#territorio` of the action, which
+            browsers keep on a GET submit, scrolls there); with it, the detail is drawn in place -#}
+        <form id="district-form" method="get" action="/{{ state.scope }}#territorio">
           <input type="hidden" name="mode" value="{{ state.mode }}">
           {% if state.pinned %}
           <input type="hidden" name="run" value="{{ state.run }}">
