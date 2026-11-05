@@ -1,5 +1,8 @@
 """Tests de los lanzadores de la raíz (`job.py`, `pipeline.py`) y del job `Pipeline`, sin base ni Pushover."""
+import os
 import signal
+import subprocess
+import sys
 import types
 
 import pytest
@@ -129,3 +132,24 @@ def test_pipeline_main_returns_1_when_a_chunk_or_finish_failed(booted, capsys):
     assert pipeline.main('grp.bad', 'update', ['a', 'bad'], namespace=types.SimpleNamespace(**{'grp.Bad': BadChunk})) == 1
     assert pipeline.main('grp.bad', 'update', ['a'], namespace=types.SimpleNamespace(**{'grp.Bad': BadFinish})) == 1
     assert pipeline.main('grp.bad', 'update', ['a'], namespace=types.SimpleNamespace(**{'grp.Bad': BadChunk})) == 0
+
+
+def _write_metrics(folder, scope, mae):
+    import pandas as pd
+    target = folder if scope == 'es' else folder / scope
+    target.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({'event_date': ['2023-07-23'], 'horizon': [6], 'mae_shares': [mae], 'crps_seats': [5.], 'brier_vs': [.1],
+                  'cov_shares95': [.9]}).to_csv(target / 'metrics.csv', index=False)
+
+
+def test_compare_results_script_prints_the_table_and_warns_on_a_missing_scope(tmp_path):
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    for name, mae in (('a', 2.0), ('b', 1.5)):
+        _write_metrics(tmp_path / name, 'es', mae)
+        _write_metrics(tmp_path / name, 'es-md', mae + 1)
+    out = subprocess.run([sys.executable, os.path.join(root, 'backtest', 'compare_results.py'), str(tmp_path / 'a'),
+                          str(tmp_path / 'b'), '--scopes', 'es', 'es-md', 'es-ct', '--label-a', 'A', '--label-b', 'B'],
+                         capture_output=True, text=True, cwd=root)
+    assert out.returncode == 0
+    assert '| Todas | ' in out.stdout
+    assert 'es-ct' in out.stderr

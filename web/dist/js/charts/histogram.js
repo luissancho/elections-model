@@ -32,16 +32,19 @@ function binIndex(starts, width, value) {
  *   median mark and of the tooltip subtitle, replacing `Mediana: …`), `share` (bars as the % of the values,
  *   the default; `false` draws the raw counts, with integer ticks) and `countLabel` (count → tooltip text, used
  *   when `share` is false), `bounds` (thin solid lines at the bins of `lo` and `hi`, and a thicker median
- *   line), `markLabels` (`false` draws every mark line without a label) and `caption` (`{label, value}` lines
- *   written at the top left above the bars, the value in bold, as the ridges write theirs)
+ *   line), `markLabels` (`false` draws every mark line without a label), `caption` (`{label, value}` lines
+ *   written at the top left above the bars, the value in bold, as the ridges write theirs) and `tickEvery` (only
+ *   the bins whose start is a multiple of it get a tick and a label, e.g. 5 for seats, so the bins are 1 unit wide
+ *   unless `width` says otherwise, and the labels that would overlap on a narrow screen are hidden; `null` lets
+ *   ECharts choose)
  * @returns {object} the option
  */
 export function histogramOption(values, {
   color = THEME.barColor, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
   unit = 'escaños', label = null, markLabel = null, share = true, countLabel = fmtInt, bounds = false,
-  markLabels = true, caption = null,
+  markLabels = true, caption = null, tickEvery = null,
 } = {}) {
-  const step = width ?? binWidth(values);
+  const step = width ?? (tickEvery ? 1 : binWidth(values));
   const {starts, counts} = histogram(values, step);
   const n = values.length;
   const shares = counts.map((count) => (n ? (100 * count) / n : 0));
@@ -108,6 +111,9 @@ export function histogramOption(values, {
     },
   }] : [];
 
+  // Ticks and labels only at the multiples of `tickEvery` (a category axis: the interval is per bin)
+  const interval = tickEvery ? {interval: (index, value) => Number(value) % tickEvery === 0} : {};
+  const labelInterval = tickEvery ? {...interval, hideOverlap: true} : {};
   const option = {
     ...baseOption(),
     grid: {left: 8, right: 16, top: 24 + lines.length * CAPTION_LINE, bottom: 8, containLabel: true},
@@ -115,8 +121,8 @@ export function histogramOption(values, {
     xAxis: {
       type: 'category',
       data: starts.map(String),
-      axisTick: {alignWithLabel: true},
-      axisLabel: {...axisLabelStyle(), formatter: (value) => formatter(Number(value))},
+      axisTick: {alignWithLabel: true, ...interval},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => formatter(Number(value)), ...labelInterval},
     },
     yAxis: {
       type: 'value',

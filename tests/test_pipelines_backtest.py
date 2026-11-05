@@ -103,7 +103,8 @@ def test_backtest_passes_every_parameter_through_and_records_it(fresh_app, patch
                                'n_sim': 50, 'seed': 7, 'max_fc': 5, 'nowcast_only': True, 'house_effects': False,
                                'industry_bias': True, 'dispersion': False, 'herding': False, 'composition': None,
                                'regional_noise': False, 'min_events': 1, 'error_model': 'average',
-                               'drift_scale': 2., 'tail_dof': 5, 'config': None, 'weight_ratings': None}
+                               'drift_scale': 2., 'tail_dof': 5, 'config': None, 'rating_exponent': 1.0,
+                               'weight_ratings': None}
     run = json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))
     assert run['seed'] == 7 and run['nowcast_only'] is True and run['house_effects'] is False and run['min_events'] == 1
     assert run['recompute_ratings'] is False and run['error_model'] == 'average' and run['drift_scale'] == 2.
@@ -168,6 +169,14 @@ def test_backtest_passes_the_config_through(fresh_app, patched, tmp_path):
     evaluate(runner, tmp_path=tmp_path, config=config)
     assert runner.calls[0]['config'] is config and (runner.calls[0]['herding'], runner.calls[0]['max_fc']) == (False, 3)
     assert json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))['config'] == config
+
+
+def test_backtest_rating_exponent_passes_through_and_records_it(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    evaluate(runner, tmp_path=tmp_path, events=['2023-05-28'], horizons=[6], rating_exponent=1.5)
+    assert runner.calls[0]['rating_exponent'] == 1.5
+    run = json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))
+    assert run['rating_exponent'] == 1.5 and run['flat_ratings'] is False
 
 
 def test_backtest_flat_ratings_passes_flat_and_records_it(fresh_app, patched, tmp_path):

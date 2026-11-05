@@ -183,7 +183,7 @@
             La cifra de escaños es el reparto central de las simulaciones y el rango, donde cae el 95% de ellas: deja
             fuera las más extremas de cada lado. P(escaño) es la probabilidad de obtener al menos uno; P(primero), la de
             ser el partido con más escaños, y P(mayoría), la de llegar a la mayoría absoluta sin ayuda, que está en
-            {{ majority|int }} de {{ n_seats|int }}.
+            {{ majority|int }} de {{ n_seats|int }}. Los partidos van por escaños y, a igual número, por voto.
           </p>
           <p>
             Con la vista Bloques del hemiciclo, la tabla pasa a los bloques: Izquierda y Derecha suman el voto y los
@@ -251,7 +251,7 @@
       {{ m.card_end() }}
       </section>
       <section class="event-section" id="evolucion">
-      {#- one card for the two metrics: the Voto / Escaños switch changes the chart and the table of changes
+      {#- one card for the two metrics: the % Voto / Escaños switch changes the chart and the table of changes
           (`pages/evolution-wire.js`) -#}
       {{ m.card_start('evolution', 'Evolución de las actualizaciones', 'El voto y los escaños de cada partido en cada actualización del modelo, de la primera a la última.', '· voto o escaños de cada actualización',
                       tools=m.download_button('evolution-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Evolución de las actualizaciones · ' ~ title_suffix,
@@ -259,7 +259,7 @@
         <div class="series-controls">
           <fieldset id="evolution-metric" class="seg" hidden>
             <legend>Mostrar</legend>
-            <label><input type="radio" name="evmetric" value="pct" checked> Voto</label>
+            <label><input type="radio" name="evmetric" value="pct" checked> % Voto</label>
             <label><input type="radio" name="evmetric" value="seats"> Escaños</label>
           </fieldset>
           {% if blocks %}
@@ -277,10 +277,10 @@
         {% call m.how() %}
         <p>
           Cada actualización del modelo es un run: una ejecución completa con los sondeos conocidos ese día. Cada
-          punto es lo que dijo la actualización de ese día: con Voto, el voto de cada partido; con Escaños, sus
-          escaños del reparto central. Si un día hubo varias actualizaciones, se muestra la última. Un punto hueco
-          marca un día en que la cifra del partido cambió frente al día anterior (el voto, redondeado a un decimal, o
-          el número de escaños); si no cambió, el punto es lleno.
+          punto es lo que dijo la actualización de ese día: con «% Voto», el voto de cada partido; con «Escaños»,
+          sus escaños del reparto central. Si un día hubo varias actualizaciones, se muestra la última. Un punto
+          hueco marca un día en que la cifra del partido cambió frente al día anterior (el voto, redondeado a un
+          decimal, o el número de escaños); si no cambió, el punto es lleno.
         </p>
         <p>
           La tabla que se abre con «Ver los datos» da la cifra de cada partido el último día y cuánto ha cambiado
@@ -420,7 +420,7 @@
             <thead>
               <tr>
                 <th scope="col">Partido</th>
-                <th scope="col">Voto</th>
+                <th scope="col">% Voto</th>
                 <th scope="col">Rango 95%</th>
                 <th scope="col">Escaños</th>
                 <th scope="col">Rango 95%</th>

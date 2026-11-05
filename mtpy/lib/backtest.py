@@ -17,7 +17,7 @@ import time
 import warnings
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -384,6 +384,7 @@ def run_case(
     tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
+    rating_exponent: float = 1.0,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -413,7 +414,9 @@ def run_case(
     (`drift_scale_rows`, 0 when not fitted). `tail_dof` fixes the degrees of freedom of the Student t of the draw
     of the `Simulator` for every party (`None`, the default, `nobs - 2` per party, at least 3); `meta` records it
     (`tail_dof`, NaN when unset). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the
-    polls with ratings recomputed in memory (the string `'flat'` weighs every poll with rating 1).
+    polls with ratings recomputed in memory (the string `'flat'` weighs every poll with rating 1). `rating_exponent`
+    is passed to the `Simulator` (phase C2a): the rating weight of every poll is raised to it (1, the default, is the
+    model as it is; 0 weighs every poll with rating 1, as `'flat'`); `meta` records it (`rating_exponent`).
 
     `config` is a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search,
     validated by the backtest job): its `reg_params`, `he_params` and `disp_params` (with its `herding`) go to the
@@ -454,7 +457,7 @@ def run_case(
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
             disp_params=disp_params | {'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
             error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings,
-            **tuned
+            rating_exponent=rating_exponent, **tuned
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         n_overrides = matched_overrides(sim.model, tuned['weight_overrides']) if config is not None else np.nan
@@ -587,7 +590,7 @@ def run_case(
         'n_polls': int(polls.shape[0]), 'last_poll': str(last_date.date()), 'n_parties': len(names),
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1),
         'config': config['label'] if config is not None else np.nan, 'n_overrides': n_overrides,
-        'flat_ratings': isinstance(weight_ratings, str)
+        'flat_ratings': isinstance(weight_ratings, str), 'rating_exponent': float(rating_exponent)
     }])
 
     calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df,
@@ -746,6 +749,143 @@ def summarize_calibration(
     return out[columns]
 
 
+COMPARE_METRICS = ('mae_shares', 'crps_seats', 'brier_vs', 'cov_shares95')
+HIGHER_IS_BETTER = ('cov_shares95',)
+COMPARE_KEYS = ('scope', 'event_date', 'horizon')
+COMPARE_POPULATIONS = ('generales', 'autonomicas', 'all')
+COMPARE_LABELS = {
+    'mae_shares': 'MAE de voto (puntos)', 'crps_seats': 'CRPS de escaños', 'brier_vs': 'Brier de mayorías',
+    'cov_shares95': 'Cobertura del 95 %', 'generales': 'Generales', 'autonomicas': 'Autonómicas', 'all': 'Todas'}
+
+
+def load_results(folder: str, scopes: Sequence[str]) -> pd.DataFrame:
+    """
+    Concatenate the `metrics.csv` of several scopes of a results folder.
+
+    Parameters
+    ----------
+    folder : str
+        Results folder: the national scope `es` writes at its root, every other scope in `folder/{scope}`.
+    scopes : sequence of str
+        Scopes to read; one without `metrics.csv` is skipped with a warning.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The rows of every `metrics.csv` found with a `scope` column first (empty when none was found).
+    """
+    frames = []
+    for scope in scopes:
+        path = os.path.join(folder, 'metrics.csv' if scope == 'es' else os.path.join(scope, 'metrics.csv'))
+        if not os.path.isfile(path):
+            warnings.warn('no metrics.csv for scope {} in {}'.format(scope, folder))
+            continue
+        frames.append(pd.read_csv(path).assign(scope=scope))
+    if not frames:
+        return pd.DataFrame(columns=['scope'])
+    df = pd.concat(frames, ignore_index=True)
+    return df[['scope'] + [c for c in df.columns if c != 'scope']]
+
+
+def pair_results(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    metrics: Sequence[str] = COMPARE_METRICS,
+    keys: Sequence[str] = COMPARE_KEYS
+) -> pd.DataFrame:
+    """
+    Pair the cases of two backtest results (inner join on the case keys).
+
+    Parameters
+    ----------
+    a, b : pandas.DataFrame
+        Rows of the `metrics.csv` of two runs (see `load_results`), with the `keys` and `metrics` columns.
+    metrics : sequence of str, default COMPARE_METRICS
+        Metrics to keep.
+    keys : sequence of str, default COMPARE_KEYS
+        Columns that identify a case; the cases that are only in one of the two frames are left out.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per case: the `keys`, then `{metric}_a` and `{metric}_b` for every metric.
+    """
+    keys, metrics = list(keys), list(metrics)
+    return a[keys + metrics].merge(b[keys + metrics], on=keys, how='inner', suffixes=('_a', '_b'))
+
+
+def compare_paired(paired: pd.DataFrame, metrics: Sequence[str] = COMPARE_METRICS) -> pd.DataFrame:
+    """
+    Summarise paired cases per population and metric, from the point of view of the candidate `b`.
+
+    Parameters
+    ----------
+    paired : pandas.DataFrame
+        Output of `pair_results`.
+    metrics : sequence of str, default COMPARE_METRICS
+        Metrics to summarise; those in `HIGHER_IS_BETTER` win with the larger value, the rest with the smaller.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per population (`generales` is `scope == 'es'`, `autonomicas` the rest, `all`) and metric:
+        `n` (cases where both values are finite), `mean_a`, `mean_b`, `diff` (`mean_b - mean_a`), `pct`
+        (`100 * diff / mean_a`, NaN when `mean_a` is 0) and `better`, `worse`, `ties` (cases of `b` against `a`).
+        A population without cases has `n = 0` and NaN in the rest.
+    """
+    is_national = paired['scope'].eq('es')
+    masks = {'generales': is_national, 'autonomicas': ~is_national, 'all': pd.Series(True, index=paired.index)}
+    rows = []
+    for population in COMPARE_POPULATIONS:
+        for metric in metrics:
+            va = paired.loc[masks[population], metric + '_a'].astype(float)
+            vb = paired.loc[masks[population], metric + '_b'].astype(float)
+            ok = np.isfinite(va) & np.isfinite(vb)
+            va, vb = va[ok], vb[ok]
+            n = int(ok.sum())
+            row = {'population': population, 'metric': metric, 'n': n, 'mean_a': np.nan, 'mean_b': np.nan,
+                   'diff': np.nan, 'pct': np.nan, 'better': np.nan, 'worse': np.nan, 'ties': np.nan}
+            if n:
+                mean_a, mean_b = float(va.mean()), float(vb.mean())
+                gain = (vb - va) if metric in HIGHER_IS_BETTER else (va - vb)
+                row.update(mean_a=mean_a, mean_b=mean_b, diff=mean_b - mean_a,
+                           pct=100 * (mean_b - mean_a) / mean_a if mean_a != 0 else np.nan,
+                           better=int((gain > 0).sum()), worse=int((gain < 0).sum()), ties=int((gain == 0).sum()))
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def compare_markdown(table: pd.DataFrame, label_a: str, label_b: str) -> str:
+    """
+    Render the output of `compare_paired` as a markdown table.
+
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Output of `compare_paired`.
+    label_a, label_b : str
+        Names of the two runs for the headers of their means.
+
+    Returns
+    -------
+    str
+        Markdown table, one row per population and metric: cases, mean of each run, difference with its
+        percentage and cases where `b` is better / worse (ties); 4 decimals in the means, 1 in the percentage.
+    """
+    def num(x, fmt):
+        return fmt.format(x) if np.isfinite(x) else '–'
+
+    lines = ['| Población | Métrica | Casos | {} | {} | Diferencia (%) | Mejor / peor (empates) |'.format(label_a, label_b),
+             '|---|---|---:|---:|---:|---:|---:|']
+    for r in table.itertuples():
+        counts = '{} / {} ({})'.format(int(r.better), int(r.worse), int(r.ties)) if r.n else '–'
+        diff = '{} ({}%)'.format(num(r.diff, '{:+.4f}'), num(r.pct, '{:+.1f}')) if r.n else '–'
+        lines.append('| {} | {} | {} | {} | {} | {} | {} |'.format(
+            COMPARE_LABELS[r.population], COMPARE_LABELS.get(r.metric, r.metric), r.n,
+            num(r.mean_a, '{:.4f}'), num(r.mean_b, '{:.4f}'), diff, counts))
+    return '\n'.join(lines)
+
+
 def majority_reliability(blocks: pd.DataFrame, bins: tuple = (0, .1, .3, .5, .7, .9, 1.)) -> pd.DataFrame:
     """
     Reliability of the probabilities of absolute majority of the blocks: how often the outcome happened among
@@ -833,12 +973,14 @@ def run_backtest(
     tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
+    rating_exponent: float = 1.0,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
-    `error_model`, `drift_scale`, `tail_dof`, `weight_ratings` and `config` are passed to every case
-    (`weight_ratings` may be the string `'flat'`: every poll weighs with rating 1).
+    `error_model`, `drift_scale`, `tail_dof`, `weight_ratings`, `config` and `rating_exponent` are passed to every
+    case (`weight_ratings` may be the string `'flat'`: every poll weighs with rating 1; `rating_exponent` raises the
+    rating weight of every poll to that power, phase C2a).
 
     Returns
     -------
@@ -863,7 +1005,7 @@ def run_backtest(
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
                     error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
-                    weight_ratings=weight_ratings, config=config
+                    weight_ratings=weight_ratings, config=config, rating_exponent=rating_exponent
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
@@ -1132,6 +1274,7 @@ def backtest_scope(
     config: Optional[dict[str, Any]] = None,
     recompute_ratings: bool = False,
     flat_ratings: bool = False,
+    rating_exponent: float = 1.0,
     verbose: int = 0,
     runner=None,
     stats=None,
@@ -1166,6 +1309,9 @@ min_events, error_model, drift_scale, tail_dof
     flat_ratings : bool, default False
         Weigh every poll with rating 1 (`weight_ratings='flat'`, the average without the rating, phase C); recorded
         in `run.json` and in the `meta.csv` of every case. Exclusive with `recompute_ratings`.
+    rating_exponent : float, default 1.0
+        Power the rating weight of every poll is raised to (phase C2a: 1 is the model as it is, 0 the flat rating);
+        passed to every case and recorded in `run.json` and in the `meta.csv` of every case.
     verbose : int, default 0
         Verbosity of `run_backtest` (1 prints one line per case).
     runner : callable, optional
@@ -1198,7 +1344,7 @@ min_events, error_model, drift_scale, tail_dof
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                   regional_noise=regional_noise, min_events=min_events, error_model=error_model,
-                  drift_scale=drift_scale, tail_dof=tail_dof, config=config)
+                  drift_scale=drift_scale, tail_dof=tail_dof, config=config, rating_exponent=rating_exponent)
     if config is not None:
         params.update({key: config[key] for key in CONFIG_SWITCHES})
     weight_ratings = 'flat' if flat_ratings else (rating_overrides(scope) if recompute_ratings else None)

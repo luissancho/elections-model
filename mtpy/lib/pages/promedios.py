@@ -181,16 +181,20 @@ def result_rows(summary: dict, results: Optional[dict] = None) -> list:
     -------
     list of dict
         ``{'name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_seats', 'p_first', 'p_majority'}`` per party of the
-        summary, in its order and unformatted (a missing probability is ``None``), plus ``prev_pct``, ``prev_seats``,
-        ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None`` without results or for a party that was not in them).
+        summary, by seats and then by vote, both descending (as ``party_cards``, the territory table and the ridges
+        of the browser; a missing figure counts as 0), unformatted (a missing probability is ``None``), plus
+        ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None`` without results or
+        for a party that was not in them).
     """
     previous = (results or {}).get('parties') or {}
+    ranked = sorted((summary or {}).get('parties') or [],
+                    key=lambda row: (-(row.get('seats') or 0), -(row.get('pct') or 0)))
 
     return [
         {key: row.get(key)
          for key in ('name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_seats', 'p_first', 'p_majority')}
         | _deltas(row, previous.get(row.get('name')))
-        for row in (summary or {}).get('parties') or []
+        for row in ranked
     ]
 
 

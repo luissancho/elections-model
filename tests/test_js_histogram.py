@@ -57,6 +57,32 @@ def test_default_marks_keep_their_labels_and_have_no_bounds():
     assert out['marks'] == ['171'] and out['lines'] == [[None, 'solid', None]]
 
 
+def test_tick_every_labels_and_ticks_only_the_multiples():
+    """Luis, 2026-11-05: el eje X de la calculadora de mayorías va de 5 en 5; sin `tickEvery`, ECharts decide."""
+    script = STUB + ('const h = await import("{}"); const values = Array.from({{length: 16}}, (_, i) => 168 + i); '
+                     'const shown = (axis, f) => (typeof f === "function" ? axis.data.filter((v, i) => f(i, v)) : f ?? null); '
+                     'h.renderHistogram({{}}, values, {{width: 1, tickEvery: 5}}); const x = last.xAxis; '
+                     'const every = [shown(x, x.axisLabel.interval), shown(x, x.axisTick.interval)]; '
+                     'h.renderHistogram({{}}, values, {{width: 1}}); const p = last.xAxis; '
+                     'console.log(JSON.stringify({{every, plain: [p.axisLabel.interval ?? null, p.axisTick.interval ?? null]}}));').format(HISTOGRAM_JS)
+    out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    result = json.loads(out.stdout)
+    assert result['every'] == [['170', '175', '180'], ['170', '175', '180']] and result['plain'] == [None, None]
+
+
+def test_tick_every_makes_the_bins_one_unit_wide_so_the_ticks_hit_every_multiple():
+    """Luis, 2026-11-05: una coalición con más de 80 escaños de rango salía con bins de 3 y marcas cada 15 (los
+    múltiplos de 3 que lo son de 5). Con `tickEvery` y sin `width`, los bins son de 1; las etiquetas que se solapen
+    en pantallas estrechas se ocultan (`hideOverlap`), las marcas no."""
+    script = STUB + ('const h = await import("{}"); const values = Array.from({{length: 120}}, (_, i) => 100 + i); '
+                     'h.renderHistogram({{}}, values, {{tickEvery: 5}}); const x = last.xAxis; '
+                     'console.log(JSON.stringify({{bins: last.series[0].data.length, labels: x.data.filter((v, i) => x.axisLabel.interval(i, v)), '
+                     'hide: x.axisLabel.hideOverlap ?? null}}));').format(HISTOGRAM_JS)
+    out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    result = json.loads(out.stdout)
+    assert result['bins'] == 120 and result['labels'] == [str(v) for v in range(100, 220, 5)] and result['hide'] is True
+
+
 SERIES_JS = pathlib.Path(ROOT, 'web', 'dist', 'js', 'charts', 'series.js').as_uri()
 
 

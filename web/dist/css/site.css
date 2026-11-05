@@ -139,20 +139,6 @@ main {
   box-shadow: inset 0 -3px 0 var(--color-accent);
 }
 
-/* Round icon button of the mobile header (the method) */
-.ico-btn {
-  display: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: 1px solid var(--color-line-strong);
-  background: var(--color-card);
-  color: var(--color-muted);
-  align-items: center;
-  justify-content: center;
-}
-.ico-btn svg { width: 18px; height: 18px; }
-
 /* Freeze banner (electoral silence), above the header, sticky too */
 #freeze-banner {
   position: sticky;
@@ -770,10 +756,14 @@ ol.notes > li:target { color: var(--color-text); }
 .dd-panel .chip:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
 .et-wrap { overflow-x: auto; margin-top: var(--space-2); }
-.et { table-layout: fixed; min-width: 980px; }
+/* Fixed layout, so the columns keep their widths across pages and sorts: the table is as wide as the sum of its
+   columns when the card is narrower (it scrolls in `.et-wrap`) and stretches them when it is wider */
+.et { table-layout: fixed; }
 /* Short tables of the method pages: as wide as their content, not the card; they still scroll in `.table-wrap` */
 .et.et-fit { table-layout: auto; width: auto; min-width: 0; }
-.et col.c-f { width: 200px; }
+/* The house and its medium: the longest names of the catalogue («Lápiz Estratégico», «La Voz de Galicia») fit on
+   one line at 13 px; a longer name wraps, a longer medium is cut with an ellipsis */
+.et col.c-f { width: 150px; }
 .et col.c-r { width: 92px; }
 .et col.c-d { width: 80px; }
 .et col.c-s { width: 80px; }
@@ -789,8 +779,8 @@ ol.notes > li:target { color: var(--color-text); }
 .et .f { position: sticky; left: 0; z-index: 1; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
 .et td.f { white-space: normal; }
 .et tbody tr:hover td.f { background: var(--color-row-hover); }
-.et td.f b, .et td.f small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.et td.f small { color: var(--color-muted); font-size: 11.5px; }
+.et td.f b, .et td.f small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.et td.f small { white-space: nowrap; color: var(--color-muted); font-size: 11.5px; }
 .et td.f a { color: inherit; text-decoration: none; }
 .et td.f a:hover { color: var(--color-accent); text-decoration: underline; }
 /* Rating badge of "Todas las encuestas": the figure on a solid colour from red (0) through grey (50) to green (100),
@@ -982,7 +972,7 @@ td.blk { font-weight: 700; }
   .side .card + .card { margin-top: var(--space-4); }
 }
 
-/* Mobile (< 720 px): one column, the bottom tab bar, the header with the method button, the event bar stacked */
+/* Mobile (< 720 px): one column, the bottom tab bar, the header reduced to the brand, the event bar stacked */
 @media (max-width: 719px) {
   :root { --band-pad: 16px; }
   main { padding: var(--space-4) var(--band-pad) 92px; }
@@ -1007,7 +997,6 @@ td.blk { font-weight: 700; }
   #site-header, .hdr { min-height: 52px; }
   #site-header h1 img { height: 22px; }
   #site-header nav, .hdr nav { display: none; }
-  .ico-btn { display: inline-flex; }
   body:has(#freeze-banner:not([hidden])) #site-header, body:has(#freeze-banner:not([hidden])) .hdr { top: 0; }
 
   .tabbar {
@@ -1080,6 +1069,8 @@ td.blk { font-weight: 700; }
     min-width: 7rem;
   }
   .table-wrap tbody tr:hover td:first-child { background: var(--color-row-hover); }
+  /* «Todas las encuestas» and the ranking: the sticky column of the house takes a third of the phone, not two */
+  .et col.c-f { width: 124px; }
 
   .geo th:first-child,
   .geo td:first-child {

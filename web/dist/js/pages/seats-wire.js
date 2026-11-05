@@ -102,10 +102,10 @@ function wireCoalition(dist, majority, bar, nSeats) {
       {colors: bar.colors, fullnames: bar.fullnames, majority, total: nSeats, deltas: bar.deltas, year: bar.year, muted},
     ];
   };
-  /** Options of the histogram of the sums marked at `central` with its caption. */
+  /** Options of the histogram of the sums marked at `central` with its caption; the axis ticks every 5 seats. */
   const histogramOf = ({stats, central}) => ({
     majority, median: central, markLabel: `Reparto central: ${fmtInt(central)}`, lo: stats.lo, hi: stats.hi,
-    color: THEME.barColor, bounds: true, markLabels: false, caption: coalitionCaption(stats, central),
+    color: THEME.barColor, bounds: true, markLabels: false, caption: coalitionCaption(stats, central), tickEvery: 5,
   });
 
   function update() {

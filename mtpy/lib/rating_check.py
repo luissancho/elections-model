@@ -14,7 +14,7 @@ Columnas de ``pairs``: ``event_scope``, ``event_date``, ``population``, ``pollst
 Columnas de ``polls``: ``event_scope``, ``event_date``, ``population``, ``pollster_id``, ``pollster``, ``party``,
 ``error`` (puntos), ``weight_over``, ``weight_sample``, ``weight_rating``.
 """
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -511,6 +511,27 @@ def simple_average_errors(polls: pd.DataFrame, min_pollsters: int = MIN_POLLSTER
     return pd.DataFrame(rows, columns=columns)
 
 
+def _election_bootstrap(diffs: pd.Series, replicas: int, seed: int) -> tuple:
+    """IC 95 % de la media de una diferencia por elección, remuestreando elecciones con reemplazo.
+
+    Parameters
+    ----------
+    diffs : pd.Series
+        Una diferencia por elección (sin NaN).
+    replicas : int
+        Número de remuestreos.
+    seed : int
+        Semilla de ``np.random.default_rng``.
+
+    Returns
+    -------
+    tuple
+        ``(lo, hi)``; ``(nan, nan)`` con menos de dos elecciones.
+    """
+    frame = pd.DataFrame({'diff': np.asarray(diffs, dtype=float), 'pollster_id': np.arange(len(diffs))})
+    return _bootstrap_by(frame, 'pollster_id', lambda f: float(f['diff'].mean()), replicas, seed)
+
+
 def summarize_simple_average(elections: pd.DataFrame, replicas: int = REPLICAS, seed: int = SEED) -> dict:
     """Resume ``simple_average_errors`` por población con IC por bootstrap de elecciones.
 
@@ -539,13 +560,69 @@ def summarize_simple_average(elections: pd.DataFrame, replicas: int = REPLICAS, 
             out[population] = {'n': 0, 'mae_flat': nan, 'mae_rated': nan, 'diff': nan, 'lo': nan, 'hi': nan,
                                'better': 0, 'worse': 0}
             continue
-        lo, hi = _bootstrap_by(sub.assign(pollster_id=np.arange(len(sub))), 'pollster_id',
-                               lambda f: float(f['diff'].mean()), replicas, seed + 5 + i)
+        lo, hi = _election_bootstrap(sub['diff'], replicas, seed + 5 + i)
         out[population] = {'n': int(len(sub)), 'mae_flat': float(sub['mae_flat'].mean()),
                            'mae_rated': float(sub['mae_rated'].mean()), 'diff': float(sub['diff'].mean()),
                            'lo': lo, 'hi': hi, 'better': int((sub['diff'] < 0).sum()),
                            'worse': int((sub['diff'] > 0).sum())}
     return out
+
+
+def simple_average_curve(polls: pd.DataFrame, exponents: Sequence[float], reference: float = 1.0,
+                         replicas: int = REPLICAS, seed: int = SEED) -> pd.DataFrame:
+    """Curva del promedio simple de la última campaña con el peso por rating elevado a cada ``exponents``.
+
+    Para cada exponente γ se calcula ``simple_average_errors`` con ``weight_rating ** γ``. ``diff`` es la
+    media por elección de ``mae_γ - mae_reference``, emparejada por (``event_scope``, ``event_date``) sobre las
+    elecciones presentes en ambos; la fila de ``reference`` lleva ``diff`` 0 y ``better = worse = 0``.
+    ``better`` cuenta las elecciones con ``diff < 0`` (γ mejor que la referencia) y ``worse`` las de ``diff > 0``.
+    El IC es un bootstrap de elecciones con una semilla distinta por γ y población.
+
+    Parameters
+    ----------
+    polls : pd.DataFrame
+        Un sondeo por fila y partido, como en ``simple_average_errors``.
+    exponents : Sequence[float]
+        Rejilla de exponentes γ.
+    reference : float
+        Exponente de referencia del emparejamiento (por defecto 1).
+    replicas : int
+        Número de remuestreos.
+    seed : int
+        Semilla base; cada (γ, población) usa ``seed + 5 + k`` con ``k`` consecutivo.
+
+    Returns
+    -------
+    pd.DataFrame
+        Una fila por (``exponent``, ``population``) con ``n``, ``mae``, ``diff``, ``lo``, ``hi``, ``better``
+        y ``worse``.
+    """
+    def errors_at(gamma: float) -> pd.DataFrame:
+        raised = polls.assign(weight_rating=polls['weight_rating'] ** gamma)
+        return simple_average_errors(raised).set_index(_ELECTION_KEYS)
+
+    base = errors_at(reference)
+    rows = []
+    k = 0
+    for gamma in exponents:
+        paired = (base[['population', 'mae_rated']].rename(columns={'mae_rated': 'mae_ref'})
+                  .join(errors_at(gamma)['mae_rated'].rename('mae'), how='inner')
+                  .dropna(subset=['mae', 'mae_ref']).reset_index())
+        paired['diff'] = 0.0 if gamma == reference else paired['mae'] - paired['mae_ref']
+        for population in POPULATIONS:
+            sub = _subset(paired, population).reset_index(drop=True)
+            if sub.empty:
+                nan = float('nan')
+                rows.append({'exponent': gamma, 'population': population, 'n': 0, 'mae': nan, 'diff': nan,
+                             'lo': nan, 'hi': nan, 'better': 0, 'worse': 0})
+            else:
+                lo, hi = _election_bootstrap(sub['diff'], replicas, seed + 5 + k)
+                rows.append({'exponent': gamma, 'population': population, 'n': int(len(sub)),
+                             'mae': float(sub['mae'].mean()), 'diff': float(sub['diff'].mean()), 'lo': lo,
+                             'hi': hi, 'better': int((sub['diff'] < 0).sum()),
+                             'worse': int((sub['diff'] > 0).sum())})
+            k += 1
+    return pd.DataFrame(rows, columns=['exponent', 'population', 'n', 'mae', 'diff', 'lo', 'hi', 'better', 'worse'])
 
 
 def scatter_rows(pairs: pd.DataFrame) -> list:

@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from mtpy.core.utils.stat import LocalKernelEstimator
-from mtpy.lib.forecaster import Forecaster, NoPollsError
+from mtpy.lib.forecaster import Forecaster, NoPollsError, check_rating_exponent
 from mtpy.lib.utils import build_blocks
 
 matplotlib.use('Agg')
@@ -515,7 +515,7 @@ def test_weights_at_window_covers_every_poll_of_the_regression():
 # --- Backtest: ratings recalculados en memoria ---
 
 def _weights_builder(monkeypatch):
-    """`build(weight_ratings, weight_overrides=None)`: `build_series` sin base sobre tres sondeos de dos casas (A, B) y
+    """`build(weight_ratings, weight_overrides=None, rating_exponent=1.0)`: `build_series` sin base sobre tres sondeos de dos casas (A, B) y
     dos resultados, con los pesos guardados `weight_over` 1, 1, 2, `weight_sample` 0,5, 0,5, 1,5 y `weight_rating` 9."""
     from mtpy.lib import forecaster as fc_module
     event_date = pd.Timestamp('2023-07-23')
@@ -539,10 +539,11 @@ def _weights_builder(monkeypatch):
     monkeypatch.setattr(fc_module, 'get_parties', lambda: parties)
     monkeypatch.setattr(fc_module, 'get_pollsters', lambda: pollsters)
 
-    def build(weight_ratings, weight_overrides=None):
+    def build(weight_ratings, weight_overrides=None, rating_exponent=1.0):
         fc = Forecaster.__new__(Forecaster)
         fc.scope, fc.event_date, fc.verbose, fc.weight_ratings = 'es', '2023-07-23', 0, weight_ratings
         fc.weight_overrides = weight_overrides
+        fc.rating_exponent = check_rating_exponent(rating_exponent)
         fc.date_start, fc.date_end = pd.Timestamp('2019-11-10'), event_date
         fc.bmap = None
         fc.load_events = lambda: events
@@ -570,6 +571,36 @@ def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
     # Sin la serie, el valor guardado manda
     stored = build(None).series_raw
     assert (stored.loc[stored.pollster.notnull(), 'weight_rating'] == 9.0).all()
+
+
+def test_rating_exponent_raises_every_poll_weight(monkeypatch):
+    """γ = 2 eleva al cuadrado el peso por rating de cada sondeo (también el relleno por calidad de B);
+    los resultados oficiales quedan como con γ = 1; γ = 0 pone 1 en todos."""
+    build, pollsters = _weights_builder(monkeypatch)
+    base = build(None).series_raw
+    out = build(None, rating_exponent=2.0).series_raw
+    polls, base_polls = out.loc[out.pollster.notnull()], base.loc[base.pollster.notnull()]
+    assert polls['weight_rating'].tolist() == pytest.approx((base_polls['weight_rating'] ** 2).tolist())
+    assert polls['weight'].tolist() == pytest.approx((base_polls['weight_over'] * base_polls['weight_sample'] * base_polls['weight_rating'] ** 2).tolist())
+    pd.testing.assert_frame_equal(out.loc[out.pollster.isnull()], base.loc[base.pollster.isnull()])
+    flat = build(None, rating_exponent=0.0).series_raw
+    assert flat.loc[flat.pollster.notnull(), 'weight_rating'].tolist() == [1.0, 1.0, 1.0]
+
+
+def test_rating_exponent_applies_after_weight_overrides(monkeypatch):
+    """Un override de `weight_rating` = 4 con γ = 0,5 deja 2."""
+    build, pollsters = _weights_builder(monkeypatch)
+    overrides = pd.DataFrame({'weight_rating': [4.0]}, index=pd.MultiIndex.from_tuples(
+        [(pd.Timestamp('2023-07-10'), 1, 0)], names=['date', 'pollster_id', 'sponsor_id']))
+    out = build(None, weight_overrides=overrides, rating_exponent=0.5).series_raw.reset_index()
+    assert out.loc[(out.pollster_id == 1) & (out.date == '2023-07-10'), 'weight_rating'].iloc[0] == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize('value', [-1.0, float('nan'), float('inf')])
+def test_rating_exponent_rejects_negative_or_non_finite(monkeypatch, value):
+    build, _ = _weights_builder(monkeypatch)
+    with pytest.raises(ValueError, match='rating_exponent: expected a finite number >= 0'):
+        build(None, rating_exponent=value)
 
 
 def test_flat_weight_ratings_sets_every_poll_to_one(monkeypatch):

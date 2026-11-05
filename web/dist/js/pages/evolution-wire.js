@@ -1,5 +1,5 @@
 // Wiring of the evolution of the updates of the model: the party and block views of the daily runs
-// (`evolutionViews`), the pill legend that drives the hidden ECharts legend, the Voto/Escaños and Partidos/Bloques
+// (`evolutionViews`), the pill legend that drives the hidden ECharts legend, the % Voto/Escaños and Partidos/Bloques
 // selectors, the table of changes under the chart and the download button (`wireEvolution`). The selection lives in
 // the chart alone, never in the URL hash, like the house chart of the event page.
 import {blockRuns} from '../blocks.js';
@@ -98,7 +98,7 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
 const VOTE_ONLY = {pct: {field: 'pct', formatter: fmtPct, total: 100}};
 
 /**
- * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the Voto/Escaños radios
+ * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the % Voto/Escaños radios
  * (`#evolution-metric`, shown only with more than one metric), the Partidos/Bloques radios (`#evolution-view`, shown
  * only when the scope has blocks), the pill legend (`#evolution-legend`), which selects the names through the hidden
  * ECharts legend, the table of changes (`#evolution-changes`), with every name of the view whatever the legend shows,

@@ -265,3 +265,17 @@ def test_job_backtest_passes_flat_ratings(fresh_app, patched, tmp_path):
     Backtest().run(scopes=['es'], out=str(tmp_path), flat_ratings=True, verbose=0, runner=runner, stats=stats)
     assert runner.calls[0]['weight_ratings'] == 'flat'
     assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['flat_ratings'] is True
+
+
+def test_job_backtest_passes_rating_exponent(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), rating_exponent=2.0, verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['rating_exponent'] == 2.0
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['rating_exponent'] == 2.0
+
+
+def test_job_backtest_rejects_a_negative_rating_exponent(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    with pytest.raises(ValueError, match='rating_exponent: expected a finite number >= 0'):
+        Backtest().run(scopes=['es'], out=str(tmp_path), rating_exponent=-1, runner=runner, stats=stats)
+    assert runner.calls == []

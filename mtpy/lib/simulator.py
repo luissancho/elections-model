@@ -16,7 +16,7 @@ from ..core.utils.stat import Stat
 from ..core.utils.helpers import unset_categorical
 from ..core.utils.dataviz import plot_kde_1d
 
-from .forecaster import Forecaster
+from .forecaster import Forecaster, check_rating_exponent
 from .computer import Computer, check_drift_scale
 from .data import (
     get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds,
@@ -73,6 +73,7 @@ class Simulator(Core):
         min_events: Optional[int] = None,
         weight_ratings: Optional[pd.Series | str] = None,
         weight_overrides: Optional[pd.DataFrame] = None,
+        rating_exponent: float = 1.0,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -188,6 +189,9 @@ class Simulator(Core):
             Weights of the polls recomputed in memory, indexed by (`date`, `pollster_id`, `sponsor_id`), that
             replace the stored `weight_over`, `weight_sample` or `weight_rating` of the matching polls (see
             `Forecaster`). `None` (default) uses the stored ones.
+        rating_exponent : float, optional
+            Exponent of the rating weight of each poll, passed to the `Forecaster` (finite, >= 0). 1 (default)
+            keeps the weights; 0 makes every poll weigh the same rating.
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -202,6 +206,7 @@ class Simulator(Core):
             raise ValueError('`error_model` must be one of {}'.format(list(self.ERROR_MODELS)))
         drift_scale = check_drift_scale(drift_scale)
         tail_dof = self._check_tail_dof(tail_dof)
+        rating_exponent = check_rating_exponent(rating_exponent)
 
         super().__init__()
 
@@ -219,6 +224,7 @@ class Simulator(Core):
         self.min_events = None if min_events is None else int(min_events)
         self.weight_ratings = weight_ratings
         self.weight_overrides = weight_overrides
+        self.rating_exponent = rating_exponent
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
@@ -285,6 +291,7 @@ class Simulator(Core):
             disp_params=self.disp_params,
             weight_ratings=self.weight_ratings,
             weight_overrides=self.weight_overrides,
+            rating_exponent=self.rating_exponent,
             verbose=self.verbose,
             path=self.path
         ).build_series()
