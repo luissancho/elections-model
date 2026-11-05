@@ -1837,8 +1837,8 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['analisis', 'backtest', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters', 'inicio',
-                     'lean', 'metodo', 'promedios', 'slugs']
+    assert names == ['analisis', 'backtest', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters', 'herd',
+                     'inicio', 'lean', 'metodo', 'promedios', 'slugs']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -5520,6 +5520,66 @@ def test_lean_page_structure_and_wording(api, fresh_app):
     assert_public_wording(page, '/analisis/sesgo-cis')
     assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
 
+
+
+def test_herd_page_structure_and_wording(api, fresh_app):
+    publish_study(fresh_app.fs, study='rebano')
+    status, _, body = call(api, '/analisis/rebano'); page = html(body)
+    assert status == 200 and '<h1 class="study-title">¿Se copian las encuestadoras en la recta final?</h1>' in page
+    assert '/dist/js/pages/analisis-rebano.js' in page and 'id="initial-data"' in page
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'EN 3 DE 7', '3 CASAS']
+    assert page.count('<div class="kpi">') == 3 and '7 de 7' in page and 'Casas en rebaño en las últimas 8 semanas' in page
+    for chart in ('weeks-chart', 'matrix-chart'):
+        assert re.search(r'<div class="chart[^"]*" id="%s" role="img" aria-label="[^"]+"></div>' % chart, page), chart
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 3
+    assert 'ya como una recta final' in page and 'misma urna' in page and 'hasta la veda del 23 de noviembre' in page
+    assert 'SocioMétrica' in page and '/casas/sociometrica' in page and 'aún sin sondeos suficientes' in page
+    assert 'NC Report' in visible_text(page) and 'Las de siempre' in page
+    assert_public_wording(page, '/analisis/rebano')
+    assert 'empresa' not in visible_text(page).lower() and 'publicación' not in visible_text(page).lower() and 'max-width' not in page
+
+
+def test_herd_page_conditions_follow_the_figures(api, fresh_app):
+    summary = fixture_data('rebano-summary') | {'k_narrowed': 5, 'narrowed': ['2008', '2011', '2015', '2016', '2023'], 'mean_final': 1.3,
+                                                 'k_below_one': 0, 'below_one': [], 'current': fixture_data('rebano-summary')['current'] | {'like_final': False, 'rank_before': 3}}
+    # the lead is the published subtitle, composed at publish time: the one of these figures
+    meta = {'subtitle': 'En 5 de las 7 generales desde 2008, los sondeos se han parecido más entre sí cuanto más cerca estaba la elección.'}
+    publish_study(fresh_app.fs, study='rebano', meta=meta, parts={'summary': summary})
+    page = html(call(api, '/analisis/rebano')[2])
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['EN 5 DE 7', 'NO', '3 CASAS']
+    assert 'En 5 de los 7 ciclos' in page and 'En los 7 ciclos' not in page
+    assert 'misma urna' not in page and 'ya como una recta final' not in page and '3.º más bajo' in page
+
+
+def test_herd_page_without_houses_in_the_window(api, fresh_app):
+    summary = fixture_data('rebano-summary') | {'houses_now': {'n': 0, 'k': 0, 'herd': [], 'pending': [{'pollster': 'GAD3', 'k': 2}]}}
+    publish_study(fresh_app.fs, study='rebano', parts={'summary': summary})
+    page = html(call(api, '/analisis/rebano')[2])
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page)[2] == 'NINGUNA' and '0 de 0' in page and 'GAD3 (2)' in page
+
+
+def test_herd_page_without_a_run_speaks_of_the_past_cycles(api, fresh_app):
+    summary = fixture_data('rebano-summary') | {'current': None, 'houses_now': None, 'cis': None}
+    publish_study(fresh_app.fs, study='rebano', meta={'election': None}, parts={'summary': summary})
+    status, _, body = call(api, '/analisis/rebano'); page = html(body)
+    assert status == 200 and 'Evidencia histórica · 7 generales' in page and 'a 24 días' not in page
+
+
+def test_herd_page_names_only_the_houses_with_a_cycle_ratio(api, fresh_app):
+    houses = fixture_data('rebano-houses')
+    for row in houses['rows']:
+        if row['pollster'] == 'NC Report':
+            row['h_cycle'] = None
+    publish_study(fresh_app.fs, study='rebano', parts={'houses': houses})
+    text = visible_text(html(call(api, '/analisis/rebano')[2]))
+    sentence = text[text.index('En el ciclo entero'):][:200]
+    assert 'SocioMétrica' in sentence and 'NC Report' not in sentence
+
+
+def test_analisis_index_lists_rebano_when_published(api, fresh_app):
+    publish_study(fresh_app.fs, study='rebano')
+    page = html(call(api, '/analisis')[2])
+    assert '/analisis/rebano' in page and '¿Se copian las encuestadoras en la recta final?' in page
 
 # a ranking where the CIS leads: two houses behind it, one of them with the same share as the next
 LEAN_HOUSES = [{'pollster': 'GAD3', 'n': 30, 'k_left': 12, 'share_left': 0.4, 'mean_lean': -1.0, 'cis': False},

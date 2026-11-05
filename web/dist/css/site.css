@@ -950,6 +950,22 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 #p3 .table-wrap + .ctitle { margin-top: 14px; }
 td.blk { font-weight: 700; }
 #datos .src-list + .ctitle { margin-top: var(--space-3); }
+/* The herd study (/analisis/rebano): the blue of question 3, the row of the cycle in progress and the six shades of
+   the house × cycle matrix (its table without JavaScript and its legend): red below 1, grey near it, blue above */
+.qb { --qc: #1d4f86; --qc-ink: #1d4f86; --qc-soft: #e7eef8; }
+#study-head + .toc a.qb { border-color: var(--qc); color: var(--qc-ink); }
+tr.now td { background: var(--color-accent-soft); }
+.shade-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0; font-size: 11.5px; color: var(--color-muted); }
+.shade-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.shade-legend i { width: 14px; height: 10px; border-radius: 3px; }
+#matrix-table td + td { text-align: center; }
+:is(#matrix-table td, .shade-legend i).h1 { background: #b91c1c; color: #fff; }
+:is(#matrix-table td, .shade-legend i).h2 { background: #fca5a5; }
+:is(#matrix-table td, .shade-legend i).h3 { background: #fee2e2; }
+:is(#matrix-table td, .shade-legend i).h4 { background: #f4f5f8; }
+.shade-legend i.h4 { border: 1px solid var(--color-line-strong); }
+:is(#matrix-table td, .shade-legend i).h5 { background: #dbeafe; }
+:is(#matrix-table td, .shade-legend i).h6 { background: #93c5fd; }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {

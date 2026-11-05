@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+{% block title %}{{ study_meta.get('title') or '¿Se copian las encuestadoras en la recta final?' }}{% endblock %}
+{% block description %}{{ study_meta.get('subtitle') or 'Cuánto se parecen entre sí los sondeos de las generales a medida que se acerca la elección.' }}{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/analisis-rebano.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{#- A list of names in prose: «A, B y C». -#}
+{% macro names(items) -%}{% if items|length > 1 %}{{ items[:-1]|join(', ') }} y {{ items[-1] }}{% else %}{{ items|join('') }}{% endif %}{%- endmacro %}
+{#- «k de n» with the site's integer format. -#}
+{% macro count(k, n) -%}{{ k|int }} de {{ n|int }}{%- endmacro %}
+{#- A dispersion ratio, two decimals. -#}
+{% macro r(x) -%}{{ x|num(2) }}{%- endmacro %}
+{#- The square button that downloads a card of this page as an image: file by `slug`, signed with the study. -#}
+{% macro shot(slug) -%}{{ m.card_image_button(site_title|lower ~ '-rebano-' ~ slug ~ '.png', (study_meta.get('title') or '¿Se copian las encuestadoras en la recta final?') ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}{%- endmacro %}
+{#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
+{% macro answer(verdict, n) -%}
+<a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
+{%- endmacro %}
+{% set v1, v2, v3 = verdicts %}
+{% set t_below, t_mean, t_sign = tests %}
+{% set params = study_meta.get('params') or {} %}
+{% set n = summary.get('n_cycles') %}
+{% set k1 = summary.get('k_narrowed') %}
+{% set k2 = summary.get('k_below_one') %}
+{% set mb = summary.get('mean_before') %}
+{% set ml = summary.get('mean_last') %}
+{% set mf = summary.get('mean_final') %}
+{% set now = summary.get('current') or {} %}
+{% set hn = summary.get('houses_now') or {} %}
+{% set cis_now = ((summary.get('cis') or {}).get('current') or {}).get('ratio') %}
+{% set ww = window_weeks %}
+{% set fw = final_weeks %}
+{% set past = cycles|rejectattr('current')|list %}
+{#- the row of the cycle in progress only with a run (the summary speaks of it) -#}
+{% set live = cycles|selectattr('current')|list if has_run else [] %}
+{% set local = past|selectattr('consensus', 'equalto', 'local')|map(attribute='label')|list %}
+{% set label_now = now.get('label') or year or 'este año' %}
+{% set matrix = initial.matrix or {} %}
+    <div id="content" class="stack">
+      <header id="study-head">
+        <div class="tags">
+          <span class="pill brand">Análisis</span>
+          {% if has_run %}
+          <span class="pill ok">Página viva · se recalcula con cada actualización{% if veda_date and not after_veda %} hasta la veda del {{ veda_date }}{% endif %}</span>
+          {% else %}
+          <span class="pill">Evidencia histórica · {{ n|int }} generales</span>
+          {% endif %}
+          <span class="pill">{{ n|int }} generales desde {{ since_year or '–' }}{% if has_run and election_day %} · a {{ days_left|int }} días del {{ election_day }}{% endif %}</span>
+        </div>
+        <h1 class="study-title">{{ study_meta.get('title') or '¿Se copian las encuestadoras en la recta final?' }}</h1>
+        {% if study_meta.get('subtitle') %}<p class="study-subtitle">{{ study_meta.subtitle }}</p>{% endif %}
+      </header>
+      <nav class="section-nav toc" aria-label="Secciones">
+        <a href="#resumen">Resumen</a>
+        <a href="#p1" class="{{ v1.tone }}">1 · ¿Se acercan?</a>
+        <a href="#p2" class="{{ v2.tone }}">2 · ¿Más de lo que permite el azar?</a>
+        <a href="#p3" class="{{ v3.tone }}">3 · {{ v3.question }}</a>
+        <a href="#datos">Datos y método</a>
+      </nav>
+      {{ m.kpis(kpis) }}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'Cada semana de campaña se repite la sospecha: los sondeos se parecen demasiado. Lo medimos con los datos de ' ~ (n|int) ~ ' generales' ~ (' y con los de este ciclo, que se actualizan a diario.' if has_run else '.'), classes='shot') }}
+        {{ shot('resumen') }}
+        <div class="three">
+          {% call answer(v1, 1) -%}
+            {% if all_narrowed %}En los {{ n|int }} ciclos{% else %}En {{ k1|int }} de los {{ n|int }} ciclos{% endif %} la dispersión de
+            las últimas {{ ww }} semanas fue menor que la del resto del ciclo.
+            {%- for row in drops %}{% if loop.first %} En {{ row.label }} cayó de {{ r((row.get('before') or {}).get('ratio')) }} a {{ r((row.get('last') or {}).get('ratio')) }}{% else %}; en {{ row.label }}, de {{ r((row.get('before') or {}).get('ratio')) }} a {{ r((row.get('last') or {}).get('ratio')) }}{% endif %}{% if loop.last %}.{% endif %}{% endfor %}
+          {%- endcall %}
+          {% call answer(v2, 2) -%}
+            {% if k2 and k2 == n %}En las últimas {{ fw }} semanas de los {{ n|int }} ciclos los sondeos variaron menos de lo que
+            sus muestras permiten: eso no pasa sin mirar al vecino.
+            {%- elif k2 %}En las últimas {{ fw }} semanas de {{ names(split.below|map(attribute='label')|list) }} los sondeos
+            variaron menos de lo que sus muestras permiten: eso no pasa sin mirar al vecino.
+            {%- if split.others %} En los otros {{ split.others|length }}, entre {{ r(split.lo) }} y {{ r(split.hi) }}.{% endif %}
+            {%- else %}En ninguno de los {{ n|int }} ciclos los sondeos de las últimas {{ fw }} semanas variaron menos de lo
+            que permiten sus muestras{% if split.others %}: quedaron entre {{ r(split.lo) }} y {{ r(split.hi) }}{% endif %}.{% endif %}
+          {%- endcall %}
+          {% call answer(v3, 3) -%}
+            {% if not has_run %}Sin ciclo en curso: la matriz recoge las últimas {{ ww }} semanas de los {{ n|int }} ciclos
+            pasados, casa a casa.
+            {%- elif hn.get('herd') %}
+            {%- for house in hn.herd %}{{ house.pollster }} ({{ r(house.h) }}){% if loop.revindex == 2 %} y {% elif not loop.last %}, {% endif %}{% endfor %} en las últimas {{ ww }} semanas.
+            {%- elif hn.get('n') %}Ninguna de las {{ hn.n|int }} casas con sondeos suficientes oscila menos de lo que permiten sus
+            muestras en las últimas {{ ww }} semanas.
+            {%- else %}Ninguna casa tiene aún {{ min_polls|int }} sondeos con muestra en las últimas {{ ww }} semanas.{% endif %}
+            {%- if has_run and cis_now is number and cis_now > shade_top %} El CIS va por libre: se separa del promedio
+            {{ cis_now|num(1) }} veces el error de su muestra.{% endif %}
+          {%- endcall %}
+        </div>
+        <p class="note blue">Medimos cuánto varían las cifras publicadas alrededor del promedio, comparado con lo que variarían sólo por el azar de las muestras. No medimos intenciones: ir en rebaño puede ser copiar, ponderar por recuerdo de voto o repetir panel. Para el promedio da igual: esos sondeos aportan menos información de la que sugiere su muestra.</p>
+      {{ m.card_end() }}
+      <section class="card qcard shot {{ v1.tone }}" id="p1">
+        {{ shot('pregunta-1') }}
+        <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
+        <p class="lead">
+          Para cada sondeo con muestra publicada medimos cuánto se separa del promedio de su fecha en los
+          {{ params.get('n_series') or 4 }} partidos principales, y lo comparamos con el error que permitiría su
+          muestra. El cociente es la dispersión: 1 significa que los sondeos difieren entre sí sólo lo que difieren
+          sus muestras; 2, el doble. La curva de cada ciclo va de un año antes a la víspera.
+        </p>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Dispersión de los sondeos por semanas hasta la elección</p>
+            <p class="csub">{{ n|int }} generales desde {{ since_year or '–' }}{% if live %} y el ciclo de {{ label_now }}, que se completa cada día{% endif %} · sin el CIS · los {{ params.get('n_series') or 4 }} partidos principales de cada ciclo</p>
+            <div class="chart" id="weeks-chart" role="img" aria-label="Dispersión de los sondeos por semanas hasta la elección en {{ n|int }} generales desde {{ since_year or '–' }}: la media de los ciclos pasados pasa de {{ r(mb) }} en el resto del ciclo a {{ r(mf) }} en las últimas {{ fw }} semanas{% if has_run %}; {{ label_now }}, {{ r((now.get('cycle') or {}).get('ratio')) }} en todo el ciclo{% endif %}"></div>
+          </div>
+          <div>
+            <p class="ctitle">Resto del ciclo frente a la recta final</p>
+            <p class="csub">Sondeos con muestra publicada; cambio de la dispersión al entrar en las últimas {{ ww }} semanas</p>
+            <div class="table-wrap">
+              <table id="cycles-table">
+                <caption class="sr-only">Dispersión de los sondeos de cada ciclo en el resto del ciclo, en las últimas {{ ww }} semanas y en las últimas {{ fw }}, y su cambio al entrar en la recta final.</caption>
+                <thead>
+                  <tr><th scope="col">Ciclo</th><th scope="col">Sondeos</th><th scope="col">Resto del ciclo</th><th scope="col">Últimas {{ ww }} sem.</th><th scope="col">Últimas {{ fw }} sem.</th><th scope="col">Cambio</th></tr>
+                </thead>
+                <tbody>
+                  {% for row in past %}
+                  <tr><td><b>{{ row.label }}</b></td><td class="mut">{{ row.get('with_sample')|int }}</td><td>{{ r((row.get('before') or {}).get('ratio')) }}</td><td>{{ r((row.get('last') or {}).get('ratio')) }}</td><td>{{ r((row.get('final') or {}).get('ratio')) }}</td><td>{{ m.badge(row.get('change'), 2) }}</td></tr>
+                  {% endfor %}
+                  <tr><td><b>Media de los {{ n|int }}</b></td><td></td><td><b>{{ r(mb) }}</b></td><td><b>{{ r(ml) }}</b></td><td><b>{{ r(mf) }}</b></td><td>{{ m.badge(ml - mb if (ml is number and mb is number) else none, 2) }}</td></tr>
+                  {% for row in live %}
+                  <tr class="now"><td><b>{{ row.label }} · hoy</b></td><td class="mut">{{ row.get('with_sample')|int }}</td><td>{{ r((row.get('before') or {}).get('ratio')) }}</td><td>{{ r((row.get('last') or {}).get('ratio')) }}</td>
+                    {%- if not (row.get('final') or {}).get('k') %}<td class="mut">sin sondeos aún</td>{% else %}<td>{{ r(row.final.get('ratio')) }}</td>{% endif %}<td>{{ m.badge(row.get('change'), 2) }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="sum">
+          <b>{% if all_narrowed %}En los {{ n|int }} ciclos{% else %}En {{ k1|int }} de los {{ n|int }} ciclos{% endif %} los sondeos se acercaron al entrar en las últimas {{ ww }} semanas</b>
+          {%- if mf is number %}, y en las últimas {{ fw }} la dispersión media quedó en {{ r(mf) }}
+          {%- if final_like_chance %}: a esas alturas, las casas difieren entre sí {{ 'poco más de' if mf >= 1 else 'menos de' }} lo que difieren sus muestras{% endif %}{% endif %}.
+          {%- if final_like_chance and mb is number and mb > cooking_ratio %} El resto del ciclo cada casa lleva su cocina; en la recta final la cocina desaparece.{% endif %}
+          {%- if has_run %}{% if like_final %} {{ label_now }} es distinto: la dispersión de todo el ciclo ({{ r((now.get('cycle') or {}).get('ratio')) }}) ya está donde los ciclos pasados sólo llegaron en la recta final ({{ r(ml) }}).
+          {%- else %} En {{ label_now }}, la dispersión de todo el ciclo va en {{ r((now.get('cycle') or {}).get('ratio')) }}; en el resto del ciclo, el {{ now.get('rank_before')|int }}.º más bajo de los {{ (n or 0) + 1 }} ciclos.{% endif %}{% endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          Cada línea gris es un ciclo de las generales, de un año antes de la elección a la víspera, agrupado por
+          semanas; la discontinua negra es la media de los ciclos pasados{% if live %} y la azul, el ciclo de
+          {{ label_now }}, que avanza con cada actualización{% endif %}. La línea roja en 1 marca lo que permite el
+          azar de las muestras: por encima, las casas difieren entre sí más que sus muestras; por debajo, menos. La
+          tabla junta las mismas cifras en tres tramos: el resto del ciclo, las últimas {{ ww }} semanas y las últimas
+          {{ fw }}; la flecha es el cambio al entrar en las últimas {{ ww }}.
+        </p>
+        {% endcall %}
+      </section>
+      <section class="card qcard shot {{ v2.tone }}" id="p2">
+        {{ shot('pregunta-2') }}
+        <div class="qh"><div class="qn">2</div><h2 class="qt">{{ v2.question }}</h2><span class="verdict">{{ v2.label }}<i></i></span></div>
+        <p class="lead">
+          Que los sondeos se acerquen puede ser normal: la opinión se asienta y los indecisos deciden. Lo que no es
+          normal es que difieran <b>menos</b> de lo que difieren sus propias muestras. Una casa que repite una encuesta
+          con otra muestra obtiene cifras algo distintas; si varias casas, con muestras de mil entrevistas, publican
+          cifras más parecidas que eso, alguien ha mirado al vecino.
+        </p>
+        <div class="tests">
+          {% for box in tests %}
+          <div class="test{% if box.hi %} hi{% endif %}">
+            <div class="k">{{ box.label }}</div>
+            <div class="v">{{ box.value }}{% if box.note %} <small>{{ box.note }}</small>{% endif %}</div>
+            {% if box.text %}<p>{{ box.text }}</p>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">El CIS, aparte</p>
+            <p class="csub">Su distancia al promedio, en errores de su muestra, en las últimas {{ ww }} semanas de cada ciclo; fuera del cálculo del resto de la página porque lo dominaría</p>
+            <div class="table-wrap">
+              <table id="cis-table">
+                <caption class="sr-only">Sondeos del CIS en las últimas {{ ww }} semanas de cada ciclo, su distancia al promedio en errores de su muestra y su oscilación propia.</caption>
+                <thead>
+                  <tr><th scope="col">Ciclo</th><th scope="col">Sondeos ({{ ww }} sem.)</th><th scope="col">Distancia al promedio</th><th scope="col">Oscilación propia</th></tr>
+                </thead>
+                <tbody>
+                  {% for row in cis_rows if has_run or not row.current %}
+                  <tr{% if row.current %} class="now"{% endif %}><td><b>{{ row.label }}{% if row.current %} · hoy{% endif %}</b></td><td class="mut">{{ row.k|int }}</td><td>{{ row.ratio|num(1) }}</td>
+                    {%- if row.own is number %}<td>{{ row.own|num(1) }}</td>{% else %}<td class="mut">–{% if row.current and row.cycle is number %} ({{ row.cycle|num(1) }} en el ciclo){% endif %}</td>{% endif %}</tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <p class="tnote">«Distancia al promedio»: la misma medida que el resto de la página, sólo con sus sondeos. «Oscilación propia»: descontado su sesgo, cuánto varía de un sondeo al siguiente; con un solo sondeo no se puede medir.</p>
+          </div>
+          <div>
+            <p class="ctitle">Qué significa la cifra</p>
+            <div class="tech">
+              <b>1,0</b> · los sondeos difieren entre sí lo que difieren sus muestras: ninguna cocina propia, o la misma para todos.<br>
+              <b>Por encima de 1</b> · cada casa aporta algo distinto: su ponderación, su panel, su estimación. En el resto del ciclo, la media de los ciclos pasados es {{ r(mb) }}.<br>
+              <b>Por debajo de 1</b> · imposible sin mirar al vecino: una muestra de 1.000 entrevistas no puede dar dos veces casi la misma cifra, y menos dos casas distintas.<br>
+              {% if has_run and cis_now is number and cis_now > shade_top %}
+              <b>El CIS a {{ cis_now|num(1) }}</b> · su cifra se separa del promedio {{ cis_now|num(1) }} veces el error de su muestra: no es rebaño, es sesgo, y lo cuenta <a href="/analisis/sesgo-cis">El sesgo del CIS de Tezanos</a>.
+              {% else %}
+              <b>El CIS</b> · queda fuera del cálculo porque su sesgo lo dominaría; lo cuenta <a href="/analisis/sesgo-cis">El sesgo del CIS de Tezanos</a>.
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="sum">
+          {% if k2 and k2 == n %}<b>Sí, en los {{ n|int }} ciclos.</b> En las últimas {{ fw }} semanas de cada uno los sondeos se
+          parecieron más de lo que permite el azar de sus muestras.
+          {%- elif k2 %}<b>Sí en {{ k2|int }} ciclos; en los otros {{ split.others|length }}, por encima de 1.</b> En las últimas
+          {{ fw }} semanas de {{ names(split.below|map(attribute='label')|list) }} los sondeos se parecieron más de lo que
+          permite el azar de sus muestras.
+          {%- if split.others %} En {{ names(split.others|map(attribute='label')|list) }} quedaron entre {{ r(split.lo) }} y
+          {{ r(split.hi) }}{% if split.hi <= close_ratio %}: las casas aún difieren, pero poco{% endif %}.{% endif %}
+          {%- else %}<b>No.</b> En ninguno de los {{ n|int }} ciclos los sondeos de las últimas {{ fw }} semanas se parecieron
+          más de lo que permite el azar de sus muestras{% if split.others %}: quedaron entre {{ r(split.lo) }} y {{ r(split.hi) }}{% endif %}.{% endif %}
+        </div>
+      </section>
+      <section class="card qcard shot {{ v3.tone }}" id="p3">
+        {{ shot('pregunta-3') }}
+        <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
+        <p class="lead">
+          Casa a casa, la medida del modelo: cuánto oscilan los sondeos de una encuestadora alrededor del promedio,
+          descontada su inclinación propia, frente a lo que permiten sus muestras. Aquí, sólo en las últimas {{ ww }}
+          semanas de cada ciclo y con {{ min_polls|int }} o más sondeos con muestra publicada. El p-valor es la
+          probabilidad de una oscilación tan baja sin rebaño.
+        </p>
+        <div class="grid2">
+          <div>
+            {% if has_run %}
+            <p class="ctitle">Últimas {{ ww }} semanas de {{ label_now }} · a {{ days_left|int }} días del {{ election_day or '–' }}</p>
+            <p class="csub">Se completa con cada actualización; entran las casas al llegar a {{ min_polls|int }} sondeos con muestra{% if window_start %} desde el {{ window_start }}{% endif %}</p>
+            <div class="table-wrap">
+              <table id="houses-table">
+                <caption class="sr-only">Rebaño de cada encuestadora en las últimas {{ ww }} semanas de {{ label_now }}: sondeos con muestra, la medida y su p-valor.</caption>
+                <thead>
+                  <tr><th scope="col">Encuestadora</th><th scope="col">Sondeos</th><th scope="col">Rebaño</th><th scope="col">p-valor</th><th scope="col"><span class="sr-only">Barra</span></th></tr>
+                </thead>
+                <tbody>
+                  {% for row in houses_now %}
+                  <tr><td><a href="{{ row.href }}"><b>{{ row.pollster }}</b></a></td><td class="mut">{{ row.get('k')|int }}</td><td><b{% if row.herd %} class="neg"{% endif %}>{{ r(row.get('h')) }}</b></td><td>{{ row.p_text }}</td><td class="l"><span class="bar"><i style="width: {{ row.bar }}%; background: #ce3b3b"></i></span></td></tr>
+                  {% endfor %}
+                  {% if pending %}
+                  {% set pk = (hn.get('pending') or [])|map(attribute='k')|list %}
+                  <tr><td class="mut">{{ pending }}</td><td class="mut">{{ pk|min|int }}{% if pk|max != pk|min %}-{{ pk|max|int }}{% endif %}</td><td class="mut">–</td><td class="mut">–</td><td class="mut l">aún sin sondeos suficientes</td></tr>
+                  {% endif %}
+                  {% set cis_k = ((summary.get('cis') or {}).get('current') or {}).get('k') %}
+                  {% if cis_k %}
+                  <tr><td class="mut">CIS</td><td class="mut">{{ cis_k|int }}</td><td class="mut">–</td><td class="mut">–</td><td class="mut l">aparte: ver la pregunta 2</td></tr>
+                  {% endif %}
+                </tbody>
+              </table>
+            </div>
+            <p class="tnote">La barra crece hacia la derecha cuanto más por debajo de 1.{% if cycle_ratio %} {{ cycle_ratio }}{% endif %}</p>
+            {% else %}
+            <p class="ctitle">Sin ciclo en curso</p>
+            <p class="notice">No hay una actualización del promedio de las generales en marcha: la tarjeta habla sólo de los ciclos pasados.</p>
+            {% endif %}
+          </div>
+          <div>
+            <p class="ctitle">Las últimas {{ ww }} semanas de cada ciclo, casa a casa</p>
+            <p class="csub">Rebaño de cada encuestadora con {{ min_polls|int }} o más sondeos con muestra en esa ventana; en blanco, menos de {{ min_polls|int }}</p>
+            <div class="shade-legend"><span><i class="h1"></i>&lt; 0,5</span><span><i class="h2"></i>0,5-0,7</span><span><i class="h3"></i>0,7-0,9</span><span><i class="h4"></i>0,9-1,2</span><span><i class="h5"></i>1,2-1,6</span><span><i class="h6"></i>&gt; 1,6</span></div>
+            <div class="chart" id="matrix-chart" role="img" aria-label="Rebaño de {{ (matrix.get('houses') or [])|length }} encuestadoras en las últimas {{ ww }} semanas de {{ (matrix.get('events') or [])|length }} ciclos{% if repeaters %}; repiten {{ repeaters|length }} casas{% endif %}"></div>
+            <div class="table-wrap">
+              <table id="matrix-table">
+                <caption class="sr-only">Rebaño de cada encuestadora en las últimas {{ ww }} semanas de cada ciclo; vacía la celda con menos de {{ min_polls|int }} sondeos.</caption>
+                <thead>
+                  <tr><th scope="col">Encuestadora</th>{% for event in matrix.get('events') or [] %}<th scope="col">{% if event.current %}<b>{{ event.short }}</b>{% else %}{{ event.short }}{% endif %}</th>{% endfor %}</tr>
+                </thead>
+                <tbody>
+                  {% for row in matrix_rows %}
+                  <tr><td><a href="{{ row.href }}"><b>{{ row.name }}</b></a></td>{% for cell in row.cells %}<td class="{{ cell.shade }}">{% if cell.h is number %}{{ r(cell.h) }}{% endif %}</td>{% endfor %}</tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="sum">
+          <b>Las de siempre.</b>
+          {% if repeaters %}{{ names(repeaters) }}.{% else %}Ninguna casa repite todavía.{% endif %}
+          {%- if notes.none_escaped %} Ninguna casa con tres ciclos o más se ha librado siempre.{% endif %}
+          {%- if notes.cis_alone %} El CIS es el único que oscila de más.{% endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          El rebaño de una casa compara cuánto oscilan sus sondeos alrededor del promedio, descontada su inclinación
+          propia, con lo que permitirían sus muestras: 1 es lo esperable; por debajo, sus cifras se mueven menos de lo
+          que deberían. En la tabla{% if has_run %} de {{ label_now }}{% endif %}, el p-valor dice cómo de raro sería
+          oscilar tan poco sin rebaño. En la matriz, cada fila es una encuestadora y cada columna un ciclo: rojo por
+          debajo de 1, más intenso cuanto más bajo; azul por encima; gris claro cerca de 1; en blanco, la casa no
+          llegó a {{ min_polls|int }} sondeos con muestra en esa ventana.
+        </p>
+        {% endcall %}
+      </section>
+      {{ m.card_start('despues', 'Después del ' ~ after_day if after_day else 'Después de la elección', ('Cuando haya escrutinio, esta tarjeta sumará ' ~ label_now ~ ' a la cuenta: ¿acertaron más' if has_run else '¿Acertaron más') ~ ' las casas que iban en rebaño en la recta final o las que no? Con ' ~ (n|int) ~ ' ciclos no hay prueba, pero sí una cuenta que hacer.', classes='shot') }}
+        {{ shot('despues') }}
+        {% if accuracy %}<p>{{ accuracy }}</p>{% endif %}
+        {% if result %}<p>{{ result }}</p>{% endif %}
+      {{ m.card_end() }}
+      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y promedios publicados en Demoscopio y se puede descargar.', classes='shot') }}
+        {{ shot('datos') }}
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Datos</p>
+            <ul class="src-list">
+              <li>Los sondeos de cada ciclo de las generales desde {{ since_year or '–' }}, tal como se publicaron, con su muestra y sus fechas de campo: los mismos que enseña cada elección en el <a href="/elecciones">Histórico</a>.</li>
+              <li>La curva del promedio de cada ciclo, la que dibujan las páginas de cada elección{% if has_run %}, y la del ciclo actual de la última actualización{% endif %}.</li>
+              <li>Sólo sondeos con muestra publicada; sin agregadores ni paneles abiertos; el CIS aparte.</li>
+              <li>El rebaño del ciclo entero de cada casa es el de su perfil y el <a href="/casas">Ranking de encuestadoras</a>.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="ctitle">Método</p>
+            <div class="tech">
+              Para cada sondeo con muestra <i>n</i> y cada uno de los {{ params.get('n_series') or 4 }} partidos principales
+              del ciclo, el residuo es su cifra menos el promedio en la fecha de fin de campo; la varianza esperada,
+              <i>p</i>(1 − <i>p</i>)/<i>n</i> al nivel del promedio. La <b>dispersión</b> de un grupo de sondeos es
+              √(media de residuos² / media de varianzas). Las semanas cuentan hasta la elección por la fecha de fin de
+              campo. El <b>rebaño por casa</b> es la medida de <a href="/metodo/rating#herding">Método</a>, acotada a la
+              ventana: residuos centrados en la media de la casa, factor 1 − 1/<i>k</i>, p-valor de la χ² con
+              <i>k</i> − 1 grados de libertad. Se diferencia de la de Método en dos cosas: la referencia es la curva
+              publicada, con los sondeos de la propia casa dentro, y la ventana.
+              {%- if local %} En {{ names(local) }}, sin curva publicada, el promedio es la media de las demás casas en
+              ±{{ params.get('local_window') or 10 }} días.{% endif %}
+            </div>
+          </div>
+        </div>
+        {% if sources %}
+        <p class="ctitle">Fuentes</p>
+        <ul class="src-list">
+          {% for source in sources %}
+          <li><a href="{{ source.url }}">{{ source.label }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if csv_links %}
+        <p class="csv-links">
+          {% for link in csv_links %}<a class="pill brand" href="{{ link.href }}">CSV: {{ link.label }}</a>{% endfor %}
+        </p>
+        {% endif %}
+        {% if published_at %}<p class="tnote">Página actualizada el {{ published_at|date }}.</p>{% endif %}
+      {{ m.card_end() }}
+    </div>
+{% endblock %}

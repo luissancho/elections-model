@@ -16,12 +16,13 @@ from ..webapi import site
 from .common import api_url, bundle_part, common_context
 from .cera import (MONTHS_LONG, SCENARIOS, UNIFORM_SPLIT, _census_version, _check, _debate, _get, _question_1,
                    _question_2, _question_3, _sigla, _two_periods, _version)
-from . import lean
+from . import herd, lean
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
 STUDIES = {'voto-cera': {'template': 'analisis_voto_cera.html'},
-           'sesgo-cis': {'template': 'analisis_sesgo_cis.html'}}
+           'sesgo-cis': {'template': 'analisis_sesgo_cis.html'},
+           'rebano': {'template': 'analisis_rebano.html'}}
 CERA = 'voto-cera'
 # Verdict of each of the three questions of the CERA study and the colour class of its card
 VERDICTS = [('SÍ', 'q1'), ('SIN EVIDENCIA', 'q2'), ('NO', 'q3')]
@@ -161,7 +162,7 @@ def study_context(state: dict, study: str) -> dict:
     Returns
     -------
     dict
-        The context of the study (``CONTEXTS[study]``: ``cera_context`` or ``lean_context``).
+        The context of the study (``CONTEXTS[study]``: ``cera_context``, ``lean_context`` or ``herd_context``).
 
     Raises
     ------
@@ -654,5 +655,68 @@ def lean_context(state: dict) -> dict:
     return context
 
 
+def herd_context(state: dict) -> dict:
+    """
+    Template context of the page of the herd study (``/analisis/rebano``).
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+
+    Returns
+    -------
+    dict
+        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``cycles`` (the rows,
+        the cycle in progress last), ``verdicts`` (``herd.verdict_rows``), ``kpis``, ``tests``, ``cis_rows``,
+        ``houses_now`` (``herd.houses_now_rows``), ``pending`` (``herd.pending_text``), ``cycle_ratio``
+        (``herd.cycle_ratio_text``), ``matrix_rows`` (the table of the matrix without JavaScript), ``repeaters``,
+        ``notes`` (``herd.matrix_notes``), ``split`` (``herd.final_split``), ``drops`` (``herd.biggest_drops``),
+        ``accuracy`` (``herd.accuracy_text``), ``result`` (``herd.result_text``), ``after_day`` (the election of the
+        card «Después del 29-N»: the one in progress or the newest cycle), ``csv_links``, ``sources``,
+        ``published_at``, ``initial`` (``herd.island`` plus the common ``state``) and the flags of ``herd.flags``
+        (``has_run``, ``like_final``, ``all_narrowed``, ``final_like_chance``, ``veda_date``...).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle.
+    """
+    context = common_context(state, '/analisis')
+    parts = {part: study_part(herd.HERD, part) or {} for part in bundle.STUDY_PARTS[herd.HERD]}
+    meta, summary = parts['meta'], parts['summary']
+    cycles = _get(parts['cycles'], 'rows') or []
+    houses = _get(parts['houses'], 'rows') or []
+    initial = dict(herd.island(parts), state=context['state'])
+    context.update(herd.flags(summary, meta))
+    context.update(
+        study_meta=meta,
+        summary=summary,
+        cycles=cycles,
+        verdicts=herd.verdict_rows(summary, meta),
+        kpis=herd.kpis(summary, meta, cycles, houses),
+        tests=herd.tests(summary, cycles, meta),
+        cis_rows=herd.cis_rows(cycles),
+        houses_now=herd.houses_now_rows(summary, houses),
+        pending=herd.pending_text(summary),
+        cycle_ratio=herd.cycle_ratio_text(houses, summary),
+        matrix_rows=herd.matrix_rows(initial['matrix']),
+        repeaters=herd.repeaters(houses),
+        notes=herd.matrix_notes(houses),
+        split=herd.final_split(summary, cycles),
+        drops=herd.biggest_drops(cycles),
+        accuracy=herd.accuracy_text(summary),
+        result=herd.result_text(houses, cycles, meta),
+        after_day=context['election_short'] or herd.short_day(max((row.get('event_date') or '' for row in cycles),
+                                                                  default=None)),
+        csv_links=_csv_links(herd.HERD),
+        sources=meta.get('sources') or [],
+        published_at=_published_at(herd.HERD),
+        initial=initial,
+    )
+
+    return context
+
+
 # Context builder of each study of ``STUDIES``
-CONTEXTS = {CERA: cera_context, lean.LEAN: lean_context}
+CONTEXTS = {CERA: cera_context, lean.LEAN: lean_context, herd.HERD: herd_context}
