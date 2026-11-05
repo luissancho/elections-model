@@ -90,6 +90,34 @@ def published_seats(
     return out
 
 
+def check_rating_exponent(value: Any) -> float:
+    """
+    Validate the exponent of the rating weight of the polls (`Forecaster`, `Simulator`).
+
+    Parameters
+    ----------
+    value : float
+        Exponent applied to `weight_rating`: 1 keeps it, 0 makes every poll weigh the same.
+
+    Returns
+    -------
+    float
+        The exponent as a float.
+
+    Raises
+    ------
+    ValueError
+        If it is not a finite number greater than or equal to 0.
+    """
+    try:
+        exponent = float(value)
+    except (TypeError, ValueError):
+        exponent = float('nan')
+    if not np.isfinite(exponent) or exponent < 0:
+        raise ValueError('rating_exponent: expected a finite number >= 0')
+    return exponent
+
+
 class NoPollsError(ValueError):
     """The event has no polls, so there is nothing to forecast (a `ValueError`, so existing callers keep working)."""
 
@@ -111,6 +139,7 @@ class Forecaster(Core):
         disp_params: Optional[dict[str, Any]] = None,
         weight_ratings: Optional[Union[pd.Series, str]] = None,
         weight_overrides: Optional[pd.DataFrame] = None,
+        rating_exponent: float = 1.0,
         verbose: int = 0,
         path: Optional[str] = None,
         event_params: Optional[dict] = None
@@ -185,6 +214,11 @@ class Forecaster(Core):
             `weight_rating` columns. They replace those columns in the matching polls before the weight of each
             poll is computed (see `apply_weight_overrides`); the other polls, and the official results, keep their
             stored weights. `None` (default) uses the stored ones.
+        rating_exponent : float, optional
+            Exponent of the rating weight of each poll (finite, >= 0, see `check_rating_exponent`): it is applied
+            to `weight_rating` after the quality fallback and the `weight_overrides`, only on the polls (the
+            official results keep theirs). 1 (default) leaves the weights as they are, > 1 widens the band
+            between the worst and the best pollster, < 1 narrows it, 0 gives every poll the same rating weight.
         verbose : int, optional
             Level of verbosity.
         path : str, optional
@@ -212,6 +246,7 @@ class Forecaster(Core):
 
         self.weight_ratings = weight_ratings
         self.weight_overrides = weight_overrides
+        self.rating_exponent = check_rating_exponent(rating_exponent)
         self.verbose = verbose
         self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
@@ -564,6 +599,11 @@ class Forecaster(Core):
         if self.weight_overrides is not None:
             index_cols = ['date', 'pollster_id', 'sponsor_id']
             series = self.apply_weight_overrides(series.set_index(index_cols), self.weight_overrides).reset_index()
+        # The exponent widens (> 1) or narrows (< 1) the band between the worst and the best pollster; it acts on
+        # the final rating weight of the polls (after the quality fallback and the overrides), not on the results
+        if self.rating_exponent != 1.0:
+            is_poll = series.pollster.notnull()
+            series.loc[is_poll, 'weight_rating'] = series.loc[is_poll, 'weight_rating'] ** self.rating_exponent
         series['weight'] = series.weight_over * series.weight_sample * series.weight_rating
 
         # Sort index and columns

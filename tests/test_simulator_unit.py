@@ -886,3 +886,34 @@ def test_tail_dof_rejects_one_booleans_and_floats(bad):
 def test_simulator_rejects_a_bad_tail_dof_before_touching_data():
     with pytest.raises(ValueError, match='tail_dof'):
         Simulator('es', '2026-11-29', tail_dof=0)
+
+
+# --- Backtest del peso del rating: `rating_exponent` ---
+
+class _StopAfterForecaster(Exception):
+    """Corta el constructor del Simulator justo después de construir el Forecaster."""
+
+
+@pytest.mark.parametrize('kwargs, expected', [({'rating_exponent': 1.5}, 1.5), ({}, 1.0)])
+def test_simulator_passes_rating_exponent_to_the_forecaster(monkeypatch, kwargs, expected):
+    from mtpy.lib import simulator as simulator_module
+    seen = {}
+
+    class FakeForecaster:
+        def __init__(self, **kw):
+            seen.update(kw)
+            raise _StopAfterForecaster
+
+    monkeypatch.setattr(simulator_module, 'Forecaster', FakeForecaster)
+    monkeypatch.setattr(simulator_module, 'get_event_params',
+                        lambda *a, **k: {'parties': {'event': ['PP', 'PSOE']}, 'smap': {}})
+    monkeypatch.setattr(simulator_module, 'get_scope_parent', lambda scope: None)
+    with pytest.raises(_StopAfterForecaster):
+        Simulator('es', '2026-11-29', threshold=3., **kwargs)
+    assert seen['rating_exponent'] == expected
+
+
+@pytest.mark.parametrize('bad', [-1, float('nan'), float('inf')])
+def test_simulator_rejects_a_bad_rating_exponent(bad):
+    with pytest.raises(ValueError, match='rating_exponent: expected a finite number >= 0'):
+        Simulator('es', '2026-11-29', rating_exponent=bad)
