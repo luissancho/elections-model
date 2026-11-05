@@ -29,7 +29,7 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             meta.json pollsters.json polls.json results.json model.json
             csv/
                 pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
-        studies/{study}/                        one published study (voto-cera, sesgo-cis), overwritten on each publication
+        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano), overwritten on each publication
             meta.json {part}.json               the parts of STUDY_PARTS[study]
             csv/
                 {name}.csv                      the tables of STUDY_CSV[study]
@@ -76,21 +76,25 @@ BACKTEST_CSV = BACKTEST_PARTS[1:]
 EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
 EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks', 'series')
-STUDIES = ('voto-cera', 'sesgo-cis')
+STUDIES = ('voto-cera', 'sesgo-cis', 'rebano')
 STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
-               'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')}
+               'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election'),
+               'rebano': ('meta', 'summary', 'cycles', 'weeks', 'houses')}
 STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['voto-cera']},
-                 'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']}}
+                 'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']},
+                 'rebano': {part: 'rebano-' + part for part in STUDY_PARTS['rebano']}}
 STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
                            'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
-             'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses')}
+             'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses'),
+             'rebano': ('cycles', 'weeks', 'houses')}
 STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'census-countries'),
                               'participation': ('participation',), 'vote': ('vote', 'ecological'),
                               'prediction': ('last-seat',),
                               'sensitivity': ('sensitivity-grid', 'sensitivity-scenarios', 'placement-grid'),
                               'check': ('check',)},
                 'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
-                              'election': ('election-houses',)}}
+                              'election': ('election-houses',)},
+                'rebano': {'cycles': ('cycles',), 'weeks': ('weeks',), 'houses': ('houses',)}}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
@@ -170,6 +174,16 @@ SCHEMAS = {
     'sesgo-cis-matrix': {'events': list, 'houses': list, 'cells': list},
     'sesgo-cis-election': {'scope': str, 'date': str, 'name': NULLABLE_STR, 'blocks': dict, 'max_days': int,
                            'result': dict, 'cis': dict, 'consensus': dict, 'houses': list},
+    'rebano-meta': {'study': str, 'title': str, 'subtitle': str, 'scope': str, 'election': (dict, type(None)),
+                    'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                    'versions': dict, 'seconds': dict},
+    'rebano-summary': {'n_cycles': int, 'k_narrowed': int, 'narrowed': list, 'mean_before': (float, type(None)),
+                       'mean_last': (float, type(None)), 'mean_final': (float, type(None)), 'k_below_one': int,
+                       'below_one': list, 'sign': (dict, type(None)), 'current': (dict, type(None)),
+                       'houses_now': (dict, type(None)), 'cis': (dict, type(None)), 'accuracy': (dict, type(None))},
+    'rebano-cycles': {'rows': list},
+    'rebano-weeks': {'buckets': list, 'rows': list, 'mean': list},
+    'rebano-houses': {'rows': list},
 }
 
 

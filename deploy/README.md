@@ -1372,12 +1372,21 @@ también con `dry_run`): los análisis de los ámbitos, las elecciones y sus res
 antes, y en una cadena va tras el análisis: `["analysis","study"]`. No necesita base de datos ni tiene registro
 (`"register":true` termina `refused` y no se escribe nada) ni comprobación (`checked` es siempre falso).
 
+**Rebaño en la recta final.** `{"what":["study"],"study":"rebano"}` calcula «¿Se copian las encuestadoras en la recta
+final?» (`mtpy/lib/studies/herd/`) desde los sondeos de cada ciclo de las generales (`cycle`), las curvas publicadas del
+promedio (`series` de la elección y del run `latest`), los errores por casa (`pollsters`) y el rebaño del análisis
+nacional (`herding`); sin base de datos ni registro. **`studies`** republica, una vez por job y sin ámbito, los estudios
+vivos (`sesgo-cis` y `rebano`, los de `live` en `publish.STUDY_RUNNERS`), y es el último paso de `update`: la tarea
+diaria recalcula la página con el run del día.
+
 Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
 
 ```
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-cera"}'
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"sesgo-cis"}'
 S3_BUCKET= python job.py publish '{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}'
+S3_BUCKET= python job.py publish '{"what":["study"],"study":"rebano"}'
+S3_BUCKET= python job.py publish '{"what":["analysis","studies"],"scopes":["es"]}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 ```
 
@@ -1625,10 +1634,11 @@ Tres grupos, en este orden y cada uno sobre todos los ámbitos antes de empezar 
    diaria, unos minutos), o `full`, todas las fases, con `overwrite` o cuando una elección pendiente tiene resultado
    oficial (uno cargado con `load` o desde el cuaderno). Los errores del promedio (`average_errors`) no entran: se
    lanzan con `compute`.
-3. `publish.forecast` y `publish.analysis` por ámbito, y `publish.parties` una vez al final (el catálogo de partidos).
+3. `publish.forecast` y `publish.analysis` por ámbito, y `publish.parties` y `publish.studies` una vez al final (el catálogo de partidos y los estudios vivos).
 
 Son los mismos pipelines de los jobs `load`, `compute` y `publish`: cada línea, estado y nivel de `verbose` es el de
-su job. Los `ratings` y los catálogos no entran (se lanzan con `compute`).
+su job. La cadena de publicación acaba con `studies`, que republica los estudios vivos con el run del día (va el
+último para que un estudio que falle no deje el catálogo sin publicar). Los `ratings` y los catálogos no entran (se lanzan con `compute`).
 
 `overwrite` es el único interruptor de rehacerlo todo: reemplaza el ciclo de sondeos y computa la serie, en `full`,
 aunque no haya nada nuevo; se usa tras un cambio de código o de parámetros. `"mode": "full"` fuerza la serie entera un

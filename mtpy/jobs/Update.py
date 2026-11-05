@@ -7,11 +7,12 @@ from ..lib.publish import resolve_scopes
 class Update(SequenceJob):
     """
     Update the model of the requested scopes in one task: load the new Wikipedia polls, compute the series and publish
-    the forecast, the analysis and the party catalogue (``load``, ``compute`` and ``publish`` chained, in that order,
+    the forecast, the analysis, the party catalogue and the live studies (``load``, ``compute`` and ``publish`` chained, in that order,
     each group on every scope before the next one starts).
 
     The groups run ``load.polls``, ``compute.compute`` and ``publish.forecast``, ``publish.analysis`` and
-    ``publish.parties`` (once, after the scopes), with the same pipelines as the jobs of those names, so every result
+    ``publish.parties`` and ``publish.studies`` (once each, after the scopes, the studies last so one that fails never
+    leaves the catalogue unpublished), with the same pipelines as the jobs of those names, so every result
     line, status and level of ``verbose`` is the one of the job it comes from. The compute is skipped on the scopes with
     nothing loaded since their last compute, read from the marks ``loaded_at`` and ``computed_at`` of ``events``
     (``compute.pending_events``): a scope whose load found no new poll ends ``skipped`` in the compute and goes on to
@@ -56,7 +57,7 @@ class Update(SequenceJob):
         RUN_JOB='update {"scopes":["es"],"n_sim":10000}'
     """
 
-    sequence = {'load': ['polls'], 'compute': ['compute'], 'publish': ['forecast', 'analysis', 'parties']}
+    sequence = {'load': ['polls'], 'compute': ['compute'], 'publish': ['forecast', 'analysis', 'parties', 'studies']}
     default_action = 'update'
     stop_on_error = True
     chunk_noun = 'scopes'
@@ -91,8 +92,8 @@ class Update(SequenceJob):
         Returns
         -------
         dict
-            ``{scope: {'polls': ..., 'compute': ..., 'forecast': ..., 'analysis': ...}, 'parties': ...}``: the result
-            of each pipeline on each scope, and the one of the party catalogue.
+            ``{scope: {'polls': ..., 'compute': ..., 'forecast': ..., 'analysis': ...}, 'parties': ..., 'studies': ...}``:
+            the result of each pipeline on each scope, and the ones of the party catalogue and the live studies.
 
         Raises
         ------
@@ -130,7 +131,7 @@ class Update(SequenceJob):
         for (key, chunk), result in self.results.items():
             name = key.split('.', 1)[1]
             if chunk is None:
-                results['parties'] = result
+                results[name] = result
             else:
                 results.setdefault(chunk, {})[name] = result
         return results

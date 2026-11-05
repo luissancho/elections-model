@@ -769,9 +769,10 @@ def metodo_section_context(state: dict, section: str) -> dict:
     dict
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
-        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``) and ``rating_check``
-        (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island (``state`` and the
-        ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
+        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``),
+        ``herd_published`` (whether the ``rebano`` study is published, so the herding card links to it) and
+        ``rating_check`` (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island
+        (``state`` and the ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
         ``errors`` (``error_example``, ``None`` without one). The ``promedio`` subpage adds
         ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
         ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``), ``lean_published`` (whether the ``sesgo-cis`` study is published, so
@@ -802,6 +803,7 @@ def metodo_section_context(state: dict, section: str) -> dict:
         context['rubric'] = quality_rubric()
         check = rating_check_context()
         context['rating_check'] = check
+        context['herd_published'] = bundle_part(site().study, 'rebano', 'meta') is not None
 
         if check is not None:
             context['initial'] = {'state': context['state'], 'rating_check': check['initial']}

@@ -26,7 +26,11 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                               'Desde el nombramiento de José Félix Tezanos en 2018, el CIS ha dado al bloque de '
                               'izquierdas más voto del que obtuvo en {k} de {n} elecciones generales y autonómicas '
                               'celebradas. Es imposible que tal cosa pueda ocurrir por azar ni por un fallo general de '
-                              'las encuestas. Y no, en 2023 tampoco «acertó».')}
+                              'las encuestas. Y no, en 2023 tampoco «acertó».'),
+                # The subtitle is a template rendered from the summary (the clauses depend on its figures)
+                'rebano': ('¿Se copian las encuestadoras en la recta final?',
+                           'En las {n_words} generales desde {since_year}, los sondeos se han parecido más entre sí '
+                           'cuanto más cerca estaba la elección{final_clause}.{current}')}
 
 REGISTRATION_KEYS = ('registered_at', 'registered_commit', 'registered', 'registered_changed_at')
 
@@ -567,6 +571,10 @@ from .lean import (  # noqa: E402
     compute_for_publish, export_lean_election, export_lean_elections, export_lean_houses, export_lean_matrix,
     export_lean_meta, export_lean_summary
 )
+from .herd import (  # noqa: E402
+    compute_for_publish as compute_herd_for_publish, export_herd_cycles, export_herd_houses, export_herd_meta,
+    export_herd_summary, export_herd_weeks
+)
 
 STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation': export_study_participation,
                                  'vote': export_study_vote, 'placement': export_study_placement,
@@ -574,13 +582,17 @@ STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation':
                                  'check': export_study_check},
                    'sesgo-cis': {'summary': export_lean_summary, 'elections': export_lean_elections,
                                  'houses': export_lean_houses, 'matrix': export_lean_matrix,
-                                 'election': export_lean_election}}
+                                 'election': export_lean_election},
+                   'rebano': {'summary': export_herd_summary, 'cycles': export_herd_cycles,
+                              'weeks': export_herd_weeks, 'houses': export_herd_houses}}
 
-STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta}
+STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 'rebano': export_herd_meta}
 
-# How each study is computed (``compute(data, writer)``) and whether it has a registered prediction
-STUDY_RUNNERS = {'voto-cera': {'compute': _cera_compute, 'registrable': True},
-                 'sesgo-cis': {'compute': compute_for_publish, 'registrable': False}}
+# How each study is computed (``compute(data, writer)``), whether it has a registered prediction and whether its page
+# is live (recomputed with the data) rather than a fixed piece
+STUDY_RUNNERS = {'voto-cera': {'compute': _cera_compute, 'registrable': True, 'live': False},
+                 'sesgo-cis': {'compute': compute_for_publish, 'registrable': False, 'live': True},
+                 'rebano': {'compute': compute_herd_for_publish, 'registrable': False, 'live': True}}
 
 
 def publish_study(study_id: str, writer: BundleWriter, register: bool = False, force: bool = False,

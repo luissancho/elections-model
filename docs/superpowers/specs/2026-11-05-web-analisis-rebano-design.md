@@ -1,6 +1,6 @@
 # Web, Análisis: «¿Se copian las encuestadoras en la recta final?» (`/analisis/rebano`)
 
-Fecha: 2026-11-05. Estado: **aprobada por Luis el 2026-11-05** (brainstorm corto cerrado el 5 de noviembre; maqueta v1
+Fecha: 2026-11-05. Estado: **CONSTRUIDA el 2026-11-05 en la rama `analisis-rebano` (ver «Cierre»)**; aprobada por Luis el 2026-11-05 (brainstorm corto cerrado el 5 de noviembre; maqueta v1
 aprobada: `docs/superpowers/specs/2026-11-05-web-analisis-rebano-mockup.html`; revisión del constructor en la sección
 final, sus dos preguntas cerradas como decisiones mías y aprobadas con la spec). Tercer estudio de la sección «Análisis», tras el voto CERA (`2026-10-19-web-analisis-voto-cera-design.md`) y el
 sesgo del CIS (`2026-10-24-web-analisis-sesgo-cis-design.md`), cuyo patrón de construcción (opción B: estudio publicado
@@ -155,7 +155,7 @@ inglés; redondeos: cocientes y errores a 2 decimales, p-valores con tres cifras
 | Parte | Contenido (claves obligatorias en el esquema) |
 |---|---|
 | `meta` | `study`, `title`, `subtitle` (con «{k} de {n}» vivo y la frase de 2026 sólo con `current.like_final`), `scope`, `election` (`{date, days_left, as_of}` del ciclo actual o nulo), `params` (D4), `inputs` (por ciclo: parte `cycle`/`series`/`pollsters` leída con su `generated_at` o `skipped`; `current` con `run_id`, `as_of`; `herding` con su `generated_at` o `skipped`), `sources`, `commit`, `dirty`, `versions`, `seconds`. Sin claves de registro. |
-| `summary` | `n_cycles`, `k_narrowed` (ciclos con `last.ratio < before.ratio`), `narrowed` (etiquetas), `mean_before`, `mean_last`, `mean_final` (medias simples de los cocientes de los ciclos pasados), `k_below_one` y `below_one` (ciclos con `final.ratio < 1`, etiquetas), `sign` (`{n, k, p}`: probabilidad binomial de `k` o más ciclos a la baja entre `n` con moneda justa; la «prueba 3» de P2), `current` (`{label, before, last, final, cycle}` con `{k, ratio}` cada uno, `days_left`, `rank_before` = puesto del cociente del resto del ciclo entre los de los ciclos pasados, 1 = el más bajo, empates a dos decimales con el mismo puesto, y `like_final` = `cycle.ratio <= mean_last`, «la dispersión de todo el ciclo ya está donde los pasados sólo llegaron en la recta final»; nulo sin run), `houses_now` (`{n, k, herd: [{pollster, h}], pending: [{pollster, k}]}`: casas medibles en la ventana actual, cuántas por debajo de 1 y cuáles, ordenadas por `h`, y las que tienen entre 1 y `min_polls − 1` sondeos con muestra), `cis` (`{current: {k, ratio}, cycle: {k, ratio}, own: {k, h, p}}` del ciclo actual, nulos sin sondeos), `accuracy` (`{n, herd: {k, error_avg, error_blocks}, rest: {...}}`: las casas de `houses` de ciclos con resultado, partidas por `h < 1`, con la media de `last_error_avg` y la media de `|last_error_blocks|` de cada grupo: el error de su **último sondeo**, el que usan el rating y el Histórico, no la media de todo el año; nulo si alguna mitad está vacía). |
+| `summary` | `n_cycles`, `k_narrowed` (ciclos con `last.ratio < before.ratio`, comparados los cocientes ya redondeados de las filas), `narrowed` (etiquetas), `mean_before`, `mean_last`, `mean_final` (medias simples de los cocientes de los ciclos pasados), `k_below_one` y `below_one` (ciclos con `final.ratio < 1` redondeado a dos decimales, etiquetas: un 1,00 impreso nunca cuenta como «por debajo de 1»), `sign` (`{n, k, p}`: probabilidad binomial de `k` o más ciclos a la baja entre `n` con moneda justa; la «prueba 3» de P2), `current` (`{label, before, last, final, cycle}` con `{k, ratio}` cada uno, `days_left`, `rank_before` = puesto del cociente del resto del ciclo entre los de los ciclos pasados, 1 = el más bajo, empates a dos decimales con el mismo puesto, y `like_final` = `cycle.ratio <= mean_last`, «la dispersión de todo el ciclo ya está donde los pasados sólo llegaron en la recta final»; nulo sin run), `houses_now` (`{n, k, herd: [{pollster, h}], pending: [{pollster, k}]}`: casas medibles en la ventana actual, cuántas por debajo de 1 y cuáles, ordenadas por `h`, y las que tienen entre 1 y `min_polls − 1` sondeos con muestra), `cis` (`{current: {k, ratio}, cycle: {k, ratio}, own: {k, h, p}}` del ciclo actual, nulos sin sondeos), `accuracy` (`{n, herd: {k, error_avg, error_blocks}, rest: {...}}`: las casas de `houses` de ciclos con resultado, partidas por `h < 1`, con la media de `last_error_avg` y la media de `|last_error_blocks|` de cada grupo: el error de su **último sondeo**, el que usan el rating y el Histórico, no la media de todo el año; nulo si alguna mitad está vacía). |
 | `cycles` | Una fila por ciclo, pasados y actual: `event_date`, `label` («2019 abr.» cuando el año se repite, como `_label` del sesgo del CIS), `current` (bool), `names` (las cuatro series), `consensus` (`'curve'` o `'local'`), `polls`, `with_sample`, `houses` (casas con sondeo con muestra), `before` (`{k, ratio}`, días 57-365), `last` (`{k, ratio}`, 0-56), `final` (`{k, ratio}`, 0-20), `change` (`last.ratio − before.ratio`), `cis` (`{last: {k, ratio}, cycle: {k, ratio}, own: {k, h, p}}`). CSV `cycles` (plano: `before_k`, `before_ratio`…). |
 | `weeks` | `buckets` (`[{lo, hi, label}]` en semanas, de la más lejana a la más cercana: `27-52 … 0-1`), `rows` (`[{event_date, label, current, lo, hi, k, ratio}]` por ciclo y cubo, `ratio` nulo sin sondeos) y `mean` (`[{lo, hi, k, ratio}]`: media simple de los cocientes de los ciclos pasados con dato en el cubo, `k` ciclos). CSV `weeks`. |
 | `houses` | Una fila por ciclo y casa con `k >= params.min_polls` sondeos con muestra en la ventana final (CIS incluido, con `cis` verdadero): `event_date`, `label`, `current`, `pollster`, `slug` (perfil), `k`, `h`, `p`, `cis`, `h_cycle` (de `herding`, nulo sin fila), `last_error_avg`, `last_error_blocks` (de `pollsters`: el error del último sondeo de la casa, el de bloques con el signo con que se publica; nulos en el ciclo actual). Orden: ciclo y `h` ascendente, nulos al final. CSV `houses`. |
@@ -224,7 +224,8 @@ y la plantilla lo guarda. Entrega `study_meta`, `summary`, `cycles` (filas, actu
 `matrix` (filas = casas con fila en algún ciclo, en el orden: las de 2026 primero por `h`, luego por número de ciclos
 con `h < 1` descendente, el CIS el último; columnas = ciclos), `accuracy`, `csv_links`, `sources`, `published_at` y la
 isla `initial` con sólo lo que dibujan los gráficos: `weeks` (`{buckets, rows, mean}`) y `matrix` (`{events, houses,
-cells}` para `matrix.js`, `cells` con `h`).
+cells}` para `matrix.js`, `cells` como `[x, y, h, k, p]`: la columna, la fila, la medida, los sondeos y el p-valor, para el
+tooltip).
 
 **Verdictos y textos condicionados** (cada frase fuerte con su condición; el constructor fija las demás):
 
@@ -238,17 +239,24 @@ cells}` para `matrix.js`, `cells` con `h`).
 - P3: «{k} CASAS» con `houses_now.k`; «NINGUNA» con 0; sin run, la tarjeta habla sólo de los ciclos pasados. «Las de
   siempre» (`.sum`) se construye con las casas de la matriz con dos o más ciclos por debajo de 1, nombradas; sin
   ninguna, la frase cambia a «Ninguna casa repite todavía».
-- KPI 2 («1,06 hoy»): subtítulo «a {days_left} días del {election} · en el resto del ciclo, el {rank_before}.º más
-  bajo de los {n + 1}» y, con `like_final`, «· ya como una recta final».
+- KPI 2 («1,06 hoy»): subtítulo «a {días} días del {election} · en el resto del ciclo, el {rank_before}.º más
+  bajo de los {n + 1}» y, con `like_final`, «· ya como una recta final». Los días se cuentan **desde hoy** (Europe/Madrid,
+  `pages.common.days_left(election.date)`), no desde el `as_of` del run: dentro de la veda la previsión se rechaza y la
+  republicación diaria conserva el último run (el del 23-N, `days_left` 6), así que el `days_left` del estudio se queda
+  como dato y la página no lo usa para los textos. Con 0 días o menos (elección celebrada, pendiente de `publish
+  event`): etiqueta «Dispersión de los sondeos de {año}» (sin «hoy») y subtítulo «al cierre de los sondeos · …».
 - KPI 3: «{k} de {n}» de `houses_now`; sin run, «Sin run» no: la KPI pasa a la casa más en rebaño del último ciclo pasado.
 
 **Estructura** (ids de la maqueta; `m.card_start`/`qcard`; botón de descarga por tarjeta con `card_image_button` como
 el sesgo del CIS):
 
 - `#study-head`: pastillas «Análisis», «Página viva · se recalcula con cada actualización hasta la veda del {veda}»
-  (la fecha de la veda = `election.date − 6` días; tras la veda, «se recalcula con cada actualización»; sin run,
-  «Evidencia histórica · {n} generales»), «{n} generales desde {since} · a {days_left} días del {election}»; `h1`
-  y entradilla vivas.
+  (la fecha de la veda = `election.date − 6` días; tras la veda, «se recalcula con cada actualización»; con la
+  elección celebrada, «Página viva · elección celebrada, pendiente del escrutinio», sin fecha; sin run, «Evidencia
+  histórica · {n} generales»), «{n} generales desde {since} · a {días} días del {election}» (sin los días una vez
+  celebrada); `h1` y entradilla vivas. Los días, `after_veda` y la elección celebrada salen de hoy, como en el KPI 2;
+  el título de la tabla de P3 cambia «a {días} días del …» por «al cierre de los sondeos» y la pregunta 3 sigue siendo
+  «¿Quién va en rebaño en {año}?».
 - `nav.toc`: Resumen · 1 · ¿Se acercan? · 2 · ¿Más de lo que permite el azar? · 3 · ¿Quién va en rebaño en {año}? ·
   Datos y método.
 - `m.kpis`: «Ciclos en que los sondeos se acercaron en la recta final» `{k} de {n}` («la dispersión media pasa de
@@ -328,3 +336,115 @@ Un revisor independiente leyó la spec como constructor. Dos preguntas, resuelta
 Menores anotados por el revisor y recogidos: `houses_now.pending` para las casas con sondeos insuficientes (D3, D6);
 `studies` en último lugar del `update` (D5); la curva del backtest cubre el ciclo entero y `herding` ya trae el ciclo en
 curso (D2); el filtro `weight > 0` vale igual en `cycle` (sin agregadores) y en `polls` del run.
+
+## Cierre (2026-11-05)
+
+Construida en la rama `analisis-rebano` (nueve tareas, de `eaba7c9` a este cierre), con una revisión por tarea limpia.
+
+### Lo que existe
+
+- **Tarea 1, registro y fixtures (`902f8bb`)**: `mtpy/lib/bundle.py` (el estudio `rebano` en `STUDIES` y sus esquemas),
+  `mtpy/lib/pages/analisis.py` (la tarjeta en `/analisis`), los fixtures
+  `tests/fixtures/bundle/rebano-{cycles,houses,meta,summary,weeks}.json` y sus tests.
+- **Tarea 2, lectores (`2adffde`)**: `data/rebano/params.json`, `data/README.md`,
+  `mtpy/lib/studies/herd/{__init__,data}.py` (parámetros y lectura de ciclos, run actual y rebaño desde el paquete),
+  `tests/fakes.py`, `tests/test_herd_data.py`.
+- **Tarea 3, la medida (`e33722f`, `217ab5f`)**: `mtpy/lib/studies/herd/stats.py` (dispersión frente a la curva, rebaño
+  por casa; el consenso local deja fuera los sondeos sin peso) y `tests/test_herd_stats.py`.
+- **Tarea 4, el estudio (`7acc576`)**: `mtpy/lib/studies/herd/study.py` (ciclos, semanas, casas y resumen) y
+  `tests/test_herd_study.py`.
+- **Tarea 5, exportadores (`8b76159`)**: `mtpy/lib/publish/herd.py` (`export_herd_*`, con la entradilla viva en `meta`),
+  `mtpy/lib/publish/studies.py` y `__init__.py` (registro del estudio, clave `live`), tests `test_publish_herd.py`,
+  `test_publish_studies.py`, `test_publish_unit.py`.
+- **Tarea 6, acción `studies` (`5d776bf`)**: `mtpy/pipelines/publish/Studies.py`, `mtpy/jobs/Publish.py`,
+  `mtpy/jobs/Update.py` (último paso de `update`), `deploy/README.md`, `docs/web/contrato.md` y sus tests.
+- **Tarea 7, la página (`9cd5728`)**: `mtpy/lib/pages/herd.py` (textos vivos condicionados, tablas, isla de datos),
+  `mtpy/lib/pages/{__init__,analisis}.py`, `web/templates/analisis_rebano.html`, reglas en `web/dist/css/site.css`, el
+  script `web/dist/js/pages/analisis-rebano.js` y `tests/test_pages.py`.
+- **Tarea 8, los gráficos (`46f64d4`, `6170ed7`)**: `web/dist/js/charts/weeks.js` (dispersión por semanas),
+  `web/dist/js/charts/matrix.js` (matriz con la escala en torno a 1), el script de la página, el CSS y
+  `tests/test_js_charts.py`.
+- **Tarea 9, este cierre**: el enlace desde `/metodo/rating` (bandera `herd_published` en
+  `mtpy/lib/pages/metodo.py`, frase en `web/templates/metodo_rating.html`, test en `tests/test_pages.py`) y esta sección.
+
+### Decisiones tomadas durante la ejecución
+
+- **Ventanas en días**: 0-55 (recta final), 56-365 (resto del ciclo) y 0-20 (últimas semanas, `final_days` 21: 21
+  días), en vez de las 0-56/57-365 de D3; los tramos son `lo·7 … hi·7+6`.
+- **`charts/weeks.js` es un módulo propio**, no una extensión de `line.js`.
+- **La entradilla se compone una sola vez** en `export_herd_meta`, y el arranque de la página es `meta.subtitle` tal
+  como se publicó (sin duplicar la redacción en español en la capa web).
+- **El consenso local deja fuera los sondeos con peso 0** (el promedio nunca los usó; un sondeo descartado no debe
+  definir el consenso).
+- **Las filas de `houses` no llevan `slug`**: el enlace al perfil lo construye la página con `slugify`.
+- **`studies` es el último paso de `update`** (tras `parties`).
+- **Los muestrarios de la leyenda y de la tabla usan los colores del gráfico** (misma fórmula rgba, texto blanco sobre
+  las celdas oscuras).
+- **La columna del ciclo en curso va en negrita** y los rótulos de la matriz van rectos.
+- **La imagen de la tarjeta de la pregunta 1 sale en una columna.**
+- `Cycle.polls` conserva las fechas como texto; `stats.residual_rows` deriva `end` y `days`.
+- **Los veredictos comparan los cocientes redondeados** (corrección tras la revisión final, contra la regla del plan de
+  comparar sin redondear): `narrowed` y `below_one` usan los cocientes a dos decimales de las filas, como `rank_before`
+  y como `h < 1` sobre el `h` redondeado, para que un 1,00 impreso nunca salga como «bajó de 1»; las medias siguen
+  usando los cocientes sin redondear. Los pines no cambian (2019 final 0,96, 2023 1,14; los dos ciclos se acercan).
+
+### Menores aparcados para la revisión final
+
+- Tarea 1: valor constante del bloque del CIS en el fixture de ciclos; el CSV sin aserción de cuerpo.
+- Tarea 2: `MissingInput` sin uso en `data.py`; `read_cycles` se fía de `list_events` para elecciones pasadas.
+- Tarea 3: guarda de curva vacía/NaT en `curve_level`; `_is_number` frente a `pd.NA`; `dof` k−1 conservador (documentado
+  en Método); sin test del respaldo con `end_date` nulo.
+- Tarea 4: casa excluida con k >= min_polls sin test; empates de `rank_before` sin test; `cis.own` agrupa todas las casas
+  excluidas (vale con `exclude=[CIS]`); `below_one`/`narrowed` comparan cocientes sin redondear (los textos no deben
+  contradecir un 1,00 mostrado); líneas largas en tests.
+- Tareas 5 y 6: guarda de elección en los exportadores; supervivencia de p sin test; etiquetas de fuente sin fijar;
+  líneas largas de docstring/test; borde de lista `live` vacía.
+- Tarea 7: valores de respaldo `or 4`/`or 10` en la plantilla (moverlos a `herd.flags`); enteros sin `fmt_int`; umbrales
+  de color duplicados en la leyenda; P2 «NO»/P1 «EN 0 DE 0» con resumen vacío (teórico); etiqueta del KPI 3 cuando el
+  menor h >= 1 y `KeyError` en `house[k]`; lógica en la plantilla (ml−mb, pasado/vivo/local); `after_day` en línea en
+  `analisis.py`; tres formas de unir nombres; `flags()` recalculado; importación privada de `_get`; espaciado E303/E305
+  en `test_pages.py`; huecos de cobertura (píldora tras la veda, P2 SÍ, 1 CASA, claves de la isla, límites del color,
+  textos de acierto y resultado).
+- Tarea 8: umbral de etiqueta blanca (alpha >= 0,6) frente al texto oscuro de h2; el límite 1,2 es inclusivo en el
+  gráfico y exclusivo en la tabla; la serie actual sin `connectNulls`; cobertura de la matriz centrada; E303/E302 en
+  `test_js_charts.py`.
+- Ajena a la rama: la advertencia de matplotlib que ya estaba en `dev`.
+
+### Ola de correcciones tras la revisión final
+
+Doce puntos de la revisión de la rama entera, en una ola (todo el conjunto de tests en verde):
+
+1. Los días de la página (pastilla, KPI 2, título de la tabla de P3) se cuentan desde hoy y no desde el `as_of` del run;
+   con la elección celebrada, «Página viva · elección celebrada, pendiente del escrutinio» y «al cierre de los sondeos».
+2. Test de la casa excluida con `k >= min_polls` (el CIS de 2023 real) en el estudio y en la página (último en la
+   matriz, fuera de la tabla de 2026).
+3. `narrowed` y `below_one` comparan los cocientes redondeados (un 1,00 impreso nunca «baja de 1»).
+4. Texto blanco en las celdas `.h2` de la tabla de la matriz, como el gráfico desde la opacidad 0,6.
+5. El tramo neutro de la tabla incluye 1,20 (`h4`), como el gráfico; límites fijados en un test.
+6. La frase de 2026 de la entradilla exige `k > 0` y concuerda en número («la única casa», «las n casas», «k de las n»).
+7. Sin run, el KPI 3 dice «Casa que menos oscila» si la menor `h` del último ciclo es ≥ 1 («Casa más en rebaño» sólo
+   por debajo).
+8. Tooltip de la matriz «{casa} · {ciclo}: rebaño {h} ({k} sondeos, p {p})»: la isla lleva `[x, y, h, k, p]` y
+   `cellText` recibe la celda entera.
+9. Fuera de la plantilla los valores tecleados `or 4`/`or 10`: `n_series` y `local_window` salen de `herd.flags`.
+10. `final_days` 21 (no 20) en este cierre.
+11. Líneas de más de 120 caracteres y líneas en blanco (E302/E303/E305) de los ficheros de la rama.
+12. `/analisis/rebano` entra en el barrido de redacción pública de todas las páginas.
+
+### Lo que NO se ha verificado
+
+- Un recorrido real en navegador por Luis (alturas, scroll de la matriz, tabla oculta, imagen de la tarjeta, negritas y
+  colores descansan en la comprobación con Chrome sin cabeza del implementador).
+- Datos reales publicados: todo se ha probado con los fixtures.
+- S3 y ECS: ningún `job.py` se ha ejecutado de verdad.
+
+### Lista de Luis
+
+1. Publicar el estudio: `python job.py publish '{"what":["study"],"study":"rebano"}'` contra su S3 (o
+   `'{"what":["analysis","studies"],"scopes":["es"]}'`).
+2. Recorrer `/analisis/rebano` en escritorio y móvil (el gráfico por semanas, el scroll de la matriz, los botones de
+   descarga de cada tarjeta, la línea de casas pendientes), `/analisis`, la banda de Inicio y `/metodo/rating`.
+3. Desplegar la imagen para que el `update` diario de ECS republique el estudio (su grupo `publish` ahora termina en
+   `studies`).
+4. Tras el 29-N: `publish event` de `es/2026-11-29` (con resultados) y después `publish '{"what":["studies"]}'`, para
+   que 2026 entre en los ciclos pasados y «Después del 29-N» tenga su fila.

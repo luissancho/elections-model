@@ -6,6 +6,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import compute as compute_lib
+from mtpy.lib import publish
 from tests.publish_fixtures import patched  # noqa: F401
 from tests.test_compute_unit import FakeComputer
 from tests.test_load_unit import FakeCatalogues, FakeLoader
@@ -22,6 +23,15 @@ def marks(monkeypatch):
     seen = []
     monkeypatch.setattr(compute_lib, 'db_now', lambda: 'T0')
     monkeypatch.setattr(compute_lib, 'mark_computed', lambda scope, at: seen.append((scope, at)))
+    return seen
+
+
+@pytest.fixture(autouse=True)
+def studies(monkeypatch):
+    """`publish_study` sin S3 ni bundle: devuelve un resultado publicado (anota los estudios)."""
+    seen = []
+    monkeypatch.setattr(publish, 'publish_study', lambda study, writer, **kw: (seen.append(study) or {
+        'study': study, 'registered_at': None, 'checked': False, 'seconds': {'total': 1.0}}))
     return seen
 
 
@@ -61,13 +71,27 @@ def test_update_runs_the_three_groups_on_es_with_one_alert(fresh_app, tmp_path, 
     assert 'es: series computed (light, polls pending: 2 polls, 2 events) in 0 s' in out
     assert 'publish forecast: 1 ámbito' in out and 'es: published' in out and 'es: analysis published' in out
     assert 'parties: ' in out and 'manifest: 1 scopes, freeze off' in out
+    assert 'studies: ' in out and out.index('parties: ') < out.index('studies: ')
     # un Computer de los pesos de la carga (2 sondeos guardados) y dos del compute light (pesos y rebaño)
     assert [scope for scope, _ in computer.inits] == ['es'] * 3
-    assert set(results) == {'es', 'parties'} and set(results['es']) == {'polls', 'compute', 'forecast', 'analysis'}
+    assert set(results) == {'es', 'parties', 'studies'} and set(results['es']) == {'polls', 'compute', 'forecast', 'analysis'}
     assert results['es']['forecast']['status'] == 'published' and results['parties']['status'] == 'published'
     assert len(alerts) == 1 and alerts[0].startswith('Update job executed in')
     assert patched[0][3]['n_sim'] == 20
     assert (tmp_path / 'site' / 'v1' / 'manifest.json').exists()
+
+
+def test_update_publishes_the_catalogue_even_when_a_study_fails(fresh_app, tmp_path, scopes, events, patched, alerts,
+                                                                monkeypatch):
+    def boom(study, writer, **kw):
+        raise KeyError(study)
+
+    monkeypatch.setattr(publish, 'publish_study', boom)
+    with pytest.raises(RuntimeError, match='studies'):
+        Update().run(fs=FileSystem(str(tmp_path)), loader=FakeLoader(), computer=FakeComputer(),
+                     catalogues=FakeCatalogues(), featured=lambda scope: 7, pending=lambda scope: ['2026-11-29'],
+                     results=lambda scope: ['2023-07-23'], verbose=0, n_sim=20, scopes=['es'])
+    assert (tmp_path / 'site' / 'v1' / 'parties.json').exists()
 
 
 def test_update_skips_the_compute_of_a_scope_with_nothing_pending(fresh_app, tmp_path, scopes, events, patched, alerts, capsys):
