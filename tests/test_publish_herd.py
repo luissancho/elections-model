@@ -38,9 +38,9 @@ def test_subtitle_when_the_final_weeks_are_significant_and_the_middle_is_not():
     s = {'n_elections': 33, 'since_year': '1977', 'comparisons': SIG}
     # the year is the first of far_final (1986), not the first of any comparison (1977)
     assert _subtitle(s) == (
-        'En 19 de las 23 elecciones con sondeos de las mismas encuestadoras lejos y al final, desde 1986, las mismas '
-        'encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación: por azar, 1 entre '
-        '769. Hasta tres semanas antes, no: 9 de 17, como una moneda.')
+        'En 19 de las 23 elecciones con sondeos lejos y cerca de la votación, desde 1986, las mismas encuestadoras se '
+        'parecen más entre sí en las tres últimas semanas que lejos de ella: por azar, 1 entre 769. Hasta tres semanas '
+        'antes, no: 9 de 17, como una moneda.')
 
 
 def test_subtitle_without_significance():
@@ -48,9 +48,9 @@ def test_subtitle_without_significance():
         'far_final': {'n': 4, 'k': 3, 'sign_p': 0.31, 'clear': 0, 'median_change': 0.62, 'since_year': '2019'},
         'far_mid': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25},
         'mid_final': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67}}}
-    assert _subtitle(s) == ('En 3 de las 4 elecciones con sondeos de las mismas encuestadoras lejos y al final, desde '
-                            '2019, las mismas encuestadoras se parecen más entre sí en las tres últimas semanas que '
-                            'lejos de la votación, una proporción que podría deberse al azar.')
+    assert _subtitle(s) == ('En 3 de las 4 elecciones con sondeos lejos y cerca de la votación, desde 2019, las mismas '
+                            'encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de ella, una '
+                            'proporción que podría deberse al azar.')
 
 
 def test_subtitle_other_branches():
@@ -72,9 +72,8 @@ def test_subtitle_without_a_second_sentence_when_the_last_stretch_is_not_signifi
 def test_subtitle_when_most_elections_do_not_get_closer():
     far_final = {'n': 10, 'k': 3, 'sign_p': 0.01, 'clear': 0, 'median_change': 0.3, 'since_year': '2008'}
     assert _subtitle({'since_year': '2008', 'comparisons': {**SIG, 'far_final': far_final}}) == (
-        'En sólo 3 de las 10 elecciones con sondeos de las mismas encuestadoras lejos y al final, desde 2008, las '
-        'mismas encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación; en las '
-        'demás, no.')
+        'En sólo 3 de las 10 elecciones con sondeos lejos y cerca de la votación, desde 2008, las mismas '
+        'encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de ella; en las demás, no.')
 
 
 def test_subtitle_without_elections():

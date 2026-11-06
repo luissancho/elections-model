@@ -5903,6 +5903,7 @@ def test_shy_page_structure_and_wording(api, fresh_app):
     assert 'Frente Amplio' not in page and 'FA' in visible_text(page)   # the column is the run's party name
     assert_public_wording(page, '/analisis/voto-oculto')
     assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
+    assert 'permite el azar' not in page   # Luis, 2026-11-06: «cabría esperar sólo por el azar»
     data = initial(body)
     assert len(data['left_bars']) == 8 and all(isinstance(bar['general'], bool) for bar in data['left_bars'])
     assert len(data['vox_bars']) == 6
@@ -5919,6 +5920,7 @@ def test_shy_page_conditions_follow_the_figures(api, fresh_app):
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'SÍ', 'DE PSOE']
     assert 'Confirmada' in page and 'Refutada' not in page and 'más veces de menos que de más' in page
     assert 'la creencia se sostiene' in page and 'lo que se espera de unos sondeos sin sesgo' not in page and 'del 0,04 %' in page
+    assert 'permite el azar' not in page
 
 
 def test_shy_page_after_card_shows_only_the_values_present(api, fresh_app):

@@ -164,10 +164,10 @@ sin redondear en las cuentas; p con tres cifras significativas):
 | `current` | La elección en curso (nulo sin ella): `scope`, `event_date`, `label`, `days_left`, `as_of`, `windows` (fechas de inicio de `mid` y `final`), y `far_mid` y `mid_final` con la forma de una fila de `elections` (nulos mientras el tramo B no tenga ninguna pareja). |
 
 **Subtítulo** (compuesto al publicar, como hoy, con cláusulas condicionadas a las cifras): «En {k} de las {n}
-elecciones con sondeos de las mismas encuestadoras lejos y al final, desde {since_year de far_final}, las mismas
-encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación{: por azar, 1 entre X}.
+elecciones con sondeos lejos y cerca de la votación, desde {since_year de far_final}, las mismas encuestadoras se
+parecen más entre sí en las tres últimas semanas que lejos de ella{: por azar, 1 entre X}.
 Hasta tres semanas antes, no: {k2} de {n2}, como una moneda.» (revisión final: antes «elecciones con datos desde
-{since_year}» y «por azar pasaría una vez de cada X»). La segunda frase sólo si `far_mid` no es significativa y `mid_final` sí; las demás combinaciones las
+{since_year}» y «por azar pasaría una vez de cada X»; Luis, 2026-11-06: sin repetir «las mismas encuestadoras»). La segunda frase sólo si `far_mid` no es significativa y `mid_final` sí; las demás combinaciones las
 redacta el constructor con el mismo tono (D5, textos condicionados).
 
 **Paquete**: se reescribe `mtpy/lib/studies/herd/` (`data.py` con la lectura multiámbito, `stats.py` con

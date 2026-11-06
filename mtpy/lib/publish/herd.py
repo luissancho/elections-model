@@ -109,7 +109,7 @@ def _subtitle(summary: dict) -> str:
     comparisons = summary['comparisons']
     final, far_mid, mid_final = comparisons['far_final'], comparisons['far_mid'], comparisons['mid_final']
     n, k, since = final['n'], final['k'], final.get('since_year') or summary.get('since_year')
-    elections = f'elecciones con sondeos de las mismas encuestadoras lejos y al final, desde {since}'
+    elections = f'elecciones con sondeos lejos y cerca de la votación, desde {since}'
 
     if n == 0:
         return ('Todavía no hay elecciones con sondeos suficientes para comparar las mismas encuestadoras lejos y '
@@ -117,10 +117,10 @@ def _subtitle(summary: dict) -> str:
 
     if k * 2 <= n:
         return (f'En sólo {k} de las {n} {elections}, las mismas encuestadoras se parecen más entre sí en las tres '
-                f'últimas semanas que lejos de la votación; en las demás, no.')
+                f'últimas semanas que lejos de ella; en las demás, no.')
 
     head = (f'En {k} de las {n} {elections}, las mismas encuestadoras se parecen más entre sí en las tres últimas '
-            f'semanas que lejos de la votación')
+            f'semanas que lejos de ella')
 
     if not _significant(final):
         return head + ', una proporción que podría deberse al azar.'
