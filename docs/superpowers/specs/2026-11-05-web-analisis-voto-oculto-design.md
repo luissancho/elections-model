@@ -449,7 +449,7 @@ nombres entre paréntesis son alternativas por si el principal no está en los r
 
 ### Lo que existe, tarea a tarea
 
-Ocho commits sobre `dev` (`8ff9874..e945f86`, partiendo de `23b4fab`), construidos con subagentes y revisión por tarea.
+Nueve commits en la rama `analisis-voto-oculto` (`23b4fab..e945f86`), más el de este cierre, construidos con subagentes y revisión por tarea.
 
 - **Tarea 1** (`8ff9874`, «Estudios: registro, esquemas y fixtures del estudio voto-oculto»): `mtpy/lib/bundle.py`,
   `mtpy/lib/publish/studies.py`, los cuatro fixtures `tests/fixtures/bundle/voto-oculto-*.json`, `tests/fakes.py`,
@@ -505,6 +505,7 @@ Ocho commits sobre `dev` (`8ff9874..e945f86`, partiendo de `23b4fab`), construid
 - Bandera `generals_fail`; la caja 2 («no se distingue de cero») sólo sale con `not p2_yes`.
 - Los partidos de P3 salen del veredicto, no se recalculan de las filas.
 - Encabezado neutro de la nota de Podemos.
+- Tarjeta «Después del 29-N» una vez publicada la elección: sin run y sin `meta.election`, muestra la fila de la última elección general sólo si su año coincide con `summary.last_year`, con sus tres filas (sondeos finales, resultado, error) leídas de los dicts `polls`/`results` de la fila de `elections`; si no, una frase neutra.
 - La pastilla no usa `meta.election` (sin «añade la fila de –»).
 - Aceptado sin tocar (menores): `_clean` copiado de `herd.py`, dos líneas de más de 120 columnas, `xMax` fijo en 8 en la
   nube, `signColor(null)` en azul.
@@ -520,8 +521,8 @@ Ocho commits sobre `dev` (`8ff9874..e945f86`, partiendo de `23b4fab`), construid
 
 - `S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-oculto"}'` en local primero; después contra su S3
   (o esperar al `update` diario, cuyo paso `studies` lo publica en cuanto la imagen esté desplegada).
-- Recorrer `/analisis/voto-oculto` (escritorio y móvil: las 92 barras, el desplazamiento de la tabla de P3, los botones
+- Recorrer `/analisis/voto-oculto` (escritorio y móvil: las barras, el desplazamiento de la tabla de P3, los botones
   de descarga), `/analisis`, Inicio y `/metodo/promedio`.
 - Desplegar la imagen.
-- Tras el 29-N: `publish event` de `es/2026-11-29` y luego `publish '{"what":["studies"]}'` (la página añade sola la
+- Tras el 29-N: `python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2026-11-29"}'` y luego `python job.py publish '{"what":["studies"]}'` (la página añade sola la
   fila de 2026).
