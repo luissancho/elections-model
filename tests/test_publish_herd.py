@@ -29,49 +29,52 @@ def study(tmp_path_factory):
     return compute_herd(bundle.BundleReader(fs), FileSystem(os.path.join(ROOT, 'data')))
 
 
-SIG = {'far_final': {'n': 23, 'k': 19, 'sign_p': 0.0013, 'clear': 3, 'median_change': -0.15},
+SIG = {'far_final': {'n': 23, 'k': 19, 'sign_p': 0.0013, 'clear': 3, 'median_change': -0.15, 'since_year': '1986'},
        'far_mid': {'n': 17, 'k': 9, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.1},
        'mid_final': {'n': 29, 'k': 23, 'sign_p': 0.0012, 'clear': 2, 'median_change': -0.15}}
 
 
 def test_subtitle_when_the_final_weeks_are_significant_and_the_middle_is_not():
     s = {'n_elections': 33, 'since_year': '1977', 'comparisons': SIG}
-    assert _subtitle(s) == ('En 19 de las 23 elecciones con datos desde 1977, las mismas encuestadoras se parecen más '
-                            'entre sí en las tres últimas semanas que lejos de la votación: por azar pasaría una vez '
-                            'de cada 769. Hasta tres semanas antes, no: 9 de 17, como una moneda.')
+    # the year is the first of far_final (1986), not the first of any comparison (1977)
+    assert _subtitle(s) == (
+        'En 19 de las 23 elecciones con sondeos de las mismas encuestadoras lejos y al final, desde 1986, las mismas '
+        'encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación: por azar, 1 entre '
+        '769. Hasta tres semanas antes, no: 9 de 17, como una moneda.')
 
 
 def test_subtitle_without_significance():
     s = {'n_elections': 2, 'since_year': '2019', 'comparisons': {
-        'far_final': {'n': 4, 'k': 3, 'sign_p': 0.31, 'clear': 0, 'median_change': 0.62},
+        'far_final': {'n': 4, 'k': 3, 'sign_p': 0.31, 'clear': 0, 'median_change': 0.62, 'since_year': '2019'},
         'far_mid': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25},
         'mid_final': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67}}}
-    assert _subtitle(s) == ('En 3 de las 4 elecciones con datos desde 2019, las mismas encuestadoras se parecen más '
-                            'entre sí en las tres últimas semanas que lejos de la votación, una proporción que podría '
-                            'deberse al azar.')
+    assert _subtitle(s) == ('En 3 de las 4 elecciones con sondeos de las mismas encuestadoras lejos y al final, desde '
+                            '2019, las mismas encuestadoras se parecen más entre sí en las tres últimas semanas que '
+                            'lejos de la votación, una proporción que podría deberse al azar.')
 
 
 def test_subtitle_other_branches():
     far_mid = {'n': 17, 'k': 15, 'sign_p': 0.001, 'clear': 2, 'median_change': -0.2}
     final = dict(SIG['far_final'], sign_p=0.0002)
     text = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'far_mid': far_mid, 'far_final': final}})
-    assert text.endswith('por azar pasaría una vez de cada 5.000. Y también hasta tres semanas antes: 15 de 17.')
+    assert text.endswith('por azar, menos de 1 entre 1.000. Y también hasta tres semanas antes: 15 de 17.')
     no_mid = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'far_mid': dict(far_mid, n=0, k=0)}})
-    assert no_mid.endswith('una vez de cada 769.')
+    assert no_mid.endswith('por azar, 1 entre 769.')
     assert 'copi' not in text.lower()
 
 
 def test_subtitle_without_a_second_sentence_when_the_last_stretch_is_not_significant():
     quiet = dict(SIG['mid_final'], k=15, sign_p=0.6)
     text = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'mid_final': quiet}})
-    assert text.endswith('por azar pasaría una vez de cada 769.')
+    assert text.endswith('por azar, 1 entre 769.')
 
 
 def test_subtitle_when_most_elections_do_not_get_closer():
-    far_final = {'n': 10, 'k': 3, 'sign_p': 0.01, 'clear': 0, 'median_change': 0.3}
+    far_final = {'n': 10, 'k': 3, 'sign_p': 0.01, 'clear': 0, 'median_change': 0.3, 'since_year': '2008'}
     assert _subtitle({'since_year': '2008', 'comparisons': {**SIG, 'far_final': far_final}}) == (
-        'En sólo 3 de las 10 elecciones con datos desde 2008, las mismas encuestadoras se parecen más entre sí en las '
-        'tres últimas semanas que lejos de la votación; en las demás, no.')
+        'En sólo 3 de las 10 elecciones con sondeos de las mismas encuestadoras lejos y al final, desde 2008, las '
+        'mismas encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación; en las '
+        'demás, no.')
 
 
 def test_subtitle_without_elections():
@@ -99,7 +102,7 @@ def test_export_herd_parts_validate(study):
     assert meta['title'] == '¿Se comportan las encuestadoras como un rebaño?'
     assert meta['election'] == study.election and meta['scope'] == 'es'
     assert 'copi' not in meta['subtitle'].lower()
-    assert [s['url'] for s in meta['sources']] == ['/elecciones', '/metodo/promedio', '/analisis']
+    assert [s['url'] for s in meta['sources']] == ['/elecciones', '/analisis']
 
 
 def test_export_herd_current_is_none_without_an_election_in_progress(study):

@@ -35,7 +35,7 @@
 {% set mid_weeks = (((periods.get('mid') or [21, 56])[1]) / 7)|round|int %}
 {% set n_elections = summary.get('n_elections') %}
 {% set clear_text %}{% if not ff.get('clear') %}en ninguna la bajada es clara por sí sola{% else %}sólo en {{ ff.get('clear')|int }} la bajada es clara por sí sola{% endif %}{% endset %}
-    <div id="content" class="stack">
+    <div id="content" class="stack herd-page">
       <header id="study-head">
         <div class="tags">
           <span class="pill brand">Análisis</span>
@@ -53,8 +53,8 @@
       </header>
       <nav class="section-nav toc" aria-label="Secciones">
         <a href="#resumen">Resumen</a>
-        <a href="#p1" class="{{ v1.tone }}">1 · ¿Se acercan al final?</a>
-        <a href="#p2" class="{{ v2.tone }}">2 · ¿Más cerca de la elección?</a>
+        <a href="#p1" class="{{ v1.tone }}">1 · ¿Se comportan las encuestadoras como un rebaño?</a>
+        <a href="#p2" class="{{ v2.tone }}">2 · ¿Es mayor según se acerca la elección?</a>
         {% if has_run %}<a href="#directo">{{ current.get('label') or 'Elección en curso' }}, en directo</a>{% endif %}
         <a href="#como">Cómo lo medimos</a>
         <a href="#datos">Datos y método</a>
@@ -63,10 +63,10 @@
       {{ m.card_start('resumen', 'Dos preguntas, dos respuestas', 'Cada campaña se repite la sospecha: las encuestadoras acaban dando las mismas cifras. Lo comprobamos con las mismas parejas de casas, lejos de la votación y al final, en cada elección con datos.', classes='shot') }}
         {{ shot('resumen') }}
         <div class="three two">
-          {% call answer(v1, 1, '¿Se acercan al final?') -%}
+          {% call answer(v1, 1, '¿Se comportan las encuestadoras como un rebaño?') -%}
             {% if ff.get('n') %}En {{ count(ff) }} elecciones, las mismas casas difieren menos al final que lejos de la votación{% if chance.far_final %}; {{ odds(chance.far_final) }}{% endif %}.{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
           {%- endcall %}
-          {% call answer(v2, 2, '¿Más cerca de la elección?') -%}
+          {% call answer(v2, 2, '¿Es mayor según se acerca la elección?') -%}
             {% if mf.get('n') %}En las tres últimas semanas, {{ count(mf) }}{% if chance.mid_final %}; {{ odds(chance.mid_final) }}{% endif %}.{% if fm.get('n') %} Hasta tres semanas antes, {{ count(fm) }}{% if chance.far_mid %}: {{ chance.far_mid }}{% endif %}.{% endif %}{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
           {%- endcall %}
         </div>
@@ -76,8 +76,8 @@
         {{ shot('pregunta-1') }}
         <div class="qh"><div class="qn">1</div><h2 class="qt">¿Se comportan las encuestadoras como un rebaño?</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
         <p class="lead">
-          Tomamos dos sondeos de casas distintas que acaban su campo con {{ params.get('pair_days') or 7 }} días o menos de diferencia y miramos cuánto se separan, frente a lo que se separarían sólo por el azar de sus muestras.
-          Después repetimos la medida con las mismas parejas de casas en las tres últimas semanas. Cada barra es una elección: a la izquierda, las que se acercan; a la derecha, las que se separan.
+          Tomamos dos sondeos de casas distintas que acaban su campo con {{ params.get('pair_days') or 7 }} días o menos de diferencia y miramos cuánto se separan, frente a lo que se separarían sólo por el azar de sus muestras: primero, lejos de la votación (a más de {{ mid_weeks }} semanas); después, con las mismas parejas de casas, en las tres últimas semanas.
+          Cada barra es una elección y mide cuánto cambia esa separación: a la izquierda, las que se acercan; a la derecha, las que se separan.
         </p>
         {% if bars %}
         <div class="herd-bars" role="list" aria-label="Cambio de la separación entre las mismas casas, lejos de la votación y al final, por elección">
@@ -92,7 +92,7 @@
         {% if ff.get('n') %}
         <div class="sum">
           <b>En {{ count(ff) }} elecciones las mismas casas se acercan al final</b>{% set med = ff.get('median_change') %}{% if med is number and med != 0 %}, con {{ 'una bajada mediana' if med < 0 else 'una subida mediana' }} del {{ (med|abs * 100)|round|int }} %{% endif %}.
-          En cada una por separado podría ser azar ({{ clear_text }}){% if chance.far_final %}. Que pase {{ count(ff) }} veces por azar: {{ chance.far_final }}{% endif %}.
+          En cada una por separado podría ser azar ({{ clear_text }}){% if chance.far_final == 'como una moneda' %}. Que ocurra en {{ count(ff) }}: como una moneda{% elif chance.far_final %}. Que ocurra en {{ count(ff) }} sólo por azar: {{ chance.far_final }}{% endif %}.
         </div>
         {% endif %}
       </section>
@@ -134,39 +134,39 @@
         <p class="tnote">Antes y después son la separación entre las parejas de casas, en veces la que darían sus muestras: 1 es lo que cabe esperar sólo por el azar.</p>
         {% endif %}
         {% if live %}<div class="sum"><b>{{ live }}</b></div>{% endif %}
-        {% if year and not held %}<p class="tnote">Tras el escrutinio, {{ year }} entra en la cuenta como la elección número {{ ((ff.get('n') or 0) + 1)|int }}.</p>{% endif %}
+        {% if year and not held %}<p class="tnote">Tras el escrutinio, {{ year }} entra en los recuentos.</p>{% endif %}
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('como', 'Cómo lo medimos', 'Dos sondeos, una diferencia y lo que cabría esperar de sus muestras.', classes='shot') }}
         {{ shot('como') }}
         <p>
           Elegimos dos sondeos de casas distintas que acaban su campo con {{ params.get('pair_days') or 7 }} días o menos de diferencia y miramos cuánto se separan sus cifras en los {{ params.get('n_series') or 4 }} partidos principales.
-          Lo comparamos con lo que se separarían sólo por el azar de sus muestras: 1 significa que difieren lo que difieren sus muestras; menos de 1, que se parecen más de lo que el azar permite.
+          Lo comparamos con lo que se separarían sólo por el azar de sus muestras: 1 significa que difieren lo que cabría esperar de sus muestras; menos de 1, que se parecen más de lo que cabría esperar sólo por el azar.
         </p>
         <p>
-          Para que el método de cada casa no cuente, usamos las mismas parejas en los dos tramos que se comparan, y contamos por elección, sin mezclar sondeos de elecciones distintas: así una elección con muchos sondeos no pesa más que otra con pocos.
+          Para que el método de cada casa no cuente, usamos las mismas parejas en los dos tramos que se comparan, cada una con el mismo peso en los dos, y contamos por elección, sin mezclar sondeos de elecciones distintas: así una elección con muchos sondeos no pesa más que otra con pocos.
         </p>
         <p>
-          Hay límites. Las generales pesan más porque tienen más sondeos tempranos; muchas autonómicas sólo tienen una pareja de casas comparable. Quedan fuera el CIS, los agregadores y los paneles abiertos. Medimos cuánto se acercan, no por qué.
+          Hay límites. Las generales entran más a menudo, porque tienen más sondeos tempranos; muchas autonómicas sólo tienen una pareja de casas, a veces una sola pareja de sondeos, comparable. Quedan fuera el CIS, los agregadores y los paneles abiertos. Medimos cuánto se acercan, no por qué.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y promedios publicados en Demoscopio y se puede descargar.', classes='shot') }}
+      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos publicados en Demoscopio y se puede descargar.', classes='shot') }}
         {{ shot('datos') }}
         <div class="grid2">
           <div>
             <p class="ctitle">Datos</p>
             <ul class="src-list">
               <li>Los sondeos de cada elección con resultado, tal como se publicaron, con su muestra y sus fechas de campo: los mismos que enseña cada elección en el <a href="/elecciones">Histórico</a>.</li>
-              <li>La curva del promedio de cada elección, la que dibujan sus páginas{% if has_run %}, y la de la elección en curso de la última actualización{% endif %}.</li>
               <li>Sólo sondeos con muestra publicada{% if params.get('exclude') %}; sin {{ params.exclude|join(', ') }}{% endif %}, sin agregadores ni paneles abiertos.</li>
             </ul>
           </div>
           <div>
             <p class="ctitle">Método</p>
             <div class="tech">
-              Parejas de sondeos de casas distintas que acaban su campo con {{ params.get('pair_days') or 7 }} días o menos de diferencia, en los {{ params.get('n_series') or 4 }} partidos principales y con al menos {{ params.get('min_rows') or 3 }} sondeos por tramo.
+              Parejas de sondeos de casas distintas que acaban su campo con {{ params.get('pair_days') or 7 }} días o menos de diferencia, en los {{ params.get('n_series') or 4 }} partidos principales, con al menos {{ params.get('min_rows') or 3 }} comparaciones (pareja de sondeos y partido) por pareja de casas en cada tramo; en algunas elecciones eso es una sola pareja de sondeos por tramo.
+              Cada pareja de casas pesa lo mismo en los dos tramos que se comparan, aunque tenga más comparaciones en uno que en otro.
               Los tramos cuentan desde el fin de campo hasta la elección: {{ (periods.get('final') or [0, 21])[0] }} a {{ (periods.get('final') or [0, 21])[1] }} días, {{ (periods.get('mid') or [21, 56])[0] }} a {{ (periods.get('mid') or [21, 56])[1] }} y {{ (periods.get('far') or [56, 365])[0] }} a {{ (periods.get('far') or [56, 365])[1] }}.
-              La <b>permutación</b> baraja {{ (params.get('permutations') or 2000)|int }} veces a qué tramo pertenece cada sondeo y dice cuántas veces saldría una bajada tan grande sólo por azar: es lo que llamamos clara por sí sola.
+              La <b>permutación</b> baraja {{ (params.get('permutations') or 2000)|int }} veces el tramo de cada comparación, dentro de cada pareja de casas, y dice cuántas veces saldría una bajada tan grande sólo por azar: es lo que llamamos clara por sí sola.
               La <b>prueba del signo</b> cuenta en cuántas elecciones baja la separación y qué probabilidad tendría ese recuento con una moneda.
             </div>
           </div>

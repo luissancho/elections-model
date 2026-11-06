@@ -8,7 +8,7 @@
   "data": {
     "study": "rebano",
     "title": "¿Se comportan las encuestadoras como un rebaño?",
-    "subtitle": "En 19 de las 23 elecciones con datos desde 1977, las mismas encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación: por azar pasaría una vez de cada 769. Hasta tres semanas antes, no: 9 de 17, como una moneda.",
+    "subtitle": "En 19 de las 23 elecciones con sondeos de las mismas encuestadoras lejos y al final, desde 1986, las mismas encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación: por azar, 1 entre 769. Hasta tres semanas antes, no: 9 de 17, como una moneda.",
     "scope": "es",
     "election": {
       "date": "2026-11-29",
@@ -63,10 +63,6 @@
       {
         "label": "Histórico de elecciones",
         "url": "/elecciones"
-      },
-      {
-        "label": "Método del promedio",
-        "url": "/metodo/promedio"
       },
       {
         "label": "Análisis",

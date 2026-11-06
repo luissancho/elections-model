@@ -11,7 +11,7 @@ from typing import Optional
 
 from .cera import MONTHS_LONG, _get
 from .common import days_left as days_to
-from .filters import DASH, _madrid_tz, fmt_int
+from .filters import DASH, _madrid_tz, fmt_int, fmt_num
 
 HERD = 'rebano'
 # Significance level of the sign test
@@ -87,6 +87,28 @@ def percent(change, signed: bool = True) -> str:
         return '{}{} %'.format(MINUS, fmt_int(-value))
 
     return '{}{} %'.format('+' if signed and value else '', fmt_int(value))
+
+
+def percent_fine(change) -> str:
+    """
+    ``percent`` with one decimal when the change rounds to 0 % without being 0: «−0,3 %», «+0,4 %».
+
+    Parameters
+    ----------
+    change : float or None
+        The change as a fraction.
+
+    Returns
+    -------
+    str
+        As ``percent``, except for a non-zero change below half a point, written with its sign and one decimal.
+    """
+    if not _is_num(change) or round(change * 100) or not round(change * 100, 1):
+        return percent(change)
+
+    value = round(change * 100, 1)
+
+    return '{}{} %'.format(MINUS if value < 0 else '+', fmt_num(abs(value), 1))
 
 
 def chance_text(p: Optional[float]) -> Optional[str]:
@@ -208,13 +230,13 @@ def flags(meta: Optional[dict], current: Optional[dict]) -> dict:
 
 
 def _odds(p: Optional[float]) -> Optional[str]:
-    """«por azar, 1 vez de cada 769» (or the coin) for the support line of a KPI, ``None`` without ``p``."""
+    """«por azar, 1 entre 769» (or the coin) for the support line of a KPI, ``None`` without ``p``."""
     text = chance_text(p)
 
     if text is None or text == 'como una moneda':
         return text
 
-    return 'por azar, ' + text.replace(' entre ', ' vez de cada ')
+    return 'por azar, ' + text
 
 
 def kpis(summary: Optional[dict], current: Optional[dict], flag: dict) -> list:
@@ -258,14 +280,14 @@ def kpis(summary: Optional[dict], current: Optional[dict], flag: dict) -> list:
         rows.append(dict(row, label='Generales y autonómicas',
                          value='{} y {}'.format(fmt_int(_get(kinds, 'generales', 'n') or 0),
                                                 fmt_int(_get(kinds, 'autonómicas', 'n') or 0)),
-                         support='elecciones con datos de cada clase'))
+                         support='elecciones de cada clase con sondeos lejos y al final'))
         return rows
 
     own = _get(current, 'mid_final')
     versus = 'entre 3 y 8 semanas antes'
     comparison = own or _get(current, 'far_mid')
-    support = ['las mismas parejas de casas, frente a ' + versus if own else
-               'las mismas parejas de casas, frente a más de 8 semanas antes']
+    support = ['de separación entre las mismas parejas de casas, frente a ' + versus if own else
+               'de separación entre las mismas parejas de casas, frente a más de 8 semanas antes']
 
     if _is_num(flag['days_left']) and flag['days_left'] > 0:
         support.append('a {} {}'.format(fmt_int(flag['days_left']), 'día' if flag['days_left'] == 1 else 'días'))
@@ -292,14 +314,16 @@ def bars(rows: list) -> list:
     Returns
     -------
     list of dict
-        ``{'label', 'text', 'side', 'width'}``: ``text`` the signed percentage, ``side`` ``'down'`` or ``'up'`` and
-        ``width`` the length of the bar in % of half the axis, clipped at 100.
+        ``{'label', 'text', 'side', 'width'}``: ``text`` the signed percentage (``percent_fine``), ``side``
+        ``'down'`` when the election ``falls`` (the same count as the squares and the KPIs, even when the published
+        change rounds to zero), ``'up'`` otherwise, and ``width`` the length of the bar in % of half the axis, clipped
+        at 100.
     """
     chosen = sorted((row for row in rows or [] if row.get('comparison') == 'far_final'
                      and _is_num(row.get('change'))), key=lambda row: row['change'])
 
-    return [{'label': row.get('label'), 'text': percent(row['change']),
-             'side': 'down' if row['change'] < 0 else 'up',
+    return [{'label': row.get('label'), 'text': percent_fine(row['change']),
+             'side': 'down' if row.get('falls', row['change'] < 0) else 'up',
              'width': round(min(BAR_CLIP, abs(row['change'])) * 100, 1)} for row in chosen]
 
 

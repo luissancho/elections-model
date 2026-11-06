@@ -13,12 +13,13 @@ from ...core.io import FileSystem
 
 HERD_SOURCES = [
     {'label': 'Histórico de elecciones', 'url': '/elecciones'},
-    {'label': 'Método del promedio', 'url': '/metodo/promedio'},
     {'label': 'Análisis', 'url': '/analisis'},
 ]
 
 # A comparison is «significant» when its sign test is below this level and most elections go the same way
 ALPHA = 0.05
+# Below this probability the chance is written «menos de 1 entre 1.000», as on the page
+RARE = 0.001
 
 ELECTION_COLUMNS = ['scope', 'event_date', 'label', 'kind', 'comparison', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
                     'change', 'falls', 'p']
@@ -96,28 +97,35 @@ def _times(value: float) -> str:
     return f'{int(round(value)):,}'.replace(',', '.')
 
 
+def _chance(p: float) -> str:
+    """A sign-test probability as the page writes it: «1 entre 769», «menos de 1 entre 1.000»."""
+    return 'menos de 1 entre 1.000' if p < RARE else f'1 entre {_times(1 / p)}'
+
+
 def _subtitle(summary: dict) -> str:
     """Write the subtitle from the figures of the summary: what holds in the last three weeks, then, if there is
-    data, what holds before them."""
+    data, what holds before them. The year is the first of the elections of ``far_final`` (falling back on the
+    ``since_year`` of the summary)."""
     comparisons = summary['comparisons']
     final, far_mid, mid_final = comparisons['far_final'], comparisons['far_mid'], comparisons['mid_final']
-    n, k, since = final['n'], final['k'], summary['since_year']
+    n, k, since = final['n'], final['k'], final.get('since_year') or summary.get('since_year')
+    elections = f'elecciones con sondeos de las mismas encuestadoras lejos y al final, desde {since}'
 
     if n == 0:
         return ('Todavía no hay elecciones con sondeos suficientes para comparar las mismas encuestadoras lejos y '
                 'cerca de la votación.')
 
     if k * 2 <= n:
-        return (f'En sólo {k} de las {n} elecciones con datos desde {since}, las mismas encuestadoras se parecen más '
-                f'entre sí en las tres últimas semanas que lejos de la votación; en las demás, no.')
+        return (f'En sólo {k} de las {n} {elections}, las mismas encuestadoras se parecen más entre sí en las tres '
+                f'últimas semanas que lejos de la votación; en las demás, no.')
 
-    head = (f'En {k} de las {n} elecciones con datos desde {since}, las mismas encuestadoras se parecen más entre sí '
-            f'en las tres últimas semanas que lejos de la votación')
+    head = (f'En {k} de las {n} {elections}, las mismas encuestadoras se parecen más entre sí en las tres últimas '
+            f'semanas que lejos de la votación')
 
     if not _significant(final):
         return head + ', una proporción que podría deberse al azar.'
 
-    text = f"{head}: por azar pasaría una vez de cada {_times(1 / final['sign_p'])}."
+    text = f"{head}: por azar, {_chance(final['sign_p'])}."
 
     if far_mid['n'] > 0:
         count = f"{far_mid['k']} de {far_mid['n']}"

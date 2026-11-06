@@ -15,21 +15,24 @@
         "k": 19,
         "sign_p": 0.0013,
         "clear": 3,
-        "median_change": -0.15
+        "median_change": -0.15,
+        "since_year": "1986"
       },
       "far_mid": {
         "n": 17,
         "k": 9,
         "sign_p": 0.5,
         "clear": 0,
-        "median_change": -0.1
+        "median_change": -0.1,
+        "since_year": "1986"
       },
       "mid_final": {
         "n": 29,
         "k": 23,
         "sign_p": 0.0012,
         "clear": 2,
-        "median_change": -0.15
+        "median_change": -0.15,
+        "since_year": "1977"
       }
     },
     "kinds": {

@@ -5696,6 +5696,17 @@ def test_herd_bars_sorted_and_clipped():
     assert pages.herd.bars([]) == [] and pages.herd.bars(None) == []
 
 
+def test_herd_bars_side_follows_falls_and_small_changes_keep_a_decimal():
+    rows = [{'comparison': 'far_final', 'label': label, 'change': change, 'falls': falls}
+            for label, change, falls in (('A', -0.0, True), ('B', -0.003, True), ('C', 0.004, False),
+                                         ('D', 0.12, False), ('E', -0.2, True))]
+    b = {bar['label']: bar for bar in pages.herd.bars(rows)}
+    # a change that rounds to −0 % still falls: its bar goes to the left, with its decimal
+    assert (b['A']['side'], b['B']['side'], b['C']['side']) == ('down', 'down', 'up')
+    assert (b['B']['text'], b['C']['text'], b['D']['text'], b['E']['text']) == ('−0,3 %', '+0,4 %', '+12 %', '−20 %')
+    assert b['B']['width'] == 0.3
+
+
 def test_herd_squares():
     s = pages.herd.squares({'n': 4, 'k': 3, 'sign_p': 0.3125})
     assert s == {'k': 3, 'n': 4, 'cells': [True, True, True, False], 'chance': 'como una moneda'}
@@ -5735,10 +5746,11 @@ def test_herd_kpis_with_and_without_a_run(monkeypatch):
     flag = pages.herd.flags(meta, current)
     first, second, third = pages.herd.kpis(summary, current, flag)
     assert (first['value'], second['value']) == ('19 de 23', '23 de 29')
-    assert first['support'] == 'por azar, 1 vez de cada 769'
+    assert first['support'] == 'por azar, 1 entre 769'
     assert second['support'] == 'hasta tres semanas antes, 9 de 17: como una moneda'
     assert third['label'] == 'Generales 2026, en directo' and third['value'] == '−5 %'
     assert 'el tramo final empieza el 9 de noviembre' in third['support'] and 'a 23 días' in third['support']
+    assert third['support'].startswith('de separación entre las mismas parejas de casas, frente a más de 8 semanas')
     herd_today(monkeypatch, date(2026, 11, 12))
     third = pages.herd.kpis(summary, dict(current, mid_final={'change': -0.12}), pages.herd.flags(meta, current))[2]
     assert third['value'] == '−12 %' and 'empieza' not in third['support']
@@ -5800,6 +5812,19 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     # «copi» as a word start: the name of the site, Demoscopio, contains it
     assert not re.search(r'\bcopi', low)
     assert all(word not in low for word in ('vecino', 'empresa', 'indecis', 'rebaño por casa', 'none'))
+    # the two questions of Luis everywhere (summary, index, cards), one form of the odds and the texts of the method
+    # (question 1 is also the title of the page: <title> and <h1>)
+    assert text.count('¿Se comportan las encuestadoras como un rebaño?') == 5
+    assert text.count('¿Es mayor según se acerca la elección?') == 3
+    assert 'Que ocurra en 19 de 23 sólo por azar: 1 entre 769.' in text and 'vez de cada' not in text
+    assert 'por azar, 1 entre 769' in text and 'Tras el escrutinio, 2026 entra en los recuentos.' in text
+    assert 'primero, lejos de la votación (a más de 8 semanas)' in text and 'mide cuánto cambia esa separación' in text
+    assert 'más de lo que cabría esperar sólo por el azar' in text and 'el azar permite' not in text
+    assert 'difieren lo que cabría esperar de sus muestras' in text and 'promedio' not in low
+    assert 'al menos 3 comparaciones (pareja de sondeos y partido) por pareja de casas en cada tramo' in text
+    assert 'baraja 2.000 veces el tramo de cada comparación, dentro de cada pareja de casas' in text
+    assert 'Las generales entran más a menudo' in text and 'a veces una sola pareja de sondeos' in text
+    assert 'class="stack herd-page"' in page
 
 
 def test_herd_page_bars_and_squares(api, fresh_app, monkeypatch):

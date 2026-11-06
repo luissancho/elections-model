@@ -978,6 +978,13 @@ td.blk { font-weight: 700; }
 .herd-squares { display: flex; flex-wrap: wrap; gap: 5px; }
 .herd-squares .sq { width: 20px; height: 20px; border: 2px solid #1d4f86; border-radius: 4px; background: #fff; }
 .herd-squares .sq.on { background: #1d4f86; }
+.herd-bar > * { min-width: 0; }
+.herd-label { overflow-wrap: anywhere; }
+/* On phones the long pill of the live page and the labels of the KPIs wrap instead of running past the edge or being
+   cut (this page only: the global rules keep them on one line); the live table scrolls inside its wrapper */
+.herd-page #study-head .pill { white-space: normal; border-radius: 10px; }
+.herd-page .kpi .l { white-space: normal; overflow: visible; text-overflow: clip; }
+.herd-page .table-wrap { max-width: 100%; }
 @media (max-width: 719px) {
   .herd-bar { grid-template-columns: 6.5rem minmax(0, 1fr) 3.6rem; gap: 6px; font-size: 12px; }
 }
