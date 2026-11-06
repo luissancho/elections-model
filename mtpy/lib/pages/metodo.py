@@ -706,7 +706,8 @@ def metodo_context(state: dict) -> dict:
     dict
         The common context plus ``subpages`` (``subpages(None)``, the index of the four questions), ``figures``
         (``national_figures``), ``thresholds`` (``thresholds_rows``) and ``sections`` (the cross-cutting
-        sections, ``{'id', 'title'}`` in ``SECTIONS`` order).
+        sections, ``{'id', 'title'}`` in ``SECTIONS`` order) and ``andorra_published`` (whether the ``andorra``
+        study is published, so the «Veda» limit links to it).
 
     Raises
     ------
@@ -718,6 +719,7 @@ def metodo_context(state: dict) -> dict:
     context['figures'] = national_figures()
     context['thresholds'] = thresholds_rows()
     context['sections'] = [{'id': section_id, 'title': title} for section_id, title in SECTIONS]
+    context['andorra_published'] = bundle_part(site().study, 'andorra', 'meta') is not None
 
     return context
 

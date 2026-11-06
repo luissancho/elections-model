@@ -3106,6 +3106,15 @@ def test_metodo_rating_herding_card_links_to_rebano_only_when_published(api, fre
     assert_public_wording(page, '/metodo/rating')
 
 
+def test_metodo_links_the_andorra_study_only_when_published(events_site, fresh_app):
+    """El punto «Veda» de /metodo enlaza a /analisis/andorra sólo con el estudio publicado."""
+    assert 'href="/analisis/andorra"' not in html(call(events_site, '/metodo')[2])
+    publish_study(fresh_app.fs, study='andorra')
+    page = html(call(events_site, '/metodo')[2])
+    assert 'href="/analisis/andorra"' in page and 'El mercado de la fruta en Andorra' in page
+    assert_public_wording(page, '/metodo')
+
+
 def write_rating_check(fs, data):
     """La parte `rating-check` de `es` con `data` en lugar de la del fixture (el resto del análisis, el del fixture)."""
     write_analysis(fs)

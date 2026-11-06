@@ -91,7 +91,8 @@
             la votación, con el pronóstico
             definitivo{% if frozen and freeze.since %}: desde el {{ freeze.since|date }}{% endif %}. Los sondeos
             que se publican fuera de España durante la veda se cargan en la base, pero no entran en el promedio
-            porque su trabajo de campo acaba dentro de esos cinco días, y la API en vivo no los sirve.</li>
+            porque su trabajo de campo acaba dentro de esos cinco días, y la API en vivo no los sirve.{% if andorra_published %} Si aciertan más que los legales, elección a elección,
+            está en <a href="/analisis/andorra">El mercado de la fruta en Andorra</a>.{% endif %}</li>
         </ul>
         {% endif %}
       </section>

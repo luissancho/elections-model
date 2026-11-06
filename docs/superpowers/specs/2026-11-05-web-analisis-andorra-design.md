@@ -430,3 +430,73 @@ Un revisor independiente leyó la spec como constructor. Tres preguntas:
    Luis, también en `deploy/README.md`): `DEFAULT_EVENTS` gana `2026-11-29` (como en cada elección), `backtest
    {"scopes":["es"],"ban":true}`, `backtest push`, `publish event` de `es/2026-11-29`, `publish study andorra`. Hasta
    entonces la fila de 2026 no existe y la tarjeta «El 29-N» sigue cerrada (D7).
+
+## Cierre (2026-11-06)
+
+Construida en la rama `analisis-andorra` (diez tareas, de `f56d33c` a este cierre), con una revisión por tarea.
+
+### Lo que existe
+
+- **Tarea 1, registro y fixtures (`f56d33c`, `66293b4`)**: `mtpy/lib/bundle.py` (la parte de evento `ban`, el estudio
+  `andorra` y sus esquemas), `mtpy/lib/pages/analisis.py` (la tarjeta en `/analisis`), los fixtures
+  `tests/fixtures/bundle/andorra-{cells,elections,houses,latest,meta,pairs,summary}.json` y `event-ban.json`, y sus
+  tests; `mtpy/lib/publish/studies.py` declara el estudio.
+- **Tarea 2, la parte `ban` del evento (`3cc3498`, `e5107f2`)**: `mtpy/lib/publish/events.py` y `__init__.py` (los
+  sondeos clandestinos, sus errores y el último legal de cada casa), `tests/fakes.py`, `tests/test_publish_unit.py`.
+- **Tarea 3, el caso `ban` del backtest (`a8b1bc6`, `2e12dfe`)**: `mtpy/lib/backtest.py`, `mtpy/jobs/Backtest.py`,
+  `mtpy/pipelines/backtest/Backtest.py` (horizonte 0 con los sondeos clandestinos, en `ban.csv`), y `drop_ctypes`
+  explícito en `mtpy/lib/forecaster.py` y `mtpy/lib/simulator.py`, con sus tests.
+- **Tarea 4, la fila `ban` de la parte `model` (`35dcdd9`)**: `mtpy/lib/publish/events.py` y `__init__.py`.
+- **Tarea 5, etiquetas comunes (`ee07b59`, `b94c3c1`)**: `mtpy/lib/studies/labels.py`, importado por
+  `mtpy/lib/studies/herd/data.py` y `mtpy/lib/studies/lean/data.py`.
+- **Tarea 6, el estudio (`caf391e`, `b94c3c1`)**: `data/andorra/params.json`, `data/README.md`,
+  `mtpy/lib/studies/ban/{__init__,data,stats,study}.py` (pares, consenso clandestino, celdas, guarda legal) y
+  `tests/test_ban_{data,stats,study}.py`.
+- **Tarea 7, exportadores (`132a399`, `9f74f83`)**: `mtpy/lib/publish/ban.py`, `studies.py` y `__init__.py`,
+  `mtpy/jobs/Publish.py`, `deploy/README.md`, `docs/web/contrato.md` y sus tests.
+- **Tarea 8, la página (`3e015ed`)**: `mtpy/lib/pages/ban.py` (modelos de vista), `pages/{__init__,analisis}.py`,
+  `web/templates/analisis_andorra.html`, reglas en `web/dist/css/site.css`, el script
+  `web/dist/js/pages/analisis-andorra.js` y `tests/test_pages.py`.
+- **Tarea 9, el gráfico (`6e41426`)**: `web/dist/js/charts/dumbbell.js` (antes → después por casa), el script de la
+  página y `tests/test_js_charts.py`.
+- **Tarea 10, este cierre**: el enlace desde `/metodo` (bandera `andorra_published` en `mtpy/lib/pages/metodo.py`,
+  frase en el punto «Veda» de `web/templates/metodo.html`, test en `tests/test_pages.py`) y esta sección.
+
+### Decisiones tomadas durante la ejecución
+
+- **La parte `ban` lleva también `legal`** (el último sondeo legal de cada casa con clandestino, sin filtro de tipo):
+  `pollsters` y `cycle` excluyen los paneles abiertos (ElectoPanel) y sus pares no podían formarse; los pares salen de
+  `ban.polls × ban.legal`.
+- **Los sondeos de `ban` salen de `comp.series` sin el filtro de peso de `filter_polls`**: los trackings diarios
+  (GESOP, ElectoPanel) llevan `weight_over = 0` en sus filas solapadas y desaparecían.
+- **`drop_ctypes` explícito, por defecto `['wban', 'exit']`** en Forecaster, Simulator y `run_case`. Hay 17 `wban` con
+  `days = 6` (campo acabado el día anterior al primer día de la veda); ninguno pesa hoy en un promedio, así que nada
+  publicado se mueve. La ruta de `reweighted_overrides` pasa también `drop_contexts`.
+- **El caso `ban` del backtest va en `ban.csv`** (clave `ban` de la parte `model`, nunca en `horizons`); con `ban`
+  apagado se borra el fichero viejo.
+- **Las partes no llevan `slug`**: la página calcula los enlaces a los perfiles por nombre, como el sesgo del CIS.
+- **`crossed` = producto de signos < 0**: un acierto exacto («clavado») no es «pasó de largo»; las comparaciones
+  estrictas usan una tolerancia de 1e-9 para que un empate exacto (2019 en el fixture) no cuente como mejora.
+- **Etiquetas de elección compartidas** en `mtpy/lib/studies/labels.py`; las autonómicas toman el nombre del catálogo
+  `data/es-scopes.csv`, no el `meta.name` del evento; septiembre abrevia «sept.» como el sitio.
+- **`compute_for_publish` rechaza** (`NothingToPublish`) antes de escribir nada si ninguna elección nacional tiene
+  sondeos clandestinos; el año del subtítulo sale de `chart_since`.
+- **La fecha de la elección en curso puede aparecer en `meta.next` e `inputs`** (el manifiesto ya la publica); la
+  guarda legal es sobre sondeos y cifras, y un test la fija.
+- **Sin parámetro `labels` en `params.json`**: las etiquetas salen de la regla.
+
+### Lo que queda para Luis
+
+En este orden:
+
+1. `python job.py backtest '{"scopes":["es"],"ban":true}'` en el portátil (unos 80 s más por elección).
+2. `backtest push`.
+3. `publish '{"what":["event"],"scopes":"all","event_date":"all"}'` (cada elección con resultado de cada ámbito gana la
+   parte `ban`; unos 25 s cada una).
+4. `publish '{"what":["study"],"study":"andorra"}'` (después, el `update` diario lo republica como estudio vivo).
+5. Recorrer `/analisis`, `/analisis/andorra` (escritorio y móvil: el gráfico con 25 filas, la tabla de celdas, la
+   tarjeta cerrada «El 29-N») y `/metodo` (el enlace en el punto «Veda»).
+6. Integrar la rama en `dev` y desplegar.
+7. Tras el 29-N: `DEFAULT_EVENTS` de `mtpy/lib/backtest.py` gana `'2026-11-29'`, `backtest '{"scopes":["es"],"ban":true}'`,
+   `backtest push`, `publish event` de `es/2026-11-29` y `publish study andorra` (la tarjeta se abre con los sondeos
+   clandestinos de 2026).
