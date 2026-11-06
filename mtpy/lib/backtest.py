@@ -385,6 +385,7 @@ def run_case(
     weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
     rating_exponent: float = 1.0,
+    drop_ctypes: Optional[list[str]] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -418,6 +419,10 @@ def run_case(
     is passed to the `Simulator` (phase C2a): the rating weight of every poll is raised to it (1, the default, is the
     model as it is; 0 weighs every poll with rating 1, as `'flat'`); `meta` records it (`rating_exponent`).
 
+    `drop_ctypes` lists the poll contexts left out (`wban`, published abroad during the electoral ban, and `exit` polls);
+    `None`, the default, leaves the default of the `Simulator` (both out), which is how the backtest has always run;
+    it is passed to the `Simulator` only when given.
+
     `config` is a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search,
     validated by the backtest job): its `reg_params`, `he_params` and `disp_params` (with its `herding`) go to the
     `Simulator`, its `house_effects`, `dispersion`, `herding` and `max_fc` replace the loose arguments of the same
@@ -445,6 +450,7 @@ def run_case(
         tuned = {'reg_params': dict(config['reg_params']), 'he_params': dict(config['he_params']),
                  'weight_overrides': None}
         disp_params = dict(config['disp_params'])
+    extra = {} if drop_ctypes is None else {'drop_ctypes': drop_ctypes}
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         if config is not None and config.get('weights'):
@@ -457,7 +463,7 @@ def run_case(
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
             disp_params=disp_params | {'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
             error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings,
-            rating_exponent=rating_exponent, **tuned
+            rating_exponent=rating_exponent, **tuned, **extra
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         n_overrides = matched_overrides(sim.model, tuned['weight_overrides']) if config is not None else np.nan
@@ -974,13 +980,15 @@ def run_backtest(
     weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
     rating_exponent: float = 1.0,
+    drop_ctypes: Optional[list[str]] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
     `error_model`, `drift_scale`, `tail_dof`, `weight_ratings`, `config` and `rating_exponent` are passed to every
     case (`weight_ratings` may be the string `'flat'`: every poll weighs with rating 1; `rating_exponent` raises the
-    rating weight of every poll to that power, phase C2a).
+    rating weight of every poll to that power, phase C2a). `drop_ctypes` (poll contexts left out, see `run_case`)
+    is passed to every case when given.
 
     Returns
     -------
@@ -1005,7 +1013,8 @@ def run_backtest(
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
                     error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
-                    weight_ratings=weight_ratings, config=config, rating_exponent=rating_exponent
+                    weight_ratings=weight_ratings, config=config, rating_exponent=rating_exponent,
+                    drop_ctypes=drop_ctypes
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal

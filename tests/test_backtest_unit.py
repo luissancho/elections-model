@@ -731,6 +731,20 @@ def test_run_case_without_a_config_builds_the_simulator_as_before(recording):
     assert recording['polls'] == [] and recording['reweighted'] == []
 
 
+def test_run_case_passes_drop_ctypes_to_the_simulator(recording):
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 0, n_sim=5, nowcast_only=True, drop_ctypes=['exit'])
+    assert RecordingSimulator.calls[0]['init']['drop_ctypes'] == ['exit']
+
+
+def test_run_case_without_drop_ctypes_builds_the_simulator_as_before(recording):
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 6, n_sim=5, nowcast_only=True)
+    assert 'drop_ctypes' not in RecordingSimulator.calls[0]['init']
+
+
 def test_run_case_builds_the_simulator_with_the_config_and_the_recomputed_weights(recording):
     """Con configuración, el `Simulator` recibe sus `reg_params`, `he_params`, `disp_params` (con su rebaño) e
     interruptores, `fit_forecast` su `max_fc` (la configuración manda sobre los argumentos sueltos) y los pesos se

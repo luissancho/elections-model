@@ -49,6 +49,7 @@ class Simulator(Core):
         scope: str,
         event_date: str,
         drop_mtypes: Optional[list[str]] = list(DROP_MTYPES),
+        drop_ctypes: Optional[list[str]] = ['wban', 'exit'],
         drange: Optional[tuple[int, int] | int] = None,
         alpha: float = 0.05,
         limit_date: Optional[str] = None,
@@ -89,6 +90,9 @@ class Simulator(Core):
             Date of the election event.
         drop_mtypes : list of str, optional
             Drop the polls published by pollsters whose methodology type is in the list.
+        drop_ctypes : list of str, optional
+            Poll contexts left out: `wban` (published abroad during the electoral ban) and `exit` polls. The default
+            makes explicit what the horizon and the freeze guaranteed; `None` or empty keeps every context.
         drange : tuple of int or int, optional
             Only the polls published within the specified days range before the event will be included.
             If an integer is provided, it will be converted to (`drange`, None), meaning that only polls published
@@ -227,6 +231,7 @@ class Simulator(Core):
         self.rating_exponent = rating_exponent
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
+        self.drop_ctypes = list(drop_ctypes) if drop_ctypes else []
 
         self.drange = norm_range(drange)
         self.alpha = alpha
@@ -283,6 +288,7 @@ class Simulator(Core):
             drange=self.drange,
             bmap=self.poll_blocks(self.names, self.smap),
             drop_mtypes=self.drop_mtypes,
+            drop_ctypes=self.drop_ctypes,
             reg_params=self.reg_params,
             alpha=self.alpha,
             house_effects=self.house_effects,

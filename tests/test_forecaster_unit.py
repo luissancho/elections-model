@@ -701,3 +701,30 @@ def test_event_params_given_to_the_constructor_replace_the_derivation(monkeypatc
     given = {'parties': {'polls': ['PP', 'VOX']}, 'bmaps': {'main': ['VOX']}}
     fc = Forecaster('es', '2023-07-23', event_params=given)
     assert len(calls) == 1 and fc.event_params is given and fc.bmap == ['PP', 'VOX']
+
+
+def test_forecaster_drops_the_ban_and_exit_polls_by_default(monkeypatch):
+    """`load_polls` pasa `drop_ctypes` a `get_poll_series` como `drop_contexts`: por defecto `wban` y `exit` fuera."""
+    from mtpy.lib import forecaster as forecaster_module
+
+    seen = {}
+
+    def fake_get_poll_series(scope, event_dates, drange=None, drop_mtypes=None, drop_contexts=None, **kw):
+        seen['drop_contexts'] = drop_contexts
+        return pd.DataFrame({'date': pd.to_datetime(['2023-07-01']), 'pollster_id': [1], 'sponsor_id': [0]})
+
+    monkeypatch.setattr(forecaster_module, 'get_poll_series', fake_get_poll_series)
+    monkeypatch.setattr(forecaster_module, 'get_event_params',
+                        lambda scope, event_date, path=None: {'parties': {'polls': ['PP', 'PSOE']},
+                                                              'bmaps': {'main': ['PP']}})
+
+    def loaded(**kwargs):
+        fc = Forecaster('es', '2023-07-23', **kwargs)
+        fc.date_end = pd.Timestamp('2023-07-23')
+        return fc.load_polls()
+
+    loaded()
+    assert seen['drop_contexts'] == ['wban', 'exit']
+    loaded(drop_ctypes=['exit'])
+    assert seen['drop_contexts'] == ['exit']
+    assert Forecaster('es', '2023-07-23', drop_ctypes=None).drop_ctypes == []
