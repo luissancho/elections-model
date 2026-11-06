@@ -124,11 +124,12 @@
         {% include '_glosario.html' %}
       {{ m.card_end() }}
       {#- the subtitle and the file of the image get the filters chosen and the count (`bullseye-wire.js`) -#}
-      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver sólo esas elecciones.',
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito: a la izquierda, en cada bloque; a la derecha, en el bloque de izquierdas frente a la media de las demás encuestadoras en esa misma elección. Elige un ámbito o unos años para ver sólo esas elecciones.',
                       tools=m.download_button('bullseye-download', profile.pollster.name, 'Diana de errores', site_host ~ ' · ' ~ author_handle,
                                               site_title|lower ~ '-diana-' ~ profile.pollster.name|slug ~ '.png') if bullseye else none) }}
         {% if bullseye %}
         {% set bv = {'rows': bullseye, 'scopes': bullseye_scopes, 'years': bullseye_years, 'table_blocks': table_blocks,
+                     'blocks': blocks, 'consensus': {'house': profile.pollster.name, 'left': left} if left else none,
                      'aria': 'Error de ' ~ profile.pollster.name ~ ' en cada elección por bloque',
                      'caption': 'Error de su último sondeo antes de cada elección (sondeo menos resultado).', 'dates': true} %}
         {% include '_bullseye.html' %}
@@ -138,8 +139,9 @@
         <p class="notice">Esta encuestadora no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
         {% call m.how() %}
-        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan sólo esas elecciones en la diana y en la tabla.</p>
+        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). Un punto hueco es un sondeo de más de seis semanas antes de la votación: el último que publicó, aunque no fuera de la recta final. La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan sólo esas elecciones en los dos gráficos y en la tabla.</p>
         <p>Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.</p>
+        <p>En el gráfico de la derecha cada punto es también una elección: en horizontal, la media del error de las demás encuestadoras en el bloque de izquierdas con sus últimos sondeos de las seis semanas finales; en vertical, el de la encuestadora. Sobre la diagonal, dio a ese bloque más voto que las demás; debajo, menos. Una elección en la que ninguna otra encuestadora publicó en esas seis semanas no tiene punto.</p>
         <p>Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
       {{ m.card_end() }}

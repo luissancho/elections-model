@@ -1495,7 +1495,7 @@ def test_casas_without_database_is_a_503_page(api):
 
 def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     page = html(call(houses, '/casas/gad3', query='scope=es')[2])
-    assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'class="chart big" id="bullseye-chart"' in page
+    assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'class="chart" id="bullseye-chart"' in page
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas/gad3', query='scope=es')[2])
@@ -1550,6 +1550,13 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert 'id="path-table"' in page
     bullseye = re.search(r'<table id="bullseye-table">(.*?)</table>', page, re.S).group(1)
     assert 'Generales 2023' in bullseye and '2023-23J' not in bullseye  # la elección, por su nombre
+    # desde 2026-11-06, junto a la diana, la casa frente a la media de las demás (la pregunta 2 del estudio del CIS)
+    assert 'id="consensus-chart"' in page and 'data-house="GAD3"' in page
+    grid = page[page.index('id="bullseye-chart"') - 600:page.index('id="consensus-chart"')]
+    assert 'class="grid2"' in grid and 'Frente a la media de las demás encuestadoras en la misma elección' in grid
+    assert 'Su último sondeo, por bloques' in grid and 'Un punto hueco es un sondeo de más de seis semanas antes' in page
+    assert 'Horizontal: la media de las demás casas con sus últimos sondeos de las seis semanas finales. Vertical: GAD3.' in page
+    assert_public_wording(page, 'perfil')
     effects = page[page.index('id="profile-effects"'):]
     effects = effects[:effects.index('</table>')]
     # la próxima elección no tiene resultado; Madrid 2021 no está publicada y va con fecha y ámbito
@@ -1607,6 +1614,7 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     assert '<div class="v">5,0<small></small></div>' in page.replace('\n', '') and 'sin evaluar' in page
     assert 'class="headline"' not in page  # el perfil no lleva titular (2026-10-15)
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page and 'id="bullseye-filter"' not in page
+    assert 'consensus-chart' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
     data = initial(body)
     assert data['path'] == [] and data['today'] is None and data['bullseye'] == []
@@ -2719,6 +2727,12 @@ def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
     assert len(invalid) == 2 and len(rows) == 8
     assert all(row[4:7] == ['—', '—', '—'] and row[7] == 'no' for row in invalid)
     assert all(row[7] == 'sí' for row in rows if row not in invalid)
+
+
+def test_backtest_model_bullseye_has_no_consensus_chart(history_site):
+    """La diana del modelo comparte `_bullseye.html` con el perfil, sin el gráfico «frente a las demás casas»."""
+    page = html(call(history_site, '/metodo/backtest', query='scope=es')[2])
+    assert 'class="chart big" id="bullseye-chart"' in page and 'consensus-chart' not in page and 'grid2' not in page[page.index('id="bullseye-chart"') - 300:page.index('id="bullseye-chart"')]
 
 
 def test_model_record_scores_the_model_in_every_election_with_a_backtest(history_site):
