@@ -200,6 +200,23 @@ def verdict_rows(summary: Optional[dict]) -> list:
     return rows
 
 
+def verdict_names(summary: Optional[dict]) -> list:
+    """
+    The parties named by the third verdict (``summary.verdicts.p3``, «DE PSOE Y DE VOX»), with the casing of the
+    labels of ``summary.parties`` («PSOE», «Vox»); ``[]`` with «DE NADIE», «SIN DATOS» or without the verdict.
+    """
+    label = _get(summary, 'verdicts', 'p3') or ''
+
+    if not label.startswith('DE ') or label == 'DE NADIE':
+        return []
+
+    cased = {text.upper(): text for text in LABELS.values()}
+    cased |= {row['label'].upper(): row['label'] for row in _get(summary, 'parties') or [] if row.get('label')}
+
+    return [cased.get(name, name) for name in (part.removeprefix('DE ').strip()
+                                                for part in re.split(r' Y (?=DE )', label))]
+
+
 def _under(figures: Optional[dict]) -> bool:
     """Whether a figures block is underestimated beyond chance (mean below 0, ``p_t`` below ``SIGNIFICANCE``)."""
     return bool(figures) and _is_num(figures.get('mean')) and figures['mean'] < 0 and \
@@ -254,6 +271,9 @@ def flags(summary: Optional[dict], meta: Optional[dict]) -> dict:
         ``podemos_all`` (overestimated in every recent regional), ``podemos_over``, ``podemos_general_under``,
         ``podemos_before_chance``, ``incumbent_vanishes`` (the regional incumbent split as chance does),
         ``incumbent_general_under``, ``incumbent_hidden`` (an incumbent row underestimated beyond chance),
+        ``generals_fail`` (the PSOE in the generals and the party in government do not pass the test: neither
+        underestimated beyond chance, the incumbent underestimated more often in the generals and not in the
+        regionals, the PSOE figures present),
         ``far_from_zero`` (rows of ``parties`` with ``|mean| >= FAR``), ``coin`` and the parameters of the texts
         (``window_weeks``, ``window_days``, ``recent_year``, ``pp_late_year``, ``big_points``, ``size_threshold``).
     """
@@ -300,6 +320,9 @@ def flags(summary: Optional[dict], meta: Optional[dict]) -> dict:
         'incumbent_vanishes': _chance(_party(summary, 'incumbent_regional')),
         'incumbent_general_under': _more(_party(summary, 'incumbent_general'), 'under', 'over'),
         'incumbent_hidden': any(_under(_party(summary, key)) for key in INCUMBENTS),
+        'generals_fail': _chance(_party(summary, 'incumbent_regional'))
+        and _more(_party(summary, 'incumbent_general'), 'under', 'over') and _is_num(_get(psoe, 'n'))
+        and not _under(psoe) and not _under(_party(summary, 'incumbent_general')),
         'far_from_zero': sum(1 for mean in means if _is_num(mean) and abs(mean) >= FAR),
         'coin': coin(_get(vox, 'n')),
         'window_weeks': count_word(p['window_days'] // 7),
@@ -451,7 +474,8 @@ def vox_tests(summary: Optional[dict]) -> list:
          'text': 'Y menos en {}. Si los sondeos no tuvieran sesgo saldrían {}: la probabilidad de {} o más por azar es '
                  '{}.'.format(fmt_int(over), f['coin'], fmt_int(max(under, over)), pct_with(vox.get('p_sign')))},
         {'key': 'mean', 'label': '2 · Sesgo medio', 'value': delta_text(vox.get('mean'), 1), 'unit': 'puntos',
-         'text': median + (': un error que no se distingue de cero.' if f['vox_chance'] else '.')},
+         'text': median + (': un error que no se distingue de cero.' if f['vox_chance'] and not f['p2_yes']
+                           else '.')},
         {'key': 'extremes',
          'label': '3 · Las sorpresas, en los dos sentidos' if low and high else '3 · Las mayores sorpresas',
          'value': '{} y {}'.format(delta_text(low[0].get('error'), 1) if low else DASH,
@@ -512,7 +536,7 @@ def texts(summary: Optional[dict], elections: list, meta: Optional[dict]) -> dic
         'times'}``: «1982 y 1993», the signed errors in prose and «cuatro veces seguidas»), ``pp_examples``
         («+4,0 en abril de 2019»: the general elections since the early period in which the PP got less than its polls
         by more than the big threshold), ``pp_april`` (the error of the PP in April 2019, ``None`` without that row), ``hidden`` (the
-        labels of the lineages underestimated beyond chance, in prose; ``hidden_n`` their number), ``podemos_general`` (the recent generals in words),
+        parties named by the third verdict, ``verdict_names``, in prose; ``hidden_n`` their number), ``podemos_general`` (the recent generals in words),
         ``podemos_contrary`` (the times they were underestimated, «dos veces») and ``n_communities``
         (``n_scopes`` − 1).
     """
@@ -530,8 +554,7 @@ def texts(summary: Optional[dict], elections: list, meta: Optional[dict]) -> dic
                 and row['PP'] > -p['big_threshold']]
     april = next((row.get('PP') for row in elections
                   if (row.get('scope'), row.get('event_date')) == PP_EXAMPLE and _is_num(row.get('PP'))), None)
-    hidden = [row.get('label') for row in _get(summary, 'parties') or []
-              if row.get('key') in LINEAGES and _under(row.get('figures'))]
+    hidden = verdict_names(summary)
     n_scopes = _get(summary, 'n_scopes')
     n_big = len(_get(summary, 'psoe_general', 'big') or [])
     extremes = _get(summary, 'vox', 'extremes') or {}

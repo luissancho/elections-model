@@ -33,7 +33,7 @@
           <span class="pill brand">Análisis</span>
           <span class="pill">Evidencia histórica · {{ n|int }} elecciones con sondeos · {{ summary.get('n_general')|int }} generales desde {{ summary.get('first_year') or '–' }} y {{ summary.get('n_regional')|int }} autonómicas desde {{ summary.get('first_year_regional') or '–' }}</span>
           {% if has_run %}
-          <span class="pill ok">Página viva · añade la fila de {{ election_year or '–' }} en cuanto haya escrutinio</span>
+          <span class="pill ok">Página viva · añade la fila de {{ election_year or 'la elección en curso' }} en cuanto haya escrutinio</span>
           {% elif after.label %}
           <span class="pill ok">Página viva · con la fila de {{ last_year }}</span>
           {% endif %}
@@ -200,7 +200,7 @@
           {%- else %}<b>De nadie.</b> Ningún partido grande sale subestimado de forma sistemática{% endif %}
           {%- if far_from_zero == 0 %}{{ ' Las medias' if p3_someone else ', y las medias' }} quedan a menos de un punto del cero en todos los casos.
           {%- else %}{{ ' Las medias' if p3_someone else ', y las medias' }} quedan a menos de un punto del cero en todos los casos salvo {{ 'uno' if far_from_zero == 1 else far_from_zero|int }}.{% endif %}
-          {%- if incumbent_vanishes and incumbent_general_under %} El PSOE en las generales ({{ count(psoe.under, psoe.n) }}, {{ psoe.mean|delta(1) }}) y el partido del Gobierno ({{ count(ig.under, ig.n) }}) no pasan la prueba: en las {{ ir.n|int }} autonómicas la racha desaparece ({{ count(ir.under, ir.n) }}, {{ ir.mean|delta(1) }}).
+          {%- if generals_fail %} El PSOE en las generales ({{ count(psoe.under, psoe.n) }}, {{ psoe.mean|delta(1) }}) y el partido del Gobierno ({{ count(ig.under, ig.n) }}) no pasan la prueba: en las {{ ir.n|int }} autonómicas la racha desaparece ({{ count(ir.under, ir.n) }}, {{ ir.mean|delta(1) }}).
           {%- else %} El PSOE salió subestimado en {{ count(psoe.under, psoe.n) }} generales ({{ psoe.mean|delta(1) }} de media), y el partido del Gobierno, en {{ count(ig.under, ig.n) }} generales y {{ count(ir.under, ir.n) }} autonómicas.{% endif %}
           {%- if p3_someone %} El tamaño medio del error es de {{ size.mean|num(1) }} puntos por partido.
           {%- else %} Lo que se repite es el <b>tamaño</b> del error, {{ size.mean|num(1) }} puntos por partido, no su signo.{% endif %}
@@ -214,7 +214,7 @@
           En las {{ pp_all.n|int }} elecciones con PP, {{ pp_all.under|int }} subestimado y {{ pp_all.over|int }} sobreestimado, {{ pp_all.mean|delta(1) }} de media.
         </div>
         <div class="note">
-          <b>La única excepción, contada como lo que es.</b>
+          <b>{{ 'La única excepción, contada como lo que es.' if podemos_over else 'IU, Podemos y sus marcas desde ' ~ recent_year ~ '.' }}</b>
           Desde finales de {{ recent_year }}, en las {{ pod_regional.n|int }} autonómicas con Podemos o sus marcas, los sondeos le dieron de más en {{ 'todas' if podemos_all else pod_regional.over|int }}, {{ pod_regional.mean|delta(1) }} puntos de media.
           {%- if podemos_general_under %} En las {{ texts.podemos_general }} generales del mismo periodo pasó lo contrario {{ texts.podemos_contrary }} ({{ pod_general.mean|delta(1) }} de media)
           {%- else %} En las {{ texts.podemos_general }} generales del mismo periodo le dieron de más en {{ pod_general.over|int }} ({{ pod_general.mean|delta(1) }} de media){% endif %}, y antes de {{ recent_year }}

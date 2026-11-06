@@ -5758,6 +5758,32 @@ def test_shy_page_table_rows_and_dashes(api, fresh_app):
     assert 'Gobierno, autonómicas</td><td class="mut">–</td>' in page
 
 
+def test_shy_page_says_the_beliefs_fail_only_when_they_do(api, fresh_app):
+    """«no pasan la prueba» needs the PSOE figures and neither the PSOE nor the party in government underestimated
+    beyond chance (the rule of the verdicts)."""
+    summary = fixture_data('voto-oculto-summary')
+    summary['parties'][6] = summary['parties'][6] | {'figures': summary['parties'][6]['figures'] | {'n': 17, 'under': 12, 'over': 5, 'p_t': 0.03}}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert 'no pasan la prueba' not in page and 'en 12 de 17 generales' in page and 'ni el partido que gobierna' not in page
+    summary = fixture_data('voto-oculto-summary') | {'psoe_general': None}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert 'no pasan la prueba' not in page and 'El PSOE en las generales (' not in page
+
+
+def test_shy_page_box_2_does_not_contradict_the_verdict(api, fresh_app):
+    """A «SÍ» of question 2 comes from the t test: the box of the mean does not call it «indistinguishable from zero»
+    even when the split of the signs is what chance gives; the third verdict names its parties from its label."""
+    summary = fixture_data('voto-oculto-summary')
+    summary = summary | {'verdicts': {'p1': 'NO', 'p2': 'SÍ', 'p3': 'DE PSOE'},
+                         'vox': summary['vox'] | {'mean': -1.4, 'p_t': 0.01, 'p_sign': 0.26}}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert 'no se distingue de cero' not in page and 'Mediana −0,2.' in page
+    assert '<b>De PSOE.</b>' in page and 'dan a PSOE menos de lo que saca' in page
+
+
 def test_analisis_index_lists_voto_oculto_when_published(api, fresh_app):
     publish_study(fresh_app.fs, study='voto-oculto')
     page = html(call(api, '/analisis')[2])
