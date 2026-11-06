@@ -117,7 +117,8 @@ def compute_ban(reader: BundleReader, data: FileSystem, params: Optional[dict] =
     reader : BundleReader
         Reader of the bundle.
     data : FileSystem
-        The ``data/`` directory of the repository (parameters).
+        The ``data/`` directory of the repository (parameters and the scopes catalogue ``es-scopes.csv``, for the
+        names of the regional scopes in the labels).
     params : dict, optional
         Overrides of the parameters file.
 
@@ -132,7 +133,8 @@ def compute_ban(reader: BundleReader, data: FileSystem, params: Optional[dict] =
         ``'pairs'`` when no election has a pair of polls.
     """
     params = load_params(data) | (params or {})
-    events, inputs = read_events(reader, params)
+    names = data.read_csv('es-scopes.csv').set_index('scode')['name'].to_dict()
+    events, inputs = read_events(reader, params, names)
 
     pairs, elections, cells = [], [], []
     latest = None

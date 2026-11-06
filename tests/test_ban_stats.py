@@ -20,7 +20,8 @@ def ban(fresh_app, tmp_path):
     """The events of `write_ban_bundle` by ``(scope, date)`` and the hand figures."""
     fs = FileSystem(str(tmp_path))
     figures = write_ban_bundle(fs)
-    events, _ = data.read_events(bundle.BundleReader(fs), PARAMS)
+    names = FileSystem(os.path.join(ROOT, 'data')).read_csv('es-scopes.csv').set_index('scode')['name'].to_dict()
+    events, _ = data.read_events(bundle.BundleReader(fs), PARAMS, names)
     return {(event.scope, event.event_date): event for event in events}, figures
 
 
@@ -70,6 +71,16 @@ def test_pair_rows_take_the_last_row_when_a_house_publishes_twice_the_same_day(b
 def test_sign_test_is_the_binomial_of_the_wins():
     assert stats.sign_test(2, 5) == pytest.approx(0.8125)
     assert stats.sign_test(5, 5) == pytest.approx(1 / 32) and stats.sign_test(0, 0) is None
+
+
+def test_summary_counts_a_tie_in_n_and_ties_but_not_in_k_and_tests_without_it():
+    pairs = [{'scope': 'es', 'event_date': '2023-07-23', 'national': True, 'pollster_id': index, 'd': d,
+              'closer': d < 0, 'sample_size': 1000, 'label': '2023'}
+             for index, d in enumerate([-0.1, 0.0, 0.2])]
+    block = stats.summarize([], pairs, [], [], PARAMS)['pairs']
+    assert (block['n'], block['k'], block['ties']) == (3, 1, 1) and block['share'] == pytest.approx(1 / 3)
+    assert block['p'] == pytest.approx(0.75) and block['p'] == pytest.approx(stats.sign_test(1, 2))
+    assert block['mean_d'] == pytest.approx(0.1 / 3)
 
 
 def test_consensus_leaves_out_the_panel_and_the_aggregator(ban):

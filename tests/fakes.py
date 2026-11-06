@@ -746,7 +746,7 @@ BAN_EVENTS = {  # (ámbito, fecha) -> lo que escribe `write_ban_bundle`
         'pollsters': [('40dB', 7, 1.45), ('GAD3', 6, 2.73), ('CIS', 13, 1.9)],
     },
     ('es-md', '2021-05-04'): {
-        'name': 'Madrid', 'main': ['PP', 'MM', 'PSOE'], 'official': [44.7, 17.0, 16.9], 'frozen': None,
+        'name': 'Elecciones a la Asamblea de Madrid 2021', 'main': ['PP', 'MM', 'PSOE'], 'official': [44.7, 17.0, 16.9], 'frozen': None,
         'ban_rows': None,
         'polls': [
             ('GAD3', '2021-05-03', 1, 8500, 0.97, [44.0, 17.5, 17.0]),

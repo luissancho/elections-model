@@ -14,6 +14,7 @@ from tests.fakes import BAN_CURRENT, BAN_CURRENT_SHARE, write_ban_bundle
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DATA = FileSystem(os.path.join(ROOT, 'data'))
 PARAMS = data.load_params(DATA)
+NAMES = DATA.read_csv('es-scopes.csv').set_index('scode')['name'].to_dict()
 
 
 def test_load_params_reads_the_repository_file():
@@ -32,7 +33,7 @@ def test_labels_moved_from_lean_keep_their_output():
 def test_read_events_reads_every_scope_and_skips_the_election_without_results(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_ban_bundle(fs)
-    events, inputs = data.read_events(bundle.BundleReader(fs), PARAMS)
+    events, inputs = data.read_events(bundle.BundleReader(fs), PARAMS, NAMES)
     assert [(e.scope, e.event_date) for e in events] == [('es', '2019-11-10'), ('es-md', '2021-05-04'),
                                                          ('es', '2023-07-23')]
     assert [e.label for e in events] == ['2019', 'Madrid 2021', '2023'] and [e.national for e in events] == [
@@ -47,6 +48,9 @@ def test_read_events_reads_every_scope_and_skips_the_election_without_results(fr
     assert first.with_ban.loc['PP', 'model'] == 19.9 and first.official.to_dict() == {'PSOE': 28.0, 'PP': 20.8,
                                                                                      'VOX': 15.1}
     assert events[2].with_ban is None and events[1].frozen is None and events[1].pollsters is not None
+    assert events[1].name == 'Elecciones a la Asamblea de Madrid 2021'  # el nombre largo no entra en la etiqueta
+    unnamed, _ = data.read_events(bundle.BundleReader(fs), PARAMS)
+    assert unnamed[1].label == 'es-md 2021'  # sin catálogo, el código del ámbito
 
 
 def test_read_events_never_reads_the_parts_of_an_election_without_results(fresh_app, tmp_path):

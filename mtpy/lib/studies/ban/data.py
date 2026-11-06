@@ -57,10 +57,12 @@ class Event:
     event_date : str
         Election date, ``YYYY-MM-DD``.
     label : str
-        Public label: the year (``short_year_label``) in the national scope, ``{name} {year}``
-        (``election_label``) elsewhere; with the month when another election of the scope shares the year.
+        Public label: the year (``short_year_label``) in the national scope, ``{scope name} {year}``
+        (``election_label`` with the name of the scopes catalogue) elsewhere; with the month when another election
+        of the scope shares the year.
     name : str or None
-        Name of the election from its ``meta``.
+        Name of the election from its ``meta`` (the long name of the database, «Elecciones a la Asamblea de Madrid
+        2021»): never part of ``label``.
     national : bool
         Whether the scope is ``params['national']``.
     main : list of str
@@ -183,7 +185,8 @@ def _check_event(reader: BundleReader, scope: str, date: str) -> Optional[str]:
     return None
 
 
-def read_event(reader: BundleReader, scope: str, date: str, params: dict, repeated: bool) -> Optional[Event]:
+def read_event(reader: BundleReader, scope: str, date: str, params: dict, repeated: bool,
+               names: Optional[dict] = None) -> Optional[Event]:
     """
     One published election with its clandestine polls.
 
@@ -199,6 +202,9 @@ def read_event(reader: BundleReader, scope: str, date: str, params: dict, repeat
         Parameters of the study (``load_params``); uses ``national`` and ``frozen_horizon``.
     repeated : bool
         Whether another published election of the scope shares the year (the label then carries the month).
+    names : dict, optional
+        ``{scope: name}`` of the scopes catalogue (``es-scopes.csv``), for the label of a regional election; a
+        scope missing from it is labelled with its code.
 
     Returns
     -------
@@ -218,7 +224,8 @@ def read_event(reader: BundleReader, scope: str, date: str, params: dict, repeat
     main = list(meta.get('main') or ban['parties'])
     national = scope == params['national']
     name = meta.get('name')
-    label = short_year_label(date, repeated) if national else election_label(scope, name, date, repeated)
+    scope_name = (names or {}).get(scope, scope)
+    label = short_year_label(date, repeated) if national else election_label(scope, scope_name, date, repeated)
 
     pct = pd.Series({row['party']: row['pct'] for row in results['rows']}, dtype=float)
     official = pct.reindex([party for party in main if party in pct.index])
@@ -241,7 +248,7 @@ def _parts_found(reader: BundleReader, scope: str, date: str) -> list:
             if reader.exists(path_event(scope, date, part))]
 
 
-def read_events(reader: BundleReader, params: dict) -> tuple[list, dict]:
+def read_events(reader: BundleReader, params: dict, names: Optional[dict] = None) -> tuple[list, dict]:
     """
     Every published election with clandestine polls of every scope of the manifest since ``params['since']``.
 
@@ -251,6 +258,8 @@ def read_events(reader: BundleReader, params: dict) -> tuple[list, dict]:
         Reader of the bundle.
     params : dict
         Parameters of the study (``load_params``); uses ``national``, ``since`` and ``frozen_horizon``.
+    names : dict, optional
+        ``{scope: name}`` of the scopes catalogue, for the labels (``read_event``).
 
     Returns
     -------
@@ -276,7 +285,7 @@ def read_events(reader: BundleReader, params: dict) -> tuple[list, dict]:
                 inputs[scope]['skipped'][date] = reason
                 continue
 
-            events.append(read_event(reader, scope, date, params, bool(years[date[:4]] > 1)))
+            events.append(read_event(reader, scope, date, params, bool(years[date[:4]] > 1), names))
             inputs[scope]['read'].append({'event_date': date, 'parts': _parts_found(reader, scope, date)})
 
     order = {scope: index for index, scope in enumerate(scopes)}
