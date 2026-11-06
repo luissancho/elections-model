@@ -268,7 +268,7 @@ def kpis(summary: Optional[dict], current: Optional[dict], flag: dict) -> list:
                'las mismas parejas de casas, frente a más de 8 semanas antes']
 
     if _is_num(flag['days_left']) and flag['days_left'] > 0:
-        support.append('a {} días'.format(fmt_int(flag['days_left'])))
+        support.append('a {} {}'.format(fmt_int(flag['days_left']), 'día' if flag['days_left'] == 1 else 'días'))
 
     if not flag['final_started'] and flag['final_start']:
         support.append('el tramo final empieza el ' + flag['final_start'])
@@ -336,7 +336,10 @@ def live_text(current: Optional[dict], flag: dict) -> Optional[str]:
         return 'Elección celebrada: entra en la cuenta con el escrutinio.'
 
     if not flag['final_started']:
-        return 'El tramo de las tres últimas semanas empieza el {}.'.format(flag['final_start'] or DASH)
+        if not flag['final_start']:
+            return None
+
+        return 'El tramo de las tres últimas semanas empieza el {}.'.format(flag['final_start'])
 
     change = _get(current, 'mid_final', 'change')
 

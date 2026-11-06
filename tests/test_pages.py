@@ -5723,6 +5723,8 @@ def test_herd_live_text_states(monkeypatch):
     flag, text = at(date(2026, 11, 30))
     assert text == 'Elección celebrada: entra en la cuenta con el escrutinio.' and flag['held']
     assert at(date(2026, 11, 6), None)[1] is None
+    no_window = {key: value for key, value in current.items() if key != 'windows'}
+    assert at(date(2026, 11, 6), no_window)[1] is None
 
 
 def test_herd_kpis_with_and_without_a_run(monkeypatch):
@@ -5732,12 +5734,16 @@ def test_herd_kpis_with_and_without_a_run(monkeypatch):
     flag = pages.herd.flags(meta, current)
     first, second, third = pages.herd.kpis(summary, current, flag)
     assert (first['value'], second['value']) == ('19 de 23', '23 de 29')
-    assert first['support'] == 'por azar, 1 vez de cada 769' and second['support'] == 'hasta tres semanas antes, 9 de 17: como una moneda'
+    assert first['support'] == 'por azar, 1 vez de cada 769'
+    assert second['support'] == 'hasta tres semanas antes, 9 de 17: como una moneda'
     assert third['label'] == 'Generales 2026, en directo' and third['value'] == '−5 %'
     assert 'el tramo final empieza el 9 de noviembre' in third['support'] and 'a 23 días' in third['support']
     herd_today(monkeypatch, date(2026, 11, 12))
     third = pages.herd.kpis(summary, dict(current, mid_final={'change': -0.12}), pages.herd.flags(meta, current))[2]
     assert third['value'] == '−12 %' and 'empieza' not in third['support']
+    herd_today(monkeypatch, date(2026, 11, 28))
+    third = pages.herd.kpis(summary, current, pages.herd.flags(meta, current))[2]
+    assert 'a 1 día' in third['support'] and 'a 1 días' not in third['support']
     third = pages.herd.kpis(summary, None, pages.herd.flags(meta, None))[2]
     assert (third['label'], third['value']) == ('Generales y autonómicas', '10 y 13')
     assert pages.herd.kpis(None, None, pages.herd.flags(None, None))[2]['value'] == '0 y 0'
