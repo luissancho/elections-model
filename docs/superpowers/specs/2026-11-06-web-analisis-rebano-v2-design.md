@@ -129,11 +129,18 @@ encuestadoras.
 **Dispersión de un conjunto de comparaciones**: `R = sqrt(Σ d² / Σ v)` (1 = lo que daría el azar de las muestras).
 
 **Comparación de dos tramos A → B en una elección**: se quedan las parejas de casas con al menos `min_rows` (3)
-comparaciones en A **y** en B; `R_a` y `R_b` son las dispersiones de esas comparaciones en cada tramo; `change =
-R_b / R_a − 1`; `falls = R_b < R_a`; `pairs` = parejas de casas que entran. Sin ninguna pareja, la elección no entra en
-esa comparación. `p` de la elección: permutación de las etiquetas A/B de las comparaciones **dentro de cada pareja de
-casas**, `permutations` (2.000) veces con semilla fija `seed`, `p = P(cociente permutado ≤ observado)` (cociente =
-`R_b² / R_a²`, que da el mismo orden que `change`).
+comparaciones en A **y** en B. Cada pareja de casas `g` tiene su `r²_a,g = Σ d²_a,g / Σ v_a,g` y su `r²_b,g`, y un
+peso, el mismo en los dos tramos, `w_g = 1 / (1/Σ v_a,g + 1/Σ v_b,g)`; `R_a = sqrt(Σ w_g r²_a,g / Σ w_g)` y `R_b`
+igual; `change = R_b / R_a − 1`; `falls = R_b < R_a`; `pairs` = parejas de casas que entran. Sin ninguna pareja, la
+elección no entra en esa comparación. `p` de la elección: permutación de las etiquetas A/B de las comparaciones
+**dentro de cada pareja de casas**, `permutations` (2.000) veces con semilla fija `seed`, `p = P(cociente permutado ≤
+observado)` (cociente = `R_b² / R_a²`, que da el mismo orden que `change`, recalculado en cada barajado con sus
+pesos).
+
+Revisión final (2026-11-06): la primera versión sumaba todas las filas de las parejas (`R = sqrt(Σ d² / Σ v)` por
+tramo), con lo que cada pareja pesaba por sus filas, distintas en cada tramo; ese cambio de mezcla sesgaba `falls`
+(probabilidad nula de bajar 0,59 en `far_final`, hasta 0,99 en generales grandes). Con el peso fijo por pareja la
+probabilidad nula media es 0,50 en las tres comparaciones.
 
 Las tres comparaciones: `far_final` (pregunta 1), `far_mid` y `mid_final` (pregunta 2). Recuento de cada una:
 `n` elecciones, `k` con `falls`, `sign_p = binom.sf(k − 1, n, 0.5)` y `clear` = elecciones con `p < 0,05`.
@@ -146,20 +153,21 @@ el spike perdía; recontado el 2026-11-06, los tres recuentos no cambian (19 de 
 manifiesto), `since` (nulo), `live_scope` `"es"`, `max_days` 365, `pair_days` 7, `periods` `{"final": [0, 21],
 "mid": [21, 56], "far": [56, 365]}` (semiabiertos), `min_rows` 3, `n_series` 4, `exclude` `["CIS"]`, `permutations` 2000, `seed` 0.
 
-**Partes** (envoltorio de estudio; nombres de campo en inglés; cocientes y `change` a 2 decimales para la página, sin
-redondear en las cuentas; p con tres cifras significativas):
+**Partes** (envoltorio de estudio; nombres de campo en inglés; cocientes a 2 decimales y `change` a 3 para la página,
+sin redondear en las cuentas; p con tres cifras significativas):
 
 | Parte | Contenido |
 |---|---|
 | `meta` | `study`, `title`, `subtitle`, `scope` nulo, `election` (`{scope, date, days_left, as_of}` de la elección en curso o nulo), `params`, `inputs` (elecciones leídas y omitidas con su motivo; el run en curso), `sources`, `commit`, `dirty`, `versions`, `seconds`. |
-| `summary` | `n_elections` (pasadas con al menos una comparación), `n_scopes`, `since_year` (año de la primera elección que entra), `comparisons` (`{far_final, far_mid, mid_final}`, cada uno `{n, k, sign_p, clear, median_change}`), `kinds` (los mismos recuentos de `far_final` partidos en `generales` y `autonómicas`). |
+| `summary` | `n_elections` (pasadas con al menos una comparación), `n_scopes`, `since_year` (año de la primera elección que entra), `comparisons` (`{far_final, far_mid, mid_final}`, cada uno `{n, k, sign_p, clear, median_change, since_year}`, con el año de la primera elección de esa comparación), `kinds` (los mismos recuentos de `far_final` partidos en `generales` y `autonómicas`). |
 | `elections` | Una fila por elección pasada y comparación con dato: `scope`, `event_date`, `label` (el de la página, D4), `kind`, `comparison`, `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b`, `change`, `falls`, `p`. CSV `elections`. |
 | `current` | La elección en curso (nulo sin ella): `scope`, `event_date`, `label`, `days_left`, `as_of`, `windows` (fechas de inicio de `mid` y `final`), y `far_mid` y `mid_final` con la forma de una fila de `elections` (nulos mientras el tramo B no tenga ninguna pareja). |
 
 **Subtítulo** (compuesto al publicar, como hoy, con cláusulas condicionadas a las cifras): «En {k} de las {n}
-elecciones con datos desde {since_year}, las mismas encuestadoras se parecen más entre sí en las tres últimas semanas
-que lejos de la votación{: por azar pasaría una vez de cada X}. Hasta tres semanas antes, no: {k2} de {n2}, como una
-moneda.» La segunda frase sólo si `far_mid` no es significativa y `mid_final` sí; las demás combinaciones las
+elecciones con sondeos lejos y cerca de la votación, desde {since_year de far_final}, las mismas encuestadoras se
+parecen más entre sí en las tres últimas semanas que lejos de ella{: por azar, 1 entre X}.
+Hasta tres semanas antes, no: {k2} de {n2}, como una moneda.» (revisión final: antes «elecciones con datos desde
+{since_year}» y «por azar pasaría una vez de cada X»; Luis, 2026-11-06: sin repetir «las mismas encuestadoras»). La segunda frase sólo si `far_mid` no es significativa y `mid_final` sí; las demás combinaciones las
 redacta el constructor con el mismo tono (D5, textos condicionados).
 
 **Paquete**: se reescribe `mtpy/lib/studies/herd/` (`data.py` con la lectura multiámbito, `stats.py` con
@@ -271,3 +279,77 @@ Un revisor leyó la especificación como constructor. Lo que planteó y cómo qu
   de `read_current` de hoy.
 - **Cambios sin commit de la versión 1 en el árbol** (arreglos del 2026-11-06: umbral de semanas, «cabría esperar sólo
   por el azar», pregunta 3): pendiente de Luis.
+
+## Cierre (2026-11-06)
+
+Construido en la rama `analisis-rebano-v2` (`c6f6529..fff4310` por tareas, `ae87064` primer cierre y la ronda de la
+revisión final `3bde00b..`), base `c3aa20e` de `dev`, con revisión por tarea y revisión final.
+
+**Qué existe**
+
+- Paquete `mtpy/lib/studies/herd/`: `stats.py` (comparaciones entre parejas de casas, tramos semiabiertos, dispersión
+  con peso fijo por pareja de casas, permutación de 2.000 barajados dentro de cada pareja, prueba del signo),
+  `data.py` (lectura de todas las elecciones publicadas) y `study.py` (`compute_herd`).
+- Exportadores `mtpy/lib/publish/herd.py`: partes `meta`, `summary`, `elections` y `current` (+ CSV
+  `elections`); las partes de la versión 1 (`cycles`, `weeks`, `houses`) ya no se escriben. `docs/web/contrato.md`
+  describe las partes y claves de la versión 2.
+- Página `mtpy/lib/pages/herd.py` + `web/templates/analisis_rebano.html` + `web/dist/js/pages/analisis-rebano.js`
+  (barras por elección, cuadritos, tabla en directo), ajustes en `web/dist/css/site.css` (la píldora de página viva
+  y las etiquetas de los KPI parten línea sólo en esta página); fixtures y pruebas nuevas.
+
+**Cifras con el bundle real (2026-11-06, estadística con peso fijo por pareja, `compute_herd` en 31,8 s)**
+
+| Comparación | Elecciones a favor | `sign_p` | Claras por sí solas | Desde |
+|---|---|---|---|---|
+| lejos → final (`far_final`) | 19 de 23 | 0,0013 (1 entre 769) | 3 | 1996 |
+| lejos → medio (`far_mid`) | 9 de 17 | 0,5 (moneda) | 4 | 1989 |
+| medio → final (`mid_final`) | 22 de 29 | 0,00407 (1 entre 246) | 8 | 1982 |
+
+Bajada mediana de `far_final`: −15 % (`far_mid` −12 %, `mid_final` −13 %). Generales 8 de 10 (p 0,055, mediana
+−7 %), autonómicas 11 de 13 (p 0,011, mediana −20 %). 34 elecciones, 9 ámbitos, desde 1982 (la píldora; el subtítulo
+cuenta desde 1996, el primer año de `far_final`). Generales 2026 en directo: `far_mid` +6 % (37 parejas, 1,02 →
+1,08, p 0,783), a 23 días; el tramo final empieza el 9-11. Probabilidad nula media de bajar (permutaciones dentro de
+cada pareja): 0,501 / 0,502 / 0,499 en `far_final` / `far_mid` / `mid_final` (antes, sumando filas, 0,59 en
+`far_final`); con ella la cola de Poisson-binomial casi coincide con la moneda (0,00134 frente a 0,0013; 0,00394
+frente a 0,00407). Frente al primer cierre cambia `mid_final` (23 → 22 de 29) y varias barras (Generales 2023 sube
++8 %); los veredictos no cambian: pregunta 1 «SÍ, EN CONJUNTO», pregunta 2 «SÍ, EN LAS TRES ÚLTIMAS SEMANAS».
+Capturas a 390 y 1280 px sin desborde horizontal (`v3_390.png`, `v3_1280.png` en el scratchpad de la sesión
+a00d6fa2; informe en `final-fix-report.md` del espacio de trabajo SDD).
+
+**Decisiones tomadas en la ejecución**
+
+- `main_series` se retiró de `stats.py` y se recoloca en `data.py` con la definición de la versión 1; las
+  distancias de empate de la permutación llevan tolerancia de 1e-9.
+- La pareja extra de es/2023 (A3-B8, 5 días) se acepta tal cual: las cifras comprobadas no cambian.
+- Subtítulo: segunda frase sólo si `far_mid` no es significativa y `mid_final` sí; con `k*2 <= n` la frase es «En
+  sólo {k} de las {n} …; en las demás, no»; guarda con `n == 0`.
+- Texto del KPI 2 («hasta tres semanas antes, {k} de {n}: como una moneda» bajo «En las tres últimas semanas»):
+  es el de D4, aprobado por Luis, y se mantiene.
+- «a 1 día» en singular; sin frase de directo si falta la fecha del tramo final; «bajada mediana del 15 %» sin
+  doble negativo; «como una moneda» sin «por azar».
+- Se restauró la clase `.qb` del CSS compartido (la usaban `/analisis/voto-oculto` y `/analisis/andorra`).
+- En la prueba de palabras prohibidas, «copi» se comprueba como inicio de palabra (choca con «Demoscopio»).
+- Revisión final: peso fijo por pareja de casas (D3); el lado de cada barra sale de `falls` y un cambio que
+  redondea a 0 % lleva un decimal; `since_year` propio de cada comparación; una sola forma de la probabilidad
+  («1 entre N»); las dos preguntas de Luis en todas partes; «Datos y método» corregido (3 comparaciones por pareja
+  de casas y tramo, permutación de comparaciones, sin promedios ni enlace al método del promedio); los sondeos sin
+  encuestadora quedan fuera de las comparaciones.
+
+**Menores aplazados** (no bloquean): `n <= 0` sin guardar en `comparisons`; `p` puede ser 0,0; `main_series` sin
+prueba de orden; importes privados `_is_number`/`_sig3`; orden de columnas de `elections` sin prueba; KPI 3 con
+fallbacks sin probar; «tres últimas semanas» fijo en la página y no leído de `params`; «subida mediana del 0 %»;
+guion de la tabla en directo sin prueba a nivel HTML; el pie muestra el id de ejecución crudo («20261008-120000»)
+con la procedencia de los fixtures; en 390 px la tabla en directo se desplaza dentro de su envoltorio.
+
+**Sin verificar**: los botones de descarga de las tarjetas no se han probado en un navegador; la página con
+Chrome sin cabeza sólo se ha visto estática; el pie «Actualizado / Último sondeo» se vio con una procedencia
+ficticia (la de los fixtures), no con la de un `publish` real.
+
+**Pasos de Luis** (en este orden: `rebano` ya está publicado y el `update` diario con la imagen ANTIGUA republica
+las partes de la versión 1)
+
+1. Desplegar la imagen nueva.
+2. Después, `python job.py publish '{"what":["study"],"study":"rebano"}'` (o dejar que lo haga el `update` diario).
+3. Sólo con la imagen nueva ya en marcha, borrar de su S3 `studies/rebano/{cycles,weeks,houses}.json` y
+   `studies/rebano/csv/{cycles,weeks,houses}.csv`.
+4. Tras el 29-N, `publish event` de `es/2026-11-29` y una republicación.

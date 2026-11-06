@@ -1,11 +1,10 @@
 """
 Readers of the inputs of the herd study: the parts already published in the bundle.
 
-The study does not touch the database. It reads, for every published election of the scope, the ``cycle`` part (the
-polls of the whole cycle) with the ``series`` (the curve of the average) and ``pollsters`` (the error of the last poll
-of every house) parts when they exist; the ``meta``, ``polls`` and ``series`` of the latest run while its election has
-no published results; and the ``herding`` analysis of the scope, all through a ``BundleReader``, plus the small
-parameters file in ``data/``. This module keeps independent of the web layer.
+The study does not touch the database. It reads, through a ``BundleReader``, the ``cycle`` part (the polls of the whole
+cycle) of every published election of every scope of the manifest (the ones with a ``results`` part), the ``meta`` and
+``polls`` of the latest run of the live scope while its election has no published results, and the small parameters
+file in ``data/``. This module keeps independent of the web layer.
 """
 import json
 from dataclasses import dataclass
@@ -13,13 +12,15 @@ from typing import Optional
 
 import pandas as pd
 
-from ...bundle import BundleReader, path_analysis, path_event, path_manifest, path_part
+from ...bundle import BundleReader, path_event, path_manifest, path_part
+from ...mtypes import DROP_MTYPES
 from ....core.io import FileSystem
-from ..labels import short_year_label
+from ..ban.data import list_scopes
+from ..labels import election_label
+from .stats import _is_number
 
 PARAMS_FILE = 'rebano/params.json'
-# The poll columns the study keeps, before one column per party
-POLL_COLUMNS = ['date', 'pollster_id', 'pollster', 'start_date', 'end_date', 'sample_size', 'weight']
+NATIONAL = 'es'
 
 
 class MissingInput(Exception):
@@ -29,7 +30,7 @@ class MissingInput(Exception):
     Parameters
     ----------
     part : str
-        Name of the missing part, relative to the bundle (``events/es``).
+        Name of the missing part (``events``).
 
     Attributes
     ----------
@@ -43,40 +44,37 @@ class MissingInput(Exception):
 
 
 @dataclass
-class Cycle:
+class Election:
     """
-    The polls of one electoral cycle and what the study reads with them.
+    One election with the polls the study compares.
 
     Attributes
     ----------
+    scope : str
+        Scope code.
     event_date : str
         Election date, ``YYYY-MM-DD``.
     label : str
-        Public label of the cycle (``cycle_label``).
-    current : bool
-        Whether it is the cycle in progress (read from the latest run) rather than a past one.
+        Public label (``Generales 2019``, ``Madrid 2021``).
+    kind : str
+        ``'generales'`` for the national scope, ``'autonómicas'`` for the rest.
+    names : list of str
+        The series measured (``main_series``).
     polls : pandas.DataFrame
-        One row per poll with the ``POLL_COLUMNS`` (dates as the strings of the part, ``sample_size`` float with
-        NaN for null) and one float column per party.
-    parties : list of str
-        The parties of the polls, in the order of the part.
-    curve : pandas.DataFrame or None
-        The average published with the polls, indexed by ``Timestamp`` with one column per party; ``None`` without
-        a ``series`` part.
-    errors : dict
-        ``{pollster: {'last_error_avg', 'last_error_blocks'}}`` from the ``pollsters`` part; empty without it and in
-        the current cycle.
-    inputs : dict
-        The parts read for the cycle (``read_cycles`` and ``read_current`` say which).
+        The polls kept (``prepare_polls``): ``poll``, ``pollster``, ``days``, ``n`` and one column per series.
+    current : bool
+        Whether it is the election in progress (read from the latest run) rather than a past one.
+    as_of : str or None
+        The ``as_of`` of the run for the election in progress; ``None`` for a past one.
     """
+    scope: str
     event_date: str
     label: str
-    current: bool
+    kind: str
+    names: list
     polls: pd.DataFrame
-    parties: list
-    curve: Optional[pd.DataFrame]
-    errors: dict
-    inputs: dict
+    current: bool
+    as_of: Optional[str]
 
 
 def load_params(data: FileSystem) -> dict:
@@ -91,150 +89,173 @@ def load_params(data: FileSystem) -> dict:
     Returns
     -------
     dict
-        The JSON as written: ``scope``, ``since``, ``max_days``, ``window_days``, ``final_days``, ``local_window``,
-        ``n_series``, ``min_polls``, ``exclude`` and ``buckets``.
+        The JSON as written: ``scopes``, ``since``, ``live_scope``, ``max_days``, ``pair_days``, ``periods``,
+        ``min_rows``, ``n_series``, ``exclude``, ``permutations`` and ``seed``.
     """
     return json.loads(data.read(PARAMS_FILE))
 
 
-def cycle_label(event_date: str, dates: list) -> str:
+def main_series(polls: pd.DataFrame, parties: list[str], n_series: int) -> list[str]:
     """
-    Public label of a cycle: the year of its election, followed by the abbreviated month when another date of
-    ``dates`` shares the year (``2019 abr.`` and ``2019 nov.``).
+    The series the study measures: the parties with the highest mean share over the polls.
 
     Parameters
     ----------
+    polls : pandas.DataFrame
+        The polls of a cycle, one float column per party.
+    parties : list of str
+        The candidate parties, in the order that breaks ties.
+    n_series : int
+        How many series to keep.
+
+    Returns
+    -------
+    list of str
+        The ``n_series`` parties with the highest mean share, descending, ties in the order of ``parties``.
+    """
+    means = [(-polls[name].mean(), position, name) for position, name in enumerate(parties)
+             if name in polls and _is_number(polls[name].mean())]
+
+    return [name for _, _, name in sorted(means)[:n_series]]
+
+
+def prepare_polls(records: list, parties: list, event_date: str, params: dict) -> tuple[pd.DataFrame, list]:
+    """
+    The polls of a cycle the study compares, and the series it measures.
+
+    Keeps the polls whose fieldwork ended (``end_date``, or ``date`` without it) 0 to ``max_days`` days before the
+    election and whose ``mtype`` is not in ``DROP_MTYPES``; the series are the ``n_series`` parties with the highest
+    mean share over those polls (the excluded houses and the polls without a sample count here); then keeps those
+    with ``sample_size > 0``, ``weight > 0`` and a house not in ``exclude``.
+
+    Parameters
+    ----------
+    records : list of dict
+        The polls of a ``cycle`` or run ``polls`` part.
+    parties : list of str
+        The parties of the polls, in the order of the part.
     event_date : str
         Election date, ``YYYY-MM-DD``.
-    dates : list of str
-        The election dates labelled together.
+    params : dict
+        Parameters of the study (``load_params``); uses ``max_days``, ``n_series`` and ``exclude``.
 
     Returns
     -------
-    str
-        The label.
+    polls : pandas.DataFrame
+        Columns ``poll`` (index of the poll in ``records``, as str), ``pollster``, ``days`` (int), ``n`` (float, the
+        sample) and one float column per series.
+    names : list of str
+        The series.
     """
-    year = event_date[:4]
+    frame = pd.DataFrame(records).reindex(columns=['end_date', 'date', 'pollster', 'sample_size', 'weight', 'mtype']
+                                          + list(parties))
+    frame['poll'] = [str(index) for index in range(len(frame))]
+    end = pd.to_datetime(frame['end_date'].where(frame['end_date'].notna(), frame['date']))
+    frame['days'] = (pd.Timestamp(event_date) - end).dt.days
+    frame['n'] = pd.to_numeric(frame['sample_size'], errors='coerce').astype(float)
+    frame['weight'] = pd.to_numeric(frame['weight'], errors='coerce').astype(float)
 
-    return short_year_label(event_date, sum(date[:4] == year for date in set(dates) | {event_date}) > 1)
+    for name in parties:
+        frame[name] = pd.to_numeric(frame[name], errors='coerce').astype(float)
+
+    frame = frame[frame['days'].between(0, params['max_days']) & ~frame['mtype'].isin(DROP_MTYPES)]
+    names = main_series(frame, list(parties), params['n_series'])
+    frame = frame[(frame['n'] > 0) & (frame['weight'] > 0) & ~frame['pollster'].isin(params['exclude'])]
+    frame = frame[['poll', 'pollster', 'days', 'n'] + names].reset_index(drop=True)
+    frame['days'] = frame['days'].astype(int)
+
+    return frame, names
 
 
-def is_published(reader: BundleReader, scope: str, date: str) -> bool:
+def _label(scope: str, date: str, dates: list, names: dict) -> str:
+    """Public label of an election; with the month when another date of ``dates`` shares its year."""
+    month = sum(other[:4] == date[:4] for other in set(dates) | {date}) > 1
+
+    return election_label(scope, names.get(scope, scope), date, month=month)
+
+
+def _kind(scope: str) -> str:
+    """``'generales'`` for the national scope, ``'autonómicas'`` for the rest."""
+    return 'generales' if scope == NATIONAL else 'autonómicas'
+
+
+def read_elections(reader: BundleReader, params: dict, names: dict) -> tuple[list[Election], dict]:
     """
-    Whether an election is published with its results (its event folder has a ``results`` part).
-
-    Parameters
-    ----------
-    reader : BundleReader
-        Reader of the bundle.
-    scope : str
-        Scope code.
-    date : str
-        Election date, ``YYYY-MM-DD``.
-
-    Returns
-    -------
-    bool
-        ``True`` if ``events/{scope}/{date}/results.json`` exists.
-    """
-    return reader.exists(path_event(scope, date, 'results'))
-
-
-def _polls_frame(records: list, parties: list) -> pd.DataFrame:
-    """The polls of a ``cycle`` or run ``polls`` part as a table: the ``POLL_COLUMNS`` and one float column per
-    party (NaN for a missing figure), ``sample_size`` float with NaN for null."""
-    frame = pd.DataFrame(records).reindex(columns=POLL_COLUMNS + list(parties))
-    frame['sample_size'] = pd.to_numeric(frame['sample_size'], errors='coerce').astype(float)
-    frame['weight'] = frame['weight'].astype(float)
-    frame[list(parties)] = frame[list(parties)].astype(float)
-
-    return frame
-
-
-def _curve(series: dict) -> pd.DataFrame:
-    """The ``mean`` of a ``series`` part, indexed by ``Timestamp`` with one float column per party."""
-    index = pd.DatetimeIndex(pd.to_datetime(series['dates']), name='date')
-
-    return pd.DataFrame({name: series['mean'][name] for name in series['parties']}, index=index).astype(float)
-
-
-def read_cycles(reader: BundleReader, params: dict) -> tuple[list[Cycle], dict]:
-    """
-    The past cycles of the scope: every published election since ``params['since']`` with a ``cycle`` part.
+    The past elections: every date of every scope with a ``cycle`` and ``results`` part.
 
     Parameters
     ----------
     reader : BundleReader
         Reader of the bundle.
     params : dict
-        Parameters of the study (``load_params``); uses ``scope`` and ``since``.
+        Parameters of the study (``load_params``); uses ``scopes`` (``'all'`` or a list of codes), ``since`` and what
+        ``prepare_polls`` uses.
+    names : dict
+        ``{scope: name}`` of the scopes catalogue, for the labels.
 
     Returns
     -------
-    cycles : list of Cycle
-        The cycles ascending by date, with ``current`` false, ``curve`` from the ``series`` part and ``errors``
-        from the ``pollsters`` part when they exist.
+    elections : list of Election
+        Ascending by date, the national scope first on the same date.
     inputs : dict
-        By election date: ``{'cycle', 'series', 'pollsters'}`` with the ``generated_at`` of each part read
-        (``None`` for ``series`` and ``pollsters`` when missing), or ``{'skipped': 'no cycle part'}``.
+        ``{scope: {'read': [dates], 'skipped': {date: reason}}}`` with reason ``'no cycle'`` or ``'no results'``.
     """
-    scope = params['scope']
-    dates = [date for date in reader.list_events(scope) if date >= params['since']]
-    cycles = []
+    scopes = list_scopes(reader, NATIONAL)
+
+    if params.get('scopes', 'all') != 'all':
+        scopes = [scope for scope in scopes if scope in params['scopes']]
+
+    elections = []
     inputs = {}
 
-    for date in dates:
-        if not reader.exists(path_event(scope, date, 'cycle')):
-            inputs[date] = {'skipped': 'no cycle part'}
-            continue
+    for scope in scopes:
+        dates = [date for date in reader.list_events(scope) if params.get('since') is None or date >= params['since']]
+        inputs[scope] = {'read': [], 'skipped': {}}
 
-        cycle = reader.read_json(path_event(scope, date, 'cycle'))
-        series = pollsters = None
+        for date in dates:
+            if not reader.exists(path_event(scope, date, 'cycle')):
+                inputs[scope]['skipped'][date] = 'no cycle'
+                continue
 
-        if reader.exists(path_event(scope, date, 'series')):
-            series = reader.read_json(path_event(scope, date, 'series'))
+            if not reader.exists(path_event(scope, date, 'results')):
+                inputs[scope]['skipped'][date] = 'no results'
+                continue
 
-        if reader.exists(path_event(scope, date, 'pollsters')):
-            pollsters = reader.read_json(path_event(scope, date, 'pollsters'))
+            cycle = reader.read_json(path_event(scope, date, 'cycle'))['data']
+            polls, series = prepare_polls(cycle['polls'], list(cycle['parties']), date, params)
+            elections.append(Election(scope=scope, event_date=date, label=_label(scope, date, dates, names),
+                                      kind=_kind(scope), names=series, polls=polls, current=False, as_of=None))
+            inputs[scope]['read'].append(date)
 
-        inputs[date] = {'cycle': cycle['generated_at'],
-                        'series': series['generated_at'] if series else None,
-                        'pollsters': pollsters['generated_at'] if pollsters else None}
-        errors = {
-            row['pollster']: {'last_error_avg': row.get('last_error_avg'),
-                              'last_error_blocks': row.get('last_error_blocks')}
-            for row in (pollsters['data']['rows'] if pollsters else [])
-        }
-        parties = list(cycle['data']['parties'])
-        cycles.append(Cycle(event_date=date, label=cycle_label(date, dates), current=False,
-                            polls=_polls_frame(cycle['data']['polls'], parties), parties=parties,
-                            curve=_curve(series['data']) if series else None, errors=errors, inputs=inputs[date]))
+    order = {scope: index for index, scope in enumerate(scopes)}
+    elections.sort(key=lambda election: (election.event_date, order[election.scope]))
 
-    return cycles, inputs
+    return elections, inputs
 
 
-def read_current(reader: BundleReader, params: dict) -> tuple[Optional[Cycle], dict]:
+def read_current(reader: BundleReader, params: dict, names: dict) -> tuple[Optional[Election], dict]:
     """
-    The cycle in progress: the latest run of the scope while its election has no published results.
+    The election in progress: the latest run of the live scope while its election has no published results.
 
     Parameters
     ----------
     reader : BundleReader
         Reader of the bundle.
     params : dict
-        Parameters of the study (``load_params``); uses ``scope`` and ``since``.
+        Parameters of the study (``load_params``); uses ``live_scope``, ``since`` and what ``prepare_polls`` uses.
+    names : dict
+        ``{scope: name}`` of the scopes catalogue, for the labels.
 
     Returns
     -------
-    current : Cycle or None
-        The cycle with ``current`` true, the polls of the run ``polls`` part, ``curve`` from its ``series`` part
-        (published cut at ``as_of``) and ``errors`` empty; ``None`` without a manifest, without a run of the scope
-        or once its election is published with results.
+    current : Election or None
+        The election with ``current`` true, the polls of the run ``polls`` part and the ``as_of`` of its ``meta``;
+        ``None`` without a manifest, without a run of the scope or once its election has ``results``.
     inputs : dict
         ``{'run_id', 'as_of', 'event_date'}`` of the run read, or ``{'skipped': reason}`` with reason
         ``'no manifest'``, ``'no run'`` or ``'election published'``.
     """
-    scope = params['scope']
+    scope = params['live_scope']
 
     if not reader.exists(path_manifest()):
         return None, {'skipped': 'no manifest'}
@@ -247,46 +268,13 @@ def read_current(reader: BundleReader, params: dict) -> tuple[Optional[Cycle], d
     meta = reader.read_json(path_part(scope, run_id, 'meta'))['data']
     event_date = meta['event_date']
 
-    if is_published(reader, scope, event_date):
+    if reader.exists(path_event(scope, event_date, 'results')):
         return None, {'skipped': 'election published'}
 
     polls = reader.read_json(path_part(scope, run_id, 'polls'))['data']
-    series = reader.read_json(path_part(scope, run_id, 'series'))['data']
-    inputs = {'run_id': run_id, 'as_of': meta['as_of'], 'event_date': event_date}
-    dates = [date for date in reader.list_events(scope) if date >= params['since']] + [event_date]
-    parties = list(polls['parties'])
-    current = Cycle(event_date=event_date, label=cycle_label(event_date, dates), current=True,
-                    polls=_polls_frame(polls['polls'], parties), parties=parties, curve=_curve(series), errors={},
-                    inputs=inputs)
+    prepared, series = prepare_polls(polls['polls'], list(polls['parties']), event_date, params)
+    dates = [date for date in reader.list_events(scope) if params.get('since') is None or date >= params['since']]
+    current = Election(scope=scope, event_date=event_date, label=_label(scope, event_date, dates, names),
+                       kind=_kind(scope), names=series, polls=prepared, current=True, as_of=meta['as_of'])
 
-    return current, inputs
-
-
-def read_herding(reader: BundleReader, scope: str) -> tuple[dict, dict]:
-    """
-    The herding of every house over each whole cycle, from the ``herding`` analysis of the scope.
-
-    Parameters
-    ----------
-    reader : BundleReader
-        Reader of the bundle.
-    scope : str
-        Scope code.
-
-    Returns
-    -------
-    rows : dict
-        ``{(event_date, pollster): {'n', 'ratio', 'p_value'}}`` from the ``events`` of the part; empty without it.
-    inputs : dict
-        ``{'generated_at'}`` of the part, or ``{'skipped': 'no herding part'}``.
-    """
-    part = path_analysis(scope, 'herding')
-
-    if not reader.exists(part):
-        return {}, {'skipped': 'no herding part'}
-
-    envelope = reader.read_json(part)
-    rows = {(row['event_date'], row['pollster']): {'n': row['n'], 'ratio': row['ratio'], 'p_value': row['p_value']}
-            for row in envelope['data']['events']}
-
-    return rows, {'generated_at': envelope['generated_at']}
+    return current, {'run_id': run_id, 'as_of': meta['as_of'], 'event_date': event_date}

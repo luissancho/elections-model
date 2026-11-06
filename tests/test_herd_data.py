@@ -1,113 +1,114 @@
 """Tests de `mtpy/lib/studies/herd/data.py`: parámetros y lectura de las entradas del estudio del rebaño desde el
-paquete."""
+paquete sintético de `write_herd_bundle`."""
 import os
-
-import pandas as pd
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle
 from mtpy.lib.studies.herd import data
-from tests.fakes import write_herd_bundle
+from tests.fakes import HERD_RUN, write_herd_bundle
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 PARAMS = data.load_params(FileSystem(os.path.join(ROOT, 'data')))
+NAMES = {'es': 'España', 'es-md': 'Madrid'}
 
 
 def test_load_params_reads_the_repository_file():
-    params = data.load_params(FileSystem(os.path.join(ROOT, 'data')))
-    assert params['scope'] == 'es' and params['since'] == '2008-01-01' and params['max_days'] == 365
-    assert (params['window_days'], params['final_days'], params['local_window']) == (56, 21, 10)
-    assert (params['n_series'], params['min_polls'], params['exclude']) == (4, 3, ['CIS'])
-    assert params['buckets'] == [[0, 1], [2, 3], [4, 5], [6, 7], [8, 11], [12, 17], [18, 26], [27, 52]]
+    assert PARAMS['scopes'] == 'all' and PARAMS['since'] is None and PARAMS['live_scope'] == 'es'
+    assert (PARAMS['max_days'], PARAMS['pair_days'], PARAMS['min_rows'], PARAMS['n_series']) == (365, 7, 3, 4)
+    assert PARAMS['periods'] == {'final': [0, 21], 'mid': [21, 56], 'far': [56, 365]}
+    assert (PARAMS['exclude'], PARAMS['permutations'], PARAMS['seed']) == (['CIS'], 2000, 0)
 
 
-def test_read_cycles_reads_the_published_generals(fresh_app, tmp_path):
+def test_prepare_polls_filters_and_main_series(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
-    cycles, inputs = data.read_cycles(bundle.BundleReader(fs), PARAMS)
-    assert [c.event_date for c in cycles] == ['2019-11-10', '2023-07-23']
-    assert [c.label for c in cycles] == ['2019', '2023']
-    assert cycles[0].curve is None and cycles[1].curve.index.min() == pd.Timestamp('2022-07-23')
-    assert cycles[1].polls.shape[0] == 14
-    assert cycles[1].errors['GAD3'] == {'last_error_avg': 1.5, 'last_error_blocks': -2.0}
-    assert cycles[0].errors['NC Report']['last_error_blocks'] == -1.0
-    assert inputs['2023-07-23']['series'] and inputs['2019-11-10']['series'] is None
+    cycle = bundle.BundleReader(fs).read_json(bundle.path_event('es', '2019-11-10', 'cycle'))['data']
+    polls, names = data.prepare_polls(cycle['polls'], cycle['parties'], '2019-11-10', PARAMS)
+    assert names == ['PP', 'PSOE'] and len(polls) == 12
+    assert list(polls.columns) == ['poll', 'pollster', 'days', 'n', 'PP', 'PSOE']
+    assert set(polls['pollster']) == {'A', 'B'} and polls['days'].dtype.kind == 'i'
+    assert polls.iloc[0].to_dict() == {'poll': '0', 'pollster': 'A', 'days': 200, 'n': 1000.0, 'PP': 30.0,
+                                       'PSOE': 25.0}
 
 
-def test_read_cycles_casts_the_polls(fresh_app, tmp_path):
+def test_prepare_polls_applies_the_window_and_the_sample_filters():
+    def record(end, **extra):
+        return {'date': end, 'end_date': end, 'pollster': 'A', 'sample_size': 1000, 'weight': 1, 'mtype': None,
+                'PP': 30.0, 'PSOE': 25.0} | extra
+
+    records = [record('2026-11-20'), record('2025-11-20'), record('2026-11-30'), record(None, date='2026-11-10'),
+               record('2026-11-10', sample_size=None), record('2026-11-10', weight=0),
+               record('2026-11-10', mtype='online'), record('2026-11-10', pollster='CIS', PP=60.0)]
+    polls, names = data.prepare_polls(records, ['PP', 'PSOE'], '2026-11-29', PARAMS)
+    # 2025-11-20 is 374 days away and 2026-11-30 is after the election: out; online out; no sample, no weight and the
+    # excluded house are kept out after the series are chosen
+    assert list(polls['poll']) == ['0', '3'] and list(polls['days']) == [9, 19]
+    assert names == ['PP', 'PSOE']
+
+
+def test_read_elections_every_scope_with_results(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
-    cycles, inputs = data.read_cycles(bundle.BundleReader(fs), PARAMS)
-    cycle = cycles[1]
-    assert list(cycle.polls.columns) == ['date', 'pollster_id', 'pollster', 'start_date', 'end_date', 'sample_size',
-                                         'weight', 'PP', 'PSOE', 'VOX', 'SUMAR', 'Cs']
-    assert cycle.parties == ['PP', 'PSOE', 'VOX', 'SUMAR', 'Cs'] and not cycle.current
-    assert cycle.polls['sample_size'].dtype == float and cycle.polls['PP'].dtype == float
-    panel = cycle.polls[cycle.polls['pollster'] == 'Panel X'].iloc[0]
-    assert pd.isna(panel['sample_size']) and panel['weight'] == 0.5 and panel['end_date'] == '2023-07-10'
-    assert cycle.curve.loc[pd.Timestamp('2023-07-17'), 'SUMAR'] == 12.0
-    assert cycle.inputs == inputs['2023-07-23'] and inputs['2023-07-23']['pollsters']
+    elections, inputs = data.read_elections(bundle.BundleReader(fs), PARAMS, NAMES)
+    assert [e.label for e in elections] == ['Generales 2019', 'Madrid 2021', 'Generales 2023']
+    assert [(e.scope, e.kind, e.current, e.as_of) for e in elections] == [
+        ('es', 'generales', False, None), ('es-md', 'autonómicas', False, None), ('es', 'generales', False, None)]
+    assert elections[0].names == ['PP', 'PSOE'] and len(elections[0].polls) == 12
+    assert inputs['es']['read'] == ['2019-11-10', '2023-07-23'] and inputs['es']['skipped'] == {}
+    assert inputs['es-md']['read'] == ['2021-05-04']
+    assert inputs['es-md']['skipped'] == {'2023-05-28': 'no results'}
 
 
-def test_read_cycles_skips_an_event_without_the_cycle_part(fresh_app, tmp_path):
+def test_read_elections_since_and_scopes(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
-    bundle.BundleWriter(fs).remove(bundle.path_event('es', '2019-11-10', 'cycle'))
-    cycles, inputs = data.read_cycles(bundle.BundleReader(fs), PARAMS)
-    assert [c.event_date for c in cycles] == ['2023-07-23'] and inputs['2019-11-10'] == {'skipped': 'no cycle part'}
+    reader = bundle.BundleReader(fs)
+    elections, _ = data.read_elections(reader, PARAMS | {'since': '2022-01-01'}, NAMES)
+    assert [e.label for e in elections] == ['Generales 2023']
+    elections, inputs = data.read_elections(reader, PARAMS | {'scopes': ['es-md']}, NAMES)
+    assert [e.label for e in elections] == ['Madrid 2021'] and list(inputs) == ['es-md']
 
 
-def test_read_cycles_keeps_the_dates_since_the_parameter(fresh_app, tmp_path):
+def test_read_elections_labels_the_month_when_the_year_repeats(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
-    cycles, inputs = data.read_cycles(bundle.BundleReader(fs), PARAMS | {'since': '2020-01-01'})
-    assert [c.event_date for c in cycles] == ['2023-07-23'] and list(inputs) == ['2023-07-23']
+    writer = bundle.BundleWriter(fs)
+    for part, schema in (('meta', 'event-meta'), ('cycle', 'event-cycle'), ('results', 'event-results')):
+        content = bundle.BundleReader(fs).read_json(bundle.path_event('es-md', '2021-05-04', part))['data']
+        if part == 'meta':
+            content = content | {'event_date': '2021-11-04'}
+        writer.write_json(bundle.path_event('es-md', '2021-11-04', part), schema, content, 'es-md')
+    elections, _ = data.read_elections(bundle.BundleReader(fs), PARAMS, NAMES)
+    assert [e.label for e in elections if e.scope == 'es-md'] == ['Madrid may. 2021', 'Madrid nov. 2021']
 
 
 def test_read_current_reads_the_latest_run(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
-    current, inputs = data.read_current(bundle.BundleReader(fs), PARAMS)
-    assert current.current and current.event_date == '2026-11-29' and current.label == '2026'
-    assert current.polls.shape[0] == 7 and current.curve.index.max() == pd.Timestamp('2026-11-05')
-    assert current.errors == {}
-    assert inputs == {'run_id': '20261105-120000', 'as_of': '2026-11-05', 'event_date': '2026-11-29'}
-    assert current.parties == ['PP', 'PSOE', 'VOX', 'FA', 'Cs'] and current.inputs == inputs
+    current, inputs = data.read_current(bundle.BundleReader(fs), PARAMS, NAMES)
+    assert inputs == {'run_id': HERD_RUN, 'as_of': '2026-11-05', 'event_date': '2026-11-29'}
+    assert (current.scope, current.event_date, current.label, current.kind) == (
+        'es', '2026-11-29', 'Generales 2026', 'generales')
+    assert current.current and current.as_of == '2026-11-05' and len(current.polls) == 8
+    assert current.names == ['PP', 'PSOE']
 
 
-def test_read_current_is_none_without_a_run_or_once_the_election_is_published(fresh_app, tmp_path):
+def test_read_current_none_without_manifest_or_run(fresh_app, tmp_path):
+    fs = FileSystem(str(tmp_path))
+    assert data.read_current(bundle.BundleReader(fs), PARAMS, NAMES) == (None, {'skipped': 'no manifest'})
+    write_herd_bundle(fs)
+    from mtpy.lib import publish
+    publish.update_manifest(bundle.BundleWriter(fs), {'es': {'latest': None}})
+    assert data.read_current(bundle.BundleReader(fs), PARAMS, NAMES) == (None, {'skipped': 'no run'})
+
+
+def test_read_current_none_once_the_election_is_published(fresh_app, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
-    writer = bundle.BundleWriter(fs)   # the election of the run published with results
-    writer.write_json(bundle.path_event('es', '2026-11-29', 'results'), 'event-results', {'n_seats': 350, 'rows': []},
-                      'es')
-    assert data.is_published(bundle.BundleReader(fs), 'es', '2026-11-29')
-    assert data.read_current(bundle.BundleReader(fs), PARAMS) == (None, {'skipped': 'election published'})
-    writer.remove(bundle.path_manifest())
-    assert data.read_current(bundle.BundleReader(fs), PARAMS) == (None, {'skipped': 'no manifest'})
-
-
-def test_read_current_is_none_without_the_scope_in_the_manifest(fresh_app, tmp_path):
-    fs = FileSystem(str(tmp_path))
-    write_herd_bundle(fs)
-    assert not data.is_published(bundle.BundleReader(fs), 'es', '2026-11-29')
-    assert data.read_current(bundle.BundleReader(fs), PARAMS | {'scope': 'es-an'}) == (None, {'skipped': 'no run'})
-
-
-def test_read_herding_without_the_part(fresh_app, tmp_path):
-    fs = FileSystem(str(tmp_path))
-    write_herd_bundle(fs)
-    rows, inputs = data.read_herding(bundle.BundleReader(fs), 'es')
-    assert rows[('2023-07-23', 'GAD3')] == {'n': 8, 'ratio': 0.61, 'p_value': 0.05} and inputs['generated_at']
-    bundle.BundleWriter(fs).remove(bundle.path_analysis('es', 'herding'))
-    assert data.read_herding(bundle.BundleReader(fs), 'es') == ({}, {'skipped': 'no herding part'})
-
-
-def test_cycle_label_adds_the_month_only_when_the_year_repeats():
-    dates = ['2019-04-28', '2019-11-10', '2023-07-23']
-    assert [data.cycle_label(d, dates) for d in dates] == ['2019 abr.', '2019 nov.', '2023']
-
-
-def test_missing_input_names_the_part():
-    error = data.MissingInput('events/es')
-    assert error.part == 'events/es' and str(error) == 'missing input: events/es'
+    writer = bundle.BundleWriter(fs)
+    reader = bundle.BundleReader(fs)
+    cycle = reader.read_json(bundle.path_part('es', HERD_RUN, 'polls'))['data']
+    writer.write_json(bundle.path_event('es', '2026-11-29', 'cycle'), 'event-cycle', cycle, 'es')
+    writer.write_json(bundle.path_event('es', '2026-11-29', 'results'), 'event-results',
+                      {'n_seats': 350, 'rows': []}, 'es')
+    assert data.read_current(reader, PARAMS, NAMES) == (None, {'skipped': 'election published'})

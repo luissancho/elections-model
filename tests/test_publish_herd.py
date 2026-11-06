@@ -7,6 +7,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
+from mtpy.lib.publish.herd import _subtitle
 from mtpy.lib.studies.herd.study import compute_herd
 from tests.fakes import write_herd_bundle
 from tests.test_publish_unit import fake_prov, make_writer
@@ -28,65 +29,99 @@ def study(tmp_path_factory):
     return compute_herd(bundle.BundleReader(fs), FileSystem(os.path.join(ROOT, 'data')))
 
 
+SIG = {'far_final': {'n': 23, 'k': 19, 'sign_p': 0.0013, 'clear': 3, 'median_change': -0.15, 'since_year': '1986'},
+       'far_mid': {'n': 17, 'k': 9, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.1},
+       'mid_final': {'n': 29, 'k': 23, 'sign_p': 0.0012, 'clear': 2, 'median_change': -0.15}}
+
+
+def test_subtitle_when_the_final_weeks_are_significant_and_the_middle_is_not():
+    s = {'n_elections': 33, 'since_year': '1977', 'comparisons': SIG}
+    # the year is the first of far_final (1986), not the first of any comparison (1977)
+    assert _subtitle(s) == (
+        'En 19 de las 23 elecciones con sondeos lejos y cerca de la votación, desde 1986, las mismas encuestadoras se '
+        'parecen más entre sí en las tres últimas semanas que lejos de ella: por azar, 1 entre 769. Hasta tres semanas '
+        'antes, no: 9 de 17, como una moneda.')
+
+
+def test_subtitle_without_significance():
+    s = {'n_elections': 2, 'since_year': '2019', 'comparisons': {
+        'far_final': {'n': 4, 'k': 3, 'sign_p': 0.31, 'clear': 0, 'median_change': 0.62, 'since_year': '2019'},
+        'far_mid': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25},
+        'mid_final': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67}}}
+    assert _subtitle(s) == ('En 3 de las 4 elecciones con sondeos lejos y cerca de la votación, desde 2019, las mismas '
+                            'encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de ella, una '
+                            'proporción que podría deberse al azar.')
+
+
+def test_subtitle_other_branches():
+    far_mid = {'n': 17, 'k': 15, 'sign_p': 0.001, 'clear': 2, 'median_change': -0.2}
+    final = dict(SIG['far_final'], sign_p=0.0002)
+    text = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'far_mid': far_mid, 'far_final': final}})
+    assert text.endswith('por azar, menos de 1 entre 1.000. Y también hasta tres semanas antes: 15 de 17.')
+    no_mid = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'far_mid': dict(far_mid, n=0, k=0)}})
+    assert no_mid.endswith('por azar, 1 entre 769.')
+    assert 'copi' not in text.lower()
+
+
+def test_subtitle_without_a_second_sentence_when_the_last_stretch_is_not_significant():
+    quiet = dict(SIG['mid_final'], k=15, sign_p=0.6)
+    text = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'mid_final': quiet}})
+    assert text.endswith('por azar, 1 entre 769.')
+
+
+def test_subtitle_when_most_elections_do_not_get_closer():
+    far_final = {'n': 10, 'k': 3, 'sign_p': 0.01, 'clear': 0, 'median_change': 0.3, 'since_year': '2008'}
+    assert _subtitle({'since_year': '2008', 'comparisons': {**SIG, 'far_final': far_final}}) == (
+        'En sólo 3 de las 10 elecciones con sondeos lejos y cerca de la votación, desde 2008, las mismas '
+        'encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de ella; en las demás, no.')
+
+
+def test_subtitle_without_elections():
+    empty = {'n': 0, 'k': 0, 'sign_p': None, 'clear': 0, 'median_change': None}
+    comparisons = {'far_final': empty, 'far_mid': empty, 'mid_final': empty}
+    assert _subtitle({'since_year': None, 'comparisons': comparisons}) == (
+        'Todavía no hay elecciones con sondeos suficientes para comparar las mismas encuestadoras lejos y cerca de la '
+        'votación.')
+
+
 def test_export_herd_parts_validate(study):
-    for part in bundle.STUDY_PARTS['rebano'][1:]:
-        data, frames = publish.STUDY_EXPORTERS['rebano'][part](study)
-        valid(bundle.STUDY_SCHEMAS['rebano'][part], data)
-        assert set(frames) == set(bundle.STUDY_CSV_OF['rebano'].get(part, ()))
+    summary, frames = publish.export_herd_summary(study)
+    assert valid('rebano-summary', summary) and frames == {}
+    elections, frames = publish.export_herd_elections(study)
+    valid('rebano-elections', elections)
+    frame = frames['elections']
+    assert len(frame) == 4 and set(frame.columns) == set(study.elections[0])
+    assert len(list(study.elections[0])) == 13
+    current, frames = publish.export_herd_current(study)
+    valid('rebano-current', current)
+    assert current['current']['days_left'] == 24 and current['current']['mid_final'] is None and frames == {}
     meta, frames = publish.export_herd_meta(study, prov=fake_prov())
     valid('rebano-meta', meta)
     assert frames == {}
-    assert meta['subtitle'].startswith('En las 2 generales desde 2008, los sondeos se han parecido más entre sí')
-    assert 'misma urna' in meta['subtitle']
-    assert meta['subtitle'].endswith(' En 2026 ya van así desde el principio, y la única casa con sondeos suficientes '
-                                     'publica cifras que oscilan menos de lo que cabría esperar sólo por el azar de sus '
-                                     'muestras.')
-    assert meta['election'] == {'date': '2026-11-29', 'days_left': 24, 'as_of': '2026-11-05'}
-    assert meta['params']['window_days'] == 56
-    assert [s['url'] for s in meta['sources']][:2] == ['/elecciones', '/casas']
+    assert meta['title'] == '¿Se comportan las encuestadoras como un rebaño?'
+    assert meta['election'] == study.election and meta['scope'] == 'es'
+    assert 'copi' not in meta['subtitle'].lower()
+    assert [s['url'] for s in meta['sources']] == ['/elecciones', '/analisis']
 
 
-def test_export_herd_meta_drops_the_conditioned_clauses(tmp_path):
-    fs = FileSystem(str(tmp_path))
-    write_herd_bundle(fs)
-    bundle.BundleWriter(fs).remove(bundle.path_manifest())
-    study = compute_herd(bundle.BundleReader(fs), FileSystem(os.path.join(ROOT, 'data')), params={'final_days': 1})
-    meta, _ = publish.export_herd_meta(study, prov=fake_prov())
-    assert 'misma urna' not in meta['subtitle'] and 'ya van así' not in meta['subtitle']
-    assert meta['election'] is None
+def test_export_herd_current_is_none_without_an_election_in_progress(study):
+    idle = dataclasses.replace(study, current=None, election=None)
+    assert publish.export_herd_current(idle)[0] == {'current': None}
+    valid('rebano-current', {'current': None})
+    meta = publish.export_herd_meta(idle, prov=fake_prov())[0]
+    assert meta['election'] is None and valid('rebano-meta', meta)
 
 
-def test_export_herd_meta_counts_the_houses_of_the_current_clause(study):
-    """La frase de 2026 del subtítulo: «la única casa» con una sola, «las n casas» con todas, «k de las n» si no, y
-    ninguna frase cuando ninguna casa baja de 1."""
-    def subtitle(houses_now):
-        changed = dataclasses.replace(study, summary=study.summary | {'houses_now': houses_now})
-        return publish.export_herd_meta(changed, prov=fake_prov())[0]['subtitle']
-
-    two_of_three = subtitle({'n': 3, 'k': 2, 'herd': [], 'pending': []})
-    assert 'y 2 de las 3 casas con sondeos suficientes publican cifras que oscilan' in two_of_three
-    assert 'y las 2 casas con sondeos suficientes publican cifras' in subtitle({'n': 2, 'k': 2, 'herd': [],
-                                                                                'pending': []})
-    none = subtitle({'n': 1, 'k': 0, 'herd': [], 'pending': []})
-    assert 'ya van así' not in none and none.endswith('misma urna.')
-
-
-def test_export_herd_frames_follow_the_study(study):
-    data, frames = publish.STUDY_EXPORTERS['rebano']['cycles'](study)
-    assert list(frames['cycles']['before_ratio']) == [r['before']['ratio'] for r in data['rows']]
-    data, frames = publish.STUDY_EXPORTERS['rebano']['weeks'](study)
-    assert len(frames['weeks']) == len(data['rows']) + len(data['mean'])
-    data, frames = publish.STUDY_EXPORTERS['rebano']['houses'](study)
-    assert list(frames['houses']['pollster']) == [h['pollster'] for h in data['rows']]
-
-
-def test_publish_study_rebano_writes_the_parts_and_the_manifest(tmp_path):
+def test_publish_study_rebano_writes_the_four_parts(tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
     out = publish.publish_study('rebano', make_writer(tmp_path, fs), prov=fake_prov)
     assert out['study'] == 'rebano' and out['registered_at'] is None and out['checked'] is False
     reader = bundle.BundleReader(fs)
-    assert reader.read_json(bundle.path_study('rebano', 'summary'))['data']['k_narrowed'] == 2
+    for part in bundle.STUDY_PARTS['rebano']:
+        assert reader.read_json(bundle.path_study('rebano', part))['data'] is not None
+    assert reader.read_json(bundle.path_study('rebano', 'summary'))['data']['n_elections'] == 2
+    assert fs.exists(f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'elections')}")
     assert reader.read_json(bundle.path_manifest())['data']['studies']['rebano'] == {
         'published_at': ANY, 'registered_at': None, 'checked': False}
     with pytest.raises(publish.PublishRefused, match='nothing to register'):

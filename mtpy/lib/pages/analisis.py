@@ -62,9 +62,7 @@ CSV_LABELS = {
         'election-houses': 'Últimos sondeos de las generales de 2023 por bloques',
     },
     'rebano': {
-        'cycles': 'Dispersión por ciclo: resto del ciclo, últimas 8 y últimas 3 semanas',
-        'weeks': 'Dispersión por ciclo y semanas hasta la elección',
-        'houses': 'Rebaño por casa en las últimas 8 semanas de cada ciclo',
+        'elections': 'Comparaciones por elección: las mismas parejas de casas en cada tramo',
     },
     'voto-oculto': {
         'elections': 'Error de los sondeos finales por elección, bloque y partido',
@@ -669,6 +667,9 @@ def lean_context(state: dict) -> dict:
     return context
 
 
+HERD_COMPARISONS = ('far_final', 'far_mid', 'mid_final')
+
+
 def herd_context(state: dict) -> dict:
     """
     Template context of the page of the herd study (``/analisis/rebano``).
@@ -681,16 +682,13 @@ def herd_context(state: dict) -> dict:
     Returns
     -------
     dict
-        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``cycles`` (the rows,
-        the cycle in progress last), ``verdicts`` (``herd.verdict_rows``), ``kpis``, ``tests``, ``cis_rows``,
-        ``houses_now`` (``herd.houses_now_rows``), ``pending`` (``herd.pending_text``), ``cycle_ratio``
-        (``herd.cycle_ratio_text``), ``chance`` (``herd.chance_text``),
-        ``matrix_rows`` (the table of the matrix without JavaScript), ``repeaters``,
-        ``notes`` (``herd.matrix_notes``), ``split`` (``herd.final_split``), ``drops`` (``herd.biggest_drops``),
-        ``accuracy`` (``herd.accuracy_text``), ``result`` (``herd.result_text``), ``after_day`` (the election of the
-        card «Después del 29-N»: the one in progress or the newest cycle), ``csv_links``, ``sources``,
-        ``published_at``, ``initial`` (``herd.island`` plus the common ``state``) and the flags of ``herd.flags``
-        (``has_run``, ``like_final``, ``all_narrowed``, ``final_like_chance``, ``veda_date``...).
+        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``current`` (the
+        block of the election in progress, ``None`` without it), ``verdicts`` (``herd.verdicts``), ``kpis``,
+        ``bars`` (``herd.bars`` of the ``elections`` rows), ``squares`` (``far_mid`` and ``mid_final``), ``live``
+        (``herd.live_text``), ``live_rows`` (``herd.live_rows``), ``chance`` (per comparison: the probability of its
+        sign test in words), ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags``
+        (``has_run``, ``held``, ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``,
+        ``final_start``, ``final_started``).
 
     Raises
     ------
@@ -700,35 +698,23 @@ def herd_context(state: dict) -> dict:
     context = common_context(state, '/analisis')
     parts = {part: study_part(herd.HERD, part) or {} for part in bundle.STUDY_PARTS[herd.HERD]}
     meta, summary = parts['meta'], parts['summary']
-    cycles = _get(parts['cycles'], 'rows') or []
-    houses = _get(parts['houses'], 'rows') or []
-    initial = dict(herd.island(parts), state=context['state'])
-    context.update(herd.flags(summary, meta))
+    current = _get(parts['current'], 'current') or None
+    flag = herd.flags(meta, current)
+    context.update(flag)
     context.update(
         study_meta=meta,
         summary=summary,
-        cycles=cycles,
-        verdicts=herd.verdict_rows(summary, meta),
-        kpis=herd.kpis(summary, meta, cycles, houses),
-        tests=herd.tests(summary, cycles, meta),
-        cis_rows=herd.cis_rows(cycles),
-        houses_now=herd.houses_now_rows(summary, houses),
-        pending=herd.pending_text(summary),
-        cycle_ratio=herd.cycle_ratio_text(houses, summary),
-        chance=herd.chance_text(summary, houses),
-        matrix_rows=herd.matrix_rows(initial['matrix']),
-        repeaters=herd.repeaters(houses),
-        notes=herd.matrix_notes(houses),
-        split=herd.final_split(summary, cycles),
-        drops=herd.biggest_drops(cycles),
-        accuracy=herd.accuracy_text(summary),
-        result=herd.result_text(houses, cycles, meta),
-        after_day=context['election_short'] or herd.short_day(max((row.get('event_date') or '' for row in cycles),
-                                                                  default=None)),
+        current=current,
+        verdicts=herd.verdicts(summary),
+        kpis=herd.kpis(summary, current, flag),
+        bars=herd.bars(_get(parts['elections'], 'rows') or []),
+        squares={key: herd.squares(_get(summary, 'comparisons', key)) for key in ('far_mid', 'mid_final')},
+        live=herd.live_text(current, flag),
+        live_rows=herd.live_rows(current),
+        chance={key: herd.chance_text(_get(summary, 'comparisons', key, 'sign_p')) for key in HERD_COMPARISONS},
         csv_links=_csv_links(herd.HERD),
         sources=meta.get('sources') or [],
         published_at=_published_at(herd.HERD),
-        initial=initial,
     )
 
     return context
