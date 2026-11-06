@@ -978,6 +978,26 @@ tr.now td { background: var(--color-accent-soft); }
 /* the image of question 1 (`card-image.js` marks the clone `.shot-image`): the chart above the cycles table, so the
    whole table fits the 1200 px of the image */
 .shot-image .grid2:has(#cycles-table) { grid-template-columns: 1fr; }
+/* The clandestine polls study (/analisis/andorra): the four paragraphs of the head and their sources; the cells of
+   question 2 (green when the consensus moved toward the result, intense past half the way; red when it moved away or
+   crossed it, intense from a point), the movement left-aligned; the line over the sums of a table; the green box of
+   the tests; the dumbbell, whose height the page script sets by its rows; and the locked card of the election in
+   progress */
+#study-head .intro { max-width: 86ch; margin-top: 16px; }
+#study-head .intro p { margin: 0 0 8px; font-size: 14.5px; line-height: 1.55; color: var(--color-muted); }
+#study-head .intro b { color: var(--color-text); }
+#study-head .intro .srcs { font-size: 12px; }
+td.okl { background: #d1fae5; }
+td.kol { background: #fee2e2; }
+td.ok { background: var(--color-ok-soft); color: #15803d; font-weight: 700; }
+td.ko { background: #fef2f2; color: #b91c1c; font-weight: 700; }
+td.mv { text-align: left; }
+tr.sep td { border-top: 2px solid var(--color-line-strong); }
+.test.ok { border-color: #2e9e5b; background: var(--color-ok-soft); }
+.qcard .chart#c-dumb { height: auto; min-height: 320px; }
+.locked { display: grid; place-items: center; min-height: 150px; padding: 18px; border: 2px dashed var(--color-line-strong); border-radius: 12px; background: var(--color-bg); text-align: center; }
+.locked b { display: block; margin-bottom: 4px; font: 800 18px var(--font-head); }
+.locked p { max-width: 60ch; margin: 0; font-size: 13px; color: var(--color-muted); }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {

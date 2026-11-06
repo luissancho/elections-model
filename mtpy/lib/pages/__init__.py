@@ -13,7 +13,7 @@ of the scope, which is not tied to a run and is read as published.
 The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``webapi``, this module
 does not import the model nor ``publish``, so the web workers stay light.
 """
-from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, cera_context,
+from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, ban_context, cera_context,
                        herd_context, lean_context, study_cards, study_context, study_part, verdict_rows)
 from .backtest import backtest_context, backtest_part, model_record, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PATH_COLUMNS, RANKING_COLUMNS, RANKING_KEYS,
@@ -38,7 +38,7 @@ from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_tex
                       fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around,
                       shade_scale)
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
-from . import herd, lean
+from . import ban, herd, lean
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, quality_rubric, subpages, thresholds_rows)
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, pollster_href, pollster_slugs, resolve_event_path,

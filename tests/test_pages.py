@@ -1837,8 +1837,8 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['analisis', 'backtest', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters', 'herd',
-                     'inicio', 'lean', 'metodo', 'promedios', 'slugs']
+    assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters',
+                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'slugs']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -3513,10 +3513,12 @@ def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site,
     publish_study(fresh_app.fs)
     publish_study(fresh_app.fs, study='sesgo-cis')
     publish_study(fresh_app.fs, study='rebano')
+    publish_study(fresh_app.fs, study='andorra')
     for path, query in (('/', ''), ('/es', ''), ('/elecciones', ''),
                         ('/elecciones', 'scope=es&date=2023-07-23'), ('/metodo', ''), ('/metodo/promedio', ''),
                         ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', ''),
-                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', ''), ('/analisis/rebano', '')):
+                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', ''), ('/analisis/rebano', ''),
+                        ('/analisis/andorra', '')):
         status, _, body = call(events_site, path, query=query)
         assert status == 200 or not path.startswith('/analisis'), path
         assert_public_wording(html(body), path + '?' + query)
@@ -5679,6 +5681,143 @@ def test_analisis_index_lists_rebano_when_published(api, fresh_app):
     publish_study(fresh_app.fs, study='rebano')
     page = html(call(api, '/analisis')[2])
     assert '/analisis/rebano' in page and '¿Se copian las encuestadoras en la recta final?' in page
+
+
+def flat_text(page):
+    """The visible text of a page with its runs of blanks collapsed (the templates wrap their sentences)."""
+    return re.sub(r'\s+', ' ', visible_text(page))
+
+
+def question_verdicts(page):
+    """The verdicts of the question cards of a study page, in order (a question without a verdict has none)."""
+    return re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page)
+
+
+def test_andorra_page_renders_the_mockup_figures(events_site, fresh_app):
+    publish_study(fresh_app.fs, study='andorra')
+    status, _, body = call(events_site, '/analisis/andorra'); page = html(body)
+    assert status == 200 and 'El mercado de la fruta en Andorra' in page and 'sondeos de la veda' not in page
+    assert question_verdicts(page) == ['SÍ', 'EN 4 DE 5', 'LOS GRANDES']
+    assert '81 de 116' in page and '19 de 24' in page and '4 de 5' in page
+    assert 'La ley.' in page and 'elconfidencial.com' in page
+    assert initial(body)['pairs'][0]['label'] == 'GESOP · 2015'
+    assert [row['label'] for row in initial(body)['pairs']][6:8] == ['GAD3 · 19 abr.', 'SocioMétrica · 19 abr.']
+    assert '/dist/js/pages/analisis-andorra.js' in page and 'id="c-dumb"' in page
+    for anchor in ('study-head', 'resumen', 'p1', 'p2', 'p3', 'veintinueve', 'datos'):
+        assert 'id="%s"' % anchor in page, anchor
+    text = flat_text(page)
+    # the lead and the KPIs, from the parts
+    assert 'Lo que no vio nadie, tampoco lo vio la fruta: en 2023 dejó al PSOE 3,0 puntos por debajo' in text
+    assert 'del 1,70 del promedio congelado al 1,21 del consenso clandestino' in text
+    assert 'en abril de 2019, de 1,56 a 1,58, la única que no' in text
+    assert 'una moneda lo hace menos de 1 vez entre 10.000' in text
+    # question 1: the table by election, the sums and the exception
+    assert '1996 – 2014' in text and 'Autonómicas' in text and '(40 elecciones)' in text and '24 (73%)' in text
+    assert 'Cataluña es la excepción: 17 pares y sólo 6 más cerca' in text
+    assert 'Sí: en 7 de cada 10 pares' in text
+    # question 2: the movement of each cell, the model table and the counterfactual
+    for move in ('hacia el resultado · +0,3 de +1,0', 'se alejó · −0,4', 'clavado · +3,1 de +3,1',
+                 'pasó de largo · −2,3 cuando faltaban −0,7', 'pasó de largo, pero más cerca · +1,9 cuando faltaba +1,0',
+                 'hacia el resultado · apenas (−0,05)'):
+        assert move in text, move
+    assert '<td class="ok mv">clavado' in page and '<td class="kol mv">se alejó · −0,4' in page
+    assert 'habría bajado su error de 1,70 a 1,38' in text and 'peor en abril de 2019 (de 1,56 a 1,74)' in text
+    # question 3: the houses with their profile, the big polls
+    assert 'href="/casas/gad3"' in page and 'Sigma Dos · RTVE' in text and '17.550' in text
+    assert 'Los grandes afinan: 11 de los 12 sondeos de la jornada' in text
+    # the card of the election in progress, closed; the data and the downloads
+    assert 'El 29-N: el mercado de la fruta de 2026' in text and 'class="locked"' in page
+    assert page.count('class="pill brand" href="/api/v1/studies/andorra/') == 5
+    assert_public_wording(page, '/analisis/andorra')
+    lower = text.lower()
+    assert 'empresa' not in lower and 'sondeo de la veda' not in lower and 'sondeo legal medio' in lower
+
+
+def test_andorra_page_keeps_the_card_closed_without_results(events_site, fresh_app):
+    """While ``meta.next.open`` is false nothing of the election in progress reaches the page, not even when the
+    ``latest`` part were (wrongly) the election in progress."""
+    latest = fixture_data('andorra-latest')
+    latest |= {'event_date': '2026-11-29', 'label': '2026',
+               'polls': [dict(latest['polls'][0], pollster='Frutería Clandestina', sponsor='Diario Vedado',
+                              date='2026-11-27')]}
+    publish_study(fresh_app.fs, study='andorra', parts={'latest': latest})
+    page = html(call(events_site, '/analisis/andorra')[2])
+    assert 'class="locked"' in page and 'Se abre tras el cierre de urnas del 29 de noviembre' in page
+    assert '<span class="pill warn">Se completa con 2026 tras el cierre de urnas del 29-N</span>' in page
+    assert 'Frutería Clandestina' not in page and 'Diario Vedado' not in page and 'id="latest-table"' not in page
+    assert 'Desde el 23 de noviembre los sondeos de 2026 sólo se publican fuera de España' in flat_text(page)
+    card = pages.ban_context(pages.parse_state({}))['latest']
+    assert card['open'] is False and card['polls'] == [] and 'Frutería' not in json.dumps(card)
+
+
+def test_andorra_page_opens_the_card_with_the_published_election(events_site, fresh_app):
+    publish_study(fresh_app.fs, study='andorra', meta={'next': {'event_date': '2023-07-23', 'open': True}})
+    page = html(call(events_site, '/analisis/andorra')[2])
+    assert 'class="locked"' not in page and '<span class="pill ok">Completada con 2023</span>' in page
+    assert 'El 23-J: el mercado de la fruta de 2023' in flat_text(page)
+    table = re.search(r'<table id="latest-table">(.*?)</table>', page, re.S).group(1)
+    assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
+        'Casa', 'Medio', 'Fin de campo', 'Entrevistas', 'PP', 'PSOE', 'Vox', 'Sumar', 'Error']
+    assert len(re.findall(r'<tr class="poll">', table)) == 8 and 'YouGov' in table and '17.550' in table
+    rows = re.findall(r'<tr class="sum-row[^"]*"><td><b>([^<]+)</b>', table)
+    assert rows == ['Consenso clandestino', 'Promedio congelado', 'Resultado']
+    assert ('el consenso clandestino erró 1,22 puntos por partido; el promedio congelado, 1,52; con la fruta '
+            'dentro, 1,20') in flat_text(page)
+    assert_public_wording(page, '/analisis/andorra')
+
+
+def test_andorra_page_shows_an_election_without_pairs(events_site, fresh_app):
+    elections = fixture_data('andorra-elections')
+    for row in elections['rows']:
+        if row['event_date'] == '2016-06-26':
+            row.update(n_pairs=0, k_closer=0, mean_d=None)
+    publish_study(fresh_app.fs, study='andorra', parts={'elections': elections})
+    page = html(call(events_site, '/analisis/andorra')[2])
+    table = re.search(r'<table id="elections-table">(.*?)</table>', page, re.S).group(1)
+    row = re.search(r'<tr><td><b>2016</b></td>(.*?)</tr>', table, re.S).group(1)
+    assert re.findall(r'<td[^>]*>(.*?)</td>', row) == ['0', '–', '<span class="dlt flat">–</span>']
+
+
+def test_andorra_page_without_a_model_has_no_verdict_in_p2(events_site, fresh_app):
+    # what the study publishes without a general election with a model: no elections block, the cells empty
+    cells = {'n': 0, 'k_closer': 0, 'k_direction': 0, 'k_crossed': 0, 'k_half': 0, 'missed': []}
+    summary = fixture_data('andorra-summary') | {'elections': None, 'cells': cells}
+    elections = fixture_data('andorra-elections')
+    for row in elections['rows']:
+        row['model'] = None
+    publish_study(fresh_app.fs, study='andorra',
+                  parts={'summary': summary, 'elections': elections, 'cells': {'rows': []}})
+    status, _, body = call(events_site, '/analisis/andorra'); page = html(body)
+    assert status == 200 and question_verdicts(page) == ['SÍ', 'LOS GRANDES']
+    text = flat_text(page)
+    assert 'Elecciones con sondeos clandestinos' in text and '<div class="v">50<small>' in page
+    assert 'No hay generales con modelo publicado' in text and 'id="cells-table"' not in page
+    assert 'Generales en que la fruta afinó' not in text and 'Lo que no vio nadie' not in text
+    assert_public_wording(page, '/analisis/andorra')
+
+
+def test_analisis_index_lists_andorra_after_the_others(api, fresh_app):
+    for study in bundle.STUDIES:
+        publish_study(fresh_app.fs, study=study)
+    page = html(call(api, '/analisis')[2])
+    hrefs = re.findall(r'href="(/analisis/[a-z-]+)"', study_cards_html(page))
+    assert hrefs == ['/analisis/voto-cera', '/analisis/sesgo-cis', '/analisis/rebano', '/analisis/andorra']
+
+
+def test_andorra_verdicts_follow_the_thresholds():
+    """P1 «SÍ» from 6 in 10 with p < 0,05, «NO» below half; P2 «SÍ» or «NO» at the ends; P3 «LOS GRANDES» from 5
+    big polls with 3 in 4 closer, otherwise the count, and the best house without big polls."""
+    def labels(pairs, elections, big, houses=()):
+        return [(row['label'], row['tone'])
+                for row in pages.ban.verdicts({'pairs': pairs, 'elections': elections, 'big': big}, list(houses))]
+
+    houses = [{'pollster': 'GAD3', 'n': 20, 'k': 16, 'share': 0.8}]
+    assert labels({'share': 0.6, 'p': 0.01}, {'n': 5, 'k_beaten': 5}, {'n': 5, 'k': 4}) == [
+        ('SÍ', 'q1'), ('SÍ', 'q1'), ('LOS GRANDES', 'qb')]
+    assert labels({'share': 0.6, 'p': 0.2}, {'n': 5, 'k_beaten': 0}, {'n': 4, 'k': 4}) == [
+        ('A MEDIAS', 'q2'), ('NO', 'q3'), ('4 DE 4 GRANDES', 'qb')]
+    assert labels({'share': 0.4, 'p': 0.9}, None, {'n': 0, 'k': 0}, houses) == [
+        ('NO', 'q3'), (None, 'q2'), ('GAD3', 'qb')]
 
 
 # a ranking where the CIS leads: two houses behind it, one of them with the same share as the next
