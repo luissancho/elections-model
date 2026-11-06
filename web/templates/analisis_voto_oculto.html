@@ -103,7 +103,7 @@
           {%- elif la.mean is number and la.mean < 0 %}, es decir, en conjunto le dan algo de menos, pero no más de lo que permite el azar{% endif %}.{% endif %}
           {%- if streak %} En las generales el signo se inclina un poco hacia la subestimación ({{ count(lg.under, lg.n) }}) por {{ texts.big_elections }} en que el PSOE sacó más de {{ big_points }} puntos por encima de sus sondeos ({{ texts.big_years }}); una racha así sale por azar {{ texts.general_odds }} de las veces.
           {%- else %} En las generales, la izquierda salió subestimada en {{ count(lg.under, lg.n) }} ({{ lg.mean|delta(1) }} de media).{% endif %}
-          {%- if regional_both_over %} En las autonómicas {{ 'pasa lo contrario' if streak else 'los sondeos se pasan más veces' }} ({{ count(lr.over, lr.n) }} de más), pero ahí los sondeos dan de más a los dos bloques ({{ lr.mean|delta(1) }} a la izquierda y {{ rr.mean|delta(1) }} a la derecha, porque reparten poco voto a los partidos pequeños): la cuenta que vale es Izquierda − Derecha, repartida {{ lean_r.under|int }} a {{ lean_r.over|int }}.
+          {%- if regional_both_over %} En las autonómicas {{ 'pasa lo contrario' if streak else 'los sondeos se pasan más veces' }} ({{ count(lr.over, lr.n) }} de más), pero ahí los sondeos dan de más a los dos bloques ({{ lr.mean|delta(1) }} a la izquierda y {{ rr.mean|delta(1) }} a la derecha, porque reparten poco voto a los partidos pequeños): la cuenta que vale es Izquierda − Derecha, {{ 'repartida' if lean_regional_chance else 'inclinada' }} {{ lean_r.under|int }} a {{ lean_r.over|int }}.
           {%- else %} En las autonómicas, la izquierda salió subestimada en {{ count(lr.under, lr.n) }} ({{ lr.mean|delta(1) }} de media); frente a la derecha, el signo va {{ lean_r.under|int }} a {{ lean_r.over|int }}.{% endif %}
         </div>
         {% call m.how() %}
@@ -214,7 +214,7 @@
           En las {{ pp_all.n|int }} elecciones con PP, {{ pp_all.under|int }} subestimado y {{ pp_all.over|int }} sobreestimado, {{ pp_all.mean|delta(1) }} de media.
         </div>
         <div class="note">
-          <b>{{ 'La única excepción, contada como lo que es.' if podemos_over else 'IU, Podemos y sus marcas desde ' ~ recent_year ~ '.' }}</b>
+          <b>{{ 'La única excepción, contada como lo que es.' if podemos_over and not podemos_chance else 'IU, Podemos y sus marcas desde ' ~ recent_year ~ '.' }}</b>
           Desde finales de {{ recent_year }}, en las {{ pod_regional.n|int }} autonómicas con Podemos o sus marcas, los sondeos le dieron de más en {{ 'todas' if podemos_all else pod_regional.over|int }}, {{ pod_regional.mean|delta(1) }} puntos de media.
           {%- if podemos_general_under %} En las {{ texts.podemos_general }} generales del mismo periodo pasó lo contrario {{ texts.podemos_contrary }} ({{ pod_general.mean|delta(1) }} de media)
           {%- else %} En las {{ texts.podemos_general }} generales del mismo periodo le dieron de más en {{ pod_general.over|int }} ({{ pod_general.mean|delta(1) }} de media){% endif %}, y antes de {{ recent_year }}
@@ -230,7 +230,7 @@
         {% endcall %}
       </section>
       {% if has_run %}
-      {% set after_lead = 'Lo que dicen hoy los sondeos de las ' ~ window_weeks ~ ' últimas semanas, la misma cifra que la página compara con el resultado en cada elección pasada. ' ~ ('La elección ya se ha celebrado: en cuanto haya escrutinio' if held else ('El ' ~ election_day if election_day else 'El día de la elección') ~ ', en cuanto haya escrutinio') ~ ', esta tarjeta añade la fila de ' ~ (election_year or 'la elección') ~ ' a las ' ~ (n|int) ~ ' y vuelve a hacer las cuentas de las tres preguntas.' %}
+      {% set after_lead = ('Lo que dijeron' if held else 'Lo que dicen hoy') ~ ' los sondeos de las ' ~ window_weeks ~ ' últimas semanas, la misma cifra que la página compara con el resultado en cada elección pasada. ' ~ ('La elección ya se ha celebrado: en cuanto haya escrutinio' if held else ('El ' ~ election_day if election_day else 'El día de la elección') ~ ', en cuanto haya escrutinio') ~ ', esta tarjeta añade la fila de ' ~ (election_year or 'la elección') ~ ' a las ' ~ (n|int) ~ ' y vuelve a hacer las cuentas de las tres preguntas.' %}
       {% elif after.label %}
       {% set after_lead = 'La fila de ' ~ last_year ~ ' ya está en las cuentas de arriba: lo que dijeron los sondeos de las ' ~ window_weeks ~ ' últimas semanas, lo que salió de las urnas y el error, la misma cuenta que en cada elección pasada.' %}
       {% else %}
@@ -288,7 +288,7 @@
               <b>Error</b> de un partido o bloque: la media simple de sus cifras en esos sondeos menos el resultado; un bloque suma, en cada sondeo, los partidos del bloque que el sondeo estima y, en el resultado, esos mismos partidos; un linaje con dos marcas en la misma elección, igual.
               <b>Subestimado</b>: error negativo. <b>Tamaño</b>: la media del error sin su signo.
               La <b>p</b> es la de una t de Student sobre la media de los errores; la «probabilidad de k o más por azar» es la binomial de una cola.
-              Con ventanas de 7 ó 30 días, o con el último sondeo de cada casa, el cuadro no cambia.
+              Con ventanas de 7 ó 30 días, o con el último sondeo de cada casa, el cuadro no cambia (comprobado el 5 de noviembre de 2026).
             </div>
           </div>
         </div>

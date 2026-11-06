@@ -50,8 +50,9 @@ def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
     dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
-    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el del voto oculto (`er` errores) y `rows` definidos y devuelve su JSON (las
-    funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
+    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el del voto oculto (`er` errores) y `rows`
+    definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
+    `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
@@ -61,7 +62,8 @@ def run_js(expr, rows=ROWS):
         'const sw = await import("{}"); const c = await import("{}"); '
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
-        'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); const er = await import("{}"); '
+        'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
+        'const er = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
@@ -996,3 +998,13 @@ def test_error_strip_option_lists_the_parties_with_their_means():
     assert [p['value'] for p in points] == [[-3.42, 'PSOE'], [1.15, 'PP'], [-3.78, 'PP']] and points[0]['itemStyle']['color'] == '#d62728' and points[1]['itemStyle']['color'] == '#1d4f86'
     assert [m['value'] for m in option['series'][1]['data']] == [[0.02, 'PP'], [-0.12, 'PSOE']] and option['series'][1]['symbol'] == 'rect'
     assert option['series'][0]['markLine']['data'][0]['xAxis'] == 0
+
+
+def test_error_strip_option_widens_the_axis_to_the_largest_error():
+    """ECharts recorta los puntos fuera de la rejilla: un error de +8,77 (Andalucía 2018) abre el eje a ±10."""
+    data = {'rows': [{'party': 'Izquierda', 'label': 'Andalucía 2018', 'value': 8.77},
+                     {'party': 'Izquierda', 'label': 'Generales 2023', 'value': -1.2}],
+            'means': {'Izquierda': 3.79}, 'order': ['Izquierda']}
+    option = run_js('er.errorStripOption(%s)' % json.dumps(data))
+    assert (option['xAxis']['min'], option['xAxis']['max'], option['xAxis']['interval']) == (-10, 10, 2)
+    assert [p['value'] for p in option['series'][0]['data']] == [[8.77, 'Izquierda'], [-1.2, 'Izquierda']]

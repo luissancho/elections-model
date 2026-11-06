@@ -112,13 +112,17 @@ export function renderErrorBars(el, rows, opts) {
 
 /**
  * ECharts option of the strip of errors by party: a category axis of the parties (bottom up as `order` gives them),
- * a value axis from −xMax to xMax, a translucent point per election and a bar-shaped mark at the mean of each party.
+ * a value axis symmetric around 0 wide enough for every point (ECharts clips the points outside the grid), a
+ * translucent point per election and a bar-shaped mark at the mean of each party.
  *
  * @param {{rows: object[], means: object, order: string[]}} data `rows` as `{party, label, value}`, `means` by party
- * @param {object} opts `xMax` (half-range of the value axis) and `step` (its tick interval)
+ * @param {object} opts `xMin` (the least half-range of the value axis, widened to the largest error rounded up to a
+ *   tick, as in the bars) and `step` (its tick interval)
  * @returns {object} the option
  */
-export function errorStripOption({rows = [], means = {}, order = []} = {}, {xMax = 8, step = 2} = {}) {
+export function errorStripOption({rows = [], means = {}, order = []} = {}, {xMin = 8, step = 2} = {}) {
+  const largest = Math.max(0, ...rows.map((row) => Math.abs(row.value)));
+  const xMax = Math.max(xMin, Math.ceil(largest / step) * step);
   const meanData = order
     .filter((label) => typeof means[label] === 'number')
     .map((label) => ({value: [means[label], label]}));

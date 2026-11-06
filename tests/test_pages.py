@@ -5741,6 +5741,46 @@ def test_shy_page_once_the_election_is_published(api, fresh_app):
     assert 'Sondeos finales, hoy' not in page and 'Generales 2026' in page and '36,6' in page and '−1,2' in page
 
 
+def test_shy_page_once_the_election_is_held(api, fresh_app, monkeypatch):
+    """After the election, until ``publish event`` moves it to the past: the card «Después del 29-N» says the
+    election is held and waits for the scrutiny, and its row of polls loses «hoy»."""
+    monkeypatch.setattr(pages.shy, 'today', lambda: date(2026, 11, 30))
+    publish_study(fresh_app.fs, study='voto-oculto')
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    card = page[page.index('id="despues"'):]
+    assert 'Lo que dijeron los sondeos de las dos últimas semanas' in card and 'Lo que dicen hoy' not in page
+    assert 'La elección ya se ha celebrado: en cuanto haya escrutinio, esta tarjeta añade la fila de 2026' in card
+    assert '<td class="b">Sondeos finales</td>' in card and 'Sondeos finales, hoy' not in page
+    assert_public_wording(page, '/analisis/voto-oculto')
+
+
+def test_shy_page_vox_chance_names_the_larger_count(api, fresh_app):
+    """When Vox is overestimated more often, the chance is that of the overestimates («30 o más de más»), not of the
+    count of underestimates shown before it."""
+    summary = fixture_data('voto-oculto-summary')
+    summary = summary | {'vox': summary['vox'] | {'n': 39, 'under': 9, 'over': 30, 'p_sign': 0.0004}}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert page.count('la probabilidad de 30 o más de más por azar es') == 2 and '9 de 39' in page
+    assert 'la probabilidad de 9 o más por azar' not in page and 'la probabilidad de 30 o más por azar' not in page
+    publish_study(fresh_app.fs, study='voto-oculto')
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert page.count('la probabilidad de 22 o más por azar es') == 2 and 'o más de más' not in page
+
+
+def test_shy_page_wording_follows_the_chance_of_the_split(api, fresh_app):
+    """«repartida» needs the regional lean split as chance does, and «La única excepción» needs the split of Podemos
+    not to be explainable by chance."""
+    summary = fixture_data('voto-oculto-summary')
+    summary = summary | {'lean': summary['lean'] | {'regional': summary['lean']['regional'] | {'p_sign': 0.01}},
+                         'podemos': summary['podemos'] | {'regional_recent': summary['podemos']['regional_recent']
+                                                          | {'n': 32, 'under': 14, 'over': 18, 'p_sign': 0.3}}}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert 'la cuenta que vale es Izquierda − Derecha, inclinada 34 a 42' in page and 'repartida 34 a 42' not in page
+    assert 'La única excepción' not in page and '<b>IU, Podemos y sus marcas desde 2018.</b>' in page
+
+
 def test_shy_page_without_a_run_speaks_of_the_past(api, fresh_app):
     summary = fixture_data('voto-oculto-summary') | {'current': None}
     publish_study(fresh_app.fs, study='voto-oculto', meta={'election': None}, parts={'summary': summary})

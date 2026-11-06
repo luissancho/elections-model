@@ -985,13 +985,13 @@ tr.now td { background: var(--color-accent-soft); }
 .qcard .chart#vox-chart { height: 260px; }
 .qcard .chart#parties-chart { height: 340px; }
 #p1 .chart + .ctitle { margin-top: 14px; }
-.grid2.wide { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
-.quote { margin: 0 0 12px; padding: 8px 14px; border-left: 3px solid var(--color-line-strong); font-size: 13px; font-style: italic; color: var(--color-muted); }
-.quote b { font-style: normal; color: var(--color-text); }
-.quote .pill { margin-right: 8px; font-style: normal; }
+#p3 .grid2.wide { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+#p2 .quote { margin: 0 0 12px; padding: 8px 14px; border-left: 3px solid var(--color-line-strong); font-size: 13px; font-style: italic; color: var(--color-muted); }
+#p2 .quote b { font-style: normal; color: var(--color-text); }
+#p2 .quote .pill { margin-right: 8px; font-style: normal; }
 :is(#p1, #p3, #despues) td.b, :is(#p1, #p3, #despues) tr.b td { font-weight: 700; }
 @media (max-width: 899px) {
-  .grid2.wide { grid-template-columns: 1fr; }
+  #p3 .grid2.wide { grid-template-columns: 1fr; }
 }
 @media (max-width: 699px) {
   .qcard .chart#left-chart { height: 280px; }

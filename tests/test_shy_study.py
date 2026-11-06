@@ -73,9 +73,26 @@ def test_compute_shy_on_the_synthetic_bundle(fresh_app, tmp_path):
     assert s['pp']['early'] == {'from': '1982-01-01', 'to': '1996-01-01', 'errors': [{'label': 'Generales 1989', 'error': -2.3}]} and s['pp']['late']['n'] == 1
     assert (s['podemos']['before']['mean'], s['podemos']['general_recent']['mean'], s['podemos']['regional_recent']['mean']) == (0.1, 0.37, -1.2)
     assert s['current'] == {'as_of': '2026-11-05', 'days_left': 24, 'n_polls': 2, 'from': '2026-10-25', 'to': '2026-11-03',
-                            'values': {'Izquierda': 35.5, 'Derecha': 50.0, 'PP': 31.0, 'PSOE': 27.0, 'VOX': 19.0, 'FA': 7.0}, 'names': ['PP', 'PSOE', 'VOX', 'FA']}
+                            'values': {'Izquierda': 37.0, 'Derecha': 50.0, 'PP': 31.0, 'PSOE': 27.0, 'VOX': 19.0, 'FA': 7.0}, 'names': ['PP', 'PSOE', 'VOX', 'FA']}
     assert s['verdicts'] == {'p1': 'NO', 'p2': 'NO', 'p3': 'DE NADIE'}
     assert study.election == {'date': '2026-11-29', 'days_left': 24, 'as_of': '2026-11-05', 'run_id': '20261105-120000'}
+
+
+def test_compute_shy_current_blocks_add_the_means_of_their_members(fresh_app, tmp_path):
+    """Un bloque es la suma de las medias de sus miembros (el UP que falta en un sondeo no lo hunde) y sólo entran los
+    bloques de `params['blocks']`: el `Regionalista` del `bmaps` del run se queda fuera."""
+    fs = FileSystem(str(tmp_path))
+    made = write_shy_bundle(fs)
+    reader = bundle.BundleReader(fs)
+    path = reader.path(bundle.path_part('es', made['run_id'], 'meta'))
+    with open(fs.get_path(path), encoding='utf-8') as fh:
+        wrapped = json.load(fh)
+    wrapped['data']['bmaps']['blocks']['Regionalista'] = ['FA', 'UP']
+    with open(fs.get_path(path), 'w', encoding='utf-8') as fh:
+        json.dump(wrapped, fh)
+    values = compute_shy(reader, made['data']).summary['current']['values']
+    assert values['Izquierda'] == 37.0 and values['Derecha'] == 50.0 and 'Regionalista' not in values
+    assert set(values) == {'Izquierda', 'Derecha', 'PP', 'PSOE', 'VOX', 'FA'}
 
 
 def test_compute_shy_election_rows(fresh_app, tmp_path):

@@ -47,7 +47,9 @@ class ShyStudy:
     summary : dict
         ``n_elections``, ``n_general``, ``n_regional``, ``n_scopes``, ``first_year``, ``first_year_regional``,
         ``last_year``, ``left``, ``right`` and ``lean`` (four figures blocks each), ``vox``, ``parties``, ``size``,
-        ``psoe_general``, ``pp``, ``podemos``, ``current`` and ``verdicts``.
+        ``psoe_general``, ``pp``, ``podemos``, ``current`` and ``verdicts``. ``current['values']`` holds the main
+        parties of the run (mean of their non-null shares) and the blocks of ``params['blocks']`` (sum of the means
+        of their members, see ``_current``).
     elections : list of dict
         One row per election, chronological (``election_row``).
     groups : list of dict
@@ -203,8 +205,15 @@ def _subsets(rows: list, recent_from: str) -> dict:
             'recent': [row for row in rows if row['event_date'] >= recent_from]}
 
 
-def _current(current: Optional[dict]) -> Optional[dict]:
-    """The block ``summary['current']`` from the election in progress; ``None`` without it."""
+def _current(current: Optional[dict], blocks: list) -> Optional[dict]:
+    """
+    The block ``summary['current']`` from the election in progress; ``None`` without it.
+
+    ``values`` holds, rounded to 1 decimal, the mean of the non-null shares of each ``main`` party of the run and,
+    for each block of ``blocks`` (``params['blocks']``) in the ``bmaps`` of the run, the sum of the means of its
+    members with an estimate: a poll that omits a member does not pull the block down. A block is present only when
+    one of its members has an estimate; the other blocks of the run are left out.
+    """
     if current is None:
         return None
 
@@ -214,11 +223,12 @@ def _current(current: Optional[dict]) -> Optional[dict]:
     values = {}
 
     if not polls.empty:
-        for block, members in (current['blocks'] or {}).items():
-            members = [name for name in members if name in polls.columns]
-            sums = polls[members].sum(axis=1, min_count=1).dropna()
-            if not sums.empty:
-                values[block] = round(float(sums.mean()), 1)
+        run_blocks = current['blocks'] or {}
+        for block in blocks:
+            means = [polls[name].mean() for name in run_blocks.get(block, [])
+                     if name in polls.columns and polls[name].notna().any()]
+            if means:
+                values[block] = round(float(sum(means)), 1)
         for name in current['main']:
             if name in polls.columns and polls[name].notna().any():
                 values[name] = round(float(polls[name].mean()), 1)
@@ -252,7 +262,8 @@ def _groups(summary: dict, params: dict) -> list:
     entries += [('parties', row['key'], row['label'], row['figures']) for row in summary['parties']]
     entries += [('podemos', 'before', f'{up}: Antes de {year}', summary['podemos']['before']),
                 ('podemos', 'general_recent', f'{up}: Generales desde {year}', summary['podemos']['general_recent']),
-                ('podemos', 'regional_recent', f'{up}: Autonómicas desde {year}', summary['podemos']['regional_recent']),
+                ('podemos', 'regional_recent', f'{up}: Autonómicas desde {year}',
+                 summary['podemos']['regional_recent']),
                 ('pp', 'late', f"PP: Desde {params['pp_early'][1][:4]}", summary['pp']['late']),
                 ('pp', 'all', 'PP: Todas las elecciones', summary['pp']['all'])]
 
@@ -342,7 +353,7 @@ def compute_shy(reader: BundleReader, data: FileSystem, params: Optional[dict] =
         'podemos': {'before': _figures_of(before, 'UP', threshold),
                     'general_recent': _figures_of([row for row in since if row['general']], 'UP', threshold),
                     'regional_recent': _figures_of([row for row in since if not row['general']], 'UP', threshold)},
-        'current': _current(current)
+        'current': _current(current, params['blocks'])
     }
     summary['verdicts'] = verdicts(summary['left']['all'], summary['vox'], parties, labels)
 
