@@ -144,20 +144,20 @@
         <p>Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('consensus', 'Frente a las demás encuestadoras', 'En cada elección analizada, de cualquier ámbito, el error de su último sondeo en el bloque de izquierdas frente a la media de los últimos sondeos de las demás encuestadoras en esa misma elección.',
+      {{ m.card_start('consensus', 'Frente a las demás encuestadoras', 'En cada elección analizada, de cualquier ámbito, el error de su último sondeo en la ventaja de la izquierda sobre la derecha frente a la media de los últimos sondeos de las demás encuestadoras en esa misma elección.',
                       tools=m.download_button('consensus-download', profile.pollster.name, 'Frente a las demás encuestadoras', site_host ~ ' · ' ~ author_handle,
-                                              site_title|lower ~ '-consenso-' ~ profile.pollster.name|slug ~ '.png') if bullseye and left else none) }}
-        {% if bullseye and left %}
-        <p class="csub">Error en {{ left }}, cada punto una elección. Horizontal: la media de las demás encuestadoras. Vertical: {{ profile.pollster.name }}. Sobre la diagonal, dio a {{ left }} más voto que las demás.</p>
-        <div class="chart big" id="consensus-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en {{ left }} frente a la media de las demás encuestadoras, por elección" data-house="{{ profile.pollster.name }}"></div>
+                                              site_title|lower ~ '-consenso-' ~ profile.pollster.name|slug ~ '.png') if bullseye and left and right else none) }}
+        {% if bullseye and left and right %}
+        <p class="csub">Error en la ventaja de {{ left }} sobre {{ right }} ({{ left }} − {{ right }}), cada punto una elección. Horizontal: la media de las demás encuestadoras. Vertical: {{ profile.pollster.name }}. Sobre la diagonal, inclinó la carrera hacia {{ left }} más que las demás.</p>
+        <div class="chart big" id="consensus-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en la ventaja de {{ left }} sobre {{ right }} frente a la media de las demás encuestadoras, por elección" data-house="{{ profile.pollster.name }}"></div>
         {% elif analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
         <p class="notice">Esta encuestadora no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
         {% call m.how() %}
-        <p>Cada punto es una elección: en horizontal, la media del error de las demás encuestadoras en el bloque de izquierdas con sus últimos sondeos antes de esa elección, uno por encuestadora; en vertical, el error del último sondeo de la encuestadora en ese mismo bloque. En azul las generales y en naranja las autonómicas, con la etiqueta de la elección y su ámbito (2023-23J-es).</p>
-        <p>Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. Sobre la diagonal, la encuestadora dio a ese bloque más voto que la media de las demás; debajo, menos. Cuentan las mismas elecciones que la diana; una elección en la que ninguna otra encuestadora publicó en las seis semanas finales no tiene punto.</p>
+        <p>Cada punto es una elección: en horizontal, la media del error de las demás encuestadoras en la ventaja de la izquierda sobre la derecha con sus últimos sondeos antes de esa elección, uno por encuestadora; en vertical, el error del último sondeo de la encuestadora en esa misma ventaja. En azul las generales y en naranja las autonómicas, con la etiqueta de la elección y su ámbito (2023-23J-es).</p>
+        <p>El error en la ventaja es el error en la izquierda menos el error en la derecha. Positivo: el sondeo dio a la izquierda más ventaja sobre la derecha que el resultado, o menos desventaja; negativo, al revés. Mide hacia qué lado inclina el sondeo la carrera entre los dos bloques: si se pasa con los dos por igual, porque se queda corto con los demás partidos, su error en la ventaja es cero, y ese error se ve en la diana. Sobre la diagonal, la encuestadora inclinó la carrera hacia la izquierda más que la media de las demás; debajo, hacia la derecha. Cuentan las mismas elecciones que la diana; una elección en la que ninguna otra encuestadora publicó en las seis semanas finales no tiene punto.</p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('last', 'Último sondeo por elección', 'En cada elección de cualquier ámbito, cuánto se separó el último sondeo de la encuestadora del resultado de cada partido; o, con el conmutador, de la media de los últimos sondeos de las demás encuestadoras.') }}

@@ -502,6 +502,22 @@
         }
     },
     "es-an": {
+        "2030-06-16": {
+            "bmaps": {
+                "main": [
+                    "PP", "PSOE", "VOX", "AA", "PorA"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "SALF", "Cs"],
+                    "Izquierda": ["PSOE", "PorA", "UP"],
+                    "Regionalista": ["AA"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX", "SALF", "Cs"],
+                    "Izquierda": ["PSOE", "PorA", "UP"]
+                }
+            }
+        },
         "2026-05-17": {
             "parties": {
                 "event": [
@@ -631,6 +647,22 @@
         }
     },
     "es-ar": {
+        "2030-02-08": {
+            "bmaps": {
+                "main": [
+                    "PP", "PSOE", "VOX", "CHA", "TE", "IU", "PAR", "UP"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "SALF"],
+                    "Izquierda": ["PSOE", "IU", "UP", "SUMAR"],
+                    "Regionalista": ["CHA", "TE", "PAR"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX", "SALF"],
+                    "Izquierda": ["PSOE", "IU", "UP", "SUMAR"]
+                }
+            }
+        },
         "2026-02-08": {
             "parties": {
                 "event": [
@@ -1040,6 +1072,22 @@
         }
     },
     "es-cl": {
+        "2030-03-15": {
+            "bmaps": {
+                "main": [
+                    "PP", "PSOE", "VOX", "UPL", "EV", "UP"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "SALF", "Cs"],
+                    "Izquierda": ["PSOE", "IU", "UP", "SUMAR"],
+                    "Regionalista": ["UPL", "EV", "XAV"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX", "SALF", "Cs"],
+                    "Izquierda": ["PSOE", "IU", "UP", "SUMAR"]
+                }
+            }
+        },
         "2026-03-15": {
             "parties": {
                 "event": [
@@ -2564,6 +2612,21 @@
         }
     },
     "es-ex": {
+        "2029-12-21": {
+            "bmaps": {
+                "main": [
+                    "PP", "PSOE", "VOX", "UP"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP", "SUMAR"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP", "SUMAR"]
+                }
+            }
+        },
         "2025-12-21": {
             "parties": {
                 "event": [
