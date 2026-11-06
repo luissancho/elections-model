@@ -6,107 +6,40 @@
   "mode": null,
   "generated_at": "2026-11-05T12:00:00Z",
   "data": {
-    "n_cycles": 7,
-    "k_narrowed": 7,
-    "narrowed": [
-      "2008",
-      "2011",
-      "2015",
-      "2016",
-      "2019 abr.",
-      "2019 nov.",
-      "2023"
-    ],
-    "mean_before": 1.68,
-    "mean_last": 1.2,
-    "mean_final": 1.05,
-    "k_below_one": 3,
-    "below_one": [
-      "2008",
-      "2016",
-      "2019 nov."
-    ],
-    "sign": {
-      "n": 7,
-      "k": 7,
-      "p": 0.00781
-    },
-    "current": {
-      "label": "2026",
-      "before": {
-        "k": 72,
-        "ratio": 1.06
+    "n_elections": 33,
+    "n_scopes": 12,
+    "since_year": "1977",
+    "comparisons": {
+      "far_final": {
+        "n": 23,
+        "k": 19,
+        "sign_p": 0.0013,
+        "clear": 3,
+        "median_change": -0.15
       },
-      "last": {
-        "k": 24,
-        "ratio": 1.06
+      "far_mid": {
+        "n": 17,
+        "k": 9,
+        "sign_p": 0.5,
+        "clear": 0,
+        "median_change": -0.1
       },
-      "final": {
-        "k": 0,
-        "ratio": null
-      },
-      "cycle": {
-        "k": 96,
-        "ratio": 1.06
-      },
-      "days_left": 24,
-      "rank_before": 2,
-      "like_final": true
-    },
-    "houses_now": {
-      "n": 3,
-      "k": 3,
-      "herd": [
-        {
-          "pollster": "SocioMétrica",
-          "h": 0.36
-        },
-        {
-          "pollster": "NC Report",
-          "h": 0.44
-        },
-        {
-          "pollster": "Sigma Dos",
-          "h": 0.57
-        }
-      ],
-      "pending": [
-        {
-          "pollster": "GAD3",
-          "k": 2
-        },
-        {
-          "pollster": "40dB",
-          "k": 1
-        }
-      ]
-    },
-    "cis": {
-      "current": {
-        "k": 1,
-        "ratio": 10.7
-      },
-      "cycle": {
-        "k": 10,
-        "ratio": 8.3
-      },
-      "own": {
-        "k": 1,
-        "h": null,
-        "p": null
+      "mid_final": {
+        "n": 29,
+        "k": 23,
+        "sign_p": 0.0012,
+        "clear": 2,
+        "median_change": -0.15
       }
     },
-    "accuracy": {
-      "n": 20,
-      "herd": {
-        "k": 12,
-        "error_avg": 2.1,
-        "error_blocks": 2.6
+    "kinds": {
+      "generales": {
+        "n": 10,
+        "k": 8
       },
-      "rest": {
-        "k": 8,
-        "error_avg": 2.3,
-        "error_blocks": 3.1
+      "autonómicas": {
+        "n": 13,
+        "k": 11
       }
     }
   }

@@ -12,19 +12,16 @@ from .studies import _rounded, STUDY_TITLES
 from ...core.io import FileSystem
 
 HERD_SOURCES = [
-    {'label': 'Histórico de errores de las encuestas por elección', 'url': '/elecciones'},
-    {'label': 'Ranking Encuestadoras y rebaño por casa', 'url': '/casas'},
-    {'label': 'Método: el rebaño, aparte', 'url': '/metodo/rating#herding'},
-    {'label': 'El sesgo del CIS de Tezanos', 'url': '/analisis/sesgo-cis'},
+    {'label': 'Histórico de elecciones', 'url': '/elecciones'},
+    {'label': 'Método del promedio', 'url': '/metodo/promedio'},
     {'label': 'Análisis', 'url': '/analisis'},
 ]
 
-# The final window counts as «one urn» up to this mean ratio of the past cycles
-URN_RATIO = 1.1
+# A comparison is «significant» when its sign test is below this level and most elections go the same way
+ALPHA = 0.05
 
-CYCLE_WINDOWS = ('before', 'last', 'final')
-
-WEEK_COLUMNS = ['event_date', 'label', 'current', 'lo', 'hi', 'k', 'ratio']
+ELECTION_COLUMNS = ['scope', 'event_date', 'label', 'kind', 'comparison', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
+                    'change', 'falls', 'p']
 
 
 def compute_for_publish(data: FileSystem, writer: bundle.BundleWriter):
@@ -64,93 +61,63 @@ def export_herd_summary(study) -> tuple:
     return _clean(study.summary), {}
 
 
-def _flat_cycle(row: dict) -> dict:
-    """A cycle row with its nested measures flattened to scalar columns (``names`` joined by ``/``)."""
-    flat = {key: value for key, value in row.items() if key not in (*CYCLE_WINDOWS, 'cis', 'names')}
-    flat['names'] = '/'.join(row['names'])
-
-    for window in CYCLE_WINDOWS:
-        flat[f'{window}_k'] = row[window]['k']
-        flat[f'{window}_ratio'] = row[window]['ratio']
-
-    for key in ('last', 'cycle'):
-        flat[f'cis_{key}_k'] = row['cis'][key]['k']
-        flat[f'cis_{key}_ratio'] = row['cis'][key]['ratio']
-
-    for key in ('k', 'h', 'p'):
-        flat[f'cis_own_{key}'] = row['cis']['own'][key]
-
-    return flat
-
-
-def export_herd_cycles(study) -> tuple:
-    """Export one row per election cycle, past ascending then the one in progress.
+def export_herd_elections(study) -> tuple:
+    """Export one row per election and comparison (the same pairs of houses in both stretches).
 
     Returns
     -------
     tuple
-        ``(data, {'cycles': frame})``: ``data`` for ``rebano-cycles`` with ``rows``; the frame is the flat form.
+        ``(data, {'elections': frame})``: ``data`` for ``rebano-elections`` with ``rows``; the frame has the same rows.
     """
-    rows = _clean(study.cycles)
-    return {'rows': rows}, {'cycles': pd.DataFrame([_flat_cycle(row) for row in rows])}
+    rows = _clean(study.elections)
+    return {'rows': rows}, {'elections': pd.DataFrame(rows, columns=ELECTION_COLUMNS)}
 
 
-def export_herd_weeks(study) -> tuple:
-    """Export the dispersion by weeks to the election.
+def export_herd_current(study) -> tuple:
+    """Export the election in progress (its comparisons so far), or ``None`` when there is none.
 
     Returns
     -------
     tuple
-        ``(data, {'weeks': frame})``: ``data`` for ``rebano-weeks`` with ``buckets``, ``rows`` and ``mean``; the frame
-        is the long form, the rows plus the ``mean`` rows (``event_date`` null, label ``Media``).
+        ``(data, {})``: ``data`` for ``rebano-current``.
     """
-    weeks = _clean(study.weeks)
-    mean = [{'event_date': None, 'label': 'Media', 'current': False, **row} for row in weeks['mean']]
-    return weeks, {'weeks': pd.DataFrame([*weeks['rows'], *mean], columns=WEEK_COLUMNS)}
+    return {'current': _clean(study.current)}, {}
 
 
-def export_herd_houses(study) -> tuple:
-    """Export one row per cycle and house with enough polls in the final window.
+def _significant(comparison: dict) -> bool:
+    """Whether the sign test of a comparison is below ``ALPHA`` with most elections going down."""
+    p = comparison.get('sign_p')
 
-    Returns
-    -------
-    tuple
-        ``(data, {'houses': frame})``: ``data`` for ``rebano-houses`` with ``rows``.
-    """
-    rows = _clean(study.houses)
-    return {'rows': rows}, {'houses': pd.DataFrame(rows)}
+    return p is not None and p < ALPHA and comparison['k'] * 2 > comparison['n']
 
 
-def _subtitle(template: str, study) -> str:
-    """Render the subtitle template from the summary: the clauses that depend on the figures appear only if they
-    hold."""
-    summary = study.summary
-    k, n = summary['k_narrowed'], summary['n_cycles']
-    mean_final = summary['mean_final']
-    final_clause = ''
+def _times(value: float) -> str:
+    """A count of times with the thousands separator of the site (``1.234``)."""
+    return f'{int(round(value)):,}'.replace(',', '.')
 
-    if mean_final is not None and mean_final <= URN_RATIO:
-        final_clause = (': en las últimas tres semanas, tanto como si todas las casas sacaran sus muestras de la '
-                        'misma urna')
 
-    current = ''
-    now, houses = summary['current'], summary['houses_now']
+def _subtitle(summary: dict) -> str:
+    """Write the subtitle from the figures of the summary: what holds in the last three weeks, then, if there is
+    data, what holds before them."""
+    comparisons = summary['comparisons']
+    final, far_mid = comparisons['far_final'], comparisons['far_mid']
+    head = (f"En {final['k']} de las {final['n']} elecciones con datos desde {summary['since_year']}, las mismas "
+            f"encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación")
 
-    if now and now['like_final'] and houses and houses['n'] > 0 and houses['k'] > 0:
-        k_now, n_now = houses['k'], houses['n']
+    if not _significant(final):
+        return head + ', una proporción que podría deberse al azar.'
 
-        if k_now == n_now == 1:
-            who = 'la única casa con sondeos suficientes publica'
-        elif k_now == n_now:
-            who = f'las {n_now} casas con sondeos suficientes publican'
+    text = f"{head}: por azar pasaría una vez de cada {_times(1 / final['sign_p'])}."
+
+    if far_mid['n'] > 0:
+        count = f"{far_mid['k']} de {far_mid['n']}"
+
+        if _significant(far_mid):
+            text += f' Y también hasta tres semanas antes: {count}.'
         else:
-            who = f'{k_now} de las {n_now} casas con sondeos suficientes publican'
+            text += f' Hasta tres semanas antes, no: {count}, como una moneda.'
 
-        current = (f" En {study.election['date'][:4]} ya van así desde el principio, y {who} cifras que oscilan "
-                   f"menos de lo que cabría esperar sólo por el azar de sus muestras.")
-
-    return template.format(n_words=str(n) if k == n else f'{k} de las {n}', since_year=study.params['since'][:4],
-                           final_clause=final_clause, current=current)
+    return text
 
 
 def export_herd_meta(study, study_id: str = 'rebano', registration: Optional[dict] = None,
@@ -166,10 +133,11 @@ def export_herd_meta(study, study_id: str = 'rebano', registration: Optional[dic
     tuple
         ``(data, {})``: ``data`` for ``rebano-meta``. No CSV twin.
     """
-    title, template = STUDY_TITLES[study_id]
+    title = STUDY_TITLES[study_id][0]
     prov = prov or {'commit': None, 'dirty': False, 'versions': {}}
     data = {
-        'study': study_id, 'title': title, 'subtitle': _subtitle(template, study), 'scope': study.params['scope'],
+        'study': study_id, 'title': title, 'subtitle': _subtitle(study.summary),
+        'scope': study.params['live_scope'],
         'election': study.election, 'params': study.params, 'inputs': study.inputs,
         'sources': [dict(s) for s in HERD_SOURCES],
         'commit': prov['commit'], 'dirty': bool(prov['dirty']), 'versions': prov['versions'], 'seconds': seconds or {},

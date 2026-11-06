@@ -62,9 +62,7 @@ CSV_LABELS = {
         'election-houses': 'Últimos sondeos de las generales de 2023 por bloques',
     },
     'rebano': {
-        'cycles': 'Dispersión por ciclo: resto del ciclo, últimas 8 y últimas 3 semanas',
-        'weeks': 'Dispersión por ciclo y semanas hasta la elección',
-        'houses': 'Rebaño por casa en las últimas 8 semanas de cada ciclo',
+        'elections': 'Comparaciones por elección: las mismas parejas de casas en cada tramo',
     },
     'voto-oculto': {
         'elections': 'Error de los sondeos finales por elección, bloque y partido',

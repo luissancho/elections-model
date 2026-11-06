@@ -1,0 +1,35 @@
+{
+  "schema": "rebano-current@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "current": {
+      "scope": "es",
+      "event_date": "2026-11-29",
+      "label": "Generales 2026",
+      "days_left": 24,
+      "as_of": "2026-11-05",
+      "windows": {
+        "mid": "2026-10-05",
+        "final": "2026-11-09"
+      },
+      "far_mid": {
+        "scope": "es",
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "pairs": 6,
+        "rows_a": 20,
+        "rows_b": 18,
+        "r_a": 1.05,
+        "r_b": 1.0,
+        "change": -0.05,
+        "falls": true,
+        "p": 0.4
+      },
+      "mid_final": null
+    }
+  }
+}

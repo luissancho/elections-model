@@ -96,9 +96,9 @@ def test_study_registry_is_per_study():
     assert bundle.STUDY_CSV['sesgo-cis'] == ('elections', 'houses', 'matrix', 'election-houses')
     assert bundle.path_study('sesgo-cis', 'matrix') == 'studies/sesgo-cis/matrix.json'
     assert bundle.path_study_csv('sesgo-cis', 'election-houses') == 'studies/sesgo-cis/csv/election-houses.csv'
-    assert bundle.STUDY_PARTS['rebano'] == ('meta', 'summary', 'cycles', 'weeks', 'houses')
+    assert bundle.STUDY_PARTS['rebano'] == ('meta', 'summary', 'elections', 'current')
     assert bundle.STUDY_SCHEMAS['rebano'] == {part: 'rebano-' + part for part in bundle.STUDY_PARTS['rebano']}
-    assert bundle.STUDY_CSV['rebano'] == ('cycles', 'weeks', 'houses')
+    assert bundle.STUDY_CSV['rebano'] == ('elections',)
     assert bundle.EVENT_PARTS == ('meta', 'pollsters', 'polls', 'cycle', 'ban', 'results', 'model', 'series')
     assert 'ban' in bundle.EVENT_CSV and 'ban-legal' in bundle.EVENT_CSV and 'model-ban' in bundle.EVENT_CSV
     assert bundle.SCHEMAS['event-ban'] == {'parties': list, 'columns': list, 'polls': list, 'legal': list}
@@ -108,8 +108,8 @@ def test_study_registry_is_per_study():
     assert bundle.STUDY_CSV['andorra'] == ('pairs', 'elections', 'cells', 'houses', 'latest-polls')
     assert bundle.path_study('andorra', 'pairs') == 'studies/andorra/pairs.json'
     assert bundle.path_event('es', '2023-07-23', 'ban') == 'events/es/2023-07-23/ban.json'
-    assert bundle.path_study('rebano', 'weeks') == 'studies/rebano/weeks.json'
-    assert bundle.path_study_csv('rebano', 'houses') == 'studies/rebano/csv/houses.csv'
+    assert bundle.path_study('rebano', 'current') == 'studies/rebano/current.json'
+    assert bundle.path_study_csv('rebano', 'elections') == 'studies/rebano/csv/elections.csv'
     with pytest.raises(ValueError):
         bundle.path_study('rebano', 'matrix')
     assert 'voto-oculto' in bundle.STUDIES and bundle.STUDIES.index('voto-oculto') > bundle.STUDIES.index('rebano')
