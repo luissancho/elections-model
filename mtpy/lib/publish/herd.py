@@ -100,9 +100,19 @@ def _subtitle(summary: dict) -> str:
     """Write the subtitle from the figures of the summary: what holds in the last three weeks, then, if there is
     data, what holds before them."""
     comparisons = summary['comparisons']
-    final, far_mid = comparisons['far_final'], comparisons['far_mid']
-    head = (f"En {final['k']} de las {final['n']} elecciones con datos desde {summary['since_year']}, las mismas "
-            f"encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de la votación")
+    final, far_mid, mid_final = comparisons['far_final'], comparisons['far_mid'], comparisons['mid_final']
+    n, k, since = final['n'], final['k'], summary['since_year']
+
+    if n == 0:
+        return ('Todavía no hay elecciones con sondeos suficientes para comparar las mismas encuestadoras lejos y '
+                'cerca de la votación.')
+
+    if k * 2 <= n:
+        return (f'En sólo {k} de las {n} elecciones con datos desde {since}, las mismas encuestadoras se parecen más '
+                f'entre sí en las tres últimas semanas que lejos de la votación; en las demás, no.')
+
+    head = (f'En {k} de las {n} elecciones con datos desde {since}, las mismas encuestadoras se parecen más entre sí '
+            f'en las tres últimas semanas que lejos de la votación')
 
     if not _significant(final):
         return head + ', una proporción que podría deberse al azar.'
@@ -114,7 +124,7 @@ def _subtitle(summary: dict) -> str:
 
         if _significant(far_mid):
             text += f' Y también hasta tres semanas antes: {count}.'
-        else:
+        elif _significant(mid_final):
             text += f' Hasta tres semanas antes, no: {count}, como una moneda.'
 
     return text

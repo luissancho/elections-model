@@ -43,10 +43,10 @@ def test_subtitle_when_the_final_weeks_are_significant_and_the_middle_is_not():
 
 def test_subtitle_without_significance():
     s = {'n_elections': 2, 'since_year': '2019', 'comparisons': {
-        'far_final': {'n': 2, 'k': 1, 'sign_p': 0.75, 'clear': 0, 'median_change': 0.62},
+        'far_final': {'n': 4, 'k': 3, 'sign_p': 0.31, 'clear': 0, 'median_change': 0.62},
         'far_mid': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25},
         'mid_final': {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67}}}
-    assert _subtitle(s) == ('En 1 de las 2 elecciones con datos desde 2019, las mismas encuestadoras se parecen más '
+    assert _subtitle(s) == ('En 3 de las 4 elecciones con datos desde 2019, las mismas encuestadoras se parecen más '
                             'entre sí en las tres últimas semanas que lejos de la votación, una proporción que podría '
                             'deberse al azar.')
 
@@ -59,6 +59,27 @@ def test_subtitle_other_branches():
     no_mid = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'far_mid': dict(far_mid, n=0, k=0)}})
     assert no_mid.endswith('una vez de cada 769.')
     assert 'copi' not in text.lower()
+
+
+def test_subtitle_without_a_second_sentence_when_the_last_stretch_is_not_significant():
+    quiet = dict(SIG['mid_final'], k=15, sign_p=0.6)
+    text = _subtitle({'since_year': '1977', 'comparisons': {**SIG, 'mid_final': quiet}})
+    assert text.endswith('por azar pasaría una vez de cada 769.')
+
+
+def test_subtitle_when_most_elections_do_not_get_closer():
+    far_final = {'n': 10, 'k': 3, 'sign_p': 0.01, 'clear': 0, 'median_change': 0.3}
+    assert _subtitle({'since_year': '2008', 'comparisons': {**SIG, 'far_final': far_final}}) == (
+        'En sólo 3 de las 10 elecciones con datos desde 2008, las mismas encuestadoras se parecen más entre sí en las '
+        'tres últimas semanas que lejos de la votación; en las demás, no.')
+
+
+def test_subtitle_without_elections():
+    empty = {'n': 0, 'k': 0, 'sign_p': None, 'clear': 0, 'median_change': None}
+    comparisons = {'far_final': empty, 'far_mid': empty, 'mid_final': empty}
+    assert _subtitle({'since_year': None, 'comparisons': comparisons}) == (
+        'Todavía no hay elecciones con sondeos suficientes para comparar las mismas encuestadoras lejos y cerca de la '
+        'votación.')
 
 
 def test_export_herd_parts_validate(study):
