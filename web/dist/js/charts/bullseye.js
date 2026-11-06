@@ -44,25 +44,15 @@ function groupNames(points, groupOf) {
  * events. The series of the groups `onTop` get a higher `z`, so their points and labels are drawn over the other
  * groups'.
  *
- * A point whose row passes `hollowOf` is drawn hollow: transparent fill and a border in the colour of its series
- * (the fading of `alphaOf`, when any, applies to the whole point).
- *
  * @param {object[]} points `{value, row, itemStyle, label}` points (`itemStyle` and `label` only on a faded one)
- * @param {object} opts `groupOf`, `colors`, `labels`, `labelOf`, `color`, `onTop` and `hollowOf` of `renderBullseye`
+ * @param {object} opts `groupOf`, `colors`, `labels`, `labelOf`, `color` and `onTop` of `renderBullseye`
  * @returns {object[]} ECharts series
  */
-function pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop, hollowOf}) {
+function pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop}) {
   const label = {show: labels, position: 'right', formatter: (params) => labelOf(params.data.row), color: THEME.textColor};
-  const styleOf = ({row, itemStyle}, seriesColor) => {
-    const hollow = hollowOf && hollowOf(row) ? {color: 'transparent', borderColor: seriesColor, borderWidth: 1.5} : null;
-    return hollow || itemStyle ? {...hollow, ...itemStyle} : null;
-  };
   const pair = (data, style) => [
     {...style, type: 'scatter', symbolSize: POINT_SIZE, label: {show: false},
-     data: data.map((point) => {
-       const itemStyle = styleOf(point, style.color);
-       return itemStyle ? {value: point.value, row: point.row, itemStyle} : {value: point.value, row: point.row};
-     })},
+     data: data.map(({value, row, itemStyle}) => (itemStyle ? {value, row, itemStyle} : {value, row}))},
     // Many houses crowd the centre: a label that would overlap another is left out (the tooltip keeps it).
     {...style, type: 'scatter', symbolSize: POINT_SIZE, itemStyle: {opacity: 0}, silent: true, tooltip: {show: false},
      // The labels would inherit the invisible points' opacity: they get their own.
@@ -153,7 +143,7 @@ function guideSeries(limit, radii = RINGS) {
 export function bullseyeOption(rows, {
   blocks, groupOf = null, colors = {}, color = null, legend = false, labels = true, groupLabel = (group) => group,
   labelOf = (row) => row.event, alphaOf = null, onTop = null, highlight = null, highlights = [], interval = null,
-  rings = RINGS, hollowOf = null,
+  rings = RINGS,
 }) {
   const [xBlock, yBlock] = blocks;
   const styled = (row) => {
@@ -215,7 +205,7 @@ export function bullseyeOption(rows, {
         ].join('<br>');
       },
     },
-    series: [...guideSeries(limit, rings), ...pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop, hollowOf})],
+    series: [...guideSeries(limit, rings), ...pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop})],
   };
   if (marked) {
     // no label: the colour and the `z` over every other point (POINT_Z, TOP_Z) are enough; the tooltip names it
@@ -265,10 +255,8 @@ export function bullseyeOption(rows, {
  *   names `row`; nothing without coordinates), `highlights` (array of `{row, color, symbol = 'circle', label =
  *   null}`: several such points, each a series `highlight-<index>`, a diamond slightly larger, written to its right
  *   in bold when `label` is given), `interval` (step of both axes: their extent becomes the first multiple of
- *   it beyond the farthest point, with the outer tick unlabelled), `rings` (radii of the rings drawn, in points,
- *   `[2, 5, 10]` by default; the largest is the least extent of the axes) and `hollowOf` (`row => boolean`: the
- *   points of those rows are drawn hollow, transparent with a border in the colour of their series, e.g. the polls
- *   older than the final stretch in a profile; `null` fills every point)
+ *   it beyond the farthest point, with the outer tick unlabelled) and `rings` (radii of the rings drawn, in points,
+ *   `[2, 5, 10]` by default; the largest is the least extent of the axes)
  * @returns {object} the ECharts instance
  */
 export function renderBullseye(el, rows, opts) {

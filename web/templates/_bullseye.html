@@ -2,10 +2,7 @@
     profile and the model in the backtest page (`pages/bullseye-wire.js` draws it). The page sets `bv`: `rows`
     (with `name`, `event_date`, `days` and the error of each block), `scopes` and `years` (the options of the
     filters), `table_blocks` (the block columns, the left block first), `aria` (the label of the chart),
-    `caption` and `dates` (whether the table carries the date and the days before, as in a profile). With `consensus`
-    (`{house, left}`: the name of the house and the left block of the pair) the chart shares a `.grid2` with the
-    house against the mean of the other houses in the same election (`#consensus-chart`, drawn by the same wire);
-    `blocks` are then the axes of the bullseye, as published. -#}
+    `caption` and `dates` (whether the table carries the date and the days before, as in a profile). -#}
         <form id="bullseye-filter" class="series-controls filters-bar" hidden>
           <label>Ámbito
             <select name="ambito">
@@ -31,22 +28,7 @@
           </label>
           <span class="muted" id="bullseye-count" aria-live="polite"></span>
         </form>
-        {% if bv.get('consensus') %}
-        <div class="grid2">
-          <div>
-            <p class="ctitle">Su último sondeo, por bloques</p>
-            <p class="csub">Horizontal, error en {{ bv.blocks[0] }}; vertical, en {{ bv.blocks[1] }}, en puntos. Un punto hueco es un sondeo de más de seis semanas antes.</p>
-            <div class="chart" id="bullseye-chart" role="img" aria-label="{{ bv.aria }}"></div>
-          </div>
-          <div>
-            <p class="ctitle">Frente a la media de las demás encuestadoras en la misma elección</p>
-            <p class="csub">Error en {{ bv.consensus.left }}, cada punto una elección. Horizontal: la media de las demás casas con sus últimos sondeos de las seis semanas finales. Vertical: {{ bv.consensus.house }}. Sobre la diagonal, dio a {{ bv.consensus.left }} más voto que las demás.</p>
-            <div class="chart" id="consensus-chart" role="img" aria-label="Error de {{ bv.consensus.house }} en {{ bv.consensus.left }} frente a la media de las demás encuestadoras, por elección" data-house="{{ bv.consensus.house }}"></div>
-          </div>
-        </div>
-        {% else %}
         <div class="chart big" id="bullseye-chart" role="img" aria-label="{{ bv.aria }}"></div>
-        {% endif %}
         <div class="table-wrap">
           <table id="bullseye-table"{% if not bv.dates %} data-fixed="1"{% endif %}>
             <caption>{{ bv.caption }}</caption>

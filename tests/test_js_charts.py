@@ -103,23 +103,6 @@ def test_bullseye_names_the_axes_at_the_edges_and_draws_small_points():
     assert option['xAxis']['min'] == -11 and option['yAxis']['max'] == 11 and 'legend' not in option
 
 
-def test_bullseye_draws_the_late_polls_hollow():
-    """Un sondeo de más de 42 días antes (`late`, perfil desde 2026-11-06) va hueco: relleno transparente y borde del
-    color de su serie, con la opacidad de `alphaOf`; su etiqueta (en la gemela) y su tooltip no cambian."""
-    rows = [dict(ROWS[0], late=True), ROWS[1]]
-    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], groupOf: (r) => r.scope, '
-                    'colors: {es: "#1d4f86"}, hollowOf: (r) => Boolean(r.late), alphaOf: () => 0.5})', rows=rows)
-    points, labels = scatter(option)
-    hollow, plain = points[0]['data']
-    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#1d4f86', 'borderWidth': 1.5, 'opacity': 0.5}
-    assert plain['itemStyle'] == {'opacity': 0.5}
-    assert [p['row']['event'] for p in labels[0]['data']] == ['2023-23J', '2019-10N'] and 'itemStyle' not in labels[0]['data'][0]
-    # sin `alphaOf`, el hueco sólo lleva el borde; sin grupos, el borde es el color de la serie única
-    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], color: "#c0672e", hollowOf: (r) => Boolean(r.late)})', rows=rows)
-    hollow, plain = scatter(option)[0][0]['data']
-    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#c0672e', 'borderWidth': 1.5} and 'itemStyle' not in plain
-
-
 def test_bullseye_draws_the_groups_on_top_over_the_others():
     option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], '
                     'groupOf: (row) => (row.scope === "es" ? "Generales" : "Autonómicas"), '
@@ -959,29 +942,16 @@ def test_scatter_diagonal_and_fixed_axes():
 
 def test_consensus_option_names_both_axes_and_fits_symmetric_axes():
     """El gráfico «frente a las demás casas» del perfil (`bullseye-wire.js: consensusOption`): un punto por elección con
-    `others`, nombrado evento-ámbito, ejes simétricos al primer múltiplo de 5, la diagonal, el tardío hueco, el eje x
+    `others`, nombrado evento-ámbito, ejes simétricos al primer múltiplo de 5, la diagonal, el eje x
     con la media de las demás y el eje y con la casa (revisión final: la imagen descargada se lee sola)."""
-    rows = [dict(ROWS[0], others=-0.51), dict(ROWS[1], others=7.2, late=True), dict(ROWS[3], others=None)]
+    rows = [dict(ROWS[0], others=-0.51), dict(ROWS[1], others=7.2), dict(ROWS[3], others=None)]
     option = run_js('bw.consensusOption(rows, "Izquierda", "GAD3")', rows=rows)
     points = option['series'][0]['data']
     assert [p['name'] for p in points] == ['2023-23J-es', '2019-10N-es'] and points[0]['value'] == [-0.51, -0.7]
-    assert points[1]['itemStyle'] == {'color': 'transparent', 'borderColor': '#1d4f86', 'borderWidth': 1.5}
+    assert points[1]['itemStyle'] == {'color': '#1d4f86'} and all('borderColor' not in p.get('itemStyle', {}) for p in points)
     assert option['xAxis']['min'] == -10 and option['yAxis']['max'] == 10 and option['xAxis']['interval'] == 5
     assert option['xAxis']['name'] == 'Media de las demás casas, error en Izquierda' and option['yAxis']['name'] == 'GAD3, error en Izquierda'
     assert option['series'][-1]['data'] == [[-10, -10], [10, 10]]
-
-
-def test_scatter_draws_the_hollow_points_with_their_colour_as_border():
-    """`hollowOf` (el gráfico «frente a las demás casas» del perfil): el punto hueco lleva relleno transparente y el
-    borde de su color (`colorOf`, o el acento sin él)."""
-    rows = [{'x': 1, 'y': 2, 'name': 'a', 'late': True}, {'x': 2, 'y': 1, 'name': 'b'}]
-    option = run_js('sc.scatterOption(rows, {x: "x", y: "y", name: "name", colorOf: () => "#c0672e", hollowOf: (r) => Boolean(r.late)})', rows=rows)
-    hollow, plain = option['series'][0]['data']
-    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#c0672e', 'borderWidth': 1.5}
-    assert plain['itemStyle'] == {'color': '#c0672e'}
-    option = run_js('sc.scatterOption(rows, {x: "x", y: "y", name: "name", hollowOf: (r) => Boolean(r.late)})', rows=rows)
-    hollow, plain = option['series'][0]['data']
-    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#1d4f86', 'borderWidth': 1.5} and 'itemStyle' not in plain
 
 
 def test_scatter_with_fit_and_diagonal_draws_two_dashed_lines_over_fixed_axes():

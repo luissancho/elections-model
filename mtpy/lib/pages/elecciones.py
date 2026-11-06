@@ -248,7 +248,7 @@ def error_rows(scope: str, dates: list, errors: Optional[dict] = None) -> Option
 
     Only the published elections count (the analysis has every election of the scope with results and polls), so
     the filters, the histogram, the bullseye and the weeks table speak of the same elections as the list (and, through
-    ``final_stretch_rows``, of the final stretch only: the part has no upper bound of days since 2026-11-06).
+    ``final_stretch_rows``, of the final stretch only).
 
     Parameters
     ----------
@@ -362,9 +362,9 @@ def final_stretch_rows(rows: list) -> list:
     """
     The rows of ``poll-errors`` within the final stretch of their election.
 
-    The part is published without an upper bound of days since 2026-11-06 (the profile of a house shows its last poll
-    of every election it polled); the pages that speak of «the last poll of each house before the election» keep
-    the rows of the final stretch only, as before.
+    The part is published with the window (``POLL_ERRORS_PARAMS``); the pages that speak of «the last poll of each
+    house before the election» keep the rows of the final stretch themselves too, whatever the part carries (Luis
+    tried the part without an upper bound on 2026-11-06 and reverted it the same day).
 
     Parameters
     ----------

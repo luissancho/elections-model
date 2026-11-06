@@ -687,9 +687,8 @@ ol.notes > li:target { color: var(--color-text); }
 /* The bullseyes of the history, of an election, of a pollster profile and of the house effects example of the
    method are the main chart of their card: larger and centred */
 #errors-bullseye, #bullseye-chart.big, #house-chart.big { max-width: 720px; margin: 0 auto; }
-/* the profile (2026-11-06): the bullseye and the house against the others side by side, each square */
-#bullseye .grid2 { align-items: start; }
-#bullseye .grid2 .chart { height: auto; aspect-ratio: 1 / 1; max-width: 480px; margin: 0 auto; }
+/* the profile (2026-11-06): the house against the others, in its own card, square like the bullseye's rings */
+#consensus-chart.big { aspect-ratio: 1 / 1; height: auto; max-width: 560px; margin: 0 auto; }
 /* Election detail: the last-poll error bars and their table side by side, and "Ver más" under the results */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
 .split > * { min-width: 0; }

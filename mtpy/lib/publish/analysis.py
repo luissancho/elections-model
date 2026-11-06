@@ -31,10 +31,10 @@ POLL_ERRORS_COLUMNS = ['event_date', 'event', 'pollster', 'days', 'sample_size',
 ERROR_DATA_COLUMNS = ['date', 'pollster', 'party', 'regional', 'weeks', 'weight', 'pct', 'error']
 
 
-# The last poll of each house in every election with results, with the lower bound of the final stretch only
-# (`bundle.POLL_ERRORS_WINDOW`): no upper bound since 2026-11-06, so the profile of a house shows every election
-# it polled; the pages of the final stretch keep `days <= POLL_ERRORS_WINDOW[1]` themselves.
-POLL_ERRORS_PARAMS = {'bmap': 'vs', 'drange': (POLL_ERRORS_WINDOW[0], None), 'n_last': 1}
+# The last poll of each house in the final stretch of every election with results (`bundle.POLL_ERRORS_WINDOW`).
+# Luis tried the part without an upper bound on 2026-11-06 (the profile showing every election a house polled) and
+# reverted it the same day; the pages that read the part keep the window themselves too (`final_stretch_rows`).
+POLL_ERRORS_PARAMS = {'bmap': 'vs', 'drange': POLL_ERRORS_WINDOW, 'n_last': 1}
 
 
 RATING_CHECK_COLUMNS = ['event_scope', 'event_date', 'population', 'pollster', 'rating', 'rating_adj', 'd_prev',
