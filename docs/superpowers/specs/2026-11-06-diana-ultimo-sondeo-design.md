@@ -3,6 +3,11 @@
 **Fecha:** 2026-11-06 · **Estado:** aprobado por Luis (camino 1; segundo gráfico pedido en la misma sesión) ·
 **Tamaño:** cambio pequeño
 
+> **Revertido el mismo día (2026-11-06, Luis):** la parte vuelve a publicarse con `drange (6, 42)` y la diana vuelve a
+> contar sólo las elecciones con un sondeo en esa ventana; fuera los puntos huecos y las etiquetas de días. Se conservan
+> el gráfico «frente a las demás casas», el criterio de elecciones destacadas (`featured`), la constante
+> `POLL_ERRORS_WINDOW` y los filtros `final_stretch_rows` de las páginas, como guarda.
+
 ## Intención
 
 1. La diana de errores del perfil de una encuestadora (`/casas/{slug}`) debe tener un punto por cada elección

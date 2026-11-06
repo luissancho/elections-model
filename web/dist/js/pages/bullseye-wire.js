@@ -37,10 +37,10 @@ const CONSENSUS_STEP = 5;
 /**
  * Option of the house against the mean of the other houses: one point per election with a mean of the others
  * (`others`) and an error of the house in the left block, named `event-scope`, the general elections in the
- * accent and the regional ones in the contrasting tone, the late polls hollow, over a dashed diagonal between
- * symmetric axes (`CONSENSUS_STEP`); both axes named, so the downloaded image reads on its own.
+ * accent and the regional ones in the contrasting tone, over a dashed diagonal between symmetric axes
+ * (`CONSENSUS_STEP`); both axes named, so the downloaded image reads on its own.
  *
- * @param {object[]} rows bullseye rows (`others`, `late`, `scope`, `event` and the error of each block)
+ * @param {object[]} rows bullseye rows (`others`, `scope`, `event` and the error of each block)
  * @param {string} left the left block (`initial.left`)
  * @param {string} house the name of the house (the y axis in the tooltip)
  * @returns {object} the ECharts option
@@ -59,7 +59,6 @@ export function consensusOption(rows, left, house) {
     diagonal: true,
     axes: {xMin: -limit, xMax: limit, yMin: -limit, yMax: limit, interval: CONSENSUS_STEP},
     colorOf: (row) => (row.scope === NATIONAL_SCOPE ? THEME.accentColor : REGIONAL_COLOR),
-    hollowOf: (row) => Boolean(row.late),
     xName: `Media de las demás casas, error en ${left}`,
     yName: `${house}, error en ${left}`,
     xLabel: 'demás casas',
@@ -119,7 +118,7 @@ export function chosenLabel(select) {
  * years; the form only works with JavaScript, so the server renders it hidden and this shows it. The download
  * button, when the card has one, exports the bullseye as filtered.
  *
- * @param {object[]} bullseye the bullseye rows (`scope`, `year`, `late`, `others` and the block errors)
+ * @param {object[]} bullseye the bullseye rows (`scope`, `year`, `others` and the block errors)
  * @param {string[]} blocks the two blocks of the axes
  * @param {object} [opts] `left` (the left block of the pair: with it and a `#consensus-chart`, the house against
  *   the others is drawn and exported too)
@@ -145,7 +144,6 @@ export function wireBullseye(bullseye, blocks, {left = null} = {}) {
     labelOf: (row) => `${row.event}-${row.scope}`,
     alphaOf: (row) => alphas.get(row) ?? 1,
     onTop: (group) => group === KIND_GENERAL,  // the general elections over the regional ones
-    hollowOf: (row) => Boolean(row.late),  // a poll older than the final stretch
   };
   const draw = (rows) => {
     tryDraw(() => renderBullseye(target, rows, options), 'the bullseye');

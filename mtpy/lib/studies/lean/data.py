@@ -71,8 +71,8 @@ def read_error_rows(reader: BundleReader, catalogue: pd.DataFrame) -> tuple[list
 
     The analysis has every election of the scope with results and polls, the site only the published ones (those
     with an event folder), so the study speaks of the same elections as the pages. Only the rows of the final stretch count
-    (``days`` not above ``POLL_ERRORS_WINDOW[1]``, 42): the part has no upper bound of days since 2026-11-06 and the
-    study speaks of «the last poll between 6 and 42 days before».
+    (``days`` not above ``POLL_ERRORS_WINDOW[1]``, 42), whatever the part carries: the study speaks of «the last poll
+    between 6 and 42 days before».
 
     Parameters
     ----------

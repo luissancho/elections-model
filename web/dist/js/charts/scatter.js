@@ -17,15 +17,13 @@ const FIT_COLOR = '#ce3b3b';
  *   those axes; needs `axes`), `colorOf` (`row => colour` of each point), `fit` (`[[x0, y0], [x1, y1]]`: the ends of the fitted line, or null),
  *   `xFormatter` and `yFormatter` (number → text of each axis and of the tooltip), `xName` and `yName` (titles of
  *   the x and y axes; the y one is written upright beside the ticks, with room made for it on the left)
- *   and `xLabel` and `yLabel` (short names of the coordinates in the tooltip), `symbolSize` (the diameter of
- *   the points in pixels, smaller for a cloud of hundreds) and `hollowOf` (`row => boolean`: those points are drawn
- *   hollow, transparent with a border in their colour, `colorOf(row)` or the accent; `null` fills every point)
+ *   and `xLabel` and `yLabel` (short names of the coordinates in the tooltip), and `symbolSize` (the diameter of
+ *   the points in pixels, smaller for a cloud of hundreds)
  * @returns {object} the option
  */
 export function scatterOption(rows, {
   x, y, name, labelled = [], fit = null, xFormatter = (v) => fmtNum(v, 1), yFormatter = (v) => fmtNum(v, 1),
   xName = '', yName = '', xLabel = '', yLabel = '', diagonal = false, axes = null, colorOf = null, symbolSize = 9,
-  hollowOf = null,
 } = {}) {
   const named = new Set(labelled);
   const xs = rows.map((row) => row[x]).filter(Number.isFinite);
@@ -41,9 +39,7 @@ export function scatterOption(rows, {
     data: rows.map((row) => ({
       value: [row[x], row[y]],
       name: row[name],
-      ...(hollowOf && hollowOf(row)
-        ? {itemStyle: {color: 'transparent', borderColor: colorOf ? colorOf(row) : THEME.accentColor, borderWidth: 1.5}}
-        : colorOf ? {itemStyle: {color: colorOf(row)}} : {}),
+      ...(colorOf ? {itemStyle: {color: colorOf(row)}} : {}),
       label: {show: named.has(row[name]), position: row[x] > rightQuarter ? 'left' : 'right'},
     })),
   };

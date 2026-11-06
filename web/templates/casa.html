@@ -139,9 +139,10 @@
         <p class="notice">Esta encuestadora no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
         {% call m.how() %}
-        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). Un punto hueco es un sondeo de más de seis semanas antes de la votación: el último que publicó, aunque no fuera de la recta final. La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan sólo esas elecciones en los dos gráficos y en la tabla.</p>
+        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan sólo esas elecciones en los dos gráficos y en la tabla.</p>
         <p>Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos. Sólo cuentan las elecciones que alimentan el rating, las mismas que suma la columna «Elecciones» del ranking: una elección publicada sin analizar, con menos de diez sondeos útiles, no está.</p>
         <p>En el gráfico de la derecha cada punto es también una elección: en horizontal, la media del error de las demás encuestadoras en el bloque de izquierdas con sus últimos sondeos de las seis semanas finales; en vertical, el de la encuestadora. Sobre la diagonal, dio a ese bloque más voto que las demás; debajo, menos. Una elección en la que ninguna otra encuestadora publicó en esas seis semanas no tiene punto.</p>
+        <p>Cuentan las elecciones en las que la encuestadora publicó algún sondeo entre 6 y 42 días antes de la votación: si su último sondeo es más antiguo, esa elección no está en la diana aunque sí en el ranking.</p>
         <p>Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
       {{ m.card_end() }}
@@ -207,7 +208,7 @@
         {% endif %}
         {% call m.how() %}
         <p>Cada fila es el último sondeo de la encuestadora antes de una elección, el mismo que marca la diana, de la más nueva a la más antigua. Frente al resultado: positivo, el sondeo dio al partido más voto que el resultado; negativo, menos.</p>
-        <p>Frente al consenso: la media de los últimos sondeos de las demás encuestadoras en las seis semanas finales de esa elección, uno por encuestadora, los mismos que entran en el histórico de errores. Positivo: la encuestadora le daba más voto que las demás; negativo, menos. Si el último sondeo tiene más de seis semanas, la fila dice sus días antes, como el punto hueco de la diana, y se compara igualmente con esos sondeos de la recta final.</p>
+        <p>Frente al consenso: la media de los últimos sondeos de las demás encuestadoras en las seis semanas finales de esa elección, uno por encuestadora, los mismos que entran en el histórico de errores. Positivo: la encuestadora le daba más voto que las demás; negativo, menos.</p>
         <p>El fondo de cada celda es rojo si el sondeo se quedó corto (negativo) y verde si se pasó (positivo), más intenso cuanto mayor la desviación, hasta 8 puntos. Un guion es un partido que el sondeo no daba o que no concurría; un partido sin valor en ninguna elección no tiene columna. Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
       {{ m.card_end() }}

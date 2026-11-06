@@ -310,9 +310,9 @@ sólo en `es`:
   `herding_events`; fuente `Computer.herding_summary()`); `herding.events`: una fila por ciclo y casa
   (`event_date`, `pollster`, `n`, `ratio`, `p_value`; fuente `get_herding(scope)`). Razones y valores p a 3
   decimales.
-- `poll-errors.rows`: error de cada sondeo (`get_polls_metric('error', bmap='vs', drange=(6, None), n_last=1)`; sin
-  tope superior desde 2026-11-06: el último sondeo de cada casa en cada elección, aunque tenga más de 42 días; las
-  páginas de la recta final filtran `days <= 42`, `bundle.POLL_ERRORS_WINDOW`)
+- `poll-errors.rows`: error de cada sondeo (`get_polls_metric('error', bmap='vs', drange=(6, 42), n_last=1)`; la
+  ventana es `bundle.POLL_ERRORS_WINDOW` y las páginas que leen la parte la aplican también, `days <= 42`; el
+  2026-11-06 se publicó sin tope superior durante unas horas y se revirtió)
   con `event_date` ISO, `event`, `pollster`, `days`, `sample_size`, `weight`, `error_avg`, `bias_avg`,
   `error_blocks`, `bias_blocks` y `bias`; `blocks` son los bloques presentes en las filas.
 - `error-data.rows`: los datos del estimador de error (`get_error_estimator_data()`): `date`, `pollster`,

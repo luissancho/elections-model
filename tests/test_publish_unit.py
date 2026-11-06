@@ -924,17 +924,17 @@ def test_publish_analysis_writes_the_parts_and_meta_last(tmp_path):
 
 def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
     """`meta` guarda los parámetros de los errores, las elecciones del Computer y el estado de la base; los
-    errores se piden con `bmap='vs'`, `drange=(6, None)` (sin tope desde 2026-11-06: el último sondeo de cada casa en
-    cada elección) y `n_last=1`; la ventana de la recta final vive en `bundle.POLL_ERRORS_WINDOW`."""
+    errores se piden con `bmap='vs'`, `drange=(6, 42)` (la ventana de la recta final, `bundle.POLL_ERRORS_WINDOW`; Luis
+    probó sin tope el 2026-11-06 y lo revirtió el mismo día) y `n_last=1`."""
     factory = FakeComputer()
     writer = make_writer(tmp_path)
     out = publish.publish_analysis('es', writer, computer=factory, stats=fake_stats, prov=fake_prov)
     assert factory.calls[0][:3] == ('init', 'es', '.')
-    assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, None), 'n_last': 1, 'featured': 'results'})
+    assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, 42), 'n_last': 1, 'featured': 'results'})
     meta = writer.read_json(bundle.path_analysis('es', 'meta'))['data']
     assert meta['events'] == ['2019-11-10', '2023-07-23', '2026-11-29'] and meta['scope'] == 'es'
     assert meta['house_effects'] is True
-    assert meta['params'] == {'bmap': 'vs', 'drange': [6, None], 'n_last': 1, 'main': NAMES,
+    assert meta['params'] == {'bmap': 'vs', 'drange': [6, 42], 'n_last': 1, 'main': NAMES,
                               'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}, 'db_polls': 7,
                               'db_last_poll': '2026-10-01', 'rating_check': False}
     assert set(meta['seconds']) == {'build', 'house_effects', 'herding', 'poll_errors', 'error_data', 'total'}
@@ -942,7 +942,7 @@ def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
     assert (tmp_path / 'site' / 'v1' / 'analysis' / 'es' / 'csv' / 'herding-events.csv').exists()
     assert 'rating_check_data' not in [c[0] for c in factory.calls]
     assert not writer.exists(bundle.path_analysis('es', 'rating-check'))
-    assert bundle.POLL_ERRORS_WINDOW == (6, 42) and publish.POLL_ERRORS_PARAMS['drange'] == (bundle.POLL_ERRORS_WINDOW[0], None)
+    assert bundle.POLL_ERRORS_WINDOW == (6, 42) and publish.POLL_ERRORS_PARAMS['drange'] == bundle.POLL_ERRORS_WINDOW
 
 
 def test_publish_analysis_writes_rating_check_only_when_asked_and_only_nationally(tmp_path):

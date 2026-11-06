@@ -1554,7 +1554,7 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert 'id="consensus-chart"' in page and 'data-house="GAD3"' in page
     grid = page[page.index('id="bullseye-chart"') - 600:page.index('id="consensus-chart"')]
     assert 'class="grid2"' in grid and 'Frente a la media de las demás encuestadoras en la misma elección' in grid
-    assert 'Su último sondeo, por bloques' in grid and 'Un punto hueco es un sondeo de más de seis semanas antes' in page
+    assert 'Su último sondeo, por bloques' in grid and 'hueco' not in page
     assert 'Horizontal: la media de las demás casas con sus últimos sondeos de las seis semanas finales. Vertical: GAD3.' in page
     assert_public_wording(page, 'perfil')
     effects = page[page.index('id="profile-effects"'):]
@@ -1570,7 +1570,7 @@ def test_casa_profile_tables_and_bullseye(houses):
                                      'bias_dev_adj', 'rating', 'change']
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'year': 2023, 'days': 7, 'scope': 'es',
                                  'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24,
-                                 'late': False, 'others': -0.51, 'n_others': 1}]  # Sigma Dos, la otra casa de la elección
+                                 'others': -0.51, 'n_others': 1}]  # Sigma Dos, la otra casa de la elección
     assert data['left'] == 'Izquierda'
     assert data['blocks'] == ['Derecha', 'Izquierda'] and data['scopes'] == [{'code': 'es', 'name': 'España'}]
     # los filtros de la diana: ámbito (sólo los que tienen sondeos suyos) y años, ocultos hasta que el JS los cablea
@@ -1620,35 +1620,25 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     assert data['path'] == [] and data['today'] is None and data['bullseye'] == []
 
 
-def test_casa_profile_bullseye_keeps_the_late_polls_and_averages_the_final_stretch_of_the_others(houses, fresh_app):
-    """Desde 2026-11-06 la diana trae el último sondeo de cada elección aunque tenga más de 42 días (`late`); la media
-    de las demás casas en el bloque de izquierdas (`others`) sólo cuenta sus sondeos de la recta final."""
+def test_casa_profile_bullseye_keeps_only_the_final_stretch(houses, fresh_app):
+    """La diana cuenta sólo las elecciones con un sondeo entre 6 y 42 días antes (`bundle.POLL_ERRORS_WINDOW`), como
+    la parte publicada; una fila tardía de la casa queda fuera, y una de otra casa no entra en la media de las demás
+    (`others`). Luis probó sin tope el 2026-11-06 y lo revirtió el mismo día."""
     errors = fixture_data('poll-errors')
-    errors['rows'][0]['days'] = 60          # GAD3, tardío: sigue en la diana
     errors['rows'][1]['days'] = 50          # Sigma Dos, tardío: no entra en la media de las demás
     bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'),
                                                  bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es')
     webapi.site().manifest_cache_clear()
     webapi.site().files.clear()
     [row] = initial(call(houses, '/casas/gad3')[2])['bullseye']
-    assert row['late'] is True and row['days'] == 60 and row['others'] is None and row['n_others'] == 0
-    errors['rows'][1]['days'] = 8
+    assert row['days'] == 7 and row['others'] is None and row['n_others'] == 0 and 'late' not in row
+    errors['rows'][0]['days'] = 60          # GAD3, tardío: fuera de la diana
     bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'),
                                                  bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es')
     webapi.site().manifest_cache_clear()  # the analysis parts live in the TTL cache
     webapi.site().files.clear()
-    [row] = initial(call(houses, '/casas/gad3')[2])['bullseye']
-    assert row['late'] is True and row['others'] == -0.51 and row['n_others'] == 1
-    # la tabla «Último sondeo por elección» dice los días de una fila tardía (revisión final): su sondeo del ciclo
-    cycle = fixture_data('event-cycle')
-    cycle['polls'].append({'date': '2023-05-24', 'pollster': 'GAD3', 'PP': 34.1, 'PSOE': 30.3})
-    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_event('es', '2023-07-23', 'cycle'), 'event-cycle', cycle, 'es')
-    webapi.site().manifest_cache_clear()
-    webapi.site().files.clear()
-    page = html(call(houses, '/casas/gad3')[2])
-    last = page[page.index('id="profile-last"'):page.index('id="profile-last-consensus"')]
-    assert 'Generales 2023 · sondeo de 60 días antes' in last
-    assert 'Si el último sondeo tiene más de seis semanas, la fila dice sus días antes' in page
+    body = call(houses, '/casas/gad3')[2]
+    assert initial(body)['bullseye'] == [] and 'Esta encuestadora no tiene sondeos en las elecciones analizadas' in html(body)
 
 
 def test_casa_profile_bullseye_counts_only_the_featured_elections(houses, fresh_app):
