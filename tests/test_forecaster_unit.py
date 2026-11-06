@@ -574,16 +574,21 @@ def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
 
 
 def test_rating_exponent_raises_every_poll_weight(monkeypatch):
-    """γ = 2 eleva al cuadrado el peso por rating de cada sondeo (también el relleno por calidad de B);
-    los resultados oficiales quedan como con γ = 1; γ = 0 pone 1 en todos."""
+    """γ = 2 eleva al cuadrado el peso por rating de cada sondeo, también el relleno por calidad de B (el exponente
+    actúa después del relleno); los resultados oficiales quedan como con γ = 1; γ = 0 pone 1 en todos."""
     build, pollsters = _weights_builder(monkeypatch)
-    base = build(None).series_raw
-    out = build(None, rating_exponent=2.0).series_raw
-    polls, base_polls = out.loc[out.pollster.notnull()], base.loc[base.pollster.notnull()]
-    assert polls['weight_rating'].tolist() == pytest.approx((base_polls['weight_rating'] ** 2).tolist())
-    assert polls['weight'].tolist() == pytest.approx((base_polls['weight_over'] * base_polls['weight_sample'] * base_polls['weight_rating'] ** 2).tolist())
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-07-23'), 1)], names=['event_date', 'pollster_id'])
+    ratings = pd.Series([2.0], index=index)
+    quality = pollsters.set_index('id').quality / 100
+    fill = np.log1p(quality[2]) / np.log1p(quality.mean())
+    base = build(ratings).series_raw
+    out = build(ratings, rating_exponent=2.0).series_raw
+    polls = out.loc[out.pollster.notnull()]
+    assert (polls.loc[polls.pollster == 'A', 'weight_rating'] == 4.0).all()
+    assert polls.loc[polls.pollster == 'B', 'weight_rating'].iloc[0] == pytest.approx(fill ** 2)
+    assert polls['weight'].tolist() == pytest.approx((polls['weight_over'] * polls['weight_sample'] * polls['weight_rating']).tolist())
     pd.testing.assert_frame_equal(out.loc[out.pollster.isnull()], base.loc[base.pollster.isnull()])
-    flat = build(None, rating_exponent=0.0).series_raw
+    flat = build(ratings, rating_exponent=0.0).series_raw
     assert flat.loc[flat.pollster.notnull(), 'weight_rating'].tolist() == [1.0, 1.0, 1.0]
 
 
@@ -596,7 +601,7 @@ def test_rating_exponent_applies_after_weight_overrides(monkeypatch):
     assert out.loc[(out.pollster_id == 1) & (out.date == '2023-07-10'), 'weight_rating'].iloc[0] == pytest.approx(2.0)
 
 
-@pytest.mark.parametrize('value', [-1.0, float('nan'), float('inf')])
+@pytest.mark.parametrize('value', [-1.0, float('nan'), float('inf'), True, False, np.bool_(True)])
 def test_rating_exponent_rejects_negative_or_non_finite(monkeypatch, value):
     build, _ = _weights_builder(monkeypatch)
     with pytest.raises(ValueError, match='rating_exponent: expected a finite number >= 0'):

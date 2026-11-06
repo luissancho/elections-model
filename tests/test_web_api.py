@@ -116,6 +116,16 @@ def test_study_routes_serve_rebano_parts_and_csv(api, fresh_app):
     assert status == 404
 
 
+def test_study_routes_serve_voto_oculto_parts_and_csv(api, fresh_app):
+    write_study(fresh_app.fs, study='voto-oculto'); webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/api/v1/studies/voto-oculto/summary')
+    assert status == 200 and json.loads(body)['data']['verdicts'] == {'p1': 'NO', 'p2': 'NO', 'p3': 'DE NADIE'}
+    status, headers, body = call(api, '/api/v1/studies/voto-oculto/elections', query='format=csv')
+    assert status == 200 and headers['content-disposition'] == 'attachment; filename="voto-oculto-elections.csv"'
+    status, _, body = call(api, '/api/v1/studies/voto-oculto/houses')
+    assert status == 404
+
+
 @pytest.mark.parametrize('path, query, status, message', [
     ('/api/v1/forecast/es-xx', '', 400, 'invalid scope'),
     ('/api/v1/forecast/es-md', '', 404, 'scope not published'),

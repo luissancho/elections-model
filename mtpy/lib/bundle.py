@@ -30,7 +30,7 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             csv/
                 pollsters.csv polls.csv cycle.csv ban.csv ban-legal.csv results.csv
                 model-shares.csv model-seats.csv model-blocks.csv model-ban.csv series.csv
-        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano, andorra), overwritten on each publication
+        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano, voto-oculto, andorra), overwritten on each publication
             meta.json {part}.json               the parts of STUDY_PARTS[study]
             csv/
                 {name}.csv                      the tables of STUDY_CSV[study]
@@ -78,19 +78,22 @@ EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'ban', 'results', 'model',
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
 EVENT_CSV = ('pollsters', 'polls', 'cycle', 'ban', 'ban-legal', 'results', 'model-shares', 'model-seats', 'model-blocks',
              'model-ban', 'series')
-STUDIES = ('voto-cera', 'sesgo-cis', 'rebano', 'andorra')
+STUDIES = ('voto-cera', 'sesgo-cis', 'rebano', 'voto-oculto', 'andorra')
 STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
                'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election'),
                'rebano': ('meta', 'summary', 'cycles', 'weeks', 'houses'),
+               'voto-oculto': ('meta', 'summary', 'elections', 'groups'),
                'andorra': ('meta', 'summary', 'pairs', 'elections', 'cells', 'houses', 'latest')}
 STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['voto-cera']},
                  'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']},
                  'rebano': {part: 'rebano-' + part for part in STUDY_PARTS['rebano']},
+                 'voto-oculto': {part: 'voto-oculto-' + part for part in STUDY_PARTS['voto-oculto']},
                  'andorra': {part: 'andorra-' + part for part in STUDY_PARTS['andorra']}}
 STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
                            'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
              'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses'),
              'rebano': ('cycles', 'weeks', 'houses'),
+             'voto-oculto': ('elections', 'groups'),
              'andorra': ('pairs', 'elections', 'cells', 'houses', 'latest-polls')}
 STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'census-countries'),
                               'participation': ('participation',), 'vote': ('vote', 'ecological'),
@@ -100,6 +103,7 @@ STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'c
                 'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
                               'election': ('election-houses',)},
                 'rebano': {'cycles': ('cycles',), 'weeks': ('weeks',), 'houses': ('houses',)},
+                'voto-oculto': {'elections': ('elections',), 'groups': ('groups',)},
                 'andorra': {'pairs': ('pairs',), 'elections': ('elections',), 'cells': ('cells',), 'houses': ('houses',),
                             'latest': ('latest-polls',)}}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
@@ -192,6 +196,16 @@ SCHEMAS = {
     'rebano-cycles': {'rows': list},
     'rebano-weeks': {'buckets': list, 'rows': list, 'mean': list},
     'rebano-houses': {'rows': list},
+    'voto-oculto-meta': {'study': str, 'title': str, 'subtitle': str, 'scopes': list, 'election': (dict, type(None)),
+                         'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                         'versions': dict, 'seconds': dict},
+    'voto-oculto-summary': {'n_elections': int, 'n_general': int, 'n_regional': int, 'n_scopes': int,
+                            'first_year': int, 'first_year_regional': (int, type(None)), 'last_year': int,
+                            'left': dict, 'right': dict, 'lean': dict, 'vox': (dict, type(None)), 'parties': list,
+                            'size': dict, 'psoe_general': (dict, type(None)), 'pp': dict, 'podemos': dict,
+                            'current': (dict, type(None)), 'verdicts': dict},
+    'voto-oculto-elections': {'rows': list},
+    'voto-oculto-groups': {'rows': list},
     'andorra-meta': {'study': str, 'title': str, 'subtitle': str, 'params': dict, 'inputs': dict,
                      'next': (dict, type(None)), 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
                      'versions': dict, 'seconds': dict},

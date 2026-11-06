@@ -1,7 +1,8 @@
 # Banda del rating en el peso del promedio: el exponente `rating_exponent` (fase C2a)
 
-Fecha: 2026-11-05. Estado: APROBADA por Luis el 2026-11-05 (enfoque y diseño acordados en conversación; corre en el
-portátil). Sigue a la fase C (`2026-11-04-rating-validacion-design.md`, método 16).
+Fecha: 2026-11-05. Estado: CONSTRUIDA en dev el 2026-11-06 (aprobada por Luis el 2026-11-05; enfoque y diseño acordados
+en conversación; corre en el portátil). Resultados al final y en `docs/analisis-2026-09/metodo-16-rating.md`, sección
+«¿Y con otra banda? (fase C2a, 06-11-2026)». Sigue a la fase C (`2026-11-04-rating-validacion-design.md`, método 16).
 
 ## Intención
 
@@ -93,3 +94,63 @@ curva, en las dos direcciones, y sólo cambia el valor por defecto si un punto d
   de `weight_rating` también se elevan).
 - La forma exacta de la tabla markdown de `compare_results.py` (la del método 16 como modelo).
 - El lanzador encadenado de las cinco corridas (`nohup sh -c '… && …'`, log en el espacio del plan).
+
+## Resultados (2026-11-06)
+
+Detalle, tablas completas de `compare_results.py` y salvedades en `docs/analisis-2026-09/metodo-16-rating.md`, sección
+«¿Y con otra banda? (fase C2a, 06-11-2026)». Código: c0370a4 (`rating_exponent` en `Forecaster` y `Simulator`), 81306fa
+(backtest, job y CLI), 0c5276a (`compare_results.py`) y a6aaf98 (`simple_average_curve`).
+
+**Cribado 1b (promedio simple de la última campaña, 71 elecciones, 2.000 réplicas por bootstrap de elecciones, semilla
+0).** MAE − MAE de γ = 1, en puntos, todas las elecciones; mejor / peor que γ = 1.
+
+| γ | MAE (puntos) | Diferencia frente a γ = 1 (IC 95 %) | Mejor / peor |
+|---|---|---|---|
+| 0 | 1,9292 | −0,0106 (−0,0478 a +0,0197) | 34 / 37 |
+| 0,5 | 1,9369 | −0,0029 (−0,0175 a +0,0085) | 31 / 40 |
+| 1 | 1,9398 | referencia | |
+| 1,5 | 1,9401 | +0,0002 (−0,0077 a +0,0090) | 38 / 33 |
+| 2 | 1,9390 | −0,0008 (−0,0159 a +0,0142) | 40 / 31 |
+| 3 | 1,9340 | −0,0058 (−0,0299 a +0,0189) | 38 / 33 |
+
+Curva plana: en el conjunto ninguna diferencia pasa de 0,011 puntos (0,012 en las autonómicas a γ = 0) y todos los
+intervalos, también los de las generales y las autonómicas, cruzan el 0.
+
+**Backtest emparejado frente a γ = 1** (`es` 28 casos + `es-md`, `es-an`, `es-ct`, `es-vc`, `es-ga` 66; `n_sim` 1.000,
+semilla 42; del 05-11 a las 14:15 al 06-11 a las 01:50). γ = 1 se rehízo (`backtest/results_exp1`) y reproduce
+`results_rated` al diezmilésimo, 94 / 94 empates: la base no cambió y `results_flat` vale como γ = 0. Diferencia relativa
+γ − (γ = 1) (positiva: γ yerra más), cobertura en puntos porcentuales; entre paréntesis, casos mejor / peor en el voto.
+
+| γ | Población | Casos | MAE de voto | CRPS de escaños | Brier de mayorías | Cobertura del 95 % |
+|---|---|---|---|---|---|---|
+| 0 | Generales | 28 | +0,8 % (13 / 15) | +1,0 % | −8,9 % | +0,7 pp |
+| 0,5 | Generales | 28 | +0,2 % (12 / 16) | +0,2 % | −4,5 % | +0,0 pp |
+| 1,5 | Generales | 28 | +0,8 % (15 / 13) | +0,8 % | +5,9 % | −0,9 pp |
+| 2 | Generales | 28 | +1,3 % (14 / 14) | +1,1 % | +8,3 % | −0,2 pp |
+| 3 | Generales | 28 | +1,8 % (14 / 14) | +1,4 % | +12,5 % | −0,9 pp |
+| 0 | Autonómicas | 66 | +0,4 % (32 / 33) | +0,7 % | +3,3 % | −0,5 pp |
+| 0,5 | Autonómicas | 66 | +0,3 % (26 / 40) | +0,4 % | +1,2 % | −0,8 pp |
+| 1,5 | Autonómicas | 64 | −0,1 % (34 / 30) | −0,3 % | −0,5 % | −0,6 pp |
+| 2 | Autonómicas | 66 | −0,3 % (32 / 34) | −0,6 % | −0,6 % | −0,4 pp |
+| 3 | Autonómicas | 66 | −0,8 % (33 / 32) | +2,4 % | −7,1 % | −1,2 pp |
+| 0 | Todas | 94 | +0,5 % (45 / 48) | +0,8 % | −3,4 % | −0,1 pp |
+| 0,5 | Todas | 94 | +0,3 % (38 / 56) | +0,3 % | −2,0 % | −0,6 pp |
+| 1,5 | Todas | 92 | +0,1 % (49 / 43) | +0,3 % | +3,0 % | −0,7 pp |
+| 2 | Todas | 94 | +0,1 % (46 / 48) | +0,2 % | +4,3 % | −0,4 pp |
+| 3 | Todas | 94 | −0,1 % (47 / 46) | +1,9 % | +3,8 % | −1,1 pp |
+
+γ = 1,5 va sobre 92 casos: `es-an` 2022-06-19 a 90 y 180 días se perdieron por un corte de red con la base (registrados
+como «skipped», sin `OperationalError`) y no se pudieron repetir en la misma base, porque los ratings guardados se
+recalcularon el 06-11 a las 01:50, tras la cadena; el emparejamiento por caso los deja fuera.
+
+**Decisión (regla 6).** Ningún γ pasa: ninguno mejora el MAE de voto y el CRPS de escaños más de un 2 % en las dos
+poblaciones con más casos mejor que peor. Las bandas anchas empeoran las generales (γ = 3: voto +1,8 %, CRPS +1,4 %,
+Brier +12,5 %) mientras las autonómicas se mueven dentro del ±1 % en el voto; la cobertura baja en todos los γ > 1 (de
+−0,4 a −1,1 puntos sobre todos los casos); la banda estrecha (γ = 0,5) pierde en más casos de los que gana (38 / 56 en
+el MAE de voto). Lectura declarada de antemano, cumplida: la curva es plana dentro del ±2 % en el voto (y en los escaños
+salvo el CRPS de las autonómicas a γ = 3, +2,4 %, a peor), así que **la anchura de la banda es cosmética**; los recuentos
+(γ = 0,5 pierde 56 de 94 casos, γ = 1,5 gana 49 de 92) dicen que el signo, si acaso, favorece al rating por muy poco (+0,5 % de error de voto sin él en el backtest; al revés en la prueba 1b), sin distinguirse del ruido, y que alrededor de 1 una banda
+acierta lo mismo que otra. El valor por defecto se queda en 1 y el modelo vivo no cambia: no hay commit de default.
+
+**Pasos de Luis que quedan.** Integrar `dev` (el código de la palanca y del script de comparación). No hay nada que publicar ni
+desplegar por esta fase.

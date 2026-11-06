@@ -37,6 +37,14 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                 'rebano': ('¿Se copian las encuestadoras en la recta final?',
                            'En las {n_words} generales desde {since_year}, los sondeos se han parecido más entre sí '
                            'cuanto más cerca estaba la elección{final_clause}.{current}'),
+                # The subtitle is a template rendered from the summary: {vox_clause} and {tail} depend on its figures
+                'voto-oculto': ('¿Voto oculto de quién?',
+                                'Se dice que la gente de izquierdas contesta menos a las encuestas y que los '
+                                'votantes de Vox esconden su voto, y que por eso los sondeos infravaloran a unos y a '
+                                'otros. En las {n} elecciones con sondeos de nuestra base, los sondeos finales han '
+                                'dado a la izquierda menos voto del que sacó en {k_under} y más en '
+                                '{k_over}{vox_clause}. Los sondeos se equivocan con cada partido grande en {size} '
+                                'puntos de media{tail}.'),
                 # The subtitle is a template: {n} general elections with a model, {k} of them where the clandestine
                 # consensus beat the frozen average, {kc} of {nc} party figures closer to the result
                 'andorra': ('El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última '
@@ -588,6 +596,10 @@ from .herd import (  # noqa: E402
     compute_for_publish as compute_herd_for_publish, export_herd_cycles, export_herd_houses, export_herd_meta,
     export_herd_summary, export_herd_weeks
 )
+from .shy import (  # noqa: E402
+    compute_for_publish as compute_shy_for_publish, export_shy_elections, export_shy_groups, export_shy_meta,
+    export_shy_summary
+)
 
 from .ban import (  # noqa: E402
     compute_for_publish as compute_ban_for_publish, export_ban_cells, export_ban_elections, export_ban_houses,
@@ -603,11 +615,14 @@ STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation':
                                  'election': export_lean_election},
                    'rebano': {'summary': export_herd_summary, 'cycles': export_herd_cycles,
                               'weeks': export_herd_weeks, 'houses': export_herd_houses},
+                   'voto-oculto': {'summary': export_shy_summary, 'elections': export_shy_elections,
+                                   'groups': export_shy_groups},
                    'andorra': {'summary': export_ban_summary, 'pairs': export_ban_pairs,
                                'elections': export_ban_elections, 'cells': export_ban_cells,
                                'houses': export_ban_houses, 'latest': export_ban_latest}}
 
 STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 'rebano': export_herd_meta,
+              'voto-oculto': export_shy_meta,
               'andorra': export_ban_meta}
 
 # How each study is computed (``compute(data, writer)``), whether it has a registered prediction and whether its page
@@ -615,6 +630,7 @@ STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 're
 STUDY_RUNNERS = {'voto-cera': {'compute': _cera_compute, 'registrable': True, 'live': False},
                  'sesgo-cis': {'compute': compute_for_publish, 'registrable': False, 'live': True},
                  'rebano': {'compute': compute_herd_for_publish, 'registrable': False, 'live': True},
+                 'voto-oculto': {'compute': compute_shy_for_publish, 'registrable': False, 'live': True},
                  'andorra': {'compute': compute_ban_for_publish, 'registrable': False, 'live': True}}
 
 

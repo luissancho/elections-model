@@ -551,8 +551,9 @@ def test_studies_publishes_the_live_studies_in_order(fresh_app, tmp_path, monkey
     calls = []
     monkeypatch.setattr(publish, 'publish_study', lambda study, writer, **kw: (calls.append(study) or {'study': study, 'registered_at': None, 'checked': False, 'seconds': {'total': 2.0}}))
     p = Studies(); p.run('publish', chunk=None, position=(1, 1), fs=FileSystem(str(tmp_path)), verbose=0)
-    assert calls == ['sesgo-cis', 'rebano', 'andorra'] and p.result['status'] == 'published'
-    assert p.line == 'studies: sesgo-cis published in 2 s, rebano published in 2 s, andorra published in 2 s'
+    live = [s for s in bundle.STUDIES if publish.STUDY_RUNNERS[s]['live']]
+    assert calls == live and p.result['status'] == 'published'
+    assert p.line == 'studies: ' + ', '.join(f'{s} published in 2 s' for s in live)
 
 
 def test_studies_goes_on_after_a_failed_study(fresh_app, tmp_path, monkeypatch):
@@ -562,8 +563,11 @@ def test_studies_goes_on_after_a_failed_study(fresh_app, tmp_path, monkeypatch):
         return {'study': study, 'registered_at': None, 'checked': False, 'seconds': {'total': 1.0}}
     monkeypatch.setattr(publish, 'publish_study', fake)
     p = Studies(); p.run('publish', chunk=None, position=(1, 1), fs=FileSystem(str(tmp_path)), verbose=0)
+    live = [s for s in bundle.STUDIES if publish.STUDY_RUNNERS[s]['live']]
     assert p.result['status'] == 'failed' and p.result['studies']['rebano']['status'] == 'published'
-    assert p.line == "studies: sesgo-cis failed (KeyError: 'x'), rebano published in 1 s, andorra published in 1 s" and p.failure_name(None) == 'studies'
+    assert p.line == 'studies: ' + ', '.join("sesgo-cis failed (KeyError: 'x')" if s == 'sesgo-cis'
+                                             else f'{s} published in 1 s' for s in live)
+    assert p.failure_name(None) == 'studies'
 
 
 def test_point_and_unpublish_lines(fresh_app, tmp_path, patched):
