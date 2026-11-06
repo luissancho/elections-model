@@ -1639,6 +1639,16 @@ def test_casa_profile_bullseye_keeps_the_late_polls_and_averages_the_final_stret
     webapi.site().files.clear()
     [row] = initial(call(houses, '/casas/gad3')[2])['bullseye']
     assert row['late'] is True and row['others'] == -0.51 and row['n_others'] == 1
+    # la tabla «Último sondeo por elección» dice los días de una fila tardía (revisión final): su sondeo del ciclo
+    cycle = fixture_data('event-cycle')
+    cycle['polls'].append({'date': '2023-05-24', 'pollster': 'GAD3', 'PP': 34.1, 'PSOE': 30.3})
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_event('es', '2023-07-23', 'cycle'), 'event-cycle', cycle, 'es')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    page = html(call(houses, '/casas/gad3')[2])
+    last = page[page.index('id="profile-last"'):page.index('id="profile-last-consensus"')]
+    assert 'Generales 2023 · sondeo de 60 días antes' in last
+    assert 'Si el último sondeo tiene más de seis semanas, la fila dice sus días antes' in page
 
 
 def test_casa_profile_without_analysis_has_no_bullseye(houses_without_analysis):
@@ -4561,6 +4571,18 @@ LAST_CYCLE = {'parties': ['PP', 'PSOE', 'VOX'], 'polls': [
     {'date': '2023-07-16', 'pollster': 'GAD3', 'PP': 36.0, 'PSOE': 28.0, 'VOX': 10.0},  # segundo del mismo día: no cuenta
 ]}
 LAST_RESULTS = {'rows': [{'party': 'PP', 'pct': 33.06}, {'party': 'PSOE', 'pct': 31.44}, {'party': 'Cs', 'pct': 0.13}]}
+
+
+def test_last_poll_records_ignore_the_late_polls_of_the_other_houses():
+    """Desde 2026-11-06 `poll-errors` trae sondeos de más de 42 días: el consenso sigue siendo la media de los últimos
+    sondeos de las demás casas en la recta final, y el sondeo tardío de la propia casa sí se mide (revisión final)."""
+    rows = LAST_ROWS + [{'scope': 'es', 'event_date': '2023-07-23', 'pollster': 'SW Demoscopia', 'days': 387}]
+    cycle = dict(LAST_CYCLE, polls=LAST_CYCLE['polls'] + [{'date': '2022-07-01', 'pollster': 'SW Demoscopia', 'PP': 40.0, 'PSOE': 20.0, 'VOX': 9.0}])
+    records = pages.last_poll_records('es', rows, cycle, LAST_RESULTS, 'GAD3')
+    assert [(r['party'], r['consensus']) for r in records] == [('PP', 2.0), ('PSOE', -1.0), ('VOX', None)]  # como sin SW
+    records = pages.last_poll_records('es', rows, cycle, LAST_RESULTS, 'SW Demoscopia')
+    # VOX: sin resultado publicado; frente al consenso, Sigma Dos es la única otra casa que lo da (12,0)
+    assert [(r['party'], r['result'], r['consensus']) for r in records] == [('PP', 6.94, 6.9), ('PSOE', -11.44, -10.8), ('VOX', None, -3.0)]
 
 
 def test_last_poll_records_measure_the_last_poll_against_the_result_and_the_other_houses():

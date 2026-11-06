@@ -207,7 +207,7 @@
         {% endif %}
         {% call m.how() %}
         <p>Cada fila es el último sondeo de la encuestadora antes de una elección, el mismo que marca la diana, de la más nueva a la más antigua. Frente al resultado: positivo, el sondeo dio al partido más voto que el resultado; negativo, menos.</p>
-        <p>Frente al consenso: la media de los últimos sondeos de las demás encuestadoras antes de esa elección, uno por encuestadora, los mismos que entran en el histórico de errores. Positivo: la encuestadora le daba más voto que las demás; negativo, menos.</p>
+        <p>Frente al consenso: la media de los últimos sondeos de las demás encuestadoras en las seis semanas finales de esa elección, uno por encuestadora, los mismos que entran en el histórico de errores. Positivo: la encuestadora le daba más voto que las demás; negativo, menos. Si el último sondeo tiene más de seis semanas, la fila dice sus días antes, como el punto hueco de la diana, y se compara igualmente con esos sondeos de la recta final.</p>
         <p>El fondo de cada celda es rojo si el sondeo se quedó corto (negativo) y verde si se pasó (positivo), más intenso cuanto mayor la desviación, hasta 8 puntos. Un guion es un partido que el sondeo no daba o que no concurría; un partido sin valor en ninguna elección no tiene columna. Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
       {{ m.card_end() }}

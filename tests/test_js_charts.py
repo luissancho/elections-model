@@ -36,6 +36,7 @@ WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
 ERRORS_JS = pathlib.Path(DIST, 'js', 'charts', 'errors.js').as_uri()
 DUMBBELL_JS = pathlib.Path(DIST, 'js', 'charts', 'dumbbell.js').as_uri()
 FORMAT_JS = pathlib.Path(DIST, 'js', 'format.js').as_uri()
+BULLSEYE_WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'bullseye-wire.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -65,12 +66,12 @@ def run_js(expr, rows=ROWS):
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
         'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
         'const er = await import("{}"); '
-        'const db = await import("{}"); '
+        'const db = await import("{}"); const bw = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, ERRORS_JS, DUMBBELL_JS, json.dumps(rows), expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -954,6 +955,20 @@ def test_bullseye_draws_only_the_rings_asked_for():
 def test_scatter_diagonal_and_fixed_axes():
     option = run_js('sc.scatterOption([{x: 1, y: 2, name: "a"}], {x: "x", y: "y", name: "name", diagonal: true, axes: {xMin: -10, xMax: 15, yMin: -5, yMax: 15, interval: 5}})')
     assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]
+
+
+def test_consensus_option_names_both_axes_and_fits_symmetric_axes():
+    """El gráfico «frente a las demás casas» del perfil (`bullseye-wire.js: consensusOption`): un punto por elección con
+    `others`, nombrado evento-ámbito, ejes simétricos al primer múltiplo de 5, la diagonal, el tardío hueco, el eje x
+    con la media de las demás y el eje y con la casa (revisión final: la imagen descargada se lee sola)."""
+    rows = [dict(ROWS[0], others=-0.51), dict(ROWS[1], others=7.2, late=True), dict(ROWS[3], others=None)]
+    option = run_js('bw.consensusOption(rows, "Izquierda", "GAD3")', rows=rows)
+    points = option['series'][0]['data']
+    assert [p['name'] for p in points] == ['2023-23J-es', '2019-10N-es'] and points[0]['value'] == [-0.51, -0.7]
+    assert points[1]['itemStyle'] == {'color': 'transparent', 'borderColor': '#1d4f86', 'borderWidth': 1.5}
+    assert option['xAxis']['min'] == -10 and option['yAxis']['max'] == 10 and option['xAxis']['interval'] == 5
+    assert option['xAxis']['name'] == 'Media de las demás casas, error en Izquierda' and option['yAxis']['name'] == 'GAD3, error en Izquierda'
+    assert option['series'][-1]['data'] == [[-10, -10], [10, 10]]
 
 
 def test_scatter_draws_the_hollow_points_with_their_colour_as_border():

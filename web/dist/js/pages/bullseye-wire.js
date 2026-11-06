@@ -38,7 +38,7 @@ const CONSENSUS_STEP = 5;
  * Option of the house against the mean of the other houses: one point per election with a mean of the others
  * (`others`) and an error of the house in the left block, named `event-scope`, the general elections in the
  * accent and the regional ones in the contrasting tone, the late polls hollow, over a dashed diagonal between
- * symmetric axes (`CONSENSUS_STEP`).
+ * symmetric axes (`CONSENSUS_STEP`); both axes named, so the downloaded image reads on its own.
  *
  * @param {object[]} rows bullseye rows (`others`, `late`, `scope`, `event` and the error of each block)
  * @param {string} left the left block (`initial.left`)
@@ -61,6 +61,7 @@ export function consensusOption(rows, left, house) {
     colorOf: (row) => (row.scope === NATIONAL_SCOPE ? THEME.accentColor : REGIONAL_COLOR),
     hollowOf: (row) => Boolean(row.late),
     xName: `Media de las demás casas, error en ${left}`,
+    yName: `${house}, error en ${left}`,
     xLabel: 'demás casas',
     yLabel: house,
   });

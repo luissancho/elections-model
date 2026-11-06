@@ -530,10 +530,12 @@ def last_poll_records(scope: str, rows: list, cycle: Optional[dict], results: Op
     """
     Deviations of the last poll of a pollster in one election, by party.
 
-    The polls are those of the published error analysis (``poll-errors``: the last poll of each pollster in the
-    final window of the election, the ones of the bullseye) read, with their shares, from the ``cycle`` part of
-    the election: the poll of each pollster published ``days`` days before it (the first one of the part when it
-    published several that day).
+    The polls are those of the published error analysis (``poll-errors``: the last poll of each pollster before
+    the election, the ones of the bullseye) read, with their shares, from the ``cycle`` part of the election: the
+    poll of each pollster published ``days`` days before it (the first one of the part when it published several
+    that day). The poll of the pollster counts whatever its age (the part has no upper bound of days since
+    2026-11-06); the other pollsters only with their polls of the final stretch (``final_stretch_rows``), so the
+    consensus stays the one of the error history.
 
     Parameters
     ----------
@@ -564,6 +566,7 @@ def last_poll_records(scope: str, rows: list, cycle: Optional[dict], results: Op
     if own is None or cycle is None:
         return []
 
+    rows = [own] + [row for row in final_stretch_rows(rows) if row.get('pollster') != name]
     dates = {row['pollster']: poll_date(row.get('event_date'), row.get('days')) for row in rows if row.get('pollster')}
     polls = {}
 
@@ -830,7 +833,8 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
         ``today`` (``rating_path``, the end of the chart), ``last_table`` and
         ``last_consensus_table`` (``effects_table`` of the ``result`` and ``consensus`` of ``last_poll_records``:
         the deviations of its last poll in every election of the bullseye, read from the ``cycle`` and
-        ``results`` parts of the election), ``effects_table`` and ``cycle_table`` (``effects_table`` of
+        ``results`` parts of the election; the label of a ``late`` poll carries its days before), ``effects_table``
+        and ``cycle_table`` (``effects_table`` of
         ``dev_result_c`` and ``dev_cycle``, with the elections named by ``election_label``), ``herding_table``
         (its herding by cycle, ``HERDING_KEYS`` plus ``label``), ``bullseye`` (its rows of the ``poll-errors``
         parts of the published elections: ``event``, ``event_date``, ``year``, ``days``, ``scope``, ``name``,
@@ -932,8 +936,17 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     context['path'] = path['points'][::-1]
     context['path_points'] = path['points'] if rated else []
     context['today'] = path['today']
-    context['last_table'] = effects_table(last_records, label, order=order, key='result')
-    context['last_consensus_table'] = effects_table(last_records, label, order=order, key='consensus')
+    # a late poll of the house (older than the final stretch) says its days in the label of the last-poll tables
+    late_days = {(row['scope'], row['event_date']): row['days'] for row in bullseye if row['late']}
+
+    def last_label(scope, date):
+        """Name of an election of the last-poll tables, with the days before of a late poll."""
+        days = late_days.get((scope, date))
+
+        return label(scope, date) if days is None else '{} · sondeo de {} días antes'.format(label(scope, date), int(days))
+
+    context['last_table'] = effects_table(last_records, last_label, order=order, key='result')
+    context['last_consensus_table'] = effects_table(last_records, last_label, order=order, key='consensus')
     context['effects_table'] = effects_table(profile['house_effects'], label, order=order)
     context['cycle_table'] = effects_table(profile['house_effects'], label, order=order, key='dev_cycle')
     context['herding_table'] = [dict(row, label=label(row.get('event_scope') or RATING_SCOPE, row['event_date']))
