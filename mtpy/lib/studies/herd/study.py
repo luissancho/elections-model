@@ -32,8 +32,9 @@ class HerdStudy:
     election : dict or None
         ``{scope, date, days_left, as_of}`` of the election in progress; ``None`` without one.
     summary : dict
-        ``n_elections``, ``n_scopes``, ``since_year``, ``comparisons`` (the ``count`` of each comparison) and
-        ``kinds`` (the ``count`` of ``far_final`` by kind of election).
+        ``n_elections``, ``n_scopes``, ``since_year`` (the first year of the elections that enter any comparison),
+        ``comparisons`` (the ``count`` of each comparison with its own ``since_year``) and ``kinds`` (the ``count`` of
+        ``far_final`` by kind of election).
     elections : list of dict
         One row per past election and comparison with a result (see ``_row``), in the order of the elections.
     current : dict or None
@@ -83,10 +84,11 @@ def _results(election: Election, params: dict) -> dict:
 
 
 def _row(election: Election, result: dict) -> dict:
-    """The published figures of a result: rounded ratios and change, ``falls`` and ``p`` as computed."""
+    """The published figures of a result: ratios at two decimals, change at three (the page writes a change below
+    half a point with one decimal), ``falls`` and ``p`` as computed."""
     return {'scope': election.scope, 'event_date': election.event_date, 'label': election.label,
             'pairs': result['pairs'], 'rows_a': result['rows_a'], 'rows_b': result['rows_b'],
-            'r_a': round(result['r_a'], 2), 'r_b': round(result['r_b'], 2), 'change': round(result['change'], 2),
+            'r_a': round(result['r_a'], 2), 'r_b': round(result['r_b'], 2), 'change': round(result['change'], 3),
             'falls': result['falls'], 'p': result['p']}
 
 
@@ -98,6 +100,11 @@ def _count(results: list) -> dict:
         tally['median_change'] = round(tally['median_change'], 2)
 
     return tally
+
+
+def _since_year(dates: list) -> Optional[str]:
+    """The year of the first of ``dates`` (ISO), ``None`` without dates."""
+    return min(dates)[:4] if dates else None
 
 
 def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] = None) -> HerdStudy:
@@ -134,6 +141,7 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
     current, inputs_current = read_current(reader, params, names)
     rows = []
     raw = {key: [] for key in COMPARISONS}
+    dates = {key: [] for key in COMPARISONS}
     raw_kinds = {kind: [] for kind in KINDS}
     counted = []
 
@@ -146,13 +154,15 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
         for key, result in results.items():
             rows.append(_row(election, result) | {'kind': election.kind, 'comparison': key})
             raw[key].append(result)
+            dates[key].append(election.event_date)
 
             if key == 'far_final':
                 raw_kinds[election.kind].append(result)
 
     summary = {'n_elections': len(counted), 'n_scopes': len({election.scope for election in counted}),
-               'since_year': counted[0].event_date[:4] if counted else None,
-               'comparisons': {key: _count(results) for key, results in raw.items()},
+               'since_year': _since_year([election.event_date for election in counted]),
+               'comparisons': {key: _count(results) | {'since_year': _since_year(dates[key])}
+                               for key, results in raw.items()},
                'kinds': {kind: _count(results) for kind, results in raw_kinds.items()}}
 
     return HerdStudy(params=params, election=None if current is None else _election(current), summary=summary,

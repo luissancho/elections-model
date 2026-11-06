@@ -6,7 +6,12 @@ Two polls of different houses, fielded within a few days of each other, measure 
 series, squared (``d2``), has an expectation of ``v = 1e4 · p(1 − p) · (1/n_i + 1/n_j)`` squared points were both
 simple random samples. The dispersion of a set of comparisons is ``sqrt(Σ d2 / Σ v)``: about 1 for polls that only
 differ by sampling error, below 1 for polls closer to each other than their samples allow. Herding shows as the
-dispersion of the same pair of houses falling from far away from the election to its last weeks.
+dispersion of the same pairs of houses falling from far away from the election to its last weeks.
+
+Two periods are compared pair of houses by pair of houses: each pair ``g`` has its own ``r²_g = Σ d2_g / Σ v_g`` in
+each period, and the pairs are combined with one weight per pair, the same in both periods,
+``w_g = 1 / (1/Σ v_a,g + 1/Σ v_b,g)``. Pooling all the rows instead would weigh each pair by its rows, which differ
+between the periods: a change in the mix of pairs would read as a change in the dispersion.
 """
 import math
 from typing import Optional
@@ -66,7 +71,7 @@ def comparisons(polls: pd.DataFrame, names: list[str], params: dict) -> pd.DataF
     polls : pandas.DataFrame
         Columns ``poll`` (label), ``pollster``, ``days`` (int, days to the election), ``n`` (float, sample) and one
         float column per series in ``names``. ``poll_i`` of a pair is the earlier row in this order, ``poll_j`` the
-        later one.
+        later one. The polls without ``pollster`` are left out.
     names : list of str
         The series compared.
     params : dict
@@ -81,7 +86,7 @@ def comparisons(polls: pd.DataFrame, names: list[str], params: dict) -> pd.DataF
         the series with both shares finite enter.
     """
     rows = []
-    frame = polls.reset_index(drop=True)
+    frame = polls[polls['pollster'].notna()].reset_index(drop=True)
 
     for i in range(len(frame)):
         for j in range(i + 1, len(frame)):
@@ -137,9 +142,33 @@ def _shared_pairs(rows: pd.DataFrame, a: str, b: str, min_rows: int) -> pd.DataF
     return rows[rows['pair'].isin(pairs) & rows['period'].isin([a, b])]
 
 
+def _weighted_sums(d2_a, v_a, d2_b, v_b) -> tuple:
+    """
+    The terms of one pair of houses in the weighted squared dispersions of both periods.
+
+    Parameters
+    ----------
+    d2_a, v_a, d2_b, v_b : float or numpy.ndarray
+        ``Σ d2`` and ``Σ v`` of the pair in period ``a`` and in period ``b`` (arrays: one value per permutation).
+
+    Returns
+    -------
+    tuple
+        ``(w, w · r²_a, w · r²_b)`` with ``w = 1 / (1/v_a + 1/v_b) = v_a · v_b / (v_a + v_b)``, so that
+        ``w · r²_a = d2_a · v_b / (v_a + v_b)`` and ``w · r²_b = d2_b · v_a / (v_a + v_b)``.
+    """
+    total = v_a + v_b
+
+    return v_a * v_b / total, d2_a * v_b / total, d2_b * v_a / total
+
+
 def compare(rows: pd.DataFrame, a: str, b: str, min_rows: int) -> Optional[dict]:
     """
-    Dispersion of the same pairs of houses in two periods.
+    Dispersion of the same pairs of houses in two periods, each pair with the same weight in both.
+
+    For each pair of houses ``g`` counted, ``r²_a,g = Σ d2_a,g / Σ v_a,g`` and ``r²_b,g`` likewise, and its weight
+    ``w_g = 1 / (1/Σ v_a,g + 1/Σ v_b,g)``; ``r_a = sqrt(Σ w_g r²_a,g / Σ w_g)`` and ``r_b`` likewise. With one pair
+    this is the dispersion of its rows in each period.
 
     Parameters
     ----------
@@ -161,14 +190,18 @@ def compare(rows: pd.DataFrame, a: str, b: str, min_rows: int) -> Optional[dict]
     if len(shared) == 0:
         return None
 
-    in_a, in_b = shared[shared['period'] == a], shared[shared['period'] == b]
-    r_a, r_b = dispersion(in_a), dispersion(in_b)
+    sums = shared.groupby(['pair', 'period'])[['d2', 'v']].sum().unstack('period')
+    weight, term_a, term_b = _weighted_sums(sums[('d2', a)].to_numpy(float), sums[('v', a)].to_numpy(float),
+                                            sums[('d2', b)].to_numpy(float), sums[('v', b)].to_numpy(float))
+    r_a = math.sqrt(term_a.sum() / weight.sum())
+    r_b = math.sqrt(term_b.sum() / weight.sum())
 
     if r_a == 0:
         return None
 
-    return {'pairs': int(shared['pair'].nunique()), 'rows_a': len(in_a), 'rows_b': len(in_b), 'r_a': r_a, 'r_b': r_b,
-            'change': r_b / r_a - 1, 'falls': bool(r_b < r_a)}
+    return {'pairs': len(sums), 'rows_a': int((shared['period'] == a).sum()),
+            'rows_b': int((shared['period'] == b).sum()), 'r_a': r_a, 'r_b': r_b, 'change': r_b / r_a - 1,
+            'falls': bool(r_b < r_a)}
 
 
 def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutations: int,
@@ -176,8 +209,9 @@ def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutation
     """
     Permutation test of the fall in dispersion between two periods.
 
-    Within each pair of houses counted by ``compare``, the labels ``a``/``b`` of its rows are shuffled; the statistic is
-    ``(Σ d2_b / Σ v_b) / (Σ d2_a / Σ v_a)`` over all the pairs.
+    Within each pair of houses counted by ``compare``, the labels ``a``/``b`` of its rows are shuffled (each pair keeps
+    its number of rows in each period); the statistic is the one of ``compare``, ``r_b² / r_a²``, recomputed for each
+    permutation with the weights of that permutation.
 
     Parameters
     ----------
@@ -203,10 +237,9 @@ def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutation
 
     shared = _shared_pairs(rows, a, b, min_rows)
     generator = np.random.default_rng(seed)
-    sum_d2_a = np.zeros(permutations)
-    sum_v_a = np.zeros(permutations)
-    total_d2 = total_v = 0.0
-    obs_d2_b = obs_v_b = 0.0
+    # Σ w · r² of each period, per permutation, and the same sums observed (Σ w cancels out in the ratio)
+    perm_a, perm_b = np.zeros(permutations), np.zeros(permutations)
+    obs_a = obs_b = 0.0
 
     for _, group in shared.groupby('pair'):
         d2, v = group['d2'].to_numpy(float), group['v'].to_numpy(float)
@@ -216,17 +249,18 @@ def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutation
         order = np.argsort(generator.random((permutations, size)), axis=1)
         label_a = np.zeros((permutations, size), dtype=bool)
         np.put_along_axis(label_a, order[:, :int(is_a.sum())], True, axis=1)
-        sum_d2_a += label_a @ d2
-        sum_v_a += label_a @ v
-        total_d2 += d2.sum()
-        total_v += v.sum()
-        obs_d2_b += d2[~is_a].sum()
-        obs_v_b += v[~is_a].sum()
+        d2_a, v_a = label_a @ d2, label_a @ v
+        _, term_a, term_b = _weighted_sums(d2_a, v_a, d2.sum() - d2_a, v.sum() - v_a)
+        perm_a += term_a
+        perm_b += term_b
+        _, term_a, term_b = _weighted_sums(d2[is_a].sum(), v[is_a].sum(), d2[~is_a].sum(), v[~is_a].sum())
+        obs_a += term_a
+        obs_b += term_b
 
-    observed = (obs_d2_b / obs_v_b) / ((total_d2 - obs_d2_b) / (total_v - obs_v_b))
+    observed = obs_b / obs_a
 
     with np.errstate(divide='ignore', invalid='ignore'):
-        permuted = ((total_d2 - sum_d2_a) / (total_v - sum_v_a)) / (sum_d2_a / sum_v_a)
+        permuted = perm_b / perm_a
 
     return float(np.mean(permuted <= observed * (1 + PERMUTATION_TOLERANCE)))
 

@@ -1,4 +1,6 @@
 """Tests of the pure statistics of the herd study (comparisons between pairs of houses)."""
+from itertools import combinations
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -26,6 +28,13 @@ def test_comparisons_pairs_other_houses_within_a_week():
     assert set(rows.name) == {'PP'}             # PSOE missing in b: no PSOE comparison
 
 
+def test_comparisons_skip_polls_without_pollster():
+    polls = pd.DataFrame({'poll': ['a', 'b', 'c'], 'pollster': ['A', None, 'B'], 'days': [30, 29, 28],
+                          'n': [1000.0] * 3, 'PP': [30.0, 32.0, 31.0]})
+    rows = comparisons(polls, ['PP'], PARAMS)
+    assert list(rows[['poll_i', 'poll_j']].apply(tuple, axis=1)) == [('a', 'c')]
+
+
 def test_comparisons_empty_has_columns():
     polls = pd.DataFrame({'poll': ['a'], 'pollster': ['A'], 'days': [30], 'n': [1000.0], 'PP': [30.0]})
     assert list(comparisons(polls, ['PP'], PARAMS).columns) == [
@@ -41,6 +50,61 @@ def test_compare_and_dispersion_on_the_same_house_pairs():
     assert out['change'] == pytest.approx(-0.5) and out['falls'] is True
     assert dispersion(rows[rows.period == 'far']) == pytest.approx(2 ** 0.5) and dispersion(rows.iloc[:0]) is None
     assert compare(rows, 'far', 'final', 4) is None
+
+
+def two_pairs():
+    """Two pairs of houses whose number of rows changes between the periods: A|B has 9 far rows and 3 final rows,
+    A|C 3 far rows and 9 final rows (all ``v`` = 2)."""
+    return pd.DataFrame({'pair': ['A|B'] * 12 + ['A|C'] * 12,
+                         'period': ['far'] * 9 + ['final'] * 3 + ['far'] * 3 + ['final'] * 9,
+                         'd2': [4.0] * 9 + [5.0] * 3 + [1.0] * 3 + [1.2] * 9, 'v': [2.0] * 24})
+
+
+def test_compare_weighs_each_pair_of_houses_the_same_in_both_periods():
+    # A|B: far Σd2 36, Σv 18, r² 2; final Σd2 15, Σv 6, r² 2,5.  A|C: far Σd2 3, Σv 6, r² 0,5; final Σd2 10,8,
+    # Σv 18, r² 0,6. Both pairs get further apart. Weights w = 1 / (1/Σv_a + 1/Σv_b): A|B 1/(1/18 + 1/6) = 4,5,
+    # A|C 1/(1/6 + 1/18) = 4,5. R_a² = (4,5·2 + 4,5·0,5) / 9 = 1,25 and R_b² = (4,5·2,5 + 4,5·0,6) / 9 = 1,55:
+    # change = sqrt(1,55 / 1,25) − 1 = sqrt(1,24) − 1 = 0,11355, no fall. Pooled over all rows it would fall:
+    # R_a² = 39/24 = 1,625, R_b² = 25,8/24 = 1,075, change −0,187, only because A|B weighs more far away.
+    out = compare(two_pairs(), 'far', 'final', 3)
+    assert out['pairs'] == 2 and (out['rows_a'], out['rows_b']) == (12, 12)
+    assert out['r_a'] == pytest.approx(1.25 ** 0.5) and out['r_b'] == pytest.approx(1.55 ** 0.5)
+    assert out['change'] == pytest.approx(1.24 ** 0.5 - 1) and out['falls'] is False
+
+
+def statistic(rows, is_a):
+    """R_b² / R_a² of ``rows`` with the labels ``is_a`` (reference for the permutation test)."""
+    num_a = num_b = 0.0
+
+    for pair in rows['pair'].unique():
+        mask = (rows['pair'] == pair).to_numpy()
+        in_a, in_b = mask & is_a, mask & ~is_a
+        d2_a, v_a, d2_b, v_b = (rows['d2'][in_a].sum(), rows['v'][in_a].sum(), rows['d2'][in_b].sum(),
+                                rows['v'][in_b].sum())
+        weight = 1 / (1 / v_a + 1 / v_b)
+        num_a += weight * d2_a / v_a
+        num_b += weight * d2_b / v_b
+
+    return num_b / num_a
+
+
+def test_permutation_p_shuffles_within_each_pair_with_its_weights():
+    # Exact p: every arrangement of the labels within each pair (C(12,9) · C(12,3) = 220 · 220), with d2 that differ
+    # inside the pairs. Exact p ≈ 0,393; the pooled statistic, shuffled the same way, would give ≈ 0,466
+    rows = two_pairs()
+    rows['d2'] = [5.5, 3.0, 6.5, 6.0, 2.0, 2.0, 3.5, 3.0, 5.0, 2.0, 5.5, 2.0,
+                  1.0, 0.5, 1.0, 1.5, 2.0, 0.5, 2.0, 1.5, 1.5, 1.5, 1.5, 1.0]
+    observed = statistic(rows, (rows['period'] == 'far').to_numpy())
+    options = []
+
+    for start in (0, 12):
+        n_a = int((rows['period'][start:start + 12] == 'far').sum())
+        options.append([np.isin(np.arange(12), chosen) for chosen in combinations(range(12), n_a)])
+
+    below = [statistic(rows, np.concatenate([x, y])) <= observed * (1 + 1e-9) for x in options[0] for y in options[1]]
+    exact = float(np.mean(below))
+    p = permutation_p(rows, 'far', 'final', 3, 4000, 0)
+    assert exact == pytest.approx(0.3926, abs=1e-3) and abs(p - exact) < 0.025
 
 
 def test_compare_without_differences_in_a_is_none():
