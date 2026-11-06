@@ -135,6 +135,227 @@ La lectura declarada de antemano se cumple: **plano ≈ con rating dentro del ±
 
 Las tablas salen de un script de scratch (no commiteado) que lee `metrics.csv` de las dos carpetas y empareja los casos; en `es`, el `by_horizon.csv` de cada carpeta da las mismas medias por horizonte (en los autonómicos, `by_horizon.csv` es por ámbito).
 
+## ¿Y con otra banda? (fase C2a, 06-11-2026)
+
+La prueba 1a quitó el rating, que es la banda de anchura 0 entre la peor y la mejor encuestadora, y el error de voto del modelo vivo subió un 0,5 %: una señal pequeña a favor del rating. La fase C2a pregunta si **ensanchar la banda** (o estrecharla) acierta más. Spec: `docs/superpowers/specs/2026-11-05-rating-exponent-design.md`.
+
+Cambios:
+- `rating_exponent` (γ, número ≥ 0, 1 por defecto) de `Forecaster` y `Simulator`: eleva a γ el `weight_rating` de cada sondeo, después del relleno por calidad y de los `weight_overrides`; los resultados oficiales no se tocan. γ = 1 es el modelo tal cual y γ = 0, el rating plano; un valor negativo o no finito da `ValueError` (`mtpy/lib/forecaster.py`, c0370a4).
+- Backtest: `rating_exponent` en `run_case`, `run_backtest`, `backtest_scope`, el pipeline y el job `backtest`, y `--rating-exponent` en `backtest/run_backtest.py`; queda en `run.json` y en la columna `rating_exponent` de `meta.csv` (81306fa).
+- `backtest/compare_results.py A B`: empareja los `metrics.csv` de dos carpetas por (ámbito, `event_date`, `horizon`) y escribe la tabla por población en markdown (`pair_results`, `compare_paired` y `compare_markdown` en `mtpy/lib/backtest.py`). Sustituye al script de scratch de la prueba 1a (0c5276a).
+- `rating_check.simple_average_curve(polls, exponents)`: la prueba 1b con el peso por rating elevado a cada γ, emparejada por elección frente a γ = 1 (a6aaf98).
+
+Tests: `tests/test_forecaster_unit.py`, `tests/test_simulator_unit.py`, `tests/test_backtest_unit.py`, `tests/test_jobs_backtest.py`, `tests/test_pipelines_backtest.py`, `tests/test_launchers.py` y `tests/test_rating_check_unit.py`.
+
+### La rejilla y la banda
+
+γ ∈ {0, 0,5, 1, 1,5, 2, 3}, fijada antes de mirar y simétrica alrededor de 1: si lo mejor estuviera por debajo de 1, una rejilla sólo hacia arriba no lo vería. γ no cambia la forma del mapa del rating al peso (sigue casi lineal en *R*); sólo estira o encoge la banda. En el ciclo nacional en curso (05-11-2026, 24 casas, 337 sondeos), a γ = 1 el peso por rating va de 0,58 (CIS) a 2,25 (GAD3), 3,9 veces:
+
+| γ | 0 | 0,5 | 1 | 1,5 | 2 | 3 |
+|---|---|---|---|---|---|---|
+| Peso de la mejor casa frente a la peor | 1× (todos los sondeos pesan 1) | 2× | 3,9× | 7,7× | 15× | 59× |
+
+Los jueces, en este orden (spec, decisión 4): la prueba 1b como cribado, en minutos, y el backtest emparejado del modelo vivo, que es el que decide. El arnés de sondeos futuros (método 14) no juzga: con una banda más ancha el promedio se acerca a las casas mejor valoradas, y predecir sus sondeos futuros lo premiaría por construcción.
+
+La regla para cambiar el valor por defecto, fijada antes de las corridas (spec, decisión 6): un γ sólo sustituye a 1 si mejora el MAE de voto y el CRPS de escaños frente a γ = 1 más de un 2 % en las dos poblaciones, con más casos mejor que peor, sin empeorar el Brier más de un 2 % ni bajar la cobertura. Lectura declarada de antemano: una curva plana dentro del ±2 % confirma que la anchura de la banda es cosmética.
+
+### El promedio simple por γ (prueba 1b, cribado)
+
+`simple_average_curve` sobre el frame `polls` de `Computer('es').build_series().rating_check_data('all')`, guardado el 05-11-2026 (4.457 filas): 71 elecciones (13 generales y 58 autonómicas), los sondeos útiles de los 30 días anteriores de cada una, 2.000 réplicas por bootstrap de elecciones, semilla 0; 9 s. La diferencia es el MAE con γ menos el MAE con γ = 1, emparejado por elección y promediado (negativa: γ acierta más); «mejor / peor» cuenta las elecciones en que γ gana o pierde frente a γ = 1.
+
+| γ | Población | Elecciones | MAE (puntos) | Diferencia frente a γ = 1 (IC 95 %) | Mejor / peor que γ = 1 |
+|---|---|---|---|---|---|
+| 0 | Todas | 71 | 1,9292 | −0,0106 (−0,0478 a +0,0197) | 34 / 37 |
+| | Generales | 13 | 1,6572 | −0,0041 (−0,0664 a +0,0580) | 6 / 7 |
+| | Autonómicas | 58 | 1,9902 | −0,0121 (−0,0601 a +0,0197) | 28 / 30 |
+| 0,5 | Todas | 71 | 1,9369 | −0,0029 (−0,0175 a +0,0085) | 31 / 40 |
+| | Generales | 13 | 1,6617 | +0,0004 (−0,0230 a +0,0296) | 6 / 7 |
+| | Autonómicas | 58 | 1,9986 | −0,0036 (−0,0212 a +0,0098) | 25 / 33 |
+| 1 | Todas | 71 | 1,9398 | referencia | |
+| | Generales | 13 | 1,6613 | referencia | |
+| | Autonómicas | 58 | 2,0023 | referencia | |
+| 1,5 | Todas | 71 | 1,9401 | +0,0002 (−0,0077 a +0,0090) | 38 / 33 |
+| | Generales | 13 | 1,6623 | +0,0010 (−0,0137 a +0,0128) | 5 / 8 |
+| | Autonómicas | 58 | 2,0023 | +0,0001 (−0,0099 a +0,0108) | 33 / 25 |
+| 2 | Todas | 71 | 1,9390 | −0,0008 (−0,0159 a +0,0142) | 40 / 31 |
+| | Generales | 13 | 1,6633 | +0,0020 (−0,0203 a +0,0192) | 5 / 8 |
+| | Autonómicas | 58 | 2,0008 | −0,0015 (−0,0195 a +0,0181) | 35 / 23 |
+| 3 | Todas | 71 | 1,9340 | −0,0058 (−0,0299 a +0,0189) | 38 / 33 |
+| | Generales | 13 | 1,6615 | +0,0002 (−0,0322 a +0,0266) | 5 / 8 |
+| | Autonómicas | 58 | 1,9951 | −0,0071 (−0,0356 a +0,0235) | 33 / 25 |
+
+Las filas de γ = 0 son la prueba 1b de la fase C con el signo al revés (allí, con rating − sin rating: +0,011 y 37 / 34).
+
+**La curva es plana.** En el conjunto, el MAE va de 1,929 a γ = 0 a 1,940 a γ = 1 y 1,934 a γ = 3; ninguna diferencia frente a γ = 1 pasa de 0,011 puntos (en las autonómicas, 0,012 a γ = 0), un 0,5 % del error, y todos los intervalos cruzan el 0. Los recuentos tampoco separan: las bandas anchas ganan algo más elecciones de las que pierden en el conjunto (de 38 / 33 a 40 / 31), la estrecha (γ = 0,5) pierde más de las que gana (31 / 40), y en las generales todos los γ distintos de 1 pierden más de las que ganan (6 / 7 o 5 / 8), siempre por milésimas de punto de media. En el promedio simple, la anchura de la banda es cosmética.
+
+### El backtest emparejado por γ (el que decide)
+
+Las corridas, encadenadas en segundo plano en el portátil del 05-11-2026 a las 14:15 al 06-11-2026 a las 01:50, con γ = 1 primero para comprobar la base cuanto antes; por γ, `es` (28 casos, 5 generales) y luego los cinco autonómicos de la prueba 1a (66 casos: 18 de `es-md` y 12 de cada uno de los otros cuatro), en `backtest/results_exp{γ}` (ignoradas por git), con los parámetros por defecto (`n_sim` 1.000, semilla 42). Tiempos (`es` + los cinco): γ = 1, 56 min + 1 h 21 (2 h 17); γ = 0,5, 50 min + 1 h 19; γ = 1,5, 1 h 15 + 1 h 45; γ = 2, 50 min + 1 h 07; γ = 3, 59 min + 1 h 10.
+
+**La base no cambió.** γ = 1 se rehízo como referencia (`backtest/results_exp1`) y reproduce `results_rated` de la prueba 1a al diezmilésimo en las cuatro métricas, con los 94 casos empatados (`compare_results.py backtest/results_rated backtest/results_exp1`). Por eso `results_flat` vale como γ = 0 y no se rehízo (spec, decisión 4). Comprobaciones: `run.json` con `rating_exponent` = γ en las seis carpetas de cada γ; 28 / 18 / 12 / 12 / 12 / 12 casos por ámbito en todos los γ salvo 1,5 (ver Salvedades); ningún `OperationalError` en el log. Los `run.json` llevan los commits a6aaf98, ea54e9b, eaba7c9, a3f905b y 4049057 según la hora de cada corrida: entre ellos sólo cambian la web, `publish`, `update` y los estudios, no el modelo ni el backtest. Las cinco rejillas acabaron (01:49) antes del recálculo de los ratings guardados del 06-11-2026 a las 01:50: todas corrieron sobre la misma base que `results_rated` y `results_flat`.
+
+Emparejado por (ámbito, `event_date`, `horizon`), la diferencia es γ − (γ = 1) en % de la media de γ = 1 (positiva: γ yerra más; en la cobertura, en puntos porcentuales, positiva: cubre más); «mejor / peor» cuenta los casos en que γ gana o pierde (en la cobertura, gana si cubre más), con los empates entre paréntesis. «Casos» son los de voto y cobertura; el CRPS y el Brier sólo cuentan los casos con escaños válidos (22 de los 28 de las generales: 2015 no los tiene). Métricas del modo Hoy, como en la prueba 1a.
+
+**Generales** (5 elecciones, 28 casos)
+
+| γ | Casos | MAE de voto | CRPS de escaños | Brier de mayorías | Cobertura del 95 % |
+|---|---|---|---|---|---|
+| 0 | 28 | +0,8 % (13 / 15) | +1,0 % (10 / 12) | −8,9 % (10 / 12) | +0,7 pp (1 / 0, 27) |
+| 0,5 | 28 | +0,2 % (12 / 16) | +0,2 % (12 / 10) | −4,5 % (11 / 11) | +0,0 pp (0 / 0, 28) |
+| 1,5 | 28 | +0,8 % (15 / 13) | +0,8 % (10 / 12) | +5,9 % (12 / 10) | −0,9 pp (0 / 1, 27) |
+| 2 | 28 | +1,3 % (14 / 14) | +1,1 % (10 / 12) | +8,3 % (8 / 13, 1) | −0,2 pp (1 / 1, 26) |
+| 3 | 28 | +1,8 % (14 / 14) | +1,4 % (12 / 10) | +12,5 % (7 / 15) | −0,9 pp (1 / 2, 25) |
+
+**Autonómicas** (11 elecciones, 66 casos)
+
+| γ | Casos | MAE de voto | CRPS de escaños | Brier de mayorías | Cobertura del 95 % |
+|---|---|---|---|---|---|
+| 0 | 66 | +0,4 % (32 / 33, 1) | +0,7 % (30 / 33, 3) | +3,3 % (16 / 20, 30) | −0,5 pp (3 / 4, 59) |
+| 0,5 | 66 | +0,3 % (26 / 40) | +0,4 % (28 / 35, 3) | +1,2 % (16 / 19, 31) | −0,8 pp (2 / 5, 59) |
+| 1,5 | 64 | −0,1 % (34 / 30) | −0,3 % (31 / 30, 3) | −0,5 % (15 / 20, 29) | −0,6 pp (0 / 2, 62) |
+| 2 | 66 | −0,3 % (32 / 34) | −0,6 % (32 / 31, 3) | −0,6 % (16 / 24, 26) | −0,4 pp (1 / 2, 63) |
+| 3 | 66 | −0,8 % (33 / 32, 1) | +2,4 % (28 / 35, 3) | −7,1 % (21 / 20, 25) | −1,2 pp (1 / 5, 60) |
+
+**Todas** (94 casos)
+
+| γ | Casos | MAE de voto | CRPS de escaños | Brier de mayorías | Cobertura del 95 % |
+|---|---|---|---|---|---|
+| 0 | 94 | +0,5 % (45 / 48, 1) | +0,8 % (40 / 45, 3) | −3,4 % (26 / 32, 30) | −0,1 pp (4 / 4, 86) |
+| 0,5 | 94 | +0,3 % (38 / 56) | +0,3 % (40 / 45, 3) | −2,0 % (27 / 30, 31) | −0,6 pp (2 / 5, 87) |
+| 1,5 | 92 | +0,1 % (49 / 43) | +0,3 % (41 / 42, 3) | +3,0 % (27 / 30, 29) | −0,7 pp (0 / 3, 89) |
+| 2 | 94 | +0,1 % (46 / 48) | +0,2 % (42 / 43, 3) | +4,3 % (24 / 37, 27) | −0,4 pp (2 / 3, 89) |
+| 3 | 94 | −0,1 % (47 / 46, 1) | +1,9 % (40 / 45, 3) | +3,8 % (28 / 35, 25) | −1,1 pp (2 / 7, 85) |
+
+Las medias de γ = 1, con las que se calculan los %: en las generales, MAE de voto 2,3737, CRPS 7,2361, Brier 0,0775 y cobertura 0,8560; en las autonómicas, 2,5102, 2,6430, 0,0209 y 0,8515 (las de γ = 1,5, sobre 64 casos: 2,5404, 2,6728, 0,0215 y 0,8469). Las tablas completas de `compare_results.py`, con las medias de cada γ, al final de la sección.
+
+### Juicio (regla 6 de la spec)
+
+**Ningún γ pasa la regla.** Ninguno mejora el MAE de voto y el CRPS de escaños más de un 2 % en las dos poblaciones con más casos mejor que peor; en las generales, ningún γ mejora siquiera el voto o el CRPS de γ = 1:
+
+- **Las bandas anchas empeoran las generales, más cuanto más anchas**: a γ = 1,5, 2 y 3, el voto sube un 0,8, un 1,3 y un 1,8 %, el CRPS un 0,8, un 1,1 y un 1,4 %, y el Brier un 5,9, un 8,3 y un 12,5 %. En las autonómicas el voto se mueve dentro del ±1 % (−0,1, −0,3 y −0,8 %), y lo mejor que dan es −0,8 % en voto a γ = 3, con el CRPS un 2,4 % peor, o −0,6 % en el CRPS a γ = 2: muy lejos del 2 %.
+- **La cobertura del 95 % baja en todos los γ > 1**, en las dos poblaciones: entre −0,4 y −1,1 puntos porcentuales sobre todos los casos.
+- **La banda estrecha pierde en más casos de los que gana**: γ = 0,5 empeora el MAE de voto en 56 de los 94 casos (38 / 56; 26 / 40 en las autonómicas), con medias apenas peores (+0,3 %). El rating plano (γ = 0) es la prueba 1a: +0,5 % de error de voto, 45 / 48.
+- **El Brier de las generales sigue a la anchura en todo el tramo** (−8,9, −4,5, 0, +5,9, +8,3 y +12,5 % de γ = 0 a 3), pero sobre 22 casos y lo mueven pocas elecciones: en la prueba 1a, los seis casos de 2023 decidían el de γ = 0. No es una señal para estrechar la banda, porque el voto y los escaños de las generales también empeoran hacia γ = 0.
+
+La lectura declarada de antemano se cumple: **la curva es plana dentro del ±2 % en el voto, en todos los γ y las dos poblaciones (lo más, +1,8 % en las generales a γ = 3), y en los escaños salvo el CRPS de las autonómicas a γ = 3 (+2,4 %, a peor), así que la anchura de la banda es cosmética para la predicción.** Los recuentos añaden lo que las medias no dicen: γ = 0,5 pierde 56 de los 94 casos y γ = 1,5 gana 49 de 92 (con una media un 0,1 % peor). El rating ayuda un poco, y alrededor de 1 una banda acierta lo mismo que otra: la de hoy está en el tramo plano de la curva.
+
+Decisión: el valor por defecto se queda en γ = 1 y el modelo vivo no cambia (no hay commit de ese tipo). `rating_exponent` queda en el código como palanca del backtest.
+
+### Salvedades
+
+- **Cinco generales.** 28 casos, 22 con escaños y Brier. El Brier de las generales lo domina 2023 (prueba 1a), así que su pendiente frente a γ dice poco; el voto y el CRPS de las generales se mueven menos de un 2 % en todos los γ.
+- **La referencia γ = 1 se rehízo** con el código de hoy y la misma base que los demás puntos, y se comprobó que reproduce `results_rated` caso a caso: las cinco carpetas `results_exp{γ}` son comparables entre sí y con `results_flat`.
+- **γ = 1,5 sobre 92 casos.** `es-an` 2022-06-19 a 90 y 180 días se perdieron por un corte de red con la base: el arnés los registró como «skipped», sin la palabra `OperationalError`. No se pudieron repetir sobre la misma base, porque los ratings guardados se recalcularon el 06-11-2026 a las 01:50, después de la cadena entera. El emparejamiento por caso los deja fuera también de γ = 1 en esa comparación (64 autonómicas; MAE de voto de referencia 2,4897 en 92 casos, frente a 2,4695 en 94), sin tocar el resto. Lección para las corridas largas: contar los casos de cada ámbito frente a la referencia, no sólo buscar `OperationalError` en el log.
+- **La prueba 1b sólo pesa la última campaña de cada elección**: los sondeos de los 30 días anteriores, sin horizontes, sin efectos de casa y sin el resto del modelo. Tiene la potencia de 71 elecciones, pero mide otra cosa que el backtest; es el cribado, no el juez.
+- **El arnés de sondeos futuros no juzgó** (spec, decisión 4): con una banda más ancha el promedio se acerca a las casas mejor valoradas, y predecir sus sondeos futuros lo premiaría por construcción. Queda como diagnóstico posterior.
+- **Sin intervalos en el backtest.** Como en la prueba 1a, con 5 generales y 11 autonómicas los recuentos mejor / peor son la medida de su ruido.
+
+### Reproducción
+
+```bash
+# La rejilla, encadenada en segundo plano (≈ 2 h por γ en el portátil); γ = 0 es results_flat de la prueba 1a
+nohup sh -c 'for g in 1 0.5 1.5 2 3; do python backtest/run_backtest.py --scope es --rating-exponent $g --out backtest/results_exp$g && python backtest/run_backtest.py --scopes es-md es-an es-ct es-vc es-ga --rating-exponent $g --out backtest/results_exp$g || exit 1; done' > backtests.log 2>&1 &
+# La base no cambió: diferencia 0 y 94 casos empatados
+python backtest/compare_results.py backtest/results_rated backtest/results_exp1
+# Cada punto de la curva frente a γ = 1
+python backtest/compare_results.py backtest/results_exp1 backtest/results_flat --label-a "γ = 1" --label-b "γ = 0"
+python backtest/compare_results.py backtest/results_exp1 backtest/results_exp0.5 --label-a "γ = 1" --label-b "γ = 0,5"
+python backtest/compare_results.py backtest/results_exp1 backtest/results_exp1.5 --label-a "γ = 1" --label-b "γ = 1,5"
+python backtest/compare_results.py backtest/results_exp1 backtest/results_exp2 --label-a "γ = 1" --label-b "γ = 2"
+python backtest/compare_results.py backtest/results_exp1 backtest/results_exp3 --label-a "γ = 1" --label-b "γ = 3"
+```
+
+En Python, la prueba 1b: `data = Computer(scope='es').build_series().rating_check_data('all')` (≈ 4 min contra la base, sólo lectura) y `rating_check.simple_average_curve(data['polls'], [0, 0.5, 1, 1.5, 2, 3])` (9 s).
+
+### Tablas completas (`compare_results.py`)
+
+Tal como las escribe el script (punto decimal; «mejor / peor» desde γ).
+
+**γ = 0** (`results_flat`)
+
+| Población | Métrica | Casos | γ = 1 | γ = 0 | Diferencia (%) | Mejor / peor (empates) |
+|---|---|---:|---:|---:|---:|---:|
+| Generales | MAE de voto (puntos) | 28 | 2.3737 | 2.3926 | +0.0188 (+0.8%) | 13 / 15 (0) |
+| Generales | CRPS de escaños | 22 | 7.2361 | 7.3061 | +0.0699 (+1.0%) | 10 / 12 (0) |
+| Generales | Brier de mayorías | 22 | 0.0775 | 0.0706 | -0.0069 (-8.9%) | 10 / 12 (0) |
+| Generales | Cobertura del 95 % | 28 | 0.8560 | 0.8631 | +0.0071 (+0.8%) | 1 / 0 (27) |
+| Autonómicas | MAE de voto (puntos) | 66 | 2.5102 | 2.5208 | +0.0106 (+0.4%) | 32 / 33 (1) |
+| Autonómicas | CRPS de escaños | 66 | 2.6430 | 2.6612 | +0.0183 (+0.7%) | 30 / 33 (3) |
+| Autonómicas | Brier de mayorías | 66 | 0.0209 | 0.0215 | +0.0007 (+3.3%) | 16 / 20 (30) |
+| Autonómicas | Cobertura del 95 % | 66 | 0.8515 | 0.8470 | -0.0045 (-0.5%) | 3 / 4 (59) |
+| Todas | MAE de voto (puntos) | 94 | 2.4695 | 2.4826 | +0.0130 (+0.5%) | 45 / 48 (1) |
+| Todas | CRPS de escaños | 88 | 3.7913 | 3.8225 | +0.0312 (+0.8%) | 40 / 45 (3) |
+| Todas | Brier de mayorías | 88 | 0.0350 | 0.0338 | -0.0012 (-3.4%) | 26 / 32 (30) |
+| Todas | Cobertura del 95 % | 94 | 0.8528 | 0.8518 | -0.0011 (-0.1%) | 4 / 4 (86) |
+
+**γ = 0,5** (`results_exp0.5`)
+
+| Población | Métrica | Casos | γ = 1 | γ = 0,5 | Diferencia (%) | Mejor / peor (empates) |
+|---|---|---:|---:|---:|---:|---:|
+| Generales | MAE de voto (puntos) | 28 | 2.3737 | 2.3794 | +0.0057 (+0.2%) | 12 / 16 (0) |
+| Generales | CRPS de escaños | 22 | 7.2361 | 7.2494 | +0.0133 (+0.2%) | 12 / 10 (0) |
+| Generales | Brier de mayorías | 22 | 0.0775 | 0.0740 | -0.0035 (-4.5%) | 11 / 11 (0) |
+| Generales | Cobertura del 95 % | 28 | 0.8560 | 0.8560 | +0.0000 (+0.0%) | 0 / 0 (28) |
+| Autonómicas | MAE de voto (puntos) | 66 | 2.5102 | 2.5176 | +0.0074 (+0.3%) | 26 / 40 (0) |
+| Autonómicas | CRPS de escaños | 66 | 2.6430 | 2.6543 | +0.0113 (+0.4%) | 28 / 35 (3) |
+| Autonómicas | Brier de mayorías | 66 | 0.0209 | 0.0211 | +0.0002 (+1.2%) | 16 / 19 (31) |
+| Autonómicas | Cobertura del 95 % | 66 | 0.8515 | 0.8432 | -0.0083 (-1.0%) | 2 / 5 (59) |
+| Todas | MAE de voto (puntos) | 94 | 2.4695 | 2.4764 | +0.0069 (+0.3%) | 38 / 56 (0) |
+| Todas | CRPS de escaños | 88 | 3.7913 | 3.8031 | +0.0118 (+0.3%) | 40 / 45 (3) |
+| Todas | Brier de mayorías | 88 | 0.0350 | 0.0343 | -0.0007 (-2.0%) | 27 / 30 (31) |
+| Todas | Cobertura del 95 % | 94 | 0.8528 | 0.8470 | -0.0059 (-0.7%) | 2 / 5 (87) |
+
+**γ = 1,5** (`results_exp1.5`, 92 casos)
+
+| Población | Métrica | Casos | γ = 1 | γ = 1,5 | Diferencia (%) | Mejor / peor (empates) |
+|---|---|---:|---:|---:|---:|---:|
+| Generales | MAE de voto (puntos) | 28 | 2.3737 | 2.3916 | +0.0179 (+0.8%) | 15 / 13 (0) |
+| Generales | CRPS de escaños | 22 | 7.2361 | 7.2969 | +0.0607 (+0.8%) | 10 / 12 (0) |
+| Generales | Brier de mayorías | 22 | 0.0775 | 0.0821 | +0.0046 (+5.9%) | 12 / 10 (0) |
+| Generales | Cobertura del 95 % | 28 | 0.8560 | 0.8470 | -0.0089 (-1.0%) | 0 / 1 (27) |
+| Autonómicas | MAE de voto (puntos) | 64 | 2.5404 | 2.5371 | -0.0033 (-0.1%) | 34 / 30 (0) |
+| Autonómicas | CRPS de escaños | 64 | 2.6728 | 2.6649 | -0.0079 (-0.3%) | 31 / 30 (3) |
+| Autonómicas | Brier de mayorías | 64 | 0.0215 | 0.0214 | -0.0001 (-0.5%) | 15 / 20 (29) |
+| Autonómicas | Cobertura del 95 % | 64 | 0.8469 | 0.8410 | -0.0059 (-0.7%) | 0 / 2 (62) |
+| Todas | MAE de voto (puntos) | 92 | 2.4897 | 2.4928 | +0.0032 (+0.1%) | 49 / 43 (0) |
+| Todas | CRPS de escaños | 86 | 3.8402 | 3.8498 | +0.0097 (+0.3%) | 41 / 42 (3) |
+| Todas | Brier de mayorías | 86 | 0.0358 | 0.0369 | +0.0011 (+3.0%) | 27 / 30 (29) |
+| Todas | Cobertura del 95 % | 92 | 0.8496 | 0.8428 | -0.0068 (-0.8%) | 0 / 3 (89) |
+
+**γ = 2** (`results_exp2`)
+
+| Población | Métrica | Casos | γ = 1 | γ = 2 | Diferencia (%) | Mejor / peor (empates) |
+|---|---|---:|---:|---:|---:|---:|
+| Generales | MAE de voto (puntos) | 28 | 2.3737 | 2.4042 | +0.0305 (+1.3%) | 14 / 14 (0) |
+| Generales | CRPS de escaños | 22 | 7.2361 | 7.3172 | +0.0811 (+1.1%) | 10 / 12 (0) |
+| Generales | Brier de mayorías | 22 | 0.0775 | 0.0839 | +0.0064 (+8.3%) | 8 / 13 (1) |
+| Generales | Cobertura del 95 % | 28 | 0.8560 | 0.8542 | -0.0018 (-0.2%) | 1 / 1 (26) |
+| Autonómicas | MAE de voto (puntos) | 66 | 2.5102 | 2.5018 | -0.0084 (-0.3%) | 32 / 34 (0) |
+| Autonómicas | CRPS de escaños | 66 | 2.6430 | 2.6277 | -0.0152 (-0.6%) | 32 / 31 (3) |
+| Autonómicas | Brier de mayorías | 66 | 0.0209 | 0.0207 | -0.0001 (-0.6%) | 16 / 24 (26) |
+| Autonómicas | Cobertura del 95 % | 66 | 0.8515 | 0.8472 | -0.0043 (-0.5%) | 1 / 2 (63) |
+| Todas | MAE de voto (puntos) | 94 | 2.4695 | 2.4727 | +0.0032 (+0.1%) | 46 / 48 (0) |
+| Todas | CRPS de escaños | 88 | 3.7913 | 3.8001 | +0.0088 (+0.2%) | 42 / 43 (3) |
+| Todas | Brier de mayorías | 88 | 0.0350 | 0.0365 | +0.0015 (+4.3%) | 24 / 37 (27) |
+| Todas | Cobertura del 95 % | 94 | 0.8528 | 0.8493 | -0.0035 (-0.4%) | 2 / 3 (89) |
+
+**γ = 3** (`results_exp3`)
+
+| Población | Métrica | Casos | γ = 1 | γ = 3 | Diferencia (%) | Mejor / peor (empates) |
+|---|---|---:|---:|---:|---:|---:|
+| Generales | MAE de voto (puntos) | 28 | 2.3737 | 2.4176 | +0.0439 (+1.8%) | 14 / 14 (0) |
+| Generales | CRPS de escaños | 22 | 7.2361 | 7.3355 | +0.0994 (+1.4%) | 12 / 10 (0) |
+| Generales | Brier de mayorías | 22 | 0.0775 | 0.0872 | +0.0097 (+12.5%) | 7 / 15 (0) |
+| Generales | Cobertura del 95 % | 28 | 0.8560 | 0.8470 | -0.0089 (-1.0%) | 1 / 2 (25) |
+| Autonómicas | MAE de voto (puntos) | 66 | 2.5102 | 2.4889 | -0.0213 (-0.8%) | 33 / 32 (1) |
+| Autonómicas | CRPS de escaños | 66 | 2.6430 | 2.7069 | +0.0640 (+2.4%) | 28 / 35 (3) |
+| Autonómicas | Brier de mayorías | 66 | 0.0209 | 0.0194 | -0.0015 (-7.1%) | 21 / 20 (25) |
+| Autonómicas | Cobertura del 95 % | 66 | 0.8515 | 0.8391 | -0.0124 (-1.5%) | 1 / 5 (60) |
+| Todas | MAE de voto (puntos) | 94 | 2.4695 | 2.4677 | -0.0019 (-0.1%) | 47 / 46 (1) |
+| Todas | CRPS de escaños | 88 | 3.7913 | 3.8641 | +0.0728 (+1.9%) | 40 / 45 (3) |
+| Todas | Brier de mayorías | 88 | 0.0350 | 0.0363 | +0.0013 (+3.8%) | 28 / 35 (25) |
+| Todas | Cobertura del 95 % | 94 | 0.8528 | 0.8415 | -0.0113 (-1.3%) | 2 / 7 (85) |
+
 ## Resultados (pruebas 1b y 2, 04-11-2026)
 
 Medidos con el código b50b1a6/e5068ae sobre la base del 04-11-2026, con `Computer('es').build_series().rating_check_data('all')` y `rating_check_summary`, y repetidos con el mismo resultado en una segunda pasada. El Spearman se reprodujo con un script independiente que lee los ratings de `get_ratings` directamente: −0,1848, igual.
@@ -201,13 +422,14 @@ La fase C2 (afinar parámetros del rating con la verosimilitud fuera de muestra 
 
 - **La pendiente dice en qué dirección**: β = 0,44 con el intervalo por debajo de 1 pide una contracción más fuerte, es decir, un τ menor (y con él k = (σ/τ)² mayor). Coincide con lo que ya dice la tarjeta «Qué límites tiene el rating» (τ = 0,01 parece ancha frente a la dispersión real de las medias de casa: unos 0,0034 descontado el ruido, como en el Problema; 0,006 sin descontarlo, en las casas con cinco o más elecciones). Es el único parámetro sobre el que hay una cifra que apunte.
 - **El acierto negativo de la calidad previa cuestiona el peso de la rúbrica** (k·*Q* en `R = (W·R_aj + k·Q)/(W + k)`, unas 2 elecciones de evidencia) o su traducción a desviación. Pero el Spearman de las casas con poca evidencia (−0,18), en cuyo rating el prior pesa cerca de la mitad o más (k = 1,96 frente a W < 2), dice que la rúbrica ordena algo: el problema es de escala, no de orden.
-- **Nada dice que el promedio fuera a mejorar.** El rating mueve el promedio simple un 0,5 % y el error de voto del modelo vivo otro 0,5 % (en sentido contrario), dentro del ruido las dos veces. Un C2 cambiaría el orden y las notas del ranking, no la predicción. La mezcla 0,7/0,3, el 0,5 autonómico y el 0,9 por año no tienen ninguna cifra aquí: afinarlos sería una búsqueda a ciegas que perseguiría ruido.
+- **Nada dice que el promedio fuera a mejorar.** El rating mueve el promedio simple un 0,5 % y el error de voto del modelo vivo otro 0,5 % (en sentido contrario), dentro del ruido las dos veces. La fase C2a (sección «¿Y con otra banda?») tampoco lo encuentra al ensanchar o estrechar la banda: la curva es plana dentro del ±2 % en el voto. Un C2 cambiaría el orden y las notas del ranking, no la predicción. La mezcla 0,7/0,3, el 0,5 autonómico y el 0,9 por año no tienen ninguna cifra aquí: afinarlos sería una búsqueda a ciegas que perseguiría ruido.
 
 Recomendación, sin decidir:
 
-1. **Nada antes del 29-N.** Cambiar el orden del ranking en campaña es un anti-objetivo de la spec, y las cifras no dan una mejora de la predicción que lo justifique.
+1. **Nada antes del 29-N.** Cambiar el orden del ranking en campaña es un anti-objetivo de la spec, y las cifras no dan una mejora de la predicción que lo justifique (tampoco al cambiar la banda del rating en el promedio, fase C2a).
 2. **Tras el 29-N**, con la sexta general en las cifras (`compute '{"what":["compute","ratings"],"scopes":"all"}'` y `publish analysis` de `es` con `rating_check`), un C2 **acotado** a τ (o k) y, como mucho, al peso de la calidad previa, con este juez: el ECM fuera de muestra de `d_obs` predicho con −τ·Φ⁻¹(*R*) sobre todos los pares (o su verosimilitud normal), bootstrap por casa, y como condiciones que el intervalo de β incluya el 1 y que el acierto relativo del rating no sea negativo. Antes de afinar τ con β hay que medir cuánto de β < 1 es la atenuación por la contracción de `d_obs` sondeo a sondeo (Salvedades): por ejemplo β por tramos del número de sondeos de la elección (10 no separa nada; 30 o más sí separaría).
 3. **El peso del rating en el promedio se queda como está.** La prueba 1a dio lo declarado de antemano: el backtest plano queda dentro del ±2 % en voto y escaños, así que el rating es cosmético para la predicción, y quitarlo o dejarlo es una decisión de presentación, no de acierto. Quitarlo tampoco pasa limpio el criterio 17 (en las autonómicas, Brier +3,3 % y cobertura −0,45 puntos), y sin 2023 el plano empeora en las generales en voto, escaños y mayorías: no hay cifra que pida el cambio. Tampoco hay que buscar en C2 una mejora del promedio: el juez de C2 es la prueba 2, no el backtest.
+4. **La banda del rating se queda en γ = 1** (fase C2a, 06-11-2026, hecha). Ningún punto de la rejilla γ ∈ {0, 0,5, 1,5, 2, 3} pasa la regla 6 de su spec: las bandas anchas empeoran las generales (a γ = 3, voto +1,8 %, CRPS +1,4 %, Brier +12,5 %) y bajan la cobertura en todos los γ > 1; la estrecha (γ = 0,5) pierde en 56 de los 94 casos; en las autonómicas el voto se mueve dentro del ±1 %. La anchura de la banda es cosmética, como lo es el rating entero, y el valor por defecto no cambia. `rating_exponent` queda como palanca del backtest: si un C2 tras el 29-N cambiara los ratings, la curva se repite con los comandos de esa sección (unas 12 h de portátil).
 
 ## Salvedades
 
