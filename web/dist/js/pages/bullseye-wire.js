@@ -1,10 +1,10 @@
 // The bullseye of the last polls by election with its scope and years filters, shared by the pollster profile and
 // the model in the backtest page: the chart (`#bullseye-chart`), the filters (`#bullseye-filter`) and the table
-// (`#bullseye-table`), redrawn from the rows that pass them. No hash: the filters are the only state. In a profile
-// the card also draws the house against the mean of the other houses in the same election (`#consensus-chart`, the
-// chart of question 2 of the CIS bias study), from the same rows and filters. The download button of the card
-// (`#bullseye-download`, the profile) draws the charts as filtered, the filters and the count in the subtitle and
-// the file name.
+// (`#bullseye-table`), redrawn from the rows that pass them. No hash: the filters are the only state. The download
+// button of the card (`#bullseye-download`, the profile) draws the bullseye as filtered, the filters and the count
+// in the subtitle and the file name. A profile also has, in its own card, the house against the mean of the other
+// houses in the same election (`wireConsensus`: `#consensus-chart`, the chart of question 2 of the CIS bias study,
+// from the same rows, without filters, with its own download button `#consensus-download`).
 import {fmtDate, fmtNum, shadeAround} from '../format.js';
 import {fadeByDate, filterRows, imageTexts, yearsText} from '../errors.js';
 import {mountChart, THEME} from '../charts/base.js';
@@ -118,12 +118,10 @@ export function chosenLabel(select) {
  * years; the form only works with JavaScript, so the server renders it hidden and this shows it. The download
  * button, when the card has one, exports the bullseye as filtered.
  *
- * @param {object[]} bullseye the bullseye rows (`scope`, `year`, `others` and the block errors)
+ * @param {object[]} bullseye the bullseye rows (`scope`, `year` and the block errors)
  * @param {string[]} blocks the two blocks of the axes
- * @param {object} [opts] `left` (the left block of the pair: with it and a `#consensus-chart`, the house against
- *   the others is drawn and exported too)
  */
-export function wireBullseye(bullseye, blocks, {left = null} = {}) {
+export function wireBullseye(bullseye, blocks) {
   const target = document.getElementById('bullseye-chart');
   if (!target || !bullseye.length || blocks.length < 2) {
     return;
@@ -131,8 +129,6 @@ export function wireBullseye(bullseye, blocks, {left = null} = {}) {
   const form = document.getElementById('bullseye-filter');
   const table = document.getElementById('bullseye-table');
   const count = document.getElementById('bullseye-count');
-  const consensus = left ? document.getElementById('consensus-chart') : null;
-  const house = consensus ? consensus.dataset.house || '' : '';
   let current = {rows: bullseye, scope: null, from: null, to: null};  // what is drawn, what the button exports
   // The fading is fixed over every election of the house, so a filter does not change the tone of a point.
   const alphas = new Map(fadeByDate(bullseye, {min: OLDEST_ALPHA}).map((alpha, i) => [bullseye[i], alpha]));
@@ -147,9 +143,6 @@ export function wireBullseye(bullseye, blocks, {left = null} = {}) {
   };
   const draw = (rows) => {
     tryDraw(() => renderBullseye(target, rows, options), 'the bullseye');
-    if (consensus) {
-      tryDraw(() => mountChart(consensus, consensusOption(rows, left, house)), 'the house against the others');
-    }
     fillBullseyeTable(table, rows);
     if (count) {
       count.textContent = `${rows.length} ${rows.length === 1 ? 'elección' : 'elecciones'}`;
@@ -175,13 +168,30 @@ export function wireBullseye(bullseye, blocks, {left = null} = {}) {
     form.hidden = false;
   }
   draw(bullseye);
-  const stack = () => [
-    {option: () => bullseyeOption(current.rows, options), height: BULLSEYE_IMAGE_HEIGHT},
-    {option: () => consensusOption(current.rows, left, house), height: BULLSEYE_IMAGE_HEIGHT},
-  ];
   wireDownload(document.getElementById('bullseye-download'), () => bullseyeOption(current.rows, options), showError, {
     chartHeight: BULLSEYE_IMAGE_HEIGHT,
-    charts: consensus ? stack : null,
     texts: (dataset) => imageTexts(dataset, [current.scope, yearsText(current.from, current.to)], count ? count.textContent : null),
+  });
+}
+
+/**
+ * The house against the mean of the other houses, in its own card of the profile: draw `#consensus-chart` from the
+ * bullseye rows (every election, no filters) and wire its download button (`#consensus-download`, the chart alone,
+ * the count of elections drawn in the subtitle). Nothing without the chart, the rows or the left block.
+ *
+ * @param {object[]} bullseye the bullseye rows (`others`, `scope`, `event` and the block errors)
+ * @param {string|null} left the left block of the pair (`initial.left`)
+ */
+export function wireConsensus(bullseye, left) {
+  const target = document.getElementById('consensus-chart');
+  if (!target || !bullseye.length || !left) {
+    return;
+  }
+  const house = target.dataset.house || '';
+  tryDraw(() => mountChart(target, consensusOption(bullseye, left, house)), 'the house against the others');
+  const drawn = bullseye.filter((row) => Number.isFinite(row.others) && Number.isFinite(row[left])).length;
+  wireDownload(document.getElementById('consensus-download'), () => consensusOption(bullseye, left, house), showError, {
+    chartHeight: BULLSEYE_IMAGE_HEIGHT,
+    texts: (dataset) => imageTexts(dataset, [], `${drawn} ${drawn === 1 ? 'elección' : 'elecciones'}`),
   });
 }

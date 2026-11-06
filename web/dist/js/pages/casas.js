@@ -5,7 +5,7 @@
 import {THEME} from '../charts/base.js';
 import {renderHeatmap} from '../charts/heatmap.js';
 import {renderRatingPath} from '../charts/path.js';
-import {KIND_GENERAL, KIND_REGIONAL, REGIONAL_COLOR, wireBullseye} from './bullseye-wire.js';
+import {KIND_GENERAL, KIND_REGIONAL, REGIONAL_COLOR, wireBullseye, wireConsensus} from './bullseye-wire.js';
 import {markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 
 /**
@@ -54,7 +54,8 @@ function paint() {
       'the rating path');
   }
 
-  wireBullseye(bullseye, blocks, {left});
+  wireBullseye(bullseye, blocks);
+  wireConsensus(bullseye, left);
 }
 
 wireControls();

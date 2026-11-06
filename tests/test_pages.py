@@ -1495,7 +1495,7 @@ def test_casas_without_database_is_a_503_page(api):
 
 def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     page = html(call(houses, '/casas/gad3', query='scope=es')[2])
-    assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'class="chart" id="bullseye-chart"' in page
+    assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'class="chart big" id="bullseye-chart"' in page
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas/gad3', query='scope=es')[2])
@@ -1550,12 +1550,14 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert 'id="path-table"' in page
     bullseye = re.search(r'<table id="bullseye-table">(.*?)</table>', page, re.S).group(1)
     assert 'Generales 2023' in bullseye and '2023-23J' not in bullseye  # la elección, por su nombre
-    # desde 2026-11-06, junto a la diana, la casa frente a la media de las demás (la pregunta 2 del estudio del CIS)
-    assert 'id="consensus-chart"' in page and 'data-house="GAD3"' in page
-    grid = page[page.index('id="bullseye-chart"') - 600:page.index('id="consensus-chart"')]
-    assert 'class="grid2"' in grid and 'Frente a la media de las demás encuestadoras en la misma elección' in grid
-    assert 'Su último sondeo, por bloques' in grid and 'hueco' not in page
-    assert 'Horizontal: la media de las demás casas con sus últimos sondeos de las seis semanas finales. Vertical: GAD3.' in page
+    # desde 2026-11-06, tras la diana y en su propia tarjeta (Luis: así no pierden identidad), la casa frente a la
+    # media de las demás (la pregunta 2 del estudio del CIS); la diana vuelve a su tarjeta de siempre
+    assert 'grid2' not in page[page.index('id="bullseye"'):page.index('id="consensus"')]
+    assert page.index('id="bullseye"') < page.index('id="bullseye-table"') < page.index('id="consensus"') < page.index('id="last"')
+    card = page[page.index('id="consensus"'):page.index('id="last"')]
+    assert '<h2>Frente a las demás encuestadoras' in card and 'class="chart big" id="consensus-chart"' in card and 'data-house="GAD3"' in card
+    assert 'frente a la media de los últimos sondeos de las demás encuestadoras en esa misma elección' in card
+    assert 'Cuentan las mismas elecciones que la diana' in card and 'hueco' not in page
     assert_public_wording(page, 'perfil')
     effects = page[page.index('id="profile-effects"'):]
     effects = effects[:effects.index('</table>')]
@@ -3864,7 +3866,11 @@ def test_casa_profile_bullseye_offers_a_download_button_with_the_filters_in_js(h
     attrs = download_attrs(page, 'bullseye-download', 'Diana de errores')
     assert attrs == {'title': 'GAD3', 'subtitle': 'Diana de errores', 'sign': 'demoscopio.es · @luis_sancho',
                      'file': 'demoscopio-diana-gad3.png'}
-    assert 'bullseye-download' not in html(call(houses, '/casas/nueva')[2])
+    assert download_attrs(page, 'consensus-download', 'Frente a las demás encuestadoras') == {
+        'title': 'GAD3', 'subtitle': 'Frente a las demás encuestadoras', 'sign': 'demoscopio.es · @luis_sancho',
+        'file': 'demoscopio-consenso-gad3.png'}
+    missing = html(call(houses, '/casas/nueva')[2])
+    assert 'bullseye-download' not in missing and 'consensus-download' not in missing
     assert pages.environment().filters['slug'] is pages.slugify
 
 
