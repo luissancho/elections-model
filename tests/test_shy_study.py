@@ -89,6 +89,10 @@ def test_compute_shy_election_rows(fresh_app, tmp_path):
     assert (r15['scope_name'], r15['incumbent'], r15['incumbent_error']) == ('Madrid', 'PP', 1.4)
     assert (r89['results']['Izquierda'], r89['polls']['Izquierda'], r15['results']['UP'], r15['polls']['UP'], r89['polls']['VOX']) == (48.7, 52.0, 22.8, 23.1, None)
     assert rows[('es', '2023-07-23')]['PSOE'] == -3.7 and rows[('es-md', '2021-05-04')]['blocks'] == {'Izquierda': ['PSOE', 'MM', 'UP'], 'Derecha': ['PP', 'VOX']}
+    for row in rows.values():
+        for key in ('Izquierda', 'Derecha', 'PSOE', 'PP', 'VOX', 'UP'):
+            if row[key] is not None:
+                assert round(row['polls'][key] - row['results'][key], 2) == row[key]
     assert [k for k in rows] == [('es', '1989-10-29'), ('es-md', '2015-05-24'), ('es-md', '2021-05-04'), ('es', '2023-07-23')]
 
 

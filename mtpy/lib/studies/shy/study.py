@@ -5,8 +5,8 @@ the four lineages (PSOE, PP, Vox and the left of the PSOE) and of the party in g
 them, the long table of figures and the three verdicts. `ShyStudy` carries the results; this module only reads and
 wires, every figure comes from `data` and `stats`.
 
-Errors enter the rows rounded to 2 decimals and the figures are computed over those rounded errors, the ones the page
-prints. Negative means underestimated.
+The rows publish the errors rounded to 2 decimals, but the figures (means, p values, sizes) are computed over the
+unrounded errors and rounded last. Negative means underestimated.
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -58,11 +58,11 @@ class ShyStudy:
     """
 
     params: dict
-    scopes: list
+    scopes: list[str]
     election: Optional[dict]
     summary: dict
-    elections: list
-    groups: list
+    elections: list[dict]
+    groups: list[dict]
     inputs: dict
 
 
@@ -153,7 +153,8 @@ def _rounded(row: dict) -> dict:
     """A row of ``_measure_row`` with its errors, results and polls rounded to 2 decimals."""
     out = {key: _round(value) if isinstance(value, float) else value for key, value in row.items()}
     out['results'] = {key: _round(value) for key, value in row['results'].items()}
-    out['polls'] = {key: _round(value) for key, value in row['polls'].items()}
+    out['polls'] = {key: None if value is None else _round(out['results'][key] + out[key])
+                    for key, value in row['polls'].items()}
 
     return out
 
@@ -315,7 +316,7 @@ def compute_shy(reader: BundleReader, data: FileSystem, params: Optional[dict] =
     psoe_general = _figures_of(general, 'PSOE', threshold)
     big = [row['label'] for row in rows
            if row['general'] and row['PSOE'] is not None and row['PSOE'] < params['big_threshold']]
-    after = [row for row in raw if row['event_date'] < recent_from]
+    before = [row for row in raw if row['event_date'] < recent_from]
     since = [row for row in raw if row['event_date'] >= recent_from]
 
     summary = {
@@ -331,14 +332,14 @@ def compute_shy(reader: BundleReader, data: FileSystem, params: Optional[dict] =
         'lean': block('lean'),
         'vox': vox,
         'parties': parties,
-        'size': size(rows, params['size_parties'], threshold),
+        'size': size(raw, params['size_parties'], threshold),
         'psoe_general': None if psoe_general is None else psoe_general | {'big': big},
         'pp': {'early': {'from': early_from, 'to': early_to,
                          'errors': [{'label': row['label'], 'error': row['PP']} for row in rows if row['general']
                                     if early_from <= row['event_date'] < early_to and row['PP'] is not None]},
                'late': _figures_of([row for row in general if row['event_date'] >= early_to], 'PP', threshold),
                'all': _figures_of(raw, 'PP', threshold)},
-        'podemos': {'before': _figures_of(after, 'UP', threshold),
+        'podemos': {'before': _figures_of(before, 'UP', threshold),
                     'general_recent': _figures_of([row for row in since if row['general']], 'UP', threshold),
                     'regional_recent': _figures_of([row for row in since if not row['general']], 'UP', threshold)},
         'current': _current(current)
