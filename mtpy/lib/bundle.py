@@ -67,6 +67,11 @@ MODES = ('nowcast', 'forecast')
 RUN_PARTS = ('meta', 'headline', 'series', 'polls', 'fan', 'house-effects', 'dispersion', 'weights')
 MODE_PARTS = ('vote', 'summary', 'dist', 'districts', 'scenario', 'projection')
 ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data', 'rating-check')
+# The final stretch of an election, in days before it: the pages and studies that speak of «the last poll of each
+# house before the election» keep the rows of `poll-errors` within it (`days <= 42`); the part itself is published
+# with its lower bound only (the ban: `wban` and `exit` polls are dropped apart), so the profile of a house can show
+# its last poll of every election it polled (Luis, 2026-11-06).
+POLL_ERRORS_WINDOW = (6, 42)
 ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
                     'poll-errors': 'poll-errors', 'error-data': 'error-data', 'rating-check': 'analysis-rating-check'}
 ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data', 'rating-check',

@@ -5,7 +5,7 @@ from typing import Callable, Optional, Sequence
 import pandas as pd
 
 from .. import bundle
-from ..bundle import BundleWriter
+from ..bundle import BundleWriter, POLL_ERRORS_WINDOW
 from ..computer import Computer
 from ..forecaster import NoPollsError
 from ..rating_check import rating_check_summary, simple_average_errors
@@ -31,7 +31,10 @@ POLL_ERRORS_COLUMNS = ['event_date', 'event', 'pollster', 'days', 'sample_size',
 ERROR_DATA_COLUMNS = ['date', 'pollster', 'party', 'regional', 'weeks', 'weight', 'pct', 'error']
 
 
-POLL_ERRORS_PARAMS = {'bmap': 'vs', 'drange': (6, 42), 'n_last': 1}
+# The last poll of each house in every election with results, with the lower bound of the final stretch only
+# (`bundle.POLL_ERRORS_WINDOW`): no upper bound since 2026-11-06, so the profile of a house shows every election
+# it polled; the pages of the final stretch keep `days <= POLL_ERRORS_WINDOW[1]` themselves.
+POLL_ERRORS_PARAMS = {'bmap': 'vs', 'drange': (POLL_ERRORS_WINDOW[0], None), 'n_last': 1}
 
 
 RATING_CHECK_COLUMNS = ['event_scope', 'event_date', 'population', 'pollster', 'rating', 'rating_adj', 'd_prev',
