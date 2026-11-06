@@ -10,14 +10,11 @@ from typing import Optional
 
 import pandas as pd
 
-from ...bundle import BundleReader, path_analysis, path_event, path_manifest, path_part
+from ...bundle import BundleReader, POLL_ERRORS_WINDOW, path_analysis, path_event, path_manifest, path_part
 from ....core.io import FileSystem
+from ..labels import MONTHS, NATIONAL, election_code, election_label  # noqa: F401 (MONTHS kept for importers)
 
 PARAMS_FILE = 'sesgo-cis/params.json'
-NATIONAL = 'es'
-# The months as the site abbreviates them (``filters.MONTHS``, copied: this module keeps independent of the web layer),
-# for the label of two elections of the same scope and year
-MONTHS = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic')
 
 
 class MissingInput(Exception):
@@ -63,22 +60,9 @@ def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value
 
 
-def _short(scope: str, event_date: str, month: bool = False) -> str:
-    """Short label of an election: ``GEN 23`` for the national scope, ``AN 18`` for ``es-an`` 2018; with ``month``,
-    the initial of the month after the year (``GEN 19A`` and ``GEN 19N`` for the two general elections of 2019)."""
-    code = 'GEN' if scope == NATIONAL else scope.upper().removeprefix('ES-')
-    initial = MONTHS[int(event_date[5:7]) - 1][0].upper() if month else ''
-
-    return f'{code} {event_date[2:4]}{initial}'
-
-
-def _label(scope: str, name: str, event_date: str, month: bool = False) -> str:
-    """Label of an election: ``Generales 2023`` for the national scope, ``Andalucía 2018`` for the rest; with
-    ``month``, the abbreviated month before the year (``Generales abr. 2019`` and ``Generales nov. 2019``)."""
-    year = event_date[:4]
-    when = f'{MONTHS[int(event_date[5:7]) - 1]}. {year}' if month else year
-
-    return f'Generales {when}' if scope == NATIONAL else f'{name} {when}'
+# The labels of an election now live in ``studies.labels``; the old private names stay as aliases
+_short = election_code
+_label = election_label
 
 
 def read_error_rows(reader: BundleReader, catalogue: pd.DataFrame) -> tuple[list[dict], dict]:
@@ -86,7 +70,9 @@ def read_error_rows(reader: BundleReader, catalogue: pd.DataFrame) -> tuple[list
     Rows of the ``poll-errors`` analysis of every scope, restricted to the published elections.
 
     The analysis has every election of the scope with results and polls, the site only the published ones (those
-    with an event folder), so the study speaks of the same elections as the pages.
+    with an event folder), so the study speaks of the same elections as the pages. Only the rows of the final stretch count
+    (``days`` not above ``POLL_ERRORS_WINDOW[1]``, 42): the part has no upper bound of days since 2026-11-06 and the
+    study speaks of «the last poll between 6 and 42 days before».
 
     Parameters
     ----------
@@ -119,7 +105,8 @@ def read_error_rows(reader: BundleReader, catalogue: pd.DataFrame) -> tuple[list
         envelope = reader.read_json(part)
         inputs[code] = {'run_id': envelope.get('run_id'), 'generated_at': envelope.get('generated_at')}
         published = set(reader.list_events(code))
-        scope_rows = [row for row in envelope['data'].get('rows') or [] if row['event_date'] in published]
+        scope_rows = [row for row in envelope['data'].get('rows') or [] if row['event_date'] in published
+                      and isinstance(row.get('days'), (int, float)) and row['days'] <= POLL_ERRORS_WINDOW[1]]
         years = pd.Series(sorted({row['event_date'] for row in scope_rows})).str[:4].value_counts()
         shared = set(years[years > 1].index)
 

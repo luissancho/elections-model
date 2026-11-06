@@ -13,8 +13,9 @@ of the scope, which is not tied to a run and is read as published.
 The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``webapi``, this module
 does not import the model nor ``publish``, so the web workers stay light.
 """
-from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, cera_context,
-                       lean_context, study_cards, study_context, study_part, verdict_rows)
+from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, ban_context, cera_context,
+                       herd_context, lean_context, shy_context, study_cards, study_context, study_part,
+                       verdict_rows)
 from .backtest import backtest_context, backtest_part, model_record, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PATH_COLUMNS, RANKING_COLUMNS, RANKING_KEYS,
                     RANKING_SHOWN, analysis_part, block_bar_colors, casa_context, table_columns,
@@ -28,7 +29,8 @@ from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OTHE
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
                          history_scopes,
-                         eleccion_context, elecciones_context, error_rows, event_part, fixed_rows, last_poll_rows,
+                         eleccion_context, elecciones_context, error_rows, event_part, final_stretch_rows, fixed_rows,
+                         last_poll_rows,
                          last_results, horizon_tables, majority_of, mark_shown, model_last, MODEL_ROW, party_blocks,
                          poll_error_parts, published_events, resolve_event, run_less_colours, shown_parties, split_sides,
                          table_blocks, with_abs, with_model_row, year_range)
@@ -38,7 +40,7 @@ from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_tex
                       fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around,
                       shade_scale)
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
-from . import lean
+from . import ban, herd, lean, shy
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, quality_rubric, subpages, thresholds_rows)
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, pollster_href, pollster_slugs, resolve_event_path,

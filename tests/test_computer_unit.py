@@ -921,10 +921,65 @@ def test_get_average_error_data_fits_the_simulator_average(monkeypatch):
     assert init['scope'] == 'es' and init['event_date'] == '2023-07-23' and init['drange'] == 6
     assert init['bmap'] == {'PP': ['PP', 'Cs'], 'PSOE': ['PSOE'], 'ERC': ['ERC']}
     assert init['house_effects'] is False and init['dispersion'] is True and init['disp_params'] == {'herding': False}
-    assert init['drop_mtypes'] == ['aggr'] and init['alpha'] == .05
+    assert init['drop_mtypes'] == ['aggr'] and init['alpha'] == .05 and init['drop_ctypes'] is None
     assert fit == {'names': ['PP', 'PSOE'], 'max_fc': 7, 'fillna': True}
     assert (df['as_of'] == pd.Timestamp('2023-07-10')).all()
 
+
+
+CYCLE_HISTORY_BUILDERS = ('get_drift_data', 'get_average_error_data', 'get_house_effects_data', 'get_herding_data',
+                          'print_house_effects')
+
+
+def test_the_estimators_of_the_cycle_history_keep_every_poll_context():
+    """Los cinco Forecaster que el Computer construye para la historia de los ciclos (deriva, error del promedio,
+    efectos de casa, rebaño y su tabla impresa) pasan `drop_ctypes=None`: leen todos los sondeos del ciclo, los
+    `wban` y los `exit` incluidos, como antes del filtro explícito del Forecaster, y el compute no mueve lo
+    guardado."""
+    import ast
+    import inspect
+    import textwrap
+
+    for name in CYCLE_HISTORY_BUILDERS:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(getattr(Computer, name))))
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, 'id', None) == 'Forecaster']
+        assert len(calls) == 1, name
+        kwargs = {k.arg: k.value for k in calls[0].keywords}
+        assert 'drop_ctypes' in kwargs, name
+        assert isinstance(kwargs['drop_ctypes'], ast.Constant) and kwargs['drop_ctypes'].value is None, name
+
+
+def test_get_drift_data_builds_its_forecasters_with_every_poll_context(monkeypatch):
+    calls = []
+    c = _computer_without_db(monkeypatch, events=['2023-07-23'], main={'2023-07-23': ['PP', 'PSOE']})
+    c.reg_params = None
+    monkeypatch.setattr('mtpy.lib.forecaster.Forecaster', lambda **kw: calls.append(kw) or _fake_forecaster(
+        level={'PP': 33.5, 'PSOE': 28.2}, err={'PP': 0.4, 'PSOE': 0.5}, date_fit_last=pd.Timestamp('2023-07-23')))
+    df = c.get_drift_data(horizons=(7,), min_polls=1)
+    assert len(calls) == 1 and calls[0]['drop_ctypes'] is None and calls[0]['drange'] is None
+    assert set(df['party']) == {'PP', 'PSOE'}
+
+
+def test_get_herding_data_builds_its_forecasters_with_every_poll_context(monkeypatch):
+    import types
+
+    calls = []
+    c = _computer_without_db(monkeypatch, events=['2019-11-10', '2023-07-23'],
+                             main={'2019-11-10': ['PP'], '2023-07-23': ['PP']})
+    c.series = pd.DataFrame({'pollster': ['A', 'B', None]}, index=pd.MultiIndex.from_tuples(
+        [(pd.Timestamp('2019-11-10'), 1), (pd.Timestamp('2023-07-23'), 1), (pd.Timestamp('2026-11-29'), 0)],
+        names=['event_date', 'pollster_id']))
+
+    def forecaster(**kw):
+        calls.append(kw)
+        fc = types.SimpleNamespace(measure_herding=lambda n_series, min_polls: pd.DataFrame())
+        fc.build_series = lambda: fc
+        return fc
+
+    monkeypatch.setattr('mtpy.lib.forecaster.Forecaster', forecaster)
+    df = c.get_herding_data()
+    assert [kw['event_date'] for kw in calls] == ['2019-11-10', '2023-07-23']
+    assert all(kw['drop_ctypes'] is None for kw in calls) and df.shape[0] == 0
 
 def test_get_average_error_data_skips_what_cannot_be_measured(monkeypatch):
     """Sin resultado oficial la elección no entra; un partido sin resultado o sin promedio, tampoco; un caso con

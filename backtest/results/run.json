@@ -1,6 +1,6 @@
 {
- "run_at": "2026-11-01T22:31:33",
- "commit": "45aaa8b",
+ "run_at": "2026-11-06T12:41:39",
+ "commit": "e260d10",
  "scope": "es",
  "n_sim": 1000,
  "seed": 42,
@@ -13,7 +13,14 @@
  "composition": null,
  "regional_noise": true,
  "min_events": null,
+ "error_model": "polls",
+ "drift_scale": null,
+ "tail_dof": null,
+ "config": null,
+ "rating_exponent": 1.0,
+ "ban": true,
  "recompute_ratings": false,
+ "flat_ratings": false,
  "events": [
   "2015-12-20",
   "2016-06-26",
@@ -29,6 +36,6 @@
   90,
   180
  ],
- "db_polls": 3745,
- "db_last_poll": "2026-10-25"
+ "db_polls": 3753,
+ "db_last_poll": "2026-11-01"
 }

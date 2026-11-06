@@ -1,0 +1,108 @@
+{
+  "schema": "andorra-elections@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "rows": [
+      {
+        "scope": "es",
+        "event_date": "2023-07-23",
+        "label": "2023",
+        "national": true,
+        "n_ban": 13,
+        "n_pairs": 7,
+        "k_closer": 5,
+        "mean_d": -0.32,
+        "model": {
+          "error_legal": 1.89,
+          "error_frozen": 1.52,
+          "error_consensus": 1.22,
+          "error_with": 1.2,
+          "beaten": true,
+          "beaten_with": true
+        }
+      },
+      {
+        "scope": "es",
+        "event_date": "2019-11-10",
+        "label": "2019 nov.",
+        "national": true,
+        "n_ban": 14,
+        "n_pairs": 7,
+        "k_closer": 4,
+        "mean_d": -0.19,
+        "model": {
+          "error_legal": 1.48,
+          "error_frozen": 0.9,
+          "error_consensus": 0.64,
+          "error_with": 0.68,
+          "beaten": true,
+          "beaten_with": true
+        }
+      },
+      {
+        "scope": "es",
+        "event_date": "2019-04-28",
+        "label": "2019 abr.",
+        "national": true,
+        "n_ban": 8,
+        "n_pairs": 5,
+        "k_closer": 2,
+        "mean_d": 0.01,
+        "model": {
+          "error_legal": 1.69,
+          "error_frozen": 1.56,
+          "error_consensus": 1.58,
+          "error_with": 1.74,
+          "beaten": false,
+          "beaten_with": false
+        }
+      },
+      {
+        "scope": "es",
+        "event_date": "2016-06-26",
+        "label": "2016",
+        "national": true,
+        "n_ban": 10,
+        "n_pairs": 3,
+        "k_closer": 3,
+        "mean_d": -0.41,
+        "model": {
+          "error_legal": 2.41,
+          "error_frozen": 2.49,
+          "error_consensus": 1.75,
+          "error_with": 2.34,
+          "beaten": true,
+          "beaten_with": true
+        }
+      },
+      {
+        "scope": "es",
+        "event_date": "2015-12-20",
+        "label": "2015",
+        "national": true,
+        "n_ban": 8,
+        "n_pairs": 3,
+        "k_closer": 3,
+        "mean_d": -0.96,
+        "model": {
+          "error_legal": 2.51,
+          "error_frozen": 2.03,
+          "error_consensus": 0.84,
+          "error_with": 0.95,
+          "beaten": true,
+          "beaten_with": true
+        }
+      }
+    ],
+    "period": {
+      "since": "1996-01-01",
+      "k": 7,
+      "n": 8,
+      "mean_d": -1.1
+    }
+  }
+}

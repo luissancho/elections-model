@@ -1,0 +1,165 @@
+{
+  "schema": "andorra-latest@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "scope": "es",
+    "event_date": "2023-07-23",
+    "label": "2023",
+    "parties": [
+      "PP",
+      "PSOE",
+      "Vox",
+      "Sumar"
+    ],
+    "polls": [
+      {
+        "pollster": "GESOP",
+        "sponsor": "El Periódico",
+        "date": "2023-07-21",
+        "days": 2,
+        "sample_size": 4000,
+        "mtype": "poll",
+        "error_avg": 1.81,
+        "pct": {
+          "PP": 34.7,
+          "PSOE": 28.3,
+          "Vox": 12.8,
+          "Sumar": 12.7
+        }
+      },
+      {
+        "pollster": "Sigma Dos",
+        "sponsor": "RTVE",
+        "date": "2023-07-20",
+        "days": 3,
+        "sample_size": 17550,
+        "mtype": "poll",
+        "error_avg": 1.7,
+        "pct": {
+          "PP": 33.8,
+          "PSOE": 29.2,
+          "Vox": 12.3,
+          "Sumar": 13.2
+        }
+      },
+      {
+        "pollster": "GAD3",
+        "sponsor": "Mediaset",
+        "date": "2023-07-19",
+        "days": 4,
+        "sample_size": 10004,
+        "mtype": "poll",
+        "error_avg": 2.1,
+        "pct": {
+          "PP": 34.5,
+          "PSOE": 29.0,
+          "Vox": 12.1,
+          "Sumar": 13.1
+        }
+      },
+      {
+        "pollster": "Ipsos",
+        "sponsor": "La Vanguardia",
+        "date": "2023-07-21",
+        "days": 2,
+        "sample_size": 2000,
+        "mtype": "poll",
+        "error_avg": 1.83,
+        "pct": {
+          "PP": 33.4,
+          "PSOE": 28.1,
+          "Vox": 13.0,
+          "Sumar": 13.3
+        }
+      },
+      {
+        "pollster": "SocioMétrica",
+        "sponsor": "El Español",
+        "date": "2023-07-20",
+        "days": 3,
+        "sample_size": 6000,
+        "mtype": "poll",
+        "error_avg": 1.45,
+        "pct": {
+          "PP": 34.3,
+          "PSOE": 28.4,
+          "Vox": 12.9,
+          "Sumar": 12.6
+        }
+      },
+      {
+        "pollster": "40dB",
+        "sponsor": "El País",
+        "date": "2023-07-19",
+        "days": 4,
+        "sample_size": 1800,
+        "mtype": "poll",
+        "error_avg": 1.71,
+        "pct": {
+          "PP": 33.6,
+          "PSOE": 28.9,
+          "Vox": 12.8,
+          "Sumar": 13.1
+        }
+      },
+      {
+        "pollster": "Target Point",
+        "sponsor": "El Debate",
+        "date": "2023-07-21",
+        "days": 2,
+        "sample_size": 1500,
+        "mtype": "poll",
+        "error_avg": 3.16,
+        "pct": {
+          "PP": 34.4,
+          "PSOE": 29.0,
+          "Vox": 12.3,
+          "Sumar": 13.0
+        }
+      },
+      {
+        "pollster": "YouGov",
+        "sponsor": "YouGov",
+        "date": "2023-07-20",
+        "days": 3,
+        "sample_size": 3000,
+        "mtype": "online",
+        "error_avg": 2.3,
+        "pct": {
+          "PP": 33.0,
+          "PSOE": 29.5,
+          "Vox": 13.5,
+          "Sumar": 12.5
+        }
+      }
+    ],
+    "consensus": {
+      "PP": 34.1,
+      "PSOE": 28.7,
+      "Vox": 12.6,
+      "Sumar": 13.0
+    },
+    "frozen": {
+      "PP": 34.2,
+      "PSOE": 28.3,
+      "Vox": 13.1,
+      "Sumar": 13.1
+    },
+    "official": {
+      "PP": 33.1,
+      "PSOE": 31.7,
+      "Vox": 12.4,
+      "Sumar": 12.3
+    },
+    "error": {
+      "legal": 1.89,
+      "frozen": 1.52,
+      "consensus": 1.22,
+      "with": 1.2
+    }
+  }
+}

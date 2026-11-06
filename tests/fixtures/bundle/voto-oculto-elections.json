@@ -1,0 +1,397 @@
+{
+  "schema": "voto-oculto-elections@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "rows": [
+      {
+        "scope": "es",
+        "scope_name": "España",
+        "event_date": "1977-06-15",
+        "label": "Generales 1977",
+        "short": "GEN 77",
+        "general": true,
+        "n_cycle": 9,
+        "n_final": 7,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "PCE"
+          ],
+          "Derecha": [
+            "UCD",
+            "AP"
+          ]
+        },
+        "Izquierda": -1.82,
+        "Derecha": 2.88,
+        "lean": -4.7,
+        "PSOE": -4.42,
+        "PP": 0.6,
+        "VOX": null,
+        "UP": -1.04,
+        "names": {
+          "PP": "AP",
+          "UP": "PCE"
+        },
+        "incumbent": "UCD",
+        "incumbent_error": -1.87,
+        "results": {
+          "Izquierda": 40.0,
+          "Derecha": 42.1,
+          "PSOE": 29.3,
+          "PP": 8.3,
+          "VOX": null,
+          "UP": 9.4
+        },
+        "polls": {
+          "Izquierda": 38.18,
+          "Derecha": 44.98,
+          "PSOE": 24.88,
+          "PP": 8.9,
+          "VOX": null,
+          "UP": 8.36
+        }
+      },
+      {
+        "scope": "es",
+        "scope_name": "España",
+        "event_date": "1982-10-28",
+        "label": "Generales 1982",
+        "short": "GEN 82",
+        "general": true,
+        "n_cycle": 4,
+        "n_final": 2,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "PCE"
+          ],
+          "Derecha": [
+            "AP",
+            "UCD",
+            "CDS"
+          ]
+        },
+        "Izquierda": 3.53,
+        "Derecha": -1.47,
+        "lean": 5.0,
+        "PSOE": 0.79,
+        "PP": -5.26,
+        "VOX": null,
+        "UP": 2.74,
+        "names": {
+          "PP": "AP",
+          "UP": "PCE"
+        },
+        "incumbent": "UCD",
+        "incumbent_error": 1.23,
+        "results": {
+          "Izquierda": 52.0,
+          "Derecha": 41.0,
+          "PSOE": 48.4,
+          "PP": 26.5,
+          "VOX": null,
+          "UP": 3.8
+        },
+        "polls": {
+          "Izquierda": 55.53,
+          "Derecha": 39.53,
+          "PSOE": 49.19,
+          "PP": 21.24,
+          "VOX": null,
+          "UP": 6.54
+        }
+      },
+      {
+        "scope": "es",
+        "scope_name": "España",
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "short": "GEN 19A",
+        "general": true,
+        "n_cycle": 22,
+        "n_final": 14,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "UP"
+          ],
+          "Derecha": [
+            "PP",
+            "CS",
+            "VOX"
+          ]
+        },
+        "Izquierda": -0.5,
+        "Derecha": 3.41,
+        "lean": -3.92,
+        "PSOE": 0.47,
+        "PP": 3.97,
+        "VOX": 0.83,
+        "UP": -1.16,
+        "names": {},
+        "incumbent": "PSOE",
+        "incumbent_error": 0.47,
+        "results": {
+          "Izquierda": 45.3,
+          "Derecha": 49.9,
+          "PSOE": 28.7,
+          "PP": 16.7,
+          "VOX": 10.3,
+          "UP": 14.3
+        },
+        "polls": {
+          "Izquierda": 44.8,
+          "Derecha": 53.31,
+          "PSOE": 29.17,
+          "PP": 20.67,
+          "VOX": 11.13,
+          "UP": 13.14
+        }
+      },
+      {
+        "scope": "es",
+        "scope_name": "España",
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "short": "GEN 19N",
+        "general": true,
+        "n_cycle": 25,
+        "n_final": 17,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "UP",
+            "MP"
+          ],
+          "Derecha": [
+            "PP",
+            "CS",
+            "VOX"
+          ]
+        },
+        "Izquierda": -0.01,
+        "Derecha": 0.5,
+        "lean": -0.52,
+        "PSOE": -0.76,
+        "PP": 0.14,
+        "VOX": -2.0,
+        "UP": -0.57,
+        "names": {},
+        "incumbent": "PSOE",
+        "incumbent_error": -0.76,
+        "results": {
+          "Izquierda": 44.0,
+          "Derecha": 49.0,
+          "PSOE": 28.0,
+          "PP": 20.8,
+          "VOX": 15.1,
+          "UP": 12.9
+        },
+        "polls": {
+          "Izquierda": 43.99,
+          "Derecha": 49.5,
+          "PSOE": 27.24,
+          "PP": 20.94,
+          "VOX": 13.1,
+          "UP": 12.33
+        }
+      },
+      {
+        "scope": "es",
+        "scope_name": "España",
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "short": "GEN 23",
+        "general": true,
+        "n_cycle": 31,
+        "n_final": 20,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "SUMAR"
+          ],
+          "Derecha": [
+            "PP",
+            "VOX"
+          ]
+        },
+        "Izquierda": -2.56,
+        "Derecha": 1.87,
+        "lean": -4.43,
+        "PSOE": -3.42,
+        "PP": 1.15,
+        "VOX": 0.71,
+        "UP": 0.86,
+        "names": {
+          "UP": "SUMAR"
+        },
+        "incumbent": "PSOE",
+        "incumbent_error": -3.42,
+        "results": {
+          "Izquierda": 44.0,
+          "Derecha": 45.5,
+          "PSOE": 31.7,
+          "PP": 33.1,
+          "VOX": 12.4,
+          "UP": 12.3
+        },
+        "polls": {
+          "Izquierda": 41.44,
+          "Derecha": 47.37,
+          "PSOE": 28.28,
+          "PP": 34.25,
+          "VOX": 13.11,
+          "UP": 13.16
+        }
+      },
+      {
+        "scope": "es-an",
+        "scope_name": "Andalucía",
+        "event_date": "2018-12-02",
+        "label": "Andalucía 2018",
+        "short": "AN 18",
+        "general": false,
+        "n_cycle": 12,
+        "n_final": 8,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "ADELANTE"
+          ],
+          "Derecha": [
+            "PP",
+            "CS",
+            "VOX"
+          ]
+        },
+        "Izquierda": 8.77,
+        "Derecha": -6.13,
+        "lean": 14.89,
+        "PSOE": 4.96,
+        "PP": 1.05,
+        "VOX": -6.01,
+        "UP": 3.87,
+        "names": {},
+        "incumbent": "PSOE",
+        "incumbent_error": 4.96,
+        "results": {
+          "Izquierda": 40.9,
+          "Derecha": 53.2,
+          "PSOE": 27.9,
+          "PP": 20.8,
+          "VOX": 11.0,
+          "UP": 17.8
+        },
+        "polls": {
+          "Izquierda": 49.67,
+          "Derecha": 47.07,
+          "PSOE": 32.86,
+          "PP": 21.85,
+          "VOX": 4.99,
+          "UP": 21.67
+        }
+      },
+      {
+        "scope": "es-md",
+        "scope_name": "Madrid",
+        "event_date": "2021-05-04",
+        "label": "Madrid 2021",
+        "short": "MD 21",
+        "general": false,
+        "n_cycle": 24,
+        "n_final": 18,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "MM",
+            "UP"
+          ],
+          "Derecha": [
+            "PP",
+            "VOX"
+          ]
+        },
+        "Izquierda": 3.99,
+        "Derecha": -3.7,
+        "lean": 7.69,
+        "PSOE": 5.08,
+        "PP": -3.78,
+        "VOX": -0.04,
+        "UP": 0.23,
+        "names": {},
+        "incumbent": "PP",
+        "incumbent_error": -3.78,
+        "results": {
+          "Izquierda": 40.0,
+          "Derecha": 53.8,
+          "PSOE": 16.8,
+          "PP": 44.7,
+          "VOX": 9.1,
+          "UP": 7.2
+        },
+        "polls": {
+          "Izquierda": 43.99,
+          "Derecha": 50.1,
+          "PSOE": 21.88,
+          "PP": 40.92,
+          "VOX": 9.06,
+          "UP": 7.43
+        }
+      },
+      {
+        "scope": "es-cl",
+        "scope_name": "Castilla y León",
+        "event_date": "2026-03-15",
+        "label": "Castilla y León 2026",
+        "short": "CL 26",
+        "general": false,
+        "n_cycle": 14,
+        "n_final": 10,
+        "blocks": {
+          "Izquierda": [
+            "PSOE",
+            "UP",
+            "IU"
+          ],
+          "Derecha": [
+            "PP",
+            "VOX"
+          ]
+        },
+        "Izquierda": 0.61,
+        "Derecha": -1.16,
+        "lean": 1.77,
+        "PSOE": -2.39,
+        "PP": -2.62,
+        "VOX": 1.2,
+        "UP": 3.33,
+        "names": {
+          "UP": "UP+IU"
+        },
+        "incumbent": "PP",
+        "incumbent_error": -2.62,
+        "results": {
+          "Izquierda": 36.5,
+          "Derecha": 56.6,
+          "PSOE": 30.0,
+          "PP": 34.5,
+          "VOX": 18.9,
+          "UP": 6.5
+        },
+        "polls": {
+          "Izquierda": 37.11,
+          "Derecha": 55.44,
+          "PSOE": 27.61,
+          "PP": 31.88,
+          "VOX": 20.1,
+          "UP": 9.83
+        }
+      }
+    ]
+  }
+}

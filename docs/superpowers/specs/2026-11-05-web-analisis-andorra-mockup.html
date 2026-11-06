@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maqueta v2 · /analisis/andorra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<style>
+html, body { margin: 0; }
+body { background: #d9dce3; font-family: 'DM Sans', system-ui, sans-serif; }
+#bar { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 8px 16px; background: #1a1c22; color: #fff; font-size: 13px; }
+#bar strong { font-family: Outfit, sans-serif; font-weight: 800; font-size: 15px; }
+#bar .note { margin-left: auto; color: #9298ac; font-size: 12px; }
+.q { max-width: 1100px; margin: 18px auto 0; padding: 0 16px; font-size: 13.5px; color: #3a3f4f; }
+.q b { color: #1a1c22; }
+#stage { padding: 12px 0 60px; }
+
+.page {
+  --bg: #f4f5f8; --card: #fff; --soft: #eceef2; --soft2: #e3e6ec;
+  --line: rgba(0,0,0,.08); --line2: rgba(0,0,0,.15);
+  --ink: #1a1c22; --text2: #5a5f72; --text3: #9298ac;
+  --brand: #1d4f86; --brand-soft: #e7eef8; --hover: #eff4ff;
+  --green: #2e9e5b; --green-soft: #ecfdf3; --red: #ce3b3b; --red-soft: #fef2f2; --amber: #e8912b; --amber-soft: #fff7ed;
+  --r: 18px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+  --pad: 32px;
+  position: relative; background: var(--bg); color: var(--ink); max-width: 1180px; margin: 0 auto;
+  font: 15px/1.5 'DM Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+}
+.page * { box-sizing: border-box; }
+.page a { color: inherit; text-decoration: none; }
+.page h1, .page h2, .page h3, .page h4 { font-family: Outfit, sans-serif; margin: 0; line-height: 1.15; }
+.hdr { position: sticky; top: 41px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 var(--pad); background: var(--card); border-bottom: 1px solid var(--line); }
+.wm { font: 800 24px/1 Outfit, sans-serif; letter-spacing: -.02em; }
+.wm i { display: inline-block; width: 16px; height: 16px; border: 3px solid var(--brand); border-radius: 50%; margin-left: 3px; vertical-align: -1px; }
+.hdr nav { display: flex; gap: 4px; }
+.hdr nav a { display: inline-flex; align-items: center; height: 56px; padding: 0 12px; font-size: 13.5px; font-weight: 500; color: var(--text2); }
+.hdr nav a.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--brand); }
+.hdr .help { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--line2); display: grid; place-items: center; font-weight: 700; color: var(--text2); }
+.main { padding: 24px var(--pad) 48px; }
+.stack > * + * { margin-top: 16px; }
+.hero { padding: 6px 0 4px; }
+.hero .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.hero h1 { font: 800 36px/1.12 Outfit, sans-serif; letter-spacing: -.02em; max-width: 34ch; margin: 0 0 12px; }
+.hero p { margin: 0; font: 500 18px/1.4 Outfit, sans-serif; color: var(--text2); max-width: 70ch; }
+.hero .intro { margin-top: 16px; max-width: 86ch; }
+.hero .intro p { font: 400 14.5px/1.55 'DM Sans', system-ui, sans-serif; color: var(--text2); margin: 0 0 8px; max-width: none; }
+.hero .intro b { color: var(--ink); font-weight: 700; }
+.hero .intro .srcs { font-size: 12px; color: var(--text3); }
+.hero .intro .srcs a { color: var(--brand); font-weight: 600; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.toc a { padding: 5px 11px; border-radius: 999px; background: var(--card); border: 1px solid var(--line2); font-size: 12.5px; font-weight: 600; color: var(--text2); }
+.toc a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.toc a.g { border-color: var(--green); color: var(--green); } .toc a.o { border-color: var(--amber); color: #c2410c; } .toc a.b { border-color: var(--brand); color: var(--brand); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px 18px; min-width: 0; }
+.card-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 8px; }
+.card-t { display: flex; align-items: center; gap: 9px; font: 700 16px/1.2 Outfit, sans-serif; }
+.card-t::before { content: ""; width: 4px; height: 18px; border-radius: 3px; background: var(--brand); }
+.lead { margin: 0 0 12px; font-size: 13.5px; color: var(--text2); max-width: 100ch; }
+.how { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.how::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--brand-soft); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--text2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill.ok { background: var(--green-soft); color: #15803d; }
+.pill.warn { background: var(--amber-soft); color: #c2410c; }
+.pill.brand { background: var(--brand-soft); color: var(--brand); }
+.pill.bad { background: var(--red-soft); color: #b91c1c; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.kpi { padding: 14px 16px; border-right: 1px solid var(--line); }
+.kpi:last-child { border-right: 0; }
+.kpi .l { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.kpi .v { font: 800 26px/1.1 Outfit, sans-serif; margin: 4px 0 2px; letter-spacing: -.01em; }
+.kpi .s { font-size: 12.5px; color: var(--text2); }
+.dlt { font-weight: 700; white-space: nowrap; }
+.dlt.up { color: #d62728; } .dlt.down { color: #2ca02c; } .dlt.flat { color: var(--text2); }
+.tw { overflow-x: auto; }
+.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t th { padding: 6px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); text-align: right; white-space: nowrap; border-bottom: 1.5px solid var(--line2); }
+.t td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.t th:first-child, .t td:first-child { text-align: left; }
+.t tbody tr:hover td { background: var(--hover); }
+.t .b { font-weight: 700; } .t .mut { color: var(--text3); }
+.t tr.now td { background: var(--brand-soft); font-weight: 600; }
+.t tr.sep td { border-top: 2px solid var(--line2); }
+.t td.ok { background: var(--green-soft); color: #15803d; font-weight: 700; } .t td.ko { background: var(--red-soft); color: #b91c1c; font-weight: 700; }
+.t td.okl { background: #d1fae5; } .t td.kol { background: #fee2e2; } .t td.mv { text-align: left; }
+.chart { height: 340px; }
+.chart.tall { height: 560px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid2 > * { min-width: 0; }
+
+.qcard { position: relative; border-left: 8px solid var(--qc); padding-left: 22px; }
+.qcard .qh { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.qcard .qn { width: 36px; height: 36px; border-radius: 999px; background: var(--qc); color: #fff; display: grid; place-items: center; font: 800 18px Outfit, sans-serif; flex: none; }
+.qcard .qt { font: 800 22px/1.15 Outfit, sans-serif; letter-spacing: -.01em; flex: 1; }
+.qcard .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px Outfit, sans-serif; white-space: nowrap; }
+.qcard .verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.qcard .sum { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--qc) 9%, #fff); font-size: 14px; font-weight: 500; }
+.qcard .sum b { font-weight: 800; }
+.q1 { --qc: #2e9e5b; } .q2 { --qc: #e8912b; } .q3 { --qc: #ce3b3b; } .qb { --qc: #1d4f86; }
+.ctitle { font: 600 13px/1.3 Outfit, sans-serif; margin: 0 0 2px; }
+.csub { font-size: 11.5px; color: var(--text2); margin: 0 0 4px; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.three a { display: block; border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line2); border-top: 5px solid var(--qc); background: var(--bg); }
+.three .k { font: 800 12px Outfit, sans-serif; letter-spacing: .04em; color: var(--qc); }
+.three .tt { font: 700 15px/1.25 Outfit, sans-serif; margin: 4px 0 6px; }
+.three .vv { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 13px Outfit, sans-serif; margin-bottom: 6px; }
+.three p { margin: 0; font-size: 13px; color: var(--text2); }
+.note { padding: 10px 12px; border-radius: 10px; background: var(--amber-soft); font-size: 13px; }
+.note.blue { background: var(--brand-soft); } .note.ok { background: var(--green-soft); } .note.red { background: var(--red-soft); }
+.tests { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.test { border: 1px solid var(--line2); border-radius: 12px; padding: 12px 14px; background: var(--bg); }
+.test .k { font: 800 11px Outfit, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.test .v { font: 800 24px/1.1 Outfit, sans-serif; margin: 4px 0; }
+.test .v small { font-size: 13px; font-weight: 600; color: var(--text2); }
+.test p { margin: 4px 0 0; font-size: 12.5px; color: var(--text2); }
+.test.hi { border-color: var(--red); background: var(--red-soft); }
+.test.ok { border-color: var(--green); background: var(--green-soft); }
+.ask { background: #fff8e6; border: 1px dashed #e8912b; border-radius: 10px; padding: 8px 12px; font-size: 12.5px; color: #7c3a00; margin: 10px 0 0; }
+.ask b { color: #7c3a00; }
+.tech { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 12.5px; color: var(--text2); }
+.tech b { color: var(--ink); }
+.foot { padding: 20px var(--pad) 28px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text2); }
+.src-list { font-size: 13px; } .src-list li { margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: var(--text2); margin: 4px 0 8px; }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.locked { display: grid; place-items: center; min-height: 150px; border: 2px dashed var(--line2); border-radius: 12px; background: var(--bg); text-align: center; padding: 18px; }
+.locked b { font: 800 18px Outfit, sans-serif; display: block; margin-bottom: 4px; }
+.locked p { margin: 0; font-size: 13px; color: var(--text2); max-width: 60ch; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>Maqueta v2 · /analisis/andorra</strong>
+  <span class="note">cifras reales de la base, de las partes publicadas y de 10 casos del backtest (5 de noviembre) · las cajas naranjas son las decisiones que quedan</span>
+</div>
+<p class="q">Estructura propuesta, como el sesgo del CIS: <b>titular + entradilla</b>, tres cifras, <b>tres preguntas</b> con veredicto, <b>P1</b> cada casa contra sí misma (último legal frente a último clandestino), <b>P2</b> el consenso clandestino frente al promedio congelado y qué habría dicho el promedio con la fruta dentro, <b>P3</b> quién afina en el mercado, la tarjeta del <b>29-N</b> (cerrada hasta el cierre de urnas), datos y método. Evidencia histórica; se completa con 2026 el 30 de noviembre.</p>
+
+<div id="stage">
+<div class="page">
+  <header class="hdr">
+    <a class="wm" href="#">Demoscopio<i></i></a>
+    <nav><a>Inicio</a><a>Histórico Errores</a><a>Ranking Encuestadoras</a><a class="on">Análisis</a><a>Método</a></nav>
+    <span class="help">?</span>
+  </header>
+
+  <main class="main stack">
+    <div class="hero">
+      <div class="tags">
+        <span class="pill brand">Análisis</span>
+        <span class="pill">Evidencia histórica · 5 generales con modelo · 116 sondeos clandestinos desde 1996, con las autonómicas</span>
+        <span class="pill warn">Se completa con 2026 tras el cierre de urnas del 29-N</span>
+      </div>
+      <h1>El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última hora?</h1>
+      <p>Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y en las redes circulan como precios de la fruta. En las cinco generales desde 2015, el consenso de esos sondeos estuvo más cerca del resultado que el promedio congelado en cuatro, y quedó más cerca del resultado en 19 de las 24 cifras de partido. Lo que no vio nadie, tampoco lo vio la fruta: en 2023 dejó al PSOE tres puntos por debajo de lo que sacó.</p>
+      <div class="intro">
+        <p><b>La ley.</b> Desde 1985, la Ley Electoral prohíbe «la publicación y difusión o reproducción de sondeos electorales por cualquier medio de comunicación» durante los cinco días anteriores a la votación (artículo 69.7 de la LOREG). Saltársela se castiga con hasta un año de cárcel, multa e inhabilitación. En 2011 se añadió la «reproducción», pensando en las redes sociales, sin aclarar si una cuenta de Twitter es un medio de comunicación.</p>
+        <p><b>Por qué existen.</b> La ley acaba en la frontera. Las encuestadoras siguen haciendo campo hasta la víspera y los medios que pagan los sondeos los publican fuera de España. El Periòdic d'Andorra lleva desde 2015 publicando a diario el tracking de GESOP para El Periódico; el escocés The National hizo lo mismo con Feedback en las catalanas de 2017; The Times publicó los de Sigma Dos para El Mundo en 2008 y 2011, y en 2023 el tracking de GESOP salió en The Adelaide Review, en Australia. Los grandes sondeos de la noche electoral de RTVE y Mediaset, con diez mil entrevistas o más, también se publican fuera la víspera.</p>
+        <p><b>Cómo funcionan.</b> Para que lleguen a España sin nombrar partidos nació en 2015 la «frutería de Andorra», una idea de la cuenta Electograph: los partidos son productos y sus porcentajes, precios. El agua es el PP; la fresa o la rosa, el PSOE; la berenjena, Podemos; la naranja, Ciudadanos; el brócoli, Vox. En noviembre de 2019 el mercado abrió con «notable ascenso del brócoli y descalabro de la naranja», y en las aragonesas de 2026 unos estudiantes de la Universidad de Zaragoza vendían «ppollo», chocolate, jamón de Teruel y frutos rojos en el Mercado Central. Los sondeos «clandestinos» son esos: hechos y publicados con todas las de la ley, sólo que fuera.</p>
+        <p><b>Qué hacemos con ellos.</b> Los cargamos en la base con su marca, pero no entran en el promedio, en el rating ni en las tablas del sitio: la ley no permite publicarlos en España y esta página tampoco lo hace. Lo que sí podemos hacer, pasada cada elección, es compararlos con el resultado. Eso es esta página.</p>
+        <p class="srcs">Fuentes de la explicación: <a href="https://www.elconfidencial.com/espana/cataluna/elecciones-catalanas/2017-12-18/encuesta-sondeo-electoral-prohibido-periodic-andorra_1494464/">El Confidencial (18-12-2017)</a> · <a href="https://www.ondacero.es/noticias/espana/encuestas-electorales-andorra-ascenso-brocoli-descalabro-naranja_201911065dc2b2650cf2767d148c38e5.html">Onda Cero (6-11-2019)</a> · <a href="https://www.heraldo.es/noticias/aragon/2026/02/05/las-encuestas-de-las-elecciones-en-aragon-a-traves-de-ppollo-brocolis-y-frutos-rojos-1891137.html">Heraldo de Aragón (5-2-2026)</a>.</p>
+      </div>
+    </div>
+
+    <nav class="toc">
+      <a class="on">Resumen</a><a class="g">1 · ¿Mejor que el último legal?</a><a class="o">2 · ¿Habrían afinado el promedio?</a><a class="b">3 · ¿Quién afina en el mercado?</a><a>El 29-N</a><a>Datos y método</a>
+    </nav>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Generales en que la fruta afinó el promedio congelado</div><div class="v">4 de 5</div><div class="s">error medio en los partidos principales: del 1,70 del promedio congelado al 1,21 del consenso clandestino · en 2015, de 2,03 a 0,84 · en abril de 2019, de 1,56 a 1,58, la única que no</div></div>
+      <div class="kpi"><div class="l">Cifras de partido que quedaron más cerca del resultado</div><div class="v">19 de 24</div><div class="s">cinco generales, de cuatro a seis partidos principales cada una · 21 apuntaron en la dirección correcta y dos pasaron de largo · las que no: el PSOE en 2015, el PSOE y Vox en abril de 2019, el PSOE y Unidas Podemos en noviembre de 2019</div></div>
+      <div class="kpi"><div class="l">Sondeos clandestinos más cerca que el último legal de su casa</div><div class="v">81 de 116</div><div class="s">33 pares en generales desde 1996 (24 más cerca) y 83 en autonómicas (57) · mejora media de 0,36 puntos por partido · una moneda lo hace menos de 1 vez entre 10.000</div></div>
+    </div>
+
+    <section class="card" id="resumen">
+      <div class="card-h"><h2 class="card-t">Tres preguntas, tres respuestas</h2></div>
+      <p class="lead">Cada veda se repite la pregunta: ¿valen para algo los sondeos que llegan de Andorra? Los tenemos todos en la base, marcados y fuera del promedio, del rating y de las tablas del sitio. Aquí los comparamos con el resultado.</p>
+      <div class="three">
+        <a class="q1"><div class="k">PREGUNTA 1</div><div class="tt">¿Aciertan más que el último sondeo legal?</div><div class="vv">SÍ</div><p>En 81 de 116 pares el sondeo clandestino estuvo más cerca del resultado que el último que la misma casa publicó antes de la veda. En generales, 24 de 33.</p></a>
+        <a class="q2"><div class="k">PREGUNTA 2</div><div class="tt">¿Habrían afinado el promedio?</div><div class="vv">EN 4 DE 5</div><p>El consenso clandestino bate al promedio congelado en 2015, 2016, noviembre de 2019 y 2023, por medio punto de media. Y queda más cerca del resultado en 19 de 24 cifras, aunque se quede corto.</p></a>
+        <a class="qb"><div class="k">PREGUNTA 3</div><div class="tt">¿Quién afina en el mercado de la fruta?</div><div class="vv">LOS GRANDES</div><p>Los sondeos de la jornada con más de 5.000 entrevistas, los de RTVE y Mediaset, afinaron en 11 de 12. GAD3 lo hace en 16 de sus 20 vedas; SocioMétrica, en 8 de 12.</p></a>
+      </div>
+      <p class="note blue" style="margin-top:12px">Medimos el error medio por partido de cada sondeo frente al resultado, el mismo que usa el rating. «Consenso clandestino» es la media simple del último sondeo de cada casa durante la veda; «promedio congelado», lo que dijo el modelo seis días antes de la elección, que es lo que publicamos. Los sondeos clandestinos no entran en el promedio ni en el rating: la ley no permite publicarlos en España, y nosotros tampoco lo hacemos.</p>
+    </section>
+
+    <!-- PREGUNTA 1 -->
+    <section class="card qcard q1" id="p1">
+      <div class="qh"><div class="qn">1</div><h2 class="qt">¿Aciertan más que el último sondeo legal?</h2><span class="verdict">SÍ <i></i></span></div>
+      <p class="lead">La comparación más limpia: cada casa contra sí misma. Su último sondeo publicado antes de la veda frente al último que publicó durante la veda, en la misma elección. Si el sondeo clandestino sólo sirviera para repetir las cifras, el error sería el mismo; si la opinión se mueve en la última semana y los sondeos lo recogen, el clandestino estará más cerca.</p>
+      <div class="grid2">
+        <div>
+          <p class="ctitle">Antes y después: cada casa, de su último sondeo legal a su sondeo clandestino · generales desde 2015</p>
+          <p class="csub">Error medio por partido del último legal (punto gris) y del clandestino (punto de color), unidos; verde = afinó, rojo = empeoró</p>
+          <div class="chart tall" id="c-dumb"></div>
+        </div>
+        <div>
+          <p class="ctitle">Por elección</p>
+          <p class="csub">Pares casa a casa; «más cerca» cuenta los pares en que el sondeo clandestino tuvo menos error</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Elección</th><th>Pares</th><th>Más cerca</th><th>Mejora media</th></tr></thead>
+            <tbody>
+              <tr><td class="b">1996 – 2011 <span class="mut">(5 generales)</span></td><td class="mut">8</td><td>7</td><td><span class="dlt down">▼ −1,10</span></td></tr>
+              <tr><td class="b">2015</td><td class="mut">3</td><td>3</td><td><span class="dlt down">▼ −0,96</span></td></tr>
+              <tr><td class="b">2016</td><td class="mut">3</td><td>3</td><td><span class="dlt down">▼ −0,41</span></td></tr>
+              <tr><td class="b">2019 abr.</td><td class="mut">5</td><td>2</td><td><span class="dlt flat">= +0,01</span></td></tr>
+              <tr><td class="b">2019 nov.</td><td class="mut">7</td><td>4</td><td><span class="dlt down">▼ −0,19</span></td></tr>
+              <tr><td class="b">2023</td><td class="mut">7</td><td>5</td><td><span class="dlt down">▼ −0,32</span></td></tr>
+              <tr class="sep"><td class="b">Generales</td><td class="b">33</td><td class="b">24 <span class="mut">(73 %)</span></td><td><span class="dlt down">▼ −0,50</span></td></tr>
+              <tr><td class="b">Autonómicas <span class="mut">(40 elecciones)</span></td><td class="b">83</td><td class="b">57 <span class="mut">(69 %)</span></td><td><span class="dlt down">▼ −0,30</span></td></tr>
+              <tr><td class="b">Todas</td><td class="b">116</td><td class="b">81 <span class="mut">(70 %)</span></td><td><span class="dlt down">▼ −0,36</span></td></tr>
+            </tbody>
+          </table></div>
+          <p class="csub" style="margin-top:6px">Cataluña es la excepción: 17 pares y sólo 6 más cerca, con tres vedas largas de tracking (2017, 2021 y 2024). Andalucía (8 de 9), Galicia (8 de 10) y el País Vasco (6 de 7), las que más afinan.</p>
+        </div>
+      </div>
+      <div class="sum"><b>Sí: en 7 de cada 10 pares el sondeo clandestino estuvo más cerca del resultado que el último legal de su casa</b>, con una mejora media de 0,36 puntos por partido. En generales, 24 de 33. Que una moneda acierte 81 veces de 116 pasa menos de una vez entre 10.000: no es azar. La última semana mueve voto, y los sondeos clandestinos lo recogen.</div>
+      <span class="how">Cómo leerlo</span>
+      <div class="ask"><b>Decisión:</b> ¿el perímetro de la cuenta son todas las elecciones con sondeos clandestinos (116 pares, generales y autonómicas desde 1996) o sólo las generales (33)? Propuesta: todas en la cifra y en la tabla, las generales desde 2015 en el gráfico. Gráfico decidido: el «antes → después» por casa (dumbbell).</div>
+    </section>
+
+    <!-- PREGUNTA 2 -->
+    <section class="card qcard q2" id="p2">
+      <div class="qh"><div class="qn">2</div><h2 class="qt">¿Habrían afinado el promedio?</h2><span class="verdict">EN 4 DE 5 <i></i></span></div>
+      <p class="lead">El promedio se congela seis días antes de la elección con el último sondeo legal. Comparamos lo que dijo entonces, cifra a cifra, con el consenso clandestino (la media del último sondeo de cada casa durante la veda) y con el resultado. Sólo las cinco generales con modelo publicado.</p>
+      <div class="tests">
+        <div class="test ok"><div class="k">1 · Elecciones en que el consenso clandestino batió al promedio congelado</div><div class="v">4 de 5</div><p>2015 (2,03 → 0,84), 2016 (2,49 → 1,75), noviembre de 2019 (0,90 → 0,64) y 2023 (1,52 → 1,22). En abril de 2019, empate: 1,56 frente a 1,58.</p></div>
+        <div class="test"><div class="k">2 · Error medio de las cinco</div><div class="v">1,21 <small>desde 1,70</small></div><p>Medio punto menos por partido. Para situarlo: el promedio congelado ya bate al último sondeo legal medio (1,70 frente a 2,00).</p></div>
+        <div class="test"><div class="k">3 · Cifras que quedaron más cerca del resultado</div><div class="v">19 de 24</div><p>En 6 de ellas recorrió más de la mitad del camino. Lo más visto: Podemos y Ciudadanos en 2015, Vox en noviembre de 2019. Lo que nadie vio: el PSOE de 2023.</p></div>
+      </div>
+      <div>
+          <p class="ctitle">Cifra a cifra: promedio congelado → consenso clandestino → resultado</p>
+          <p class="csub">Partidos principales de cada elección; verde = el consenso clandestino se movió hacia el resultado, rojo = se alejó; intensidad por lo que recorrió</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Elección</th><th>Partido</th><th>Promedio congelado</th><th>Consenso clandestino</th><th>Resultado</th><th>Movimiento</th></tr></thead>
+            <tbody>
+              <tr><td class="b">2015</td><td>PP</td><td>27,7</td><td>28,0</td><td class="b">28,7</td><td class="okl mv">hacia el resultado · +0,3 de +1,0</td></tr>
+              <tr><td></td><td>PSOE</td><td>20,8</td><td>20,4</td><td class="b">22,0</td><td class="kol mv">se alejó · −0,4</td></tr>
+              <tr><td></td><td>Podemos</td><td>17,6</td><td>20,7</td><td class="b">20,7</td><td class="ok mv">clavado · +3,1 de +3,1</td></tr>
+              <tr><td></td><td>Cs</td><td>18,5</td><td>15,6</td><td class="b">13,9</td><td class="ok mv">hacia el resultado · −2,9 de −4,6</td></tr>
+              <tr><td></td><td>IU</td><td>3,9</td><td>3,9</td><td class="b">3,7</td><td class="okl mv">hacia el resultado · apenas (−0,05)</td></tr>
+              <tr class="sep"><td class="b">2016</td><td>PP</td><td>29,9</td><td>30,3</td><td class="b">33,0</td><td class="okl mv">hacia el resultado · +0,5 de +3,2</td></tr>
+              <tr><td></td><td>PSOE</td><td>21,2</td><td>21,8</td><td class="b">22,6</td><td class="okl mv">hacia el resultado · +0,6 de +1,5</td></tr>
+              <tr><td></td><td>Unidos Podemos</td><td>25,0</td><td>24,1</td><td class="b">21,2</td><td class="okl mv">hacia el resultado · −0,8 de −3,8</td></tr>
+              <tr><td></td><td>Cs</td><td>14,6</td><td>13,6</td><td class="b">13,1</td><td class="ok mv">hacia el resultado · −1,0 de −1,5</td></tr>
+              <tr class="sep"><td class="b">2019 abr.</td><td>PSOE</td><td>29,4</td><td>27,1</td><td class="b">28,7</td><td class="kol mv">pasó de largo · −2,4 cuando faltaban −0,8</td></tr>
+              <tr><td></td><td>PP</td><td>20,8</td><td>19,0</td><td class="b">16,7</td><td class="okl mv">hacia el resultado · −1,8 de −4,1</td></tr>
+              <tr><td></td><td>Cs</td><td>14,4</td><td>15,0</td><td class="b">15,9</td><td class="okl mv">hacia el resultado · +0,6 de +1,4</td></tr>
+              <tr><td></td><td>UP</td><td>13,3</td><td>15,2</td><td class="b">14,3</td><td class="okl mv">pasó de largo, pero más cerca · +2,0 cuando faltaba +1,0</td></tr>
+              <tr><td></td><td>Vox</td><td>10,8</td><td>12,5</td><td class="b">10,3</td><td class="ko mv">se alejó · +1,7</td></tr>
+              <tr class="sep"><td class="b">2019 nov.</td><td>PSOE</td><td>27,4</td><td>26,9</td><td class="b">28,0</td><td class="kol mv">se alejó · −0,5</td></tr>
+              <tr><td></td><td>PP</td><td>20,3</td><td>20,4</td><td class="b">20,8</td><td class="okl mv">hacia el resultado · +0,1 de +0,5</td></tr>
+              <tr><td></td><td>Vox</td><td>13,9</td><td>14,8</td><td class="b">15,1</td><td class="ok mv">hacia el resultado · +0,9 de +1,2</td></tr>
+              <tr><td></td><td>UP</td><td>12,6</td><td>13,3</td><td class="b">12,9</td><td class="kol mv">pasó de largo · +0,7 cuando faltaban +0,3</td></tr>
+              <tr><td></td><td>Cs</td><td>8,8</td><td>8,0</td><td class="b">6,8</td><td class="okl mv">hacia el resultado · −0,8 de −2,0</td></tr>
+              <tr><td></td><td>Más País</td><td>3,3</td><td>2,8</td><td class="b">2,4</td><td class="ok mv">hacia el resultado · −0,5 de −0,9</td></tr>
+              <tr class="sep"><td class="b">2023</td><td>PP</td><td>34,2</td><td>34,1</td><td class="b">33,1</td><td class="okl mv">hacia el resultado · −0,1 de −1,2</td></tr>
+              <tr><td></td><td>PSOE</td><td>28,3</td><td>28,7</td><td class="b">31,7</td><td class="okl mv">hacia el resultado · +0,4 de +3,3</td></tr>
+              <tr><td></td><td>Vox</td><td>13,1</td><td>12,6</td><td class="b">12,4</td><td class="ok mv">hacia el resultado · −0,5 de −0,7</td></tr>
+              <tr><td></td><td>Sumar</td><td>13,1</td><td>13,0</td><td class="b">12,3</td><td class="okl mv">hacia el resultado · −0,1 de −0,8</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      <div class="grid2" style="margin-top:14px">
+        <div>
+          <p class="ctitle">Por elección: error medio en los partidos principales</p>
+          <p class="csub">Error medio por partido · «Último legal» = media de los últimos sondeos legales de cada casa · «Congelado» = lo que publicamos («Lo que dijo el modelo») · «Clandestino» = consenso clandestino · «Con la fruta» = el mismo modelo recalculado el día de la votación con los sondeos clandestinos dentro</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Elección</th><th>Sondeos</th><th>Último legal</th><th>Congelado</th><th>Clandestino</th><th>Con la fruta</th></tr></thead>
+            <tbody>
+              <tr><td class="b">2015</td><td class="mut">8</td><td>2,51</td><td>2,03</td><td class="ok">0,84</td><td class="ok" id="cf-2015">0,95</td></tr>
+              <tr><td class="b">2016</td><td class="mut">10</td><td>2,41</td><td>2,49</td><td class="ok">1,75</td><td class="ok" id="cf-2016">2,34</td></tr>
+              <tr><td class="b">2019 abr.</td><td class="mut">8</td><td>1,69</td><td>1,56</td><td class="ko">1,58</td><td class="ko" id="cf-2019a">1,74</td></tr>
+              <tr><td class="b">2019 nov.</td><td class="mut">14</td><td>1,48</td><td>0,90</td><td class="ok">0,64</td><td class="ok" id="cf-2019n">0,68</td></tr>
+              <tr><td class="b">2023</td><td class="mut">13</td><td>1,89</td><td>1,52</td><td class="ok">1,22</td><td class="ok" id="cf-2023">1,20</td></tr>
+              <tr class="sep"><td class="b">Media</td><td></td><td class="b">2,00</td><td class="b">1,70</td><td class="b">1,21</td><td class="b" id="cf-mean">1,38</td></tr>
+            </tbody>
+          </table></div>
+          </div>
+        <div>
+          <div class="sum" style="margin-top:0"><b>En 4 de 5 generales los sondeos clandestinos habrían afinado el promedio</b>, y en la quinta no lo habría estropeado. El consenso clandestino queda más cerca del resultado en 19 de 24 cifras: lo que se mueve en la última semana, la fruta lo ve. Lo que no ve es la sorpresa: en 2023 subió al PSOE cuatro décimas cuando le faltaban tres puntos y medio. Y el propio modelo, recalculado el día de la votación con los sondeos clandestinos dentro, habría bajado su error de 1,70 a 1,38: mejor en las mismas cuatro elecciones, peor en abril de 2019 (de 1,56 a 1,74).</div>
+          <div class="tech">Lo que se movió y lo que faltaba: en 2015 el consenso clandestino recorrió entero el camino de Podemos (+3,1) y dos tercios del de Ciudadanos; en 2016 vio la dirección de los cuatro partidos pero se quedó en un cuarto del camino (PP +0,5 de +3,2); en 2023, el PSOE +0,4 de +3,3. La fruta corrige la última semana; no corrige el sesgo del ciclo.</div>
+        </div>
+      </div>
+      <span class="how">Cómo leerlo</span>
+      <div class="ask"><b>Decisión:</b> la columna «con la fruta dentro» exige recalcular el modelo el día de la votación con los sondeos clandestinos. Dos vías: (a) el backtest gana el horizonte 0 y la cifra sale en la parte <code>model</code> de cada elección, como las de 6, 14 y 30 (la página sólo lee); (b) la columna se queda en el consenso simple y no hay contrafactual. Propuesta: (a), con el horizonte 0 marcado como «con los sondeos clandestinos» en Método y fuera de las métricas del backtest.</div>
+    </section>
+
+    <!-- PREGUNTA 3 -->
+    <section class="card qcard qb" id="p3">
+      <div class="qh"><div class="qn">3</div><h2 class="qt">¿Quién afina en el mercado de la fruta?</h2><span class="verdict">LOS GRANDES <i></i></span></div>
+      <p class="lead">Casa a casa, con todas las elecciones: cuántas veces su sondeo clandestino estuvo más cerca que su último legal, y cuánto. Y aparte, los sondeos de la jornada: los que las televisiones encargan con miles de entrevistas para la noche electoral y publican fuera antes.</p>
+      <div class="grid2">
+        <div>
+          <p class="ctitle">Casas con tres o más vedas</p>
+          <p class="csub">Pares en generales y autonómicas desde 1996 · mejora = error del sondeo clandestino menos el del último legal, media por partido</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Encuestadora</th><th>Vedas</th><th>Más cerca</th><th>Mejora media</th></tr></thead>
+            <tbody>
+              <tr><td class="b">Celeste Tel</td><td class="mut">4</td><td>4 <span class="mut">(100 %)</span></td><td><span class="dlt down">▼ −0,72</span></td></tr>
+              <tr><td class="b">GAD3</td><td class="mut">20</td><td>16 <span class="mut">(80 %)</span></td><td><span class="dlt down">▼ −0,57</span></td></tr>
+              <tr><td class="b">Sigma Dos</td><td class="mut">13</td><td>10 <span class="mut">(77 %)</span></td><td><span class="dlt down">▼ −0,42</span></td></tr>
+              <tr><td class="b">Sondaxe</td><td class="mut">4</td><td>3 <span class="mut">(75 %)</span></td><td><span class="dlt down">▼ −0,34</span></td></tr>
+              <tr><td class="b">ElectoPanel</td><td class="mut">21</td><td>15 <span class="mut">(71 %)</span></td><td><span class="dlt down">▼ −0,14</span></td></tr>
+              <tr><td class="b">NC Report</td><td class="mut">7</td><td>5 <span class="mut">(71 %)</span></td><td><span class="dlt down">▼ −0,41</span></td></tr>
+              <tr><td class="b">Demoscopia</td><td class="mut">3</td><td>2 <span class="mut">(67 %)</span></td><td><span class="dlt down">▼ −0,63</span></td></tr>
+              <tr><td class="b">Gizaker</td><td class="mut">3</td><td>2 <span class="mut">(67 %)</span></td><td><span class="dlt down">▼ −0,42</span></td></tr>
+              <tr><td class="b">SocioMétrica</td><td class="mut">12</td><td>8 <span class="mut">(67 %)</span></td><td><span class="dlt flat">= +0,01</span></td></tr>
+              <tr><td class="b">GESOP</td><td class="mut">9</td><td>5 <span class="mut">(56 %)</span></td><td><span class="dlt down">▼ −0,32</span></td></tr>
+              <tr><td class="b">Feedback</td><td class="mut">3</td><td>0 <span class="mut">(0 %)</span></td><td><span class="dlt up">▲ +0,22</span></td></tr>
+            </tbody>
+          </table></div>
+          <p class="csub" style="margin-top:6px">ElectoPanel es un panel abierto y no entra en el promedio; aquí se compara consigo mismo, que es lo que mide la pregunta.</p>
+        </div>
+        <div>
+          <p class="ctitle">Los sondeos de la jornada</p>
+          <p class="csub">Sondeos clandestinos con 5.000 entrevistas o más: los que las televisiones publican fuera de España la víspera o el mismo día</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Elección</th><th>Casa · medio</th><th>Entrevistas</th><th>Último legal</th><th>Clandestino</th><th>Mejora</th></tr></thead>
+            <tbody>
+              <tr><td class="b">2023</td><td>Sigma Dos · RTVE</td><td class="mut">17.550</td><td>2,51</td><td>1,70</td><td><span class="dlt down">▼ −0,81</span></td></tr>
+              <tr><td class="b">2019 nov.</td><td>GAD3 · RTVE</td><td class="mut">13.000</td><td>0,77</td><td>0,86</td><td><span class="dlt up">▲ +0,09</span></td></tr>
+              <tr><td class="b">2019 abr.</td><td>GAD3 · RTVE</td><td class="mut">12.000</td><td>2,48</td><td>1,23</td><td><span class="dlt down">▼ −1,25</span></td></tr>
+              <tr><td class="b">2023</td><td>GAD3 · Mediaset</td><td class="mut">10.004</td><td>2,72</td><td>2,10</td><td><span class="dlt down">▼ −0,62</span></td></tr>
+              <tr><td class="b">And. 2022</td><td>GAD3 · Canal Sur</td><td class="mut">9.214</td><td>1,47</td><td>1,06</td><td><span class="dlt down">▼ −0,41</span></td></tr>
+              <tr><td class="b">And. 2026</td><td>Sigma Dos · RTVA</td><td class="mut">9.050</td><td>2,37</td><td>1,94</td><td><span class="dlt down">▼ −0,43</span></td></tr>
+              <tr><td class="b">Mad. 2021</td><td>GAD3 · Telemadrid</td><td class="mut">8.500</td><td>1,72</td><td>0,97</td><td><span class="dlt down">▼ −0,75</span></td></tr>
+              <tr><td class="b">Cat. 2021</td><td>GAD3 · CCMA</td><td class="mut">8.500</td><td>2,43</td><td>1,46</td><td><span class="dlt down">▼ −0,97</span></td></tr>
+              <tr><td class="b">2015</td><td>GAD3 · Antena 3</td><td class="mut">7.000</td><td>1,51</td><td>0,87</td><td><span class="dlt down">▼ −0,64</span></td></tr>
+              <tr><td class="b">2023</td><td>SocioMétrica · El Español</td><td class="mut">6.000</td><td>1,66</td><td>1,45</td><td><span class="dlt down">▼ −0,21</span></td></tr>
+              <tr><td class="b">Cat. 2024</td><td>Sigma Dos · CCMA</td><td class="mut">5.930</td><td>1,81</td><td>1,34</td><td><span class="dlt down">▼ −0,47</span></td></tr>
+              <tr><td class="b">CyL 2022</td><td>GAD3 · ABC</td><td class="mut">5.500</td><td>2,57</td><td>1,19</td><td><span class="dlt down">▼ −1,38</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+      <div class="sum"><b>Los grandes afinan: 11 de los 12 sondeos de la jornada con más de 5.000 entrevistas estuvieron más cerca que el último legal de su casa</b>, con una mejora de 0,65 puntos por partido. Entre las casas, GAD3 (16 de 20) y Sigma Dos (10 de 13) son las que más afinan en la veda; SocioMétrica repite sus cifras (8 de 12, mejora cero); GESOP, con sus trackings de El Periòdic, es la que menos (5 de 9).</div>
+      <span class="how">Cómo leerlo</span>
+      <div class="ask"><b>Decisiones:</b> umbral de tres vedas por casa; «grandes» desde 5.000 entrevistas (desde 4.000 serían 15 de 19); ¿enlace al perfil de cada casa y una línea en su perfil («en la veda afina en 16 de 20»)? Propuesta: enlace sí, línea en el perfil no (otra pieza).</div>
+    </section>
+
+    <section class="card" id="veintinueve">
+      <div class="card-h"><h2 class="card-t">El 29-N: el mercado de la fruta de 2026</h2><span class="pill warn">cerrado hasta el cierre de urnas</span></div>
+      <p class="lead">Desde el 23 de noviembre los sondeos de 2026 sólo se publican fuera de España. Los cargamos en la base, como siempre, pero no los enseñamos: la ley no lo permite y esta página tampoco lo hará. El domingo 29 a las 20:00 esta tarjeta se abre con los sondeos clandestinos de 2026, su consenso, el promedio congelado del 22 de noviembre y, con el escrutinio, la fila de 2026 en las tablas de arriba.</p>
+      <div class="locked"><div><b>Se abre el 29 de noviembre a las 20:00</b><p>Hasta entonces, la cuenta de arriba es la de las cinco generales anteriores. Si los sondeos clandestinos apuntan bien, el 30 de noviembre lo sabremos aquí.</p></div></div>
+      <div class="ask"><b>Decisiones:</b> (1) la tarjeta no enseña nada de 2026 hasta el cierre de urnas, y los sondeos clandestinos siguen fuera del promedio, del rating y de las tablas del sitio: ¿de acuerdo? (2) Al abrirse, ¿lista sondeo a sondeo (casa, medio, fecha, cifras) o sólo el consenso y el error? Propuesta: sondeo a sondeo, que es lo que la gente querrá mirar la noche del 29. (3) ¿Lo abre la hora, o lo abre el `publish event` de 2026 con resultado (más seguro, un día después)? Propuesta: el evento con resultado.</div>
+    </section>
+
+    <section class="card" id="datos">
+      <div class="card-h"><h2 class="card-t">Datos y método</h2></div>
+      <div class="grid2">
+        <div>
+          <p class="ctitle">Datos</p>
+          <ul class="src-list">
+            <li>Los sondeos clandestinos de cada elección (los que Wikipedia marca como publicados durante la veda), con su casa, su medio español, su fecha y su muestra: en la base desde 1996, 116 con un último legal de la misma casa con el que compararlos.</li>
+            <li>El último sondeo legal de cada casa: el último publicado seis días antes de la elección o más, el mismo que usa el rating.</li>
+            <li>El promedio congelado de cada generales desde 2015: la cifra de «Lo que dijo el modelo» de la página de la elección (horizonte de 6 días).</li>
+            <li>Sin agregadores; ElectoPanel sólo en la comparación consigo mismo.</li>
+            <li>CSV: pares casa a casa · consenso clandestino por elección y partido · casas · sondeos de la jornada.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="ctitle">Método</p>
+          <div class="tech" style="margin-top:0">
+            El <b>error</b> de un sondeo es la media, en los partidos principales de la elección, de la distancia entre su cifra y el resultado, el mismo error medio del rating. Un <b>par</b> es el último sondeo clandestino de una casa y su último sondeo legal en la misma elección. El <b>consenso clandestino</b> es la media simple del último sondeo de cada casa durante la veda; el <b>promedio congelado</b>, el modelo seis días antes. Una cifra «se mueve hacia el resultado» cuando el consenso clandestino queda más cerca del resultado que el promedio congelado. La prueba del azar es la binomial de 81 aciertos entre 116 con moneda justa.
+          </div>
+        </div>
+      </div>
+      <div class="ask"><b>Decidido:</b> titular de Luis («El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última hora?») y cabecera larga con la explicación resumida de tres artículos. Queda la URL: propuesta <code>/analisis/andorra</code>.</div>
+    </section>
+  </main>
+  <footer class="foot">Demoscopio · Análisis · «El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última hora?» · evidencia histórica, 1996 – 2026 · se completa con 2026 tras el 29-N · @luis_sancho</footer>
+</div>
+</div>
+
+<script>
+const PAIRS2 = [
+  ['GESOP · 2015', 2.71, 1.57], ['Redondo · 2015', 2.31, 1.22], ['GAD3 · 2015', 1.51, 0.87],
+  ['NC Report · 2016', 2.08, 1.18], ['GAD3 · 2016', 2.24, 2.05], ['GESOP · 2016', 2.85, 2.70],
+  ['GAD3 · 19 abr.', 2.48, 1.23], ['SocioMétrica · 19 abr.', 1.11, 0.97], ['Demoscopia · 19 abr.', 2.03, 2.25], ['ElectoPanel · 19 abr.', 1.71, 2.15], ['IMOP · 19 abr.', 1.19, 1.95],
+  ['Celeste Tel · 19 nov.', 1.15, 0.63], ['Demoscopia · 19 nov.', 1.20, 0.68], ['NC Report · 19 nov.', 1.49, 1.00], ['SocioMétrica · 19 nov.', 1.31, 1.29], ['ElectoPanel · 19 nov.', 0.61, 0.65], ['GESOP · 19 nov.', 1.04, 1.11], ['GAD3 · 19 nov.', 0.77, 0.86],
+  ['GESOP · 2023', 2.92, 1.81], ['Sigma Dos · 2023', 2.51, 1.70], ['GAD3 · 2023', 2.72, 2.10], ['Ipsos · 2023', 2.17, 1.83], ['SocioMétrica · 2023', 1.66, 1.45], ['40dB · 2023', 1.46, 1.71], ['Target Point · 2023', 2.54, 3.16],
+];
+const f1 = x => x.toFixed(2).replace('.', ',');
+const dumb = echarts.init(document.getElementById('c-dumb'));
+dumb.setOption({
+  textStyle: { fontFamily: 'DM Sans' },
+  grid: { left: 150, right: 30, top: 8, bottom: 48 },
+  tooltip: { trigger: 'item', backgroundColor: '#1a1c22', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 },
+             formatter: p => { const d = PAIRS2[p.dataIndex]; return d[0] + '<br>último legal ' + f1(d[1]) + ' → clandestino ' + f1(d[2]) + ' (' + (d[2] < d[1] ? 'afinó ' : 'empeoró ') + f1(Math.abs(d[2] - d[1])) + ')'; } },
+  xAxis: { type: 'value', min: 0, max: 3.5, interval: 0.5, axisLabel: { fontSize: 11, color: '#5a5f72', formatter: v => f1(v) }, splitLine: { lineStyle: { color: '#eceef2' } },
+           name: 'error medio por partido (puntos)', nameLocation: 'middle', nameGap: 28, nameTextStyle: { fontSize: 11, color: '#5a5f72' } },
+  yAxis: { type: 'category', inverse: true, data: PAIRS2.map(p => p[0]), axisTick: { show: false }, axisLine: { show: false }, axisLabel: { fontSize: 11.5, color: '#1a1c22' } },
+  series: [{
+    type: 'custom', data: PAIRS2.map(p => [p[1], p[2]]),
+    renderItem: (params, api) => {
+      const y = api.coord([0, params.dataIndex])[1], x0 = api.coord([api.value(0), 0])[0], x1 = api.coord([api.value(1), 0])[0];
+      const col = api.value(1) < api.value(0) ? '#2e9e5b' : '#ce3b3b';
+      return { type: 'group', children: [
+        { type: 'line', shape: { x1: x0, y1: y, x2: x1, y2: y }, style: { stroke: col, lineWidth: 2.5 } },
+        { type: 'circle', shape: { cx: x0, cy: y, r: 5 }, style: { fill: '#c3c8d4' } },
+        { type: 'circle', shape: { cx: x1, cy: y, r: 6 }, style: { fill: col, stroke: '#fff', lineWidth: 1.5 } },
+      ] };
+    },
+  }],
+});
+window.addEventListener('resize', () => dumb.resize());
+</script>
+</body>
+</html>

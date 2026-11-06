@@ -1,0 +1,138 @@
+{
+  "schema": "voto-oculto-meta@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "study": "voto-oculto",
+    "title": "¿Voto oculto de quién?",
+    "subtitle": "En 92 elecciones desde 1977, los sondeos de las dos últimas semanas no han subestimado de forma sistemática a ningún bloque ni a ningún partido: el voto oculto no es de nadie. El error que sí se repite es otro, el tamaño: unos dos puntos por partido.",
+    "scopes": [
+      "es",
+      "es-an",
+      "es-ar",
+      "es-as",
+      "es-ib",
+      "es-cn",
+      "es-cb",
+      "es-cl",
+      "es-cm",
+      "es-ct",
+      "es-vc",
+      "es-ex",
+      "es-ga",
+      "es-md",
+      "es-mc",
+      "es-nc",
+      "es-pv",
+      "es-ri"
+    ],
+    "election": {
+      "date": "2026-11-29",
+      "days_left": 24,
+      "as_of": "2026-11-05",
+      "run_id": "20261105-103609"
+    },
+    "params": {
+      "window_days": 14,
+      "recent_from": "2018-09-01",
+      "blocks": [
+        "Izquierda",
+        "Derecha"
+      ],
+      "lineages": {
+        "PSOE": [
+          "PSOE",
+          "PSC",
+          "PSE-EE"
+        ],
+        "PP": [
+          "PP",
+          "AP",
+          "CD"
+        ],
+        "VOX": [
+          "VOX"
+        ],
+        "UP": [
+          "SUMAR",
+          "FA",
+          "UP",
+          "IU",
+          "PCE"
+        ]
+      },
+      "labels": {
+        "UP": "IU / Podemos / Sumar",
+        "PP": "PP (AP, CD)",
+        "VOX": "Vox"
+      },
+      "size_parties": [
+        "PSOE",
+        "PP",
+        "VOX",
+        "UP"
+      ],
+      "size_threshold": 2,
+      "big_threshold": -3,
+      "pp_early": [
+        "1982-01-01",
+        "1996-01-01"
+      ],
+      "extremes": 3
+    },
+    "inputs": {
+      "es": {
+        "events": 16,
+        "skipped": []
+      },
+      "es-cb": {
+        "events": 2,
+        "skipped": [
+          {
+            "date": "2011-05-22",
+            "reason": "no final polls"
+          },
+          {
+            "date": "2019-05-26",
+            "reason": "no final polls"
+          }
+        ]
+      },
+      "run": {
+        "run_id": "20261105-103609",
+        "as_of": "2026-11-05"
+      },
+      "incumbents": []
+    },
+    "sources": [
+      {
+        "label": "The Objective: Tezanos admite que el CIS subestimó a Vox («probablemente hay personas que no quieren reconocer su opción»), 16 de marzo de 2022",
+        "url": "https://theobjective.com/espana/2022-03-16/tezanos-cis-vox/"
+      },
+      {
+        "label": "El Independiente: el «voto oculto» del PP, 28 de febrero de 2019",
+        "url": "https://www.elindependiente.com/politica/2019/02/28/voto-oculto-pp/"
+      },
+      {
+        "label": "REIS: ocultación del voto a PP y Vox en el recuerdo de voto",
+        "url": "https://reis.cis.es/index.php/reis/article/view/2549"
+      },
+      {
+        "label": "Pavía y Larraz: la no respuesta como primera fuente de error de las predicciones electorales en España (REIS 798)",
+        "url": "https://reis.cis.es/index.php/reis/article/view/798"
+      }
+    ],
+    "commit": "abc1234",
+    "dirty": false,
+    "versions": {
+      "python": "3.11.9"
+    },
+    "seconds": {
+      "compute": 0.1,
+      "total": 0.2
+    }
+  }
+}

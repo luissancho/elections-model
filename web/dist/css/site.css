@@ -687,6 +687,9 @@ ol.notes > li:target { color: var(--color-text); }
 /* The bullseyes of the history, of an election, of a pollster profile and of the house effects example of the
    method are the main chart of their card: larger and centred */
 #errors-bullseye, #bullseye-chart.big, #house-chart.big { max-width: 720px; margin: 0 auto; }
+/* the profile (2026-11-06): the bullseye and the house against the others side by side, each square */
+#bullseye .grid2 { align-items: start; }
+#bullseye .grid2 .chart { height: auto; aspect-ratio: 1 / 1; max-width: 480px; margin: 0 auto; }
 /* Election detail: the last-poll error bars and their table side by side, and "Ver más" under the results */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
 .split > * { min-width: 0; }
@@ -950,6 +953,72 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 #p3 .table-wrap + .ctitle { margin-top: 14px; }
 td.blk { font-weight: 700; }
 #datos .src-list + .ctitle { margin-top: var(--space-3); }
+/* The herd study (/analisis/rebano): the blue of question 3, the row of the cycle in progress and the six shades of
+   the house × cycle matrix (its table without JavaScript and its legend): red below 1, grey near it, blue above */
+.qb { --qc: #1d4f86; --qc-ink: #1d4f86; --qc-soft: #e7eef8; }
+#study-head + .toc a.qb { border-color: var(--qc); color: var(--qc-ink); }
+tr.now td { background: var(--color-accent-soft); }
+.shade-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0; font-size: 11.5px; color: var(--color-muted); }
+.shade-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.shade-legend i { width: 14px; height: 10px; border-radius: 3px; }
+#matrix-table td + td { text-align: center; }
+/* the colours of the chart (`matrixOption` with `center: 1`) at a value inside each band: 0,4, 0,6, 0,8, 1,4 and 2;
+   the label in white from the opacity 0,6, as in the chart */
+:is(#matrix-table td, .shade-legend i).h1 { background: rgba(214,39,40,0.90); color: #fff; }
+:is(#matrix-table td, .shade-legend i).h2 { background: rgba(214,39,40,0.75); color: #fff; }
+:is(#matrix-table td, .shade-legend i).h3 { background: rgba(214,39,40,0.45); }
+:is(#matrix-table td, .shade-legend i).h4 { background: #f4f5f8; }
+.shade-legend i.h4 { border: 1px solid var(--color-line-strong); }
+:is(#matrix-table td, .shade-legend i).h5 { background: rgba(29,79,134,0.45); }
+:is(#matrix-table td, .shade-legend i).h6 { background: rgba(29,79,134,0.90); color: #fff; }
+/* its two charts: the dispersion by weeks, lower on phones, and the matrix scrolling sideways in its column (few
+   cycles, so narrower than the matrix of the CIS bias study, which is not in a `.grid2`) */
+.qcard .chart#weeks-chart { height: 340px; }
+.grid2 .chart-scroll > .chart#matrix-chart { min-width: 420px; }
+@media (max-width: 699px) {
+  .qcard .chart#weeks-chart { height: 280px; }
+}
+/* the image of question 1 (`card-image.js` marks the clone `.shot-image`): the chart above the cycles table, so the
+   whole table fits the 1200 px of the image */
+.shot-image .grid2:has(#cycles-table) { grid-template-columns: 1fr; }
+/* The shy-vote study (/analisis/voto-oculto): the bars of the left at full width and lower on phones, the bars of
+   Vox, the strip of the parties beside the wider table of question 3, the quote of question 2 with its pill and the
+   bold cells and rows of its tables */
+.qcard .chart#left-chart { height: 340px; }
+.qcard .chart#vox-chart { height: 260px; }
+.qcard .chart#parties-chart { height: 340px; }
+#p1 .chart + .ctitle { margin-top: 14px; }
+#p3 .grid2.wide { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+#p2 .quote { margin: 0 0 12px; padding: 8px 14px; border-left: 3px solid var(--color-line-strong); font-size: 13px; font-style: italic; color: var(--color-muted); }
+#p2 .quote b { font-style: normal; color: var(--color-text); }
+#p2 .quote .pill { margin-right: 8px; font-style: normal; }
+:is(#p1, #p3, #despues) td.b, :is(#p1, #p3, #despues) tr.b td { font-weight: 700; }
+@media (max-width: 899px) {
+  #p3 .grid2.wide { grid-template-columns: 1fr; }
+}
+@media (max-width: 699px) {
+  .qcard .chart#left-chart { height: 280px; }
+}
+/* The clandestine polls study (/analisis/andorra): the four paragraphs of the head and their sources; the cells of
+   question 2 (green when the consensus moved toward the result, intense past half the way; red when it moved away or
+   crossed it, intense from a point), the movement left-aligned; the line over the sums of a table; the green box of
+   the tests; the dumbbell, whose height the page script sets by its rows; and the locked card of the election in
+   progress */
+#study-head .intro { max-width: 86ch; margin-top: 16px; }
+#study-head .intro p { margin: 0 0 8px; font-size: 14.5px; line-height: 1.55; color: var(--color-muted); }
+#study-head .intro b { color: var(--color-text); }
+#study-head .intro .srcs { font-size: 12px; }
+td.okl { background: #d1fae5; }
+td.kol { background: #fee2e2; }
+td.ok { background: var(--color-ok-soft); color: #15803d; font-weight: 700; }
+td.ko { background: #fef2f2; color: #b91c1c; font-weight: 700; }
+td.mv { text-align: left; }
+tr.sep td { border-top: 2px solid var(--color-line-strong); }
+.test.ok { border-color: #2e9e5b; background: var(--color-ok-soft); }
+.qcard .chart#c-dumb { height: auto; min-height: 320px; }
+.locked { display: grid; place-items: center; min-height: 150px; padding: 18px; border: 2px dashed var(--color-line-strong); border-radius: 12px; background: var(--color-bg); text-align: center; }
+.locked b { display: block; margin-bottom: 4px; font: 800 18px var(--font-head); }
+.locked p { max-width: 60ch; margin: 0; font-size: 13px; color: var(--color-muted); }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {

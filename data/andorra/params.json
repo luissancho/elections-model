@@ -1,0 +1,12 @@
+{
+  "national": "es",
+  "since": "1996-01-01",
+  "chart_since": "2015-01-01",
+  "max_days": 42,
+  "frozen_horizon": 6,
+  "min_pairs": 3,
+  "big_sample": 5000,
+  "exclude_mtypes_pairs": ["aggr"],
+  "exclude_mtypes_consensus": ["aggr", "online"],
+  "half": 0.5
+}

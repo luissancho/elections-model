@@ -608,6 +608,12 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           muestra que produciría esa oscilación. Los detalles están en
           <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada sondeo</a>.
         </p>
+        {% if herd_published %}
+        <p>
+          Cómo se acercan las encuestadoras en la recta final, ciclo a ciclo y en vivo, está en
+          <a href="/analisis/rebano">¿Se copian las encuestadoras en la recta final?</a>.
+        </p>
+        {% endif %}
       {{ m.card_end() }}
       {#- With the `rating-check` part, live figures: KPIs, the cloud (`metodo.js`), the quarters, the average with and
           without the rating; the sentences whose meaning depends on a sign read the summary of all the pairs. -#}

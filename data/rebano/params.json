@@ -1,0 +1,12 @@
+{
+  "scope": "es",
+  "since": "2008-01-01",
+  "max_days": 365,
+  "window_days": 56,
+  "final_days": 21,
+  "local_window": 10,
+  "n_series": 4,
+  "min_polls": 3,
+  "exclude": ["CIS"],
+  "buckets": [[0, 1], [2, 3], [4, 5], [6, 7], [8, 11], [12, 17], [18, 26], [27, 52]]
+}

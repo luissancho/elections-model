@@ -32,6 +32,11 @@ MATRIX_JS = pathlib.Path(DIST, 'js', 'charts', 'matrix.js').as_uri()
 RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
+WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
+ERRORS_JS = pathlib.Path(DIST, 'js', 'charts', 'errors.js').as_uri()
+DUMBBELL_JS = pathlib.Path(DIST, 'js', 'charts', 'dumbbell.js').as_uri()
+FORMAT_JS = pathlib.Path(DIST, 'js', 'format.js').as_uri()
+BULLSEYE_WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'bullseye-wire.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -46,8 +51,10 @@ ROWS = [
 def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
-    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk` ranking, `ds` distancia) y `rows` definidos y devuelve su JSON (las
-    funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
+    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
+    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el del voto oculto (`er` errores), el de
+    Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las funciones de la opción se pierden en la
+    serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
@@ -57,11 +64,14 @@ def run_js(expr, rows=ROWS):
         'const sw = await import("{}"); const c = await import("{}"); '
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
-        'const rk = await import("{}"); const ds = await import("{}"); const rows = {}; '
+        'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
+        'const er = await import("{}"); '
+        'const db = await import("{}"); const bw = await import("{}"); '
+        'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, json.dumps(rows), expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -91,6 +101,23 @@ def test_bullseye_names_the_axes_at_the_edges_and_draws_small_points():
     assert labels[0]['label']['show'] is True and labels[0]['label']['position'] == 'right' and labels[0]['labelLayout'] == {'hideOverlap': True}
     assert labels[0]['symbolSize'] == 8 and labels[0]['z'] == 10 and [p['row']['event'] for p in labels[0]['data']] == ['2023-23J', '2019-10N', '2021-4M']
     assert option['xAxis']['min'] == -11 and option['yAxis']['max'] == 11 and 'legend' not in option
+
+
+def test_bullseye_draws_the_late_polls_hollow():
+    """Un sondeo de más de 42 días antes (`late`, perfil desde 2026-11-06) va hueco: relleno transparente y borde del
+    color de su serie, con la opacidad de `alphaOf`; su etiqueta (en la gemela) y su tooltip no cambian."""
+    rows = [dict(ROWS[0], late=True), ROWS[1]]
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], groupOf: (r) => r.scope, '
+                    'colors: {es: "#1d4f86"}, hollowOf: (r) => Boolean(r.late), alphaOf: () => 0.5})', rows=rows)
+    points, labels = scatter(option)
+    hollow, plain = points[0]['data']
+    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#1d4f86', 'borderWidth': 1.5, 'opacity': 0.5}
+    assert plain['itemStyle'] == {'opacity': 0.5}
+    assert [p['row']['event'] for p in labels[0]['data']] == ['2023-23J', '2019-10N'] and 'itemStyle' not in labels[0]['data'][0]
+    # sin `alphaOf`, el hueco sólo lleva el borde; sin grupos, el borde es el color de la serie única
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], color: "#c0672e", hollowOf: (r) => Boolean(r.late)})', rows=rows)
+    hollow, plain = scatter(option)[0][0]['data']
+    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#c0672e', 'borderWidth': 1.5} and 'itemStyle' not in plain
 
 
 def test_bullseye_draws_the_groups_on_top_over_the_others():
@@ -828,6 +855,67 @@ def test_matrix_option_colours_by_sign_and_bolds_the_general_elections():
     assert colours[0].startswith('rgba(214,39,40') and colours[1].startswith('rgba(29,79,134')
 
 
+def test_weeks_option_draws_the_cycles_the_mean_and_the_current_one_over_the_chance_line():
+    def row(event_date, label, current, lo, hi, k, ratio):
+        return {'event_date': event_date, 'label': label, 'current': current, 'lo': lo, 'hi': hi, 'k': k,
+                'ratio': ratio}
+
+    data = {'buckets': [{'lo': 27, 'hi': 52, 'label': '27-52 sem.'}, {'lo': 0, 'hi': 1, 'label': '0-1 sem.'}],
+            'rows': [row('2023-07-23', '2023', False, 27, 52, 1, 1.31), row('2023-07-23', '2023', False, 0, 1, 3, 1.11),
+                     row('2026-11-29', '2026', True, 27, 52, 2, 1.01), row('2026-11-29', '2026', True, 0, 1, 0, None)],
+            'mean': [{'lo': 27, 'hi': 52, 'k': 1, 'ratio': 1.31}, {'lo': 0, 'hi': 1, 'k': 1, 'ratio': 1.11}]}
+    option = run_js('wk.weeksOption(%s)' % json.dumps(data))
+    names = [s['name'] for s in option['series']]
+    assert names == ['2023', 'Media de los 1', '2026'] and option['xAxis']['data'] == ['27-52 sem.', '0-1 sem.']
+    assert option['series'][2]['data'] == [1.01, None] and option['series'][2]['lineStyle']['width'] == 3.5
+    assert option['series'][1]['markLine']['data'][0]['yAxis'] == 1
+    assert option['series'][1]['markArea']['data'][0][1]['yAxis'] == 1
+    assert option['yAxis']['max'] == 3 and option['yAxis']['interval'] == 0.5
+
+
+HERD_MATRIX_JS = ('{events: [{short: "2023", label: "2023"}], houses: ["GAD3", "NC Report", "IMOP"], '
+                  'cells: [[0, 0, 0.32, 3, 0.0975], [0, 1, 1.97, 3, null], [0, 2, 1.0, 9, 0.275]]}')
+# the tooltip of the page script (`herdText` of `pages/analisis-rebano.js`, which needs the DOM to load)
+HERD_TEXT_JS = ('(house, event, [, , h, k, p]) => { const polls = p === null || p === undefined ? `${k} sondeos` : '
+                '`${k} sondeos, p ${fmt.fmtNum(p, 3)}`; return `${house} · ${event.label}: rebaño ${fmt.fmtNum(h, 2)} '
+                '(${polls})`; }')
+
+
+def test_matrix_option_with_a_centre_shades_around_one_and_labels_the_cells():
+    option = run_js('mx.matrixOption(%s, {center: 1, label: true})' % HERD_MATRIX_JS)
+    colors = [cell['itemStyle']['color'] for cell in option['series'][0]['data']]
+    assert colors[0].startswith('rgba(214,39,40') and colors[1].startswith('rgba(29,79,134') and colors[2] == '#f4f5f8'
+    assert option['series'][0]['label']['show'] is True
+    # `cellText` gets the whole value array of the cell (spec D7: `[x, y, h, k, p]`)
+    joined = run_js('mx.matrixOption(%s, {center: 1, cellText: (house, event, cell) => [house, event.label, ...cell]'
+                    '.join("|")}).tooltip.formatter({value: [0, 0, 0.32, 3, 0.0975]})' % HERD_MATRIX_JS)
+    assert joined == 'GAD3|2023|0|0|0.32|3|0.0975'
+    texts = run_js('await (async () => { const fmt = await import("%s"); const o = mx.matrixOption(%s, {center: 1, '
+                   'cellText: %s}); return [o.tooltip.formatter({value: [0, 0, 0.32, 3, 0.0975]}), '
+                   'o.tooltip.formatter({value: [0, 1, 1.97, 3, null]})]; })()'
+                   % (FORMAT_JS, HERD_MATRIX_JS, HERD_TEXT_JS))
+    assert texts == ['GAD3 · 2023: rebaño 0,32 (3 sondeos, p 0,098)', 'NC Report · 2023: rebaño 1,97 (3 sondeos)']
+    page = pathlib.Path(DIST, 'js', 'pages', 'analisis-rebano.js').read_text(encoding='utf-8')
+    assert 'cellText: herdText' in page and 'rebaño ${fmtNum(h, 2)} (${polls})' in page
+    assert '`${k} sondeos, p ${fmtNum(p, 3)}`' in page
+
+
+def test_matrix_option_bolds_the_columns_asked_for_and_can_keep_them_upright():
+    """The herd matrix (spec D7): the cycle in progress in bold and the few short names upright; by default the
+    general elections in bold and the names rotated, as in the CIS bias study."""
+    events = '[{short: "2023", label: "2023", current: false}, {short: "2026", label: "2026", current: true}]'
+    data = '{events: %s, houses: ["GAD3"], cells: [[0, 0, 0.5], [1, 0, 1.4]]}' % events
+    labels = ('return {rotate: a.axisLabel.rotate, '
+              'labels: a.data.map((text, i) => a.axisLabel.formatter(text, i))}; })()')
+    axis = run_js('(() => { const a = mx.matrixOption(%s, {center: 1, bold: (event) => event.current, rotate: 0})'
+                  '.xAxis; ' % data + labels)
+    assert axis == {'rotate': 0, 'labels': ['2023', '{g|2026}']}
+    axis = run_js('(() => { const a = mx.matrixOption({events: [{short: "AN 18", label: "Andalucía 2018"}, '
+                  '{short: "GEN 23", label: "Generales 2023"}], houses: ["CIS"], cells: [[0, 0, 1.0]]}).xAxis; '
+                  + labels)
+    assert axis == {'rotate': 90, 'labels': ['AN 18', '{g|GEN 23}']}
+
+
 def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():
     rows = [{'x': 93, 'y': 8.0, 'name': 'CIS', 'k': 38, 'n': 41, 'cis': True}, {'x': 77, 'y': 1.6, 'name': 'Sigma Dos', 'k': 23, 'n': 30, 'cis': False}]
     option = run_js('rk.rankingOption(%s)' % json.dumps(rows))
@@ -869,6 +957,33 @@ def test_scatter_diagonal_and_fixed_axes():
     assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]
 
 
+def test_consensus_option_names_both_axes_and_fits_symmetric_axes():
+    """El gráfico «frente a las demás casas» del perfil (`bullseye-wire.js: consensusOption`): un punto por elección con
+    `others`, nombrado evento-ámbito, ejes simétricos al primer múltiplo de 5, la diagonal, el tardío hueco, el eje x
+    con la media de las demás y el eje y con la casa (revisión final: la imagen descargada se lee sola)."""
+    rows = [dict(ROWS[0], others=-0.51), dict(ROWS[1], others=7.2, late=True), dict(ROWS[3], others=None)]
+    option = run_js('bw.consensusOption(rows, "Izquierda", "GAD3")', rows=rows)
+    points = option['series'][0]['data']
+    assert [p['name'] for p in points] == ['2023-23J-es', '2019-10N-es'] and points[0]['value'] == [-0.51, -0.7]
+    assert points[1]['itemStyle'] == {'color': 'transparent', 'borderColor': '#1d4f86', 'borderWidth': 1.5}
+    assert option['xAxis']['min'] == -10 and option['yAxis']['max'] == 10 and option['xAxis']['interval'] == 5
+    assert option['xAxis']['name'] == 'Media de las demás casas, error en Izquierda' and option['yAxis']['name'] == 'GAD3, error en Izquierda'
+    assert option['series'][-1]['data'] == [[-10, -10], [10, 10]]
+
+
+def test_scatter_draws_the_hollow_points_with_their_colour_as_border():
+    """`hollowOf` (el gráfico «frente a las demás casas» del perfil): el punto hueco lleva relleno transparente y el
+    borde de su color (`colorOf`, o el acento sin él)."""
+    rows = [{'x': 1, 'y': 2, 'name': 'a', 'late': True}, {'x': 2, 'y': 1, 'name': 'b'}]
+    option = run_js('sc.scatterOption(rows, {x: "x", y: "y", name: "name", colorOf: () => "#c0672e", hollowOf: (r) => Boolean(r.late)})', rows=rows)
+    hollow, plain = option['series'][0]['data']
+    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#c0672e', 'borderWidth': 1.5}
+    assert plain['itemStyle'] == {'color': '#c0672e'}
+    option = run_js('sc.scatterOption(rows, {x: "x", y: "y", name: "name", hollowOf: (r) => Boolean(r.late)})', rows=rows)
+    hollow, plain = option['series'][0]['data']
+    assert hollow['itemStyle'] == {'color': 'transparent', 'borderColor': '#1d4f86', 'borderWidth': 1.5} and 'itemStyle' not in plain
+
+
 def test_scatter_with_fit_and_diagonal_draws_two_dashed_lines_over_fixed_axes():
     """The cloud of the rating check (/metodo/rating): the points, the fitted line and the diagonal of the axes."""
     rows = [{'pollster': 'GAD3', 'd_prev': -0.35, 'd_obs': -0.41}, {'pollster': 'CIS', 'd_prev': 1.2, 'd_obs': 2.5}]
@@ -902,3 +1017,57 @@ def test_catalog_orders_the_block_view_left_rest_right_and_paints_otros_grey():
     assert run_js('%s.orderBlocks(["Derecha", "Otros", "Izquierda", "Separatista"])' % cat) == [
         'Izquierda', 'Otros', 'Derecha', 'Separatista']
     assert run_js('%s.blockColor("Otros")' % cat) == '#9e9e9e'
+
+
+BARS = [{'short': 'GEN 77', 'label': 'Generales 1977', 'value': -1.82, 'general': True}, {'short': 'MD 21', 'label': 'Madrid 2021', 'value': 3.99, 'general': False},
+        {'short': 'AN 18', 'label': 'Andalucía 2018', 'value': 8.77, 'general': False}]
+
+
+def test_error_bars_option_colors_by_sign_scales_the_axis_and_marks_the_mean():
+    option = run_js('er.errorBarsOption(%s, {mean: 0.47, rotate: 90})' % json.dumps(BARS))
+    data = option['series'][0]['data']
+    assert option['xAxis']['data'] == ['GEN 77', 'MD 21', 'AN 18'] and option['xAxis']['axisLabel']['rotate'] == 90 and option['xAxis']['axisLabel']['fontSize'] == 9
+    assert [d['itemStyle']['color'] for d in data] == ['#d62728', '#1d4f86', '#1d4f86'] and [d['itemStyle']['opacity'] for d in data] == [1, 0.55, 0.55]
+    assert (option['yAxis']['min'], option['yAxis']['max'], option['yAxis']['interval']) == (-10, 10, 2)
+    assert option['series'][0]['markLine']['data'][0]['yAxis'] == 0.47
+    labels = run_js('(() => { const o = er.errorBarsOption(%s); const f = o.xAxis.axisLabel.formatter; return [f("GEN 77", 0), f("MD 21", 1)]; })()' % json.dumps(BARS))
+    assert labels == ['{bold|GEN 77}', 'MD 21']
+    small = run_js('er.errorBarsOption(%s, {yMin: 5, step: 2.5})' % json.dumps(BARS[:2]))
+    assert (small['yAxis']['min'], small['yAxis']['max'], small['yAxis']['interval']) == (-5, 5, 2.5) and 'markLine' not in small['series'][0]
+
+
+def test_error_strip_option_lists_the_parties_with_their_means():
+    data = {'rows': [{'party': 'PSOE', 'label': 'Generales 2023', 'value': -3.42}, {'party': 'PP', 'label': 'Generales 2023', 'value': 1.15}, {'party': 'PP', 'label': 'Madrid 2021', 'value': -3.78}],
+            'means': {'PSOE': -0.12, 'PP': 0.02}, 'order': ['PP', 'PSOE']}
+    option = run_js('er.errorStripOption(%s)' % json.dumps(data))
+    assert option['yAxis']['data'] == ['PP', 'PSOE'] and (option['xAxis']['min'], option['xAxis']['max'], option['xAxis']['interval']) == (-8, 8, 2)
+    points = option['series'][0]['data']
+    assert [p['value'] for p in points] == [[-3.42, 'PSOE'], [1.15, 'PP'], [-3.78, 'PP']] and points[0]['itemStyle']['color'] == '#d62728' and points[1]['itemStyle']['color'] == '#1d4f86'
+    assert [m['value'] for m in option['series'][1]['data']] == [[0.02, 'PP'], [-0.12, 'PSOE']] and option['series'][1]['symbol'] == 'rect'
+    assert option['series'][0]['markLine']['data'][0]['xAxis'] == 0
+
+
+def test_error_strip_option_widens_the_axis_to_the_largest_error():
+    """ECharts recorta los puntos fuera de la rejilla: un error de +8,77 (Andalucía 2018) abre el eje a ±10."""
+    data = {'rows': [{'party': 'Izquierda', 'label': 'Andalucía 2018', 'value': 8.77},
+                     {'party': 'Izquierda', 'label': 'Generales 2023', 'value': -1.2}],
+            'means': {'Izquierda': 3.79}, 'order': ['Izquierda']}
+    option = run_js('er.errorStripOption(%s)' % json.dumps(data))
+    assert (option['xAxis']['min'], option['xAxis']['max'], option['xAxis']['interval']) == (-10, 10, 2)
+    assert [p['value'] for p in option['series'][0]['data']] == [[8.77, 'Izquierda'], [-1.2, 'Izquierda']]
+
+
+def test_dumbbell_draws_one_custom_series_with_a_colour_per_row():
+    rows = [{'label': 'GESOP · 2015', 'error_legal': 2.71, 'error_ban': 1.57}, {'label': 'IMOP · 19 abr.', 'error_legal': 1.19, 'error_ban': 1.95}, {'label': 'X', 'error_legal': 1.0, 'error_ban': 1.0}]
+    option = run_js('db.dumbbellOption(rows)', rows=rows)
+    assert option['yAxis']['inverse'] is True and option['yAxis']['data'] == ['GESOP · 2015', 'IMOP · 19 abr.', 'X']
+    assert option['xAxis']['min'] == 0 and option['xAxis']['max'] == 3.5 and option['xAxis']['name'] == 'error medio por partido (puntos)'
+    series = option['series']
+    assert len(series) == 1 and series[0]['type'] == 'custom'
+    colours = [d['itemStyle']['color'] for d in series[0]['data']]
+    assert colours[0] != colours[1] and colours[2] not in (colours[0], colours[1])
+
+
+def test_dumbbell_axis_grows_with_the_errors():
+    option = run_js('db.dumbbellOption(rows)', rows=[{'label': 'A', 'error_legal': 4.2, 'error_ban': 3.9}])
+    assert option['xAxis']['max'] == 4.5

@@ -61,6 +61,7 @@ class Backtest(SequenceJob):
         python job.py backtest '{"scopes":["es"],"error_model":"average","out":"backtest/results_avg"}'
         python job.py backtest '{"scopes":["es"],"drift_scale":"auto","out":"backtest/results_scale"}'
         python job.py backtest '{"scopes":["es"],"tail_dof":5,"out":"backtest/results_dof5"}'
+        python job.py backtest '{"scopes":["es"],"ban":true}'
         python job.py backtest '{"scopes":["es"],"config":"backtest/tuning/best.json","out":"backtest/results_tuned"}'
 
     Copy the tables between the repository and the app file system (S3 in ECS)::
@@ -85,7 +86,7 @@ class Backtest(SequenceJob):
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
             regional_noise=True, min_events=None, error_model='polls', drift_scale=None, tail_dof=None, config=None,
-            recompute_ratings=False, flat_ratings=False, rating_exponent=1.0, out=None, verbose=1, runner=None, stats=None,
+            recompute_ratings=False, flat_ratings=False, rating_exponent=1.0, ban=False, out=None, verbose=1, runner=None, stats=None,
             stop_on_error=None, action='run', **kwargs):
         """
         Run the backtest of the requested scopes.
@@ -158,6 +159,9 @@ class Backtest(SequenceJob):
         rating_exponent : float, default 1.0
             Power the rating weight of every poll is raised to (phase C2a): 1 is the model as it is, 0 the flat
             rating; a finite number of at least 0 (``meta.csv`` and ``run.json`` record it).
+        ban : bool, default False
+            Add, for every election with polls published during the electoral ban, a nowcast case at horizon 0
+            with them inside; its shares go to ``ban.csv`` (never to the metrics). ``run.json`` records it.
         out : str, optional
             Local results folder (a relative path is taken from the working directory). For ``run`` the app
             file system (``backtest/results``, S3 in ECS) by default; for ``push`` (its origin) and ``pull`` (its
@@ -220,7 +224,7 @@ class Backtest(SequenceJob):
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, error_model=error_model,
                     drift_scale=drift_scale, tail_dof=tail_dof, config=config, recompute_ratings=recompute_ratings,
-                    flat_ratings=flat_ratings, rating_exponent=rating_exponent, out=out, verbose=verbose, runner=runner, stats=stats)
+                    flat_ratings=flat_ratings, rating_exponent=rating_exponent, ban=ban, out=out, verbose=verbose, runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 

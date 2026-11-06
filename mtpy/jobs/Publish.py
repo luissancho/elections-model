@@ -33,12 +33,18 @@ class Publish(SequenceJob):
     or ``failed``.
 
     ``study`` computes a study (``voto-cera``, the CERA vote study, or ``sesgo-cis``, the lean of the CIS computed
-    from the published analyses and events) and overwrites ``studies/{study}/`` (``publish.publish_study``), updating
-    its entry of the manifest. It needs ``study``, has no LOREG guard (it publishes no polls) and registers the
-    prediction of the study only with ``register`` (and a clean tree; ``force`` replaces an existing registration;
+    from the published analyses and events, ``rebano`` or ``andorra``, the polls published abroad during the ban) and
+    overwrites ``studies/{study}/`` (``publish.publish_study``), updating its entry of the
+    manifest. It needs ``study``, has no LOREG guard (it publishes no polls) and registers the prediction of the study
+    only with ``register`` (and a clean tree; ``force`` replaces an existing registration;
     ``sesgo-cis`` has nothing to register and refuses it). ``sesgo-cis`` reads the live bundle, so it is republished
     after ``analysis`` and ``event``. With ``dry_run`` it writes under ``site-dry/v1/``. The study ends
     ``published``, ``refused`` (``publish.PublishRefused``: the registration was refused) or ``failed``.
+
+    ``studies`` republishes, once per job and with no ``study`` or scopes, the live studies (those flagged ``live`` in
+    ``publish.STUDY_RUNNERS``: ``sesgo-cis``, ``rebano`` and ``andorra``) in the order of ``bundle.STUDIES``, and
+    never registers. One study that fails does not stop the next; the action ends ``failed`` if any did. It is also
+    the last step of ``update``, so the daily task recomputes those pages with the run of the day.
 
     ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
     results and the slice and daily series of the model backtest of the election), overwriting them. It needs
@@ -73,8 +79,11 @@ class Publish(SequenceJob):
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-23"}'
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
         python job.py publish '{"what":["study"],"study":"voto-cera"}'
+        python job.py publish '{"what":["study"],"study":"andorra"}'
         python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
         python job.py publish '{"what":["study"],"study":"sesgo-cis"}'
+        python job.py publish '{"what":["study"],"study":"rebano"}'
+        python job.py publish '{"what":["analysis","studies"],"scopes":["es"]}'
         python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
         python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
@@ -86,10 +95,11 @@ class Publish(SequenceJob):
         RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}'
     """
 
-    WHAT = ('forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point', 'unpublish')
+    WHAT = ('forecast', 'analysis', 'event', 'backtest', 'study', 'studies', 'parties', 'manifest', 'point',
+            'unpublish')
     CHUNKED = ('forecast', 'analysis', 'event', 'backtest', 'point', 'unpublish')
-    sequence = {'publish': ['forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point',
-                            'unpublish']}
+    sequence = {'publish': ['forecast', 'analysis', 'event', 'backtest', 'study', 'studies', 'parties', 'manifest',
+                            'point', 'unpublish']}
     default_action = 'publish'
     stop_on_error = False
     chunk_noun = 'scopes'
@@ -104,15 +114,15 @@ class Publish(SequenceJob):
         Parameters
         ----------
         what : str or list of str, default ('forecast',)
-            Actions to run, among ``forecast``, ``analysis``, ``event``, ``backtest``, ``study``, ``parties``,
-            ``manifest``, ``point`` and ``unpublish``. They run in that order when several are given. ``parties``
+            Actions to run, among ``forecast``, ``analysis``, ``event``, ``backtest``, ``study``, ``studies``,
+            ``parties``, ``manifest``, ``point`` and ``unpublish``. They run in that order when several are given. ``parties``
             writes the party catalogue of the database next to the manifest (``publish.publish_parties``);
             ``forecast`` and ``analysis`` rewrite it too, once per run of the job, so the pages always colour and
             name every party.
         scopes : str or list of str, default ('es',)
             Scopes to act on, or ``'all'``. They are resolved (``publish.resolve_scopes``, which reads the scope
-            catalogue) only when some action works scope by scope (`CHUNKED`); ``study``, ``parties`` and
-            ``manifest`` alone run once and never read it.
+            catalogue) only when some action works scope by scope (`CHUNKED`); ``study``, ``studies``, ``parties``
+            and ``manifest`` alone run once and never read it.
         event_date : str or list of str, optional
             Election date (ISO 8601, normalised to ``YYYY-MM-DD``). Defaults to the next
             event of each scope. A value that is not a date fails each scope. For ``event``, it is required and
@@ -242,4 +252,6 @@ class Publish(SequenceJob):
                 results[chunk] = result
             elif what == 'study':
                 results[study] = result
+            elif what == 'studies':
+                results['studies'] = result
         return results

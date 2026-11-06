@@ -1,0 +1,99 @@
+{
+  "schema": "andorra-summary@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "pairs": {
+      "n": 116,
+      "k": 81,
+      "ties": 0,
+      "share": 0.7,
+      "mean_d": -0.36,
+      "p": 1.17e-05,
+      "generals": {
+        "n": 33,
+        "k": 24,
+        "mean_d": -0.5,
+        "n_events": 10
+      },
+      "regional": {
+        "n": 83,
+        "k": 57,
+        "mean_d": -0.3,
+        "n_events": 40
+      },
+      "by_scope": [
+        {
+          "scope": "es",
+          "n": 33,
+          "k": 24,
+          "mean_d": -0.5
+        },
+        {
+          "scope": "es-ct",
+          "n": 17,
+          "k": 6,
+          "mean_d": -0.03
+        },
+        {
+          "scope": "es-an",
+          "n": 9,
+          "k": 8,
+          "mean_d": -0.73
+        }
+      ]
+    },
+    "elections": {
+      "n": 5,
+      "k_beaten": 4,
+      "mean_legal": 2.0,
+      "mean_frozen": 1.7,
+      "mean_consensus": 1.21,
+      "mean_with": 1.38,
+      "k_with": 4
+    },
+    "cells": {
+      "n": 24,
+      "k_closer": 19,
+      "k_direction": 20,
+      "k_crossed": 3,
+      "k_half": 6,
+      "missed": [
+        {
+          "label": "2015",
+          "party": "PSOE"
+        },
+        {
+          "label": "2019 abr.",
+          "party": "PSOE"
+        },
+        {
+          "label": "2019 abr.",
+          "party": "Vox"
+        },
+        {
+          "label": "2019 nov.",
+          "party": "PSOE"
+        },
+        {
+          "label": "2019 nov.",
+          "party": "UP"
+        }
+      ]
+    },
+    "big": {
+      "threshold": 5000,
+      "n": 12,
+      "k": 11,
+      "mean_d": -0.65
+    },
+    "exception": {
+      "scope": "es-ct",
+      "n": 17,
+      "k": 6
+    }
+  }
+}

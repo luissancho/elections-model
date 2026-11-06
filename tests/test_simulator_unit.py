@@ -917,3 +917,22 @@ def test_simulator_passes_rating_exponent_to_the_forecaster(monkeypatch, kwargs,
 def test_simulator_rejects_a_bad_rating_exponent(bad):
     with pytest.raises(ValueError, match='rating_exponent: expected a finite number >= 0'):
         Simulator('es', '2026-11-29', rating_exponent=bad)
+
+
+@pytest.mark.parametrize('kwargs, expected', [({'drop_ctypes': ['exit']}, ['exit']), ({}, ['wban', 'exit'])])
+def test_simulator_passes_drop_ctypes_to_the_forecaster(monkeypatch, kwargs, expected):
+    from mtpy.lib import simulator as simulator_module
+    seen = {}
+
+    class FakeForecaster:
+        def __init__(self, **kw):
+            seen.update(kw)
+            raise _StopAfterForecaster
+
+    monkeypatch.setattr(simulator_module, 'Forecaster', FakeForecaster)
+    monkeypatch.setattr(simulator_module, 'get_event_params',
+                        lambda *a, **k: {'parties': {'event': ['PP', 'PSOE']}, 'smap': {}})
+    monkeypatch.setattr(simulator_module, 'get_scope_parent', lambda scope: None)
+    with pytest.raises(_StopAfterForecaster):
+        Simulator('es', '2026-11-29', threshold=3., **kwargs)
+    assert seen['drop_ctypes'] == expected

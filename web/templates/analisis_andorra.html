@@ -1,0 +1,328 @@
+{% extends 'base.html' %}
+{% block title %}{{ study_meta.get('title') or 'El mercado de la fruta en Andorra' }}{% endblock %}
+{% block description %}{{ study_meta.get('subtitle') or 'Los sondeos que se publican fuera de España durante la veda, frente al resultado.' }}{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/analisis-andorra.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{#- A list of names in prose: «A, B y C». -#}
+{% macro names(items) -%}{% if items|length > 1 %}{{ items[:-1]|join(', ') }} y {{ items[-1] }}{% else %}{{ items|join('') }}{% endif %}{%- endmacro %}
+{#- A share in 0-1 as a whole percentage in brackets, muted: «(73%)» (nothing without it). -#}
+{% macro share(x) -%}{% if x is number %} <span class="mut">({{ (x * 100)|pct(0) }})</span>{% endif %}{%- endmacro %}
+{#- The square button that downloads a card of this page as an image: file by `slug`, signed with the study. -#}
+{% macro shot(slug) -%}{{ m.card_image_button(site_title|lower ~ '-andorra-' ~ slug ~ '.png', (study_meta.get('title') or 'El mercado de la fruta en Andorra') ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}{%- endmacro %}
+{#- A card-link of the summary: the number and the question, the verdict (when there is one) and one sentence. -#}
+{% macro answer(verdict, n, text) -%}
+<a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div>{% if verdict.label %}<div class="vv">{{ verdict.label }}</div>{% endif %}<p>{{ text }}</p></a>
+{%- endmacro %}
+{#- The head of a question card: the number, the question and the verdict pill (none without a verdict). -#}
+{% macro qhead(verdict, n) -%}
+<div class="qh"><div class="qn">{{ n }}</div><h2 class="qt">{{ verdict.question }}</h2>{% if verdict.label %}<span class="verdict">{{ verdict.label }}<i></i></span>{% endif %}</div>
+{%- endmacro %}
+{#- The summary sentence of a question: the strong clause in bold, then the rest. -#}
+{% macro sum_box(text) -%}{% if text %}<div class="sum"><b>{{ text.strong }}</b>{{ text.rest }}</div>{% endif %}{%- endmacro %}
+{% set v1, v2, v3 = verdicts %}
+{% set a1, a2, a3 = answers %}
+{% set pairs = summary.get('pairs') or {} %}
+{% set el = summary.get('elections') %}
+{% set big = summary.get('big') or {} %}
+{% set since_year = (params.get('since') or '')[:4] or '–' %}
+{% set chart_year = (params.get('chart_since') or '')[:4] or '–' %}
+{% set card = latest %}
+{% set day_title = ('El ' ~ card.short) if card.short else 'La próxima elección' %}
+    <div id="content" class="stack">
+      <header id="study-head">
+        <div class="tags">
+          <span class="pill brand">Análisis</span>
+          <span class="pill">{{ pills.evidence }}</span>
+          {% if pills.state %}<span class="pill {{ pills.state_tone }}">{{ pills.state }}</span>{% endif %}
+        </div>
+        <h1 class="study-title">{{ study_meta.get('title') or 'El mercado de la fruta en Andorra' }}</h1>
+        <p class="study-subtitle">Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y en las redes circulan como precios de la fruta. {{ lead }}</p>
+        <div class="intro">
+          <p><b>La ley.</b> Desde 1985, la Ley Electoral prohíbe «la publicación y difusión o reproducción de sondeos electorales por cualquier medio de comunicación» durante los cinco días anteriores a la votación (artículo 69.7 de la LOREG). Saltársela se castiga con hasta un año de cárcel, multa e inhabilitación. En 2011 se añadió la «reproducción», pensando en las redes sociales, sin aclarar si una cuenta de Twitter es un medio de comunicación.</p>
+          <p><b>Por qué existen.</b> La ley acaba en la frontera. Las encuestadoras siguen haciendo campo hasta la víspera y los medios que pagan los sondeos los publican fuera de España. El Periòdic d'Andorra lleva desde 2015 publicando a diario el tracking de GESOP para El Periódico; el escocés The National hizo lo mismo con Feedback en las catalanas de 2017; The Times publicó los de Sigma Dos para El Mundo en 2008 y 2011, y en 2023 el tracking de GESOP salió en The Adelaide Review, en Australia. Los grandes sondeos de la noche electoral de RTVE y Mediaset, con diez mil entrevistas o más, también se publican fuera la víspera.</p>
+          <p><b>Cómo funcionan.</b> Para que lleguen a España sin nombrar partidos nació en 2015 la «frutería de Andorra», una idea de la cuenta Electograph: los partidos son productos y sus porcentajes, precios. El agua es el PP; la fresa o la rosa, el PSOE; la berenjena, Podemos; la naranja, Ciudadanos; el brócoli, Vox. En noviembre de 2019 el mercado abrió con «notable ascenso del brócoli y descalabro de la naranja», y en las aragonesas de 2026 unos estudiantes de la Universidad de Zaragoza vendían «ppollo», chocolate, jamón de Teruel y frutos rojos en el Mercado Central. Los sondeos «clandestinos» son esos: hechos y publicados con todas las de la ley, sólo que fuera.</p>
+          <p><b>Qué hacemos con ellos.</b> Los cargamos en la base con su marca, pero no entran en el promedio, en el rating ni en las tablas del sitio: la ley no permite publicarlos en España y esta página tampoco lo hace. Lo que sí podemos hacer, pasada cada elección, es compararlos con el resultado. Eso es esta página.</p>
+          <p class="srcs">Fuentes de la explicación: <a href="https://www.elconfidencial.com/espana/cataluna/elecciones-catalanas/2017-12-18/encuesta-sondeo-electoral-prohibido-periodic-andorra_1494464/">El Confidencial (18-12-2017)</a> · <a href="https://www.ondacero.es/noticias/espana/encuestas-electorales-andorra-ascenso-brocoli-descalabro-naranja_201911065dc2b2650cf2767d148c38e5.html">Onda Cero (6-11-2019)</a> · <a href="https://www.heraldo.es/noticias/aragon/2026/02/05/las-encuestas-de-las-elecciones-en-aragon-a-traves-de-ppollo-brocolis-y-frutos-rojos-1891137.html">Heraldo de Aragón (5-2-2026)</a>.</p>
+        </div>
+      </header>
+      <nav class="section-nav toc" aria-label="Secciones">
+        <a href="#resumen">Resumen</a>
+        <a href="#p1" class="{{ v1.tone }}">1 · ¿Mejor que el último legal?</a>
+        <a href="#p2" class="{{ v2.tone }}">2 · ¿Habrían afinado el promedio?</a>
+        <a href="#p3" class="{{ v3.tone }}">3 · ¿Quién afina en el mercado?</a>
+        <a href="#veintinueve">{{ day_title }}</a>
+        <a href="#datos">Datos y método</a>
+      </nav>
+      {{ m.kpis(kpis) }}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'Cada veda se repite la pregunta: ¿valen para algo los sondeos que llegan de Andorra? Los tenemos todos en la base, marcados y fuera del promedio, del rating y de las tablas del sitio. Aquí los comparamos con el resultado.', classes='shot') }}
+        {{ shot('resumen') }}
+        <div class="three">
+          {{ answer(v1, 1, a1) }}
+          {{ answer(v2, 2, a2) }}
+          {{ answer(v3, 3, a3) }}
+        </div>
+        <p class="note blue">Medimos el error medio por partido de cada sondeo frente al resultado, el mismo que usa el rating. «Consenso clandestino» es la media simple del último sondeo de cada casa durante la veda; «promedio congelado», lo que dijo el modelo {{ counts.horizon }} días antes de la elección, que es lo que publicamos. Los sondeos clandestinos no entran en el promedio ni en el rating: la ley no permite publicarlos en España, y nosotros tampoco lo hacemos.</p>
+      {{ m.card_end() }}
+      <section class="card qcard shot {{ v1.tone }}" id="p1">
+        {{ shot('pregunta-1') }}
+        {{ qhead(v1, 1) }}
+        <p class="lead">
+          La comparación más limpia: cada casa contra sí misma. Su último sondeo publicado antes de la veda frente al
+          último que publicó durante la veda, en la misma elección. Si el sondeo clandestino sólo sirviera para repetir
+          las cifras, el error sería el mismo; si la opinión se mueve en la última semana y los sondeos lo recogen, el
+          clandestino estará más cerca.
+        </p>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Antes y después: cada casa, de su último sondeo legal a su sondeo clandestino · generales desde {{ chart_year }}</p>
+            <p class="csub">Error medio por partido del último legal (punto gris) y del clandestino (punto de color), unidos; verde = afinó, rojo = empeoró</p>
+            <div class="chart" id="c-dumb" role="img" aria-label="Error medio por partido del último sondeo legal y del sondeo clandestino de cada casa en las generales desde {{ chart_year }}: {{ initial.pairs|length }} pares"></div>
+          </div>
+          <div>
+            <p class="ctitle">Por elección</p>
+            <p class="csub">Pares casa a casa; «más cerca» cuenta los pares en que el sondeo clandestino tuvo menos error</p>
+            <div class="table-wrap">
+              <table id="elections-table">
+                <caption class="sr-only">Pares de último sondeo legal y sondeo clandestino de la misma casa por elección: cuántos, en cuántos el clandestino quedó más cerca del resultado y la mejora media del error por partido.</caption>
+                <thead>
+                  <tr><th scope="col">Elección</th><th scope="col">Pares</th><th scope="col">Más cerca</th><th scope="col">Mejora media</th></tr>
+                </thead>
+                <tbody>
+                  {% for row in elections %}
+                  <tr{% if row.sep %} class="sep"{% endif %}><td><b>{{ row.label }}</b>{% if row.note %} <span class="mut">{{ row.note }}</span>{% endif %}</td>
+                    {%- if row.sum %}<td><b>{{ row.n|int }}</b></td><td>{% if row.k is none %}–{% else %}<b>{{ row.k|int }}</b>{{ share(row.share) }}{% endif %}</td>
+                    {%- else %}<td class="mut">{{ row.n|int }}</td><td>{% if row.k is none %}–{% else %}{{ row.k|int }}{% endif %}</td>{% endif %}<td>{{ m.badge(row.mean_d, 2) }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% if exception %}<p class="tnote">{{ exception }}</p>{% endif %}
+          </div>
+        </div>
+        {{ sum_box(sums.p1) }}
+        {% call m.how() %}
+        <p>
+          Cada fila del gráfico es una casa en una elección: el punto gris es el error medio por partido de su último
+          sondeo legal y el de color, el de su sondeo clandestino, unidos por una línea verde si afinó y roja si
+          empeoró. La tabla junta los pares por elección: «más cerca» cuenta los pares en que el sondeo clandestino tuvo
+          menos error, y la mejora media es el error del clandestino menos el del legal, media por partido (la flecha
+          hacia abajo, en verde, es que bajó). Que el sondeo clandestino afine no dice que la casa sea mejor: dice que
+          la última semana movió algo y su sondeo lo recogió.
+        </p>
+        {% endcall %}
+      </section>
+      <section class="card qcard shot {{ v2.tone }}" id="p2">
+        {{ shot('pregunta-2') }}
+        {{ qhead(v2, 2) }}
+        <p class="lead">
+          El promedio se congela {{ counts.horizon }} días antes de la elección con el último sondeo legal. Comparamos lo
+          que dijo entonces, cifra a cifra, con el consenso clandestino (la media del último sondeo de cada casa durante
+          la veda) y con el resultado.{% if el %} Sólo {{ counts.model }} con modelo publicado.{% endif %}
+        </p>
+        {% if not el %}
+        <p class="notice">No hay generales con modelo publicado: sin promedio congelado no hay con qué comparar el consenso clandestino. La pregunta 1, casa a casa, no lo necesita.</p>
+        {% else %}
+        <div class="tests">
+          {% for box in tests %}
+          <div class="test{% if box.tone %} {{ box.tone }}{% endif %}">
+            <div class="k">{{ box.label }}</div>
+            <div class="v">{{ box.value or '–' }}{% if box.note %} <small>{{ box.note }}</small>{% endif %}</div>
+            {% if box.text %}<p>{{ box.text }}</p>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% if cells %}
+        <p class="ctitle">Cifra a cifra: promedio congelado → consenso clandestino → resultado</p>
+        <p class="csub">Partidos principales de cada elección; verde = el consenso clandestino se movió hacia el resultado, rojo = se alejó o pasó de largo; intenso cuando recorrió más de la mitad del camino o se alejó un punto o más</p>
+        <div class="table-wrap">
+          <table id="cells-table">
+            <caption class="sr-only">Cifra de cada partido principal en el promedio congelado, en el consenso clandestino y en el resultado, y lo que se movió el consenso.</caption>
+            <thead>
+              <tr><th scope="col">Elección</th><th scope="col">Partido</th><th scope="col">Promedio congelado</th><th scope="col">Consenso clandestino</th><th scope="col">Resultado</th><th scope="col">Movimiento</th></tr>
+            </thead>
+            <tbody>
+              {% for group in cells %}{% set outer = loop %}{% for row in group.rows %}
+              <tr{% if loop.first and not outer.first %} class="sep"{% endif %}><td>{% if loop.first %}<b>{{ group.label }}</b>{% endif %}</td><td>{{ row.party }}</td><td>{{ row.frozen|num(1) }}</td><td>{{ row.consensus|num(1) }}</td><td><b>{{ row.official|num(1) }}</b></td><td class="{{ row.tone }} mv">{{ row.text }}</td></tr>
+              {% endfor %}{% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Por elección: error medio en los partidos principales</p>
+            <p class="csub">Error medio por partido · «Último legal» = media de los últimos sondeos legales de cada casa · «Congelado» = lo que publicamos («Lo que dijo el modelo») · «Clandestino» = consenso clandestino · «Con la fruta» = el mismo modelo recalculado el día de la votación con los sondeos clandestinos dentro</p>
+            <div class="table-wrap">
+              <table id="models-table">
+                <caption class="sr-only">Error medio por partido de los últimos sondeos legales, del promedio congelado, del consenso clandestino y del modelo con los sondeos clandestinos dentro, por elección.</caption>
+                <thead>
+                  <tr><th scope="col">Elección</th><th scope="col">Sondeos</th><th scope="col">Último legal</th><th scope="col">Congelado</th><th scope="col">Clandestino</th><th scope="col">Con la fruta</th></tr>
+                </thead>
+                <tbody>
+                  {% for row in model_rows %}
+                  {% if row.mean %}
+                  <tr class="sep"><td><b>{{ row.label }}</b></td><td></td><td><b>{{ row.legal|num(2) }}</b></td><td><b>{{ row.frozen|num(2) }}</b></td><td><b>{{ row.consensus|num(2) }}</b></td><td><b>{{ row.with|num(2) }}</b></td></tr>
+                  {% else %}
+                  <tr><td><b>{{ row.label }}</b></td><td class="mut">{{ row.n_ban|int }}</td><td>{{ row.legal|num(2) }}</td><td>{{ row.frozen|num(2) }}</td><td class="{{ 'ok' if row.beaten else 'ko' }}">{{ row.consensus|num(2) }}</td>
+                    {%- if row.with is number %}<td class="{{ 'ok' if row.beaten_with else 'ko' }}">{{ row.with|num(2) }}</td>{% else %}<td class="mut">–</td>{% endif %}</tr>
+                  {% endif %}
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% if el.get('mean_with') is none %}<p class="tnote">Sin el modelo recalculado con los sondeos clandestinos dentro, la columna «Con la fruta» queda vacía.</p>{% endif %}
+          </div>
+          <div>
+            {{ sum_box(sums.p2) }}
+            {% if moves %}<div class="tech"><b>Lo que se movió y lo que faltaba:</b> {{ moves }}</div>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% call m.how() %}
+        <p>
+          Cada fila de la tabla es la cifra de un partido principal: la del promedio congelado, la del consenso
+          clandestino y la del resultado. En el movimiento, el primer número es lo que se movió el consenso desde el
+          promedio congelado y el segundo, lo que faltaba hasta el resultado. Verde intenso cuando recorrió más de la
+          mitad del camino, verde claro cuando se quedó corto, rojo cuando se alejó o pasó de largo. La tabla de abajo
+          resume cada elección con el error medio por partido de cada cifra: en verde, las que mejoran al promedio
+          congelado.
+        </p>
+        {% endcall %}
+      </section>
+      <section class="card qcard shot {{ v3.tone }}" id="p3">
+        {{ shot('pregunta-3') }}
+        {{ qhead(v3, 3) }}
+        <p class="lead">
+          Casa a casa, con todas las elecciones: cuántas veces su sondeo clandestino estuvo más cerca que su último
+          legal, y cuánto. Y aparte, los sondeos de la jornada: los que las televisiones encargan con miles de
+          entrevistas para la noche electoral y publican fuera antes.
+        </p>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Casas con {{ counts.min_pairs }} o más vedas</p>
+            <p class="csub">Pares en generales y autonómicas desde {{ since_year }} · mejora = error del sondeo clandestino menos el del último legal, media por partido</p>
+            <div class="table-wrap">
+              <table id="houses-table">
+                <caption class="sr-only">Encuestadoras con {{ counts.min_pairs }} o más vedas: pares, en cuántos su sondeo clandestino quedó más cerca del resultado que su último legal y la mejora media.</caption>
+                <thead>
+                  <tr><th scope="col">Encuestadora</th><th scope="col">Vedas</th><th scope="col">Más cerca</th><th scope="col">Mejora media</th></tr>
+                </thead>
+                <tbody>
+                  {% for row in houses %}
+                  <tr><td><a href="{{ row.href }}"><b>{{ row.pollster }}</b></a></td><td class="mut">{{ row.get('n')|int }}</td><td>{{ row.get('k')|int }}{{ share(row.get('share')) }}</td><td>{{ m.badge(row.get('mean_d'), 2) }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% if panels %}<p class="tnote">{{ names(panels) }} {{ 'son paneles abiertos y no entran en el promedio; aquí se comparan consigo mismos' if panels|length > 1 else 'es un panel abierto y no entra en el promedio; aquí se compara consigo mismo' }}, que es lo que mide la pregunta.</p>{% endif %}
+          </div>
+          <div>
+            <p class="ctitle">Los sondeos de la jornada</p>
+            <p class="csub">Sondeos clandestinos con {{ big.get('threshold')|int }} entrevistas o más: los que las televisiones publican fuera de España la víspera o el mismo día</p>
+            {% if big_rows %}
+            <div class="table-wrap">
+              <table id="big-table">
+                <caption class="sr-only">Sondeos clandestinos con {{ big.get('threshold')|int }} entrevistas o más: su error, el del último sondeo legal de su casa y la mejora.</caption>
+                <thead>
+                  <tr><th scope="col">Elección</th><th scope="col">Casa · medio</th><th scope="col">Entrevistas</th><th scope="col">Último legal</th><th scope="col">Clandestino</th><th scope="col">Mejora</th></tr>
+                </thead>
+                <tbody>
+                  {% for row in big_rows %}
+                  <tr><td><b>{{ row.get('label') }}</b></td><td>{{ row.get('pollster') }}{% if row.get('sponsor') %} · {{ row.sponsor }}{% endif %}</td><td class="mut">{{ row.get('sample_size')|int }}</td><td>{{ row.get('error_legal')|num(2) }}</td><td>{{ row.get('error_ban')|num(2) }}</td><td>{{ m.badge(row.get('d'), 2) }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <p class="notice">Ningún sondeo clandestino con un último legal de su casa llegó a {{ big.get('threshold')|int }} entrevistas.</p>
+            {% endif %}
+          </div>
+        </div>
+        {{ sum_box(sums.p3) }}
+        {% call m.how() %}
+        <p>
+          La tabla de casas cuenta, para cada encuestadora con {{ counts.min_pairs }} vedas o más, en cuántas su sondeo
+          clandestino estuvo más cerca del resultado que su último sondeo legal, y la mejora media del error por
+          partido. La de la jornada lista, uno a uno, los sondeos clandestinos con {{ big.get('threshold')|int }}
+          entrevistas o más. Una casa con pocas vedas puede estar arriba por suerte: los textos sólo nombran las de
+          {{ counts.house_min }} o más.
+        </p>
+        {% endcall %}
+      </section>
+      {% if card.open %}
+      {{ m.card_start('veintinueve', day_title ~ ': el mercado de la fruta de ' ~ card.year, 'Los sondeos clandestinos de ' ~ card.year ~ ', uno a uno, frente al resultado. El consenso clandestino es la media del último de cada casa, sin agregadores ni paneles abiertos; el promedio congelado, lo que publicamos ' ~ counts.horizon ~ ' días antes.', subtitle='con el escrutinio', subtitle_class='ok', classes='shot') }}
+        {{ shot('veintinueve') }}
+        <div class="table-wrap">
+          <table id="latest-table">
+            <caption class="sr-only">Sondeos clandestinos de {{ card.year }}: casa, medio, fin de campo, entrevistas, la cifra de cada partido principal y su error; el consenso clandestino, el promedio congelado y el resultado.</caption>
+            <thead>
+              <tr><th scope="col">Casa</th><th scope="col">Medio</th><th scope="col">Fin de campo</th><th scope="col">Entrevistas</th>{% for party in card.parties %}<th scope="col">{{ party }}</th>{% endfor %}<th scope="col">Error</th></tr>
+            </thead>
+            <tbody>
+              {% for poll in card.polls %}
+              <tr class="poll"><td><a href="{{ poll.href }}"><b>{{ poll.get('pollster') }}</b></a></td><td>{{ poll.get('sponsor') or '–' }}</td><td>{{ poll.get('date')|date }}</td><td class="mut">{{ poll.get('sample_size')|int }}</td>{% for party in card.parties %}<td>{{ (poll.get('pct') or {}).get(party)|num(1) }}</td>{% endfor %}<td>{{ poll.get('error_avg')|num(2) }}</td></tr>
+              {% endfor %}
+              {% for row in card.rows %}
+              <tr class="sum-row{% if loop.first %} sep{% endif %}"><td><b>{{ row.label }}</b></td><td></td><td></td><td></td>{% for party in card.parties %}<td><b>{{ row.pct.get(party)|num(1) }}</b></td>{% endfor %}<td>{% if row.error is number %}{{ row.error|num(2) }}{% endif %}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% set err = card.error or {} %}
+        <p class="tnote">En {{ card.year }}, el consenso clandestino erró {{ err.get('consensus')|num(2) }} puntos por partido; el promedio congelado, {{ err.get('frozen')|num(2) }}{% if err.get('with') is number %}; con la fruta dentro, {{ err.with|num(2) }}{% endif %}{% if err.get('legal') is number %}; los últimos sondeos legales, {{ err.legal|num(2) }} de media{% endif %}.</p>
+      {{ m.card_end() }}
+      {% else %}
+      {{ m.card_start('veintinueve', day_title ~ ': el mercado de la fruta' ~ (' de ' ~ card.year if card.year else ''), ('Desde el ' ~ card.veda_from ~ ' los sondeos de ' ~ card.year ~ ' sólo se publican fuera de España. ' if card.veda_from else '') ~ 'Los cargamos en la base, como siempre, pero no los enseñamos: la ley no lo permite y esta página tampoco lo hará. Cuando se publique el escrutinio, esta tarjeta se abrirá con los sondeos clandestinos, su consenso, el promedio congelado y el resultado, y las tablas de arriba ganarán la nueva fila.', subtitle='cerrado hasta el cierre de urnas', subtitle_class='warn', classes='shot') }}
+        {{ shot('veintinueve') }}
+        <div class="locked"><div><b>Se abre tras el cierre de urnas{% if card.day_month %} del {{ card.day_month }}{% endif %}</b><p>Hasta entonces, la cuenta de arriba es la de {% if el %}{{ counts.model_previous }} con modelo{% else %}las elecciones anteriores{% endif %}. Si los sondeos clandestinos apuntan bien, lo sabremos aquí.</p></div></div>
+      {{ m.card_end() }}
+      {% endif %}
+      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y los promedios publicados en Demoscopio y se puede descargar.', classes='shot') }}
+        {{ shot('datos') }}
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Datos</p>
+            <ul class="src-list">
+              <li>Los sondeos clandestinos de cada elección (los que Wikipedia marca como publicados durante la veda), con su casa, su medio, su fecha de fin de campo y su muestra: desde {{ since_year }}, {{ pairs.get('n')|int }} con un último sondeo legal de la misma casa con el que compararlos.</li>
+              <li>El último sondeo legal de cada casa: el último publicado antes de la veda, el mismo que usa el rating; si tiene más de {{ params.get('max_days')|int }} días, el par no cuenta.</li>
+              <li>El promedio congelado de cada generales desde {{ chart_year }}: la cifra de «Lo que dijo el modelo» de la página de la <a href="/elecciones">elección</a> (horizonte de {{ counts.horizon }} días).</li>
+              <li>Sin agregadores; los paneles abiertos, sólo en la comparación consigo mismos.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="ctitle">Método</p>
+            <div class="tech">
+              El <b>error</b> de un sondeo es la media, en los partidos principales de la elección, de la distancia entre
+              su cifra y el resultado, el mismo error medio del rating. Un <b>par</b> es el último sondeo clandestino de una
+              casa y su último sondeo legal en la misma elección, con {{ params.get('max_days')|int }} días o menos. El
+              <b>consenso clandestino</b> es la media simple del último sondeo de cada casa durante la veda, sin
+              agregadores ni paneles abiertos; el <b>promedio congelado</b>, el modelo {{ counts.horizon }} días antes.
+              Una cifra «se mueve hacia el resultado» cuando el consenso clandestino queda más cerca del resultado que el
+              promedio congelado, y «pasa de largo» cuando lo cruza. La prueba del azar es la binomial de
+              {{ pairs.get('k')|int }} aciertos entre {{ ((pairs.get('n') or 0) - (pairs.get('ties') or 0))|int }} con
+              moneda justa{% if pairs.get('ties') %}, sin los {{ pairs.ties|int }} empates{% endif %}. <b>Con la fruta</b>
+              es el mismo modelo recalculado el día de la votación con los sondeos clandestinos dentro; no entra en
+              ninguna otra cifra del sitio.
+            </div>
+          </div>
+        </div>
+        {% if sources %}
+        <p class="ctitle">Fuentes</p>
+        <ul class="src-list">
+          {% for source in sources %}
+          <li><a href="{{ source.url }}">{{ source.label }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if csv_links %}
+        <p class="csv-links">
+          {% for link in csv_links %}<a class="pill brand" href="{{ link.href }}">CSV: {{ link.label }}</a>{% endfor %}
+        </p>
+        {% endif %}
+        {% if published_at %}<p class="tnote">Página actualizada el {{ published_at|date }}.</p>{% endif %}
+      {{ m.card_end() }}
+    </div>
+{% endblock %}

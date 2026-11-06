@@ -16,7 +16,7 @@ from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
 from .casas import election_label
 from .common import analysis_part, api_url, bundle_part, catalog, common_context, part
-from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
+from .elecciones import error_blocks, final_stretch_rows, history_events, history_rows, history_scopes, poll_error_parts
 from .filters import DASH, _is_missing, delta_text, fmt_int, fmt_num
 from .slugs import PROFILE_PATH, slugify
 
@@ -348,7 +348,8 @@ def house_effects_example() -> Optional[dict]:
     dict or None
         ``pollster``, ``since``, ``href`` (its profile), ``blocks`` (the pair of the bullseye axes, the first two
         of ``error_blocks``), ``left`` and ``right`` (the blocks the text counts, ``HOUSE_EXAMPLE``), ``rows``
-        (its ``history_rows`` since the date with an error in both blocks, newest first and, on the same date, in
+        (its ``history_rows`` of the final stretch, ``final_stretch_rows``, since the date with an error in both blocks,
+        newest first and, on the same date, in
         catalogue order, each with ``name``, the name of its election, ``election_label``; the rows of a scope
         whose ``poll-errors`` part has no blocks lack their columns and stay out, as in the bullseye), ``n``
         (their number), ``over`` and ``under`` (``{block: n}`` for ``left`` and ``right``: the elections in which
@@ -379,7 +380,7 @@ def house_effects_example() -> Optional[dict]:
     scope_names = {scope['code']: scope['name'] for scope in scopes}
     order = {scope['code']: index for index, scope in enumerate(scopes)}
     rows = [dict(row, name=election_label(row['scope'], row['event_date'], names, scope_names))
-            for row in history_rows(scopes, events, parts)
+            for row in final_stretch_rows(history_rows(scopes, events, parts))
             if row.get('pollster') == name and (row.get('event_date') or '') >= since
             and all(row.get(block) is not None for block in (left, right))]
     rows.sort(key=lambda row: order[row['scope']])
@@ -706,7 +707,8 @@ def metodo_context(state: dict) -> dict:
     dict
         The common context plus ``subpages`` (``subpages(None)``, the index of the four questions), ``figures``
         (``national_figures``), ``thresholds`` (``thresholds_rows``) and ``sections`` (the cross-cutting
-        sections, ``{'id', 'title'}`` in ``SECTIONS`` order).
+        sections, ``{'id', 'title'}`` in ``SECTIONS`` order) and ``andorra_published`` (whether the ``andorra``
+        study is published, so the «Veda» limit links to it).
 
     Raises
     ------
@@ -718,6 +720,7 @@ def metodo_context(state: dict) -> dict:
     context['figures'] = national_figures()
     context['thresholds'] = thresholds_rows()
     context['sections'] = [{'id': section_id, 'title': title} for section_id, title in SECTIONS]
+    context['andorra_published'] = bundle_part(site().study, 'andorra', 'meta') is not None
 
     return context
 
@@ -769,13 +772,14 @@ def metodo_section_context(state: dict, section: str) -> dict:
     dict
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
-        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``) and ``rating_check``
-        (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island (``state`` and the
-        ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
+        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``),
+        ``herd_published`` (whether the ``rebano`` study is published, so the herding card links to it) and
+        ``rating_check`` (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island
+        (``state`` and the ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
         ``errors`` (``error_example``, ``None`` without one). The ``promedio`` subpage adds
         ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
         ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``), ``lean_published`` (whether the ``sesgo-cis`` study is published, so
-        the card links to it) and, with either example, the
+        the card links to it), ``shy_published`` (the same for ``voto-oculto``) and, with either example, the
         ``initial`` island (``state``, the ``example`` slice the weights chart draws: ``name``, ``color``, ``date``,
         ``stats``, ``rows`` with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``; and the ``house`` slice its bullseye
         draws: ``blocks`` and ``rows`` with ``HOUSE_ROW_KEYS`` plus the blocks).
@@ -802,6 +806,7 @@ def metodo_section_context(state: dict, section: str) -> dict:
         context['rubric'] = quality_rubric()
         check = rating_check_context()
         context['rating_check'] = check
+        context['herd_published'] = bundle_part(site().study, 'rebano', 'meta') is not None
 
         if check is not None:
             context['initial'] = {'state': context['state'], 'rating_check': check['initial']}
@@ -817,6 +822,7 @@ def metodo_section_context(state: dict, section: str) -> dict:
         context['house_example'] = house
         context['cycle'] = cycle_counts()
         context['lean_published'] = bundle_part(site().study, 'sesgo-cis', 'meta') is not None
+        context['shy_published'] = bundle_part(site().study, 'voto-oculto', 'meta') is not None
         initial = {'state': context['state']}
 
         if example is not None:

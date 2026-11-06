@@ -13,8 +13,8 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
 from mtpy.lib.forecaster import NoPollsError
-from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
-                         synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
+from tests.fakes import (BACKTEST_HORIZONS, BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
+                         synthetic_backtest, synthetic_ban, synthetic_cycle, synthetic_legal, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
                          synthetic_rating_check)
 
 
@@ -924,16 +924,17 @@ def test_publish_analysis_writes_the_parts_and_meta_last(tmp_path):
 
 def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
     """`meta` guarda los parámetros de los errores, las elecciones del Computer y el estado de la base; los
-    errores se piden con `bmap='vs'`, `drange=(6, 42)` y `n_last=1`."""
+    errores se piden con `bmap='vs'`, `drange=(6, None)` (sin tope desde 2026-11-06: el último sondeo de cada casa en
+    cada elección) y `n_last=1`; la ventana de la recta final vive en `bundle.POLL_ERRORS_WINDOW`."""
     factory = FakeComputer()
     writer = make_writer(tmp_path)
     out = publish.publish_analysis('es', writer, computer=factory, stats=fake_stats, prov=fake_prov)
     assert factory.calls[0][:3] == ('init', 'es', '.')
-    assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, 42), 'n_last': 1, 'featured': 'results'})
+    assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, None), 'n_last': 1, 'featured': 'results'})
     meta = writer.read_json(bundle.path_analysis('es', 'meta'))['data']
     assert meta['events'] == ['2019-11-10', '2023-07-23', '2026-11-29'] and meta['scope'] == 'es'
     assert meta['house_effects'] is True
-    assert meta['params'] == {'bmap': 'vs', 'drange': [6, 42], 'n_last': 1, 'main': NAMES,
+    assert meta['params'] == {'bmap': 'vs', 'drange': [6, None], 'n_last': 1, 'main': NAMES,
                               'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}, 'db_polls': 7,
                               'db_last_poll': '2026-10-01', 'rating_check': False}
     assert set(meta['seconds']) == {'build', 'house_effects', 'herding', 'poll_errors', 'error_data', 'total'}
@@ -941,6 +942,7 @@ def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
     assert (tmp_path / 'site' / 'v1' / 'analysis' / 'es' / 'csv' / 'herding-events.csv').exists()
     assert 'rating_check_data' not in [c[0] for c in factory.calls]
     assert not writer.exists(bundle.path_analysis('es', 'rating-check'))
+    assert bundle.POLL_ERRORS_WINDOW == (6, 42) and publish.POLL_ERRORS_PARAMS['drange'] == (bundle.POLL_ERRORS_WINDOW[0], None)
 
 
 def test_publish_analysis_writes_rating_check_only_when_asked_and_only_nationally(tmp_path):
@@ -1283,6 +1285,31 @@ def test_export_event_model_accepts_a_file_system_and_a_folder(tmp_path):
     assert publish.export_event_series((FileSystem(str(tmp_path / 'bt')), ''), '2023-07-23') == (None, None)
 
 
+def test_export_event_model_exports_the_ban_rows_apart_from_the_horizons(tmp_path):
+    folder = write_backtest_source(str(tmp_path / 'bt'), ban=True)
+    data, frames = publish.export_event_model(folder, '2023-07-23')
+    assert data['horizons'] == list(BACKTEST_HORIZONS) and {r['horizon'] for r in data['ban']} == {0}
+    assert 'model-ban' in frames and {r['party'] for r in data['ban']} == set(NAMES)
+    data, frames = publish.export_event_model(folder, '2019-11-10')
+    assert 'ban' not in data and 'model-ban' not in frames
+    data, frames = publish.export_event_model(write_backtest_source(str(tmp_path / 'nb')), '2023-07-23')
+    assert 'ban' not in data and 'model-ban' not in frames
+
+
+def test_publish_event_retires_a_stale_model_ban_csv(tmp_path):
+    ev = synthetic_event()
+    site = FileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(site)
+    for name, ban in (('with', True), ('without', False)):
+        source = str(tmp_path / name)
+        write_backtest_source(source, ban=ban)
+        publish.publish_event('es', '2023-07-23', writer, computer=FakeComputer(), source=source, prov=fake_prov,
+                              **event_readers(ev))
+        twin = bundle.path_event_csv('es', '2023-07-23', 'model-ban')
+        model = writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data']
+        assert writer.exists(twin) is ban and ('ban' in model) is ban
+
+
 def event_readers(ev):
     return dict(events=lambda scope: ev.events, results=lambda scope, date, region: ev.results.loc[ev.results.date == date],
                 pollsters=lambda: ev.pollsters, seats=lambda scope, date, names: dict(CYCLE_SEATS))
@@ -1297,7 +1324,7 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
                                 prov=fake_prov, **event_readers(ev))
     assert out['n_polls'] == 3 and out['n_pollsters'] == 3 and out['has_model'] is True
     written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
-    assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 6 and sum(p.endswith('.csv') for p in written) == 7
+    assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 7 and sum(p.endswith('.csv') for p in written) == 9
     meta = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))
     assert meta['schema'] == 'event-meta@1' and meta['data']['name'] == 'Generales 2023' and meta['data']['horizons'] == [6, 30]
     assert meta['data']['featured'] is True
@@ -1324,6 +1351,42 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
     assert {r['event_date'] for r in model['shares']} == {'2023-07-23'} and model['horizons'] == [6, 30]
     assert bundle.BundleReader(fs).list_events('es') == ['2023-07-23']
     assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))  # el backtest sintético no trae serie
+
+
+def test_export_event_ban_keeps_the_poll_shape_and_the_last_legal_of_each_house():
+    data, frames = publish.export_event_ban(synthetic_ban().reset_index(), synthetic_legal().reset_index(), NAMES)
+    assert data['columns'] == publish.BAN_COLUMNS and data['parties'] == list(NAMES)
+    assert [(p['pollster'], p['days']) for p in data['polls']] == [('GAD3', 2), ('ElectoPanel', 2), ('GAD3', 1)]
+    assert data['polls'][2]['error_avg'] == 2.1 and data['polls'][2]['sample_size'] == 10004
+    assert [(p['pollster'], p['days']) for p in data['legal']] == [('GAD3', 7), ('ElectoPanel', 9)]  # 40dB and CIS have no clandestine poll
+    assert set(frames) == {'ban', 'ban-legal'} and list(frames['ban'].columns[:len(publish.BAN_COLUMNS)]) == publish.BAN_COLUMNS
+
+
+def test_export_event_ban_without_polls_is_empty():
+    data, frames = publish.export_event_ban(synthetic_ban().iloc[:0].reset_index(), synthetic_legal().reset_index(), NAMES)
+    assert data['polls'] == [] and data['legal'] == [] and frames['ban'].empty and frames['ban-legal'].empty
+
+
+def test_publish_event_writes_the_ban_part_and_counts_it_in_meta(tmp_path):
+    ev = synthetic_event()
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = RecordingFileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(fs)
+    comp = FakeComputer()
+    out = publish.publish_event('es', '2023-07-23', writer, computer=comp, source=str(tmp_path / 'bt'),
+                                prov=fake_prov, **event_readers(ev))
+    parts = [p.rsplit('/', 1)[-1] for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/') and p.endswith('.json')]
+    assert parts.index('cycle.json') + 1 == parts.index('ban.json') and parts.index('ban.json') + 1 == parts.index('results.json')
+    read = lambda path: writer.read_json(path)
+    ban = read(bundle.path_event('es', '2023-07-23', 'ban'))['data']
+    assert len(ban['polls']) == 3 and {row['pollster'] for row in ban['legal']} == {'GAD3', 'ElectoPanel'}
+    assert read(bundle.path_event('es', '2023-07-23', 'meta'))['data']['n_ban'] == 3 and out['n_ban'] == 3
+    assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'ban')) and writer.exists(bundle.path_event_csv('es', '2023-07-23', 'ban-legal'))
+    cycle = read(bundle.path_event('es', '2023-07-23', 'cycle'))['data']['polls']
+    assert len(cycle) == 3  # the ban polls stay out of the cycle
+    assert ('filter_polls', 'results', {'drop_ctypes': ['exit']}) not in comp.calls
+    assert any(row['pollster'] == 'GAD3' and row['days'] == 2 for row in ban['polls'])  # the zero-weight tracking row stays
+    assert ('filter_polls', 'results', {'drop_mtypes': [], 'drop_ctypes': ['wban', 'exit']}) in comp.calls
 
 
 def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
@@ -1548,8 +1611,8 @@ def test_publish_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(publish.__path__))
-    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'lean', 'parties', 'pointers',
-                     'studies']
+    assert names == ['analysis', 'backtest', 'ban', 'common', 'events', 'forecast', 'herd', 'lean', 'parties', 'pointers',
+                     'shy', 'studies']
     for name in names:
         assert inspect.ismodule(getattr(publish, name)), name
     assert publish.loreg_guard.__module__ == 'mtpy.lib.publish.common'

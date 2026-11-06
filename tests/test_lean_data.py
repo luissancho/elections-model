@@ -56,6 +56,19 @@ def test_read_error_rows_keeps_a_missing_block_as_none(catalogue, tmp_path):
     assert nc['Derecha'] is None and nc['lean'] is None and nc['short'] == 'NC 19'
 
 
+def test_read_error_rows_keeps_only_the_final_stretch(catalogue, tmp_path):
+    """La parte trae desde 2026-11-06 sondeos de más de 42 días; el estudio dice «entre 6 y 42 días» y los deja fuera
+    (`bundle.POLL_ERRORS_WINDOW`)."""
+    fs = FileSystem(str(tmp_path))
+    write_lean_bundle(fs)
+    part = bundle.path_analysis('es', 'poll-errors')
+    envelope = bundle.BundleReader(fs).read_json(part)
+    envelope['data']['rows'].append(dict(envelope['data']['rows'][0], pollster='SW Demoscopia', days=387))
+    bundle.BundleWriter(fs).write_json(part, 'poll-errors', envelope['data'], 'es')
+    rows, _ = data.read_error_rows(bundle.BundleReader(fs), catalogue)
+    assert 'SW Demoscopia' not in {row['pollster'] for row in rows} and 'CIS' in {row['pollster'] for row in rows}
+
+
 def test_read_election_needs_its_three_parts(tmp_path):
     fs = FileSystem(str(tmp_path))
     expected = write_lean_bundle(fs)

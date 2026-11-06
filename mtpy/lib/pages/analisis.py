@@ -16,12 +16,15 @@ from ..webapi import site
 from .common import api_url, bundle_part, common_context
 from .cera import (MONTHS_LONG, SCENARIOS, UNIFORM_SPLIT, _census_version, _check, _debate, _get, _question_1,
                    _question_2, _question_3, _sigla, _two_periods, _version)
-from . import lean
+from . import ban, herd, lean, shy
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
 STUDIES = {'voto-cera': {'template': 'analisis_voto_cera.html'},
-           'sesgo-cis': {'template': 'analisis_sesgo_cis.html'}}
+           'sesgo-cis': {'template': 'analisis_sesgo_cis.html'},
+           'rebano': {'template': 'analisis_rebano.html'},
+           'voto-oculto': {'template': 'analisis_voto_oculto.html'},
+           'andorra': {'template': 'analisis_andorra.html'}}
 CERA = 'voto-cera'
 # Verdict of each of the three questions of the CERA study and the colour class of its card
 VERDICTS = [('SÍ', 'q1'), ('SIN EVIDENCIA', 'q2'), ('NO', 'q3')]
@@ -57,6 +60,22 @@ CSV_LABELS = {
         'houses': 'Ranking de encuestadoras desde 2018',
         'matrix': 'Matriz casa por elección',
         'election-houses': 'Últimos sondeos de las generales de 2023 por bloques',
+    },
+    'rebano': {
+        'cycles': 'Dispersión por ciclo: resto del ciclo, últimas 8 y últimas 3 semanas',
+        'weeks': 'Dispersión por ciclo y semanas hasta la elección',
+        'houses': 'Rebaño por casa en las últimas 8 semanas de cada ciclo',
+    },
+    'voto-oculto': {
+        'elections': 'Error de los sondeos finales por elección, bloque y partido',
+        'groups': 'Resumen por grupo de elecciones y por partido',
+    },
+    'andorra': {
+        'pairs': 'Pares casa a casa: último legal frente a sondeo clandestino',
+        'elections': 'Resumen por elección',
+        'cells': 'Cifra a cifra: promedio congelado, consenso clandestino y resultado',
+        'houses': 'Casas y sondeos de la jornada',
+        'latest-polls': 'Sondeos clandestinos de la última elección',
     },
 }
 
@@ -156,7 +175,8 @@ def study_context(state: dict, study: str) -> dict:
     Returns
     -------
     dict
-        The context of the study (``CONTEXTS[study]``: ``cera_context`` or ``lean_context``).
+        The context of the study (``CONTEXTS[study]``: ``cera_context``, ``lean_context``, ``herd_context``,
+        ``shy_context`` or ``ban_context``).
 
     Raises
     ------
@@ -649,5 +669,191 @@ def lean_context(state: dict) -> dict:
     return context
 
 
+def herd_context(state: dict) -> dict:
+    """
+    Template context of the page of the herd study (``/analisis/rebano``).
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+
+    Returns
+    -------
+    dict
+        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``cycles`` (the rows,
+        the cycle in progress last), ``verdicts`` (``herd.verdict_rows``), ``kpis``, ``tests``, ``cis_rows``,
+        ``houses_now`` (``herd.houses_now_rows``), ``pending`` (``herd.pending_text``), ``cycle_ratio``
+        (``herd.cycle_ratio_text``), ``matrix_rows`` (the table of the matrix without JavaScript), ``repeaters``,
+        ``notes`` (``herd.matrix_notes``), ``split`` (``herd.final_split``), ``drops`` (``herd.biggest_drops``),
+        ``accuracy`` (``herd.accuracy_text``), ``result`` (``herd.result_text``), ``after_day`` (the election of the
+        card «Después del 29-N»: the one in progress or the newest cycle), ``csv_links``, ``sources``,
+        ``published_at``, ``initial`` (``herd.island`` plus the common ``state``) and the flags of ``herd.flags``
+        (``has_run``, ``like_final``, ``all_narrowed``, ``final_like_chance``, ``veda_date``...).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle.
+    """
+    context = common_context(state, '/analisis')
+    parts = {part: study_part(herd.HERD, part) or {} for part in bundle.STUDY_PARTS[herd.HERD]}
+    meta, summary = parts['meta'], parts['summary']
+    cycles = _get(parts['cycles'], 'rows') or []
+    houses = _get(parts['houses'], 'rows') or []
+    initial = dict(herd.island(parts), state=context['state'])
+    context.update(herd.flags(summary, meta))
+    context.update(
+        study_meta=meta,
+        summary=summary,
+        cycles=cycles,
+        verdicts=herd.verdict_rows(summary, meta),
+        kpis=herd.kpis(summary, meta, cycles, houses),
+        tests=herd.tests(summary, cycles, meta),
+        cis_rows=herd.cis_rows(cycles),
+        houses_now=herd.houses_now_rows(summary, houses),
+        pending=herd.pending_text(summary),
+        cycle_ratio=herd.cycle_ratio_text(houses, summary),
+        matrix_rows=herd.matrix_rows(initial['matrix']),
+        repeaters=herd.repeaters(houses),
+        notes=herd.matrix_notes(houses),
+        split=herd.final_split(summary, cycles),
+        drops=herd.biggest_drops(cycles),
+        accuracy=herd.accuracy_text(summary),
+        result=herd.result_text(houses, cycles, meta),
+        after_day=context['election_short'] or herd.short_day(max((row.get('event_date') or '' for row in cycles),
+                                                                  default=None)),
+        csv_links=_csv_links(herd.HERD),
+        sources=meta.get('sources') or [],
+        published_at=_published_at(herd.HERD),
+        initial=initial,
+    )
+
+    return context
+
+
+def shy_context(state: dict) -> dict:
+    """
+    Template context of the page of the shy-vote study (``/analisis/voto-oculto``).
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+
+    Returns
+    -------
+    dict
+        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``elections`` (the
+        rows of the part), ``fig`` (``shy.figure_blocks``), ``verdicts`` (``shy.verdict_rows``), ``kpis``,
+        ``left_rows`` (the table of question 1), ``vox_tests`` (the boxes of question 2), ``party_rows`` (the table
+        of question 3), ``after`` (``shy.after_rows``: the card «Después del 29-N»), ``texts`` (``shy.texts``: the prose fragments of the
+        conditioned sentences), ``csv_links``, ``sources``, ``published_at``, ``initial`` (``shy.island`` plus the
+        common ``state``) and the flags of ``shy.flags`` (``has_run``, ``held``, ``p1_yes``, ``psoe_streak``...).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle.
+    """
+    context = common_context(state, '/analisis')
+    parts = {part: study_part(shy.SHY, part) or {} for part in bundle.STUDY_PARTS[shy.SHY]}
+    meta, summary = parts['meta'], parts['summary']
+    elections = _get(parts['elections'], 'rows') or []
+    context.update(shy.flags(summary, meta))
+    context.update(
+        study_meta=meta,
+        summary=summary,
+        elections=elections,
+        fig=shy.figure_blocks(summary),
+        verdicts=shy.verdict_rows(summary),
+        kpis=shy.kpis(summary, meta),
+        left_rows=shy.left_rows(summary, elections, meta),
+        vox_tests=shy.vox_tests(summary),
+        party_rows=shy.party_rows(summary),
+        after=shy.after_rows(summary, elections, meta),
+        texts=shy.texts(summary, elections, meta),
+        csv_links=_csv_links(shy.SHY),
+        sources=meta.get('sources') or [],
+        published_at=_published_at(shy.SHY),
+        initial=dict(shy.island(parts), state=context['state']),
+    )
+
+    return context
+
+
+def _scope_names() -> dict:
+    """Scope code → name of the scopes catalogue crossed with the manifest (``site().scopes()``)."""
+    return {row['code']: row['name'] for row in site().scopes()['scopes']}
+
+
+def ban_context(state: dict) -> dict:
+    """
+    Template context of the page of the clandestine polls study (``/analisis/andorra``).
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+
+    Returns
+    -------
+    dict
+        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``params``
+        (``meta.params``), ``verdicts`` (``ban.verdicts``), ``lead`` (``ban.lead_text``), ``kpis``, ``tests`` (the
+        three boxes of question 2, ``[]`` without a model), ``answers`` (the sentences of the summary cards),
+        ``elections`` (``ban.election_rows``), ``exception`` (``ban.exception_text``, with the names of the scopes
+        catalogue), ``cells`` (``ban.cell_groups``), ``model_rows``, ``sums`` (``{'p1', 'p2', 'p3'}``, the summary
+        sentences of the questions; ``p2`` ``None`` without a model), ``moves`` (``ban.moves_text``), ``houses``
+        (with the ``href`` of the profile), ``panels`` (``ban.panel_names``), ``big_rows``, ``latest`` (the card of
+        the election in progress, ``ban.latest_card``: nothing of the ``latest`` part while it is closed), ``pills``,
+        ``counts`` (``ban.counts``), ``sources``, ``csv_links``, ``published_at`` and ``initial`` (``ban.island``
+        plus the common ``state``).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle.
+    """
+    context = common_context(state, '/analisis')
+    parts = {part: study_part(ban.BAN, part) or {} for part in bundle.STUDY_PARTS[ban.BAN]}
+    meta, summary = parts['meta'], parts['summary']
+    params = _get(meta, 'params') or {}
+    elections = _get(parts['elections'], 'rows') or []
+    cells = _get(parts['cells'], 'rows') or []
+    houses = _get(parts['houses'], 'rows') or []
+    card = ban.latest_card(parts['latest'], _get(meta, 'next'))
+    context.update(
+        study_meta=meta,
+        summary=summary,
+        params=params,
+        verdicts=ban.verdicts(summary, houses),
+        lead=ban.lead_text(summary, cells, params),
+        kpis=ban.kpis(summary, elections, cells, params),
+        tests=ban.tests(summary, elections, cells),
+        answers=ban.answers(summary, elections, houses),
+        elections=ban.election_rows(parts['elections'], summary, params),
+        exception=ban.exception_text(summary, _scope_names()),
+        cells=ban.cell_groups(cells),
+        model_rows=ban.model_rows(elections, summary),
+        sums={'p1': ban.p1_sum(summary), 'p2': ban.p2_sum(summary, elections, cells),
+              'p3': ban.p3_sum(summary, houses)},
+        moves=ban.moves_text(cells),
+        houses=ban.house_rows(houses),
+        panels=ban.panel_names(houses, _get(parts['pairs'], 'rows') or [], params),
+        big_rows=ban.big_rows(parts['houses']),
+        latest=card,
+        pills=ban.pills(summary, params, card),
+        counts=ban.counts(summary, params),
+        sources=meta.get('sources') or [],
+        csv_links=_csv_links(ban.BAN),
+        published_at=_published_at(ban.BAN),
+        initial=dict(ban.island(parts['pairs'], params), state=context['state']),
+    )
+
+    return context
+
+
 # Context builder of each study of ``STUDIES``
-CONTEXTS = {CERA: cera_context, lean.LEAN: lean_context}
+CONTEXTS = {CERA: cera_context, lean.LEAN: lean_context, herd.HERD: herd_context, shy.SHY: shy_context,
+            ban.BAN: ban_context}

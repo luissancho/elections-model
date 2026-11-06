@@ -1321,6 +1321,25 @@ trae `calibration.csv`, `calibration`, con sus gemelos CSV; formato en "Backtest
   `failed`.
 - Cuándo relanzar: tras cada nueva ejecución del job `backtest` (ver "Backtest del modelo"), y
   después `publish event` de las elecciones afectadas para refrescar su corte del modelo.
+- **Caso `ban`.** `backtest {"scopes":["es"],"ban":true}` añade, por cada elección con sondeos publicados durante la
+  veda, un caso a horizonte 0 con ellos dentro; sus filas de `shares` van a `ban.csv`, aparte de las métricas (que no se
+  mueven), y `run.json` registra el flag. Sin el flag se borra el `ban.csv` anterior. `publish backtest` no lo publica
+  como parte: lo lee `publish event`, que lo pone en la clave `ban` de `model` de la elección; el estudio `andorra` lo
+  lee de ahí. Se corre en el portátil sobre la copia del repositorio (`"out":"backtest/results"`, el flujo de
+  "Backtest del modelo"), se comprueba y después se siembra:
+
+  ```
+  cp backtest/results/series.csv /tmp/series-antes.csv
+  python job.py backtest '{"scopes":["es"],"ban":true,"out":"backtest/results"}'
+  git diff --stat backtest/results; cmp backtest/results/series.csv /tmp/series-antes.csv
+  set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"push","scopes":["es"]}'
+  ```
+
+  La comprobación de identidad espera `metrics.csv`, `by_horizon.csv`, `shares.csv` y `series.csv` sin cambios y sólo
+  `ban.csv` y `run.json` nuevos o cambiados (`meta.csv`, como mucho en `seconds` y en columnas de parámetros nuevas);
+  si cambia algo más, parar antes del `push`. Después, commit de `ban.csv` con `run.json` y `publish event` de las
+  elecciones. **Sin `out` no**: el job escribiría en el sistema de ficheros de la app (S3 con `S3_BUCKET`, `files/` sin
+  él) y el `push`, que replica en él la copia del repositorio y borra lo que ésta no tiene, se llevaría el `ban.csv`.
 
 Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante; sin `source`, `publish
 backtest` y `publish event` leen las tablas del mismo sistema de ficheros que escribe el job `backtest`, y con
@@ -1372,12 +1391,41 @@ también con `dry_run`): los análisis de los ámbitos, las elecciones y sus res
 antes, y en una cadena va tras el análisis: `["analysis","study"]`. No necesita base de datos ni tiene registro
 (`"register":true` termina `refused` y no se escribe nada) ni comprobación (`checked` es siempre falso).
 
+**Rebaño en la recta final.** `{"what":["study"],"study":"rebano"}` calcula «¿Se copian las encuestadoras en la recta
+final?» (`mtpy/lib/studies/herd/`) desde los sondeos de cada ciclo de las generales (`cycle`), las curvas publicadas del
+promedio (`series` de la elección y del run `latest`), los errores por casa (`pollsters`) y el rebaño del análisis
+nacional (`herding`); sin base de datos ni registro.
+
+**Voto oculto.** `{"what":["study"],"study":"voto-oculto"}` calcula «¿Voto oculto de quién?» (`mtpy/lib/studies/shy/`)
+desde los sondeos finales (`cycle`) y los resultados (`results`) de todas las elecciones publicadas de los ámbitos del
+catálogo y los sondeos del run `latest` de `es` (`polls`), con los linajes y la tabla del Gobierno de
+`data/voto-oculto/`; sin base de datos ni registro; es un estudio vivo (`studies` lo republica en cada `update`).
+
+**Mercado de la fruta.** `{"what":["study"],"study":"andorra"}` calcula «El mercado de la fruta en Andorra»
+(`mtpy/lib/studies/ban/`: los sondeos «clandestinos» publicados durante la veda frente al último legal de cada casa y
+frente al promedio congelado) y lo escribe en `studies/andorra/` (partes `summary`, `pairs`, `elections`, `cells`,
+`houses` y `latest` con sus gemelos CSV, y `meta` la última). Es vivo, como el rebaño: lo republica `studies`. **Sólo lee
+partes ya publicadas** del paquete vivo: de cada elección, `meta`, `ban`, `pollsters`, `results` y `model` (con la
+clave `ban` del backtest), y el run de `es` para la elección en curso; sin base de datos ni registro. Tras el 29-N: añadir
+`2026-11-29` a `DEFAULT_EVENTS` (`mtpy/lib/backtest.py`), `backtest {"scopes":["es"],"ban":true,"out":"backtest/results"}`
+en el portátil (con `out`: ver "Caso `ban`" en "Backtest"), `git diff backtest/results` (sólo filas nuevas de
+`2026-11-29`, más `by_horizon.csv` y `run.json`), `backtest push`, commit de `backtest/results`, `publish event
+es/2026-11-29` y `publish study andorra`.
+
+**`studies`** republica, una vez por job y sin ámbito, los estudios vivos (`sesgo-cis`, `rebano`, `voto-oculto` y
+`andorra`, los de `live` en `publish.STUDY_RUNNERS`), y es el último paso de `update`: la tarea diaria recalcula la
+página con el run del día.
+
 Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
 
 ```
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-cera"}'
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"sesgo-cis"}'
 S3_BUCKET= python job.py publish '{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}'
+S3_BUCKET= python job.py publish '{"what":["study"],"study":"rebano"}'
+S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-oculto"}'
+S3_BUCKET= python job.py publish '{"what":["study"],"study":"andorra"}'
+S3_BUCKET= python job.py publish '{"what":["analysis","studies"],"scopes":["es"]}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 ```
 
@@ -1625,10 +1673,11 @@ Tres grupos, en este orden y cada uno sobre todos los ámbitos antes de empezar 
    diaria, unos minutos), o `full`, todas las fases, con `overwrite` o cuando una elección pendiente tiene resultado
    oficial (uno cargado con `load` o desde el cuaderno). Los errores del promedio (`average_errors`) no entran: se
    lanzan con `compute`.
-3. `publish.forecast` y `publish.analysis` por ámbito, y `publish.parties` una vez al final (el catálogo de partidos).
+3. `publish.forecast` y `publish.analysis` por ámbito, y `publish.parties` y `publish.studies` una vez al final (el catálogo de partidos y los estudios vivos).
 
 Son los mismos pipelines de los jobs `load`, `compute` y `publish`: cada línea, estado y nivel de `verbose` es el de
-su job. Los `ratings` y los catálogos no entran (se lanzan con `compute`).
+su job. La cadena de publicación acaba con `studies`, que republica los estudios vivos con el run del día (va el
+último para que un estudio que falle no deje el catálogo sin publicar). Los `ratings` y los catálogos no entran (se lanzan con `compute`).
 
 `overwrite` es el único interruptor de rehacerlo todo: reemplaza el ciclo de sondeos y computa la serie, en `full`,
 aunque no haya nada nuevo; se usa tras un cambio de código o de parámetros. `"mode": "full"` fuerza la serie entera un

@@ -26,10 +26,11 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             csv/
                 metrics.csv by-horizon.csv blocks.csv shares.csv seats.csv
         events/{scope}/{date}/                  one past election of a scope, overwritten on each publication
-            meta.json pollsters.json polls.json results.json model.json
+            meta.json pollsters.json polls.json cycle.json ban.json results.json model.json series.json
             csv/
-                pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
-        studies/{study}/                        one published study (voto-cera, sesgo-cis), overwritten on each publication
+                pollsters.csv polls.csv cycle.csv ban.csv ban-legal.csv results.csv
+                model-shares.csv model-seats.csv model-blocks.csv model-ban.csv series.csv
+        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano, voto-oculto, andorra), overwritten on each publication
             meta.json {part}.json               the parts of STUDY_PARTS[study]
             csv/
                 {name}.csv                      the tables of STUDY_CSV[study]
@@ -66,6 +67,11 @@ MODES = ('nowcast', 'forecast')
 RUN_PARTS = ('meta', 'headline', 'series', 'polls', 'fan', 'house-effects', 'dispersion', 'weights')
 MODE_PARTS = ('vote', 'summary', 'dist', 'districts', 'scenario', 'projection')
 ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data', 'rating-check')
+# The final stretch of an election, in days before it: the pages and studies that speak of «the last poll of each
+# house before the election» keep the rows of `poll-errors` within it (`days <= 42`); the part itself is published
+# with its lower bound only (the ban: `wban` and `exit` polls are dropped apart), so the profile of a house can show
+# its last poll of every election it polled (Luis, 2026-11-06).
+POLL_ERRORS_WINDOW = (6, 42)
 ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
                     'poll-errors': 'poll-errors', 'error-data': 'error-data', 'rating-check': 'analysis-rating-check'}
 ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data', 'rating-check',
@@ -73,24 +79,38 @@ ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'er
 BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats', 'calibration')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
-EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
+EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'ban', 'results', 'model', 'series')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
-EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks', 'series')
-STUDIES = ('voto-cera', 'sesgo-cis')
+EVENT_CSV = ('pollsters', 'polls', 'cycle', 'ban', 'ban-legal', 'results', 'model-shares', 'model-seats', 'model-blocks',
+             'model-ban', 'series')
+STUDIES = ('voto-cera', 'sesgo-cis', 'rebano', 'voto-oculto', 'andorra')
 STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
-               'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')}
+               'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election'),
+               'rebano': ('meta', 'summary', 'cycles', 'weeks', 'houses'),
+               'voto-oculto': ('meta', 'summary', 'elections', 'groups'),
+               'andorra': ('meta', 'summary', 'pairs', 'elections', 'cells', 'houses', 'latest')}
 STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['voto-cera']},
-                 'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']}}
+                 'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']},
+                 'rebano': {part: 'rebano-' + part for part in STUDY_PARTS['rebano']},
+                 'voto-oculto': {part: 'voto-oculto-' + part for part in STUDY_PARTS['voto-oculto']},
+                 'andorra': {part: 'andorra-' + part for part in STUDY_PARTS['andorra']}}
 STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
                            'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
-             'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses')}
+             'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses'),
+             'rebano': ('cycles', 'weeks', 'houses'),
+             'voto-oculto': ('elections', 'groups'),
+             'andorra': ('pairs', 'elections', 'cells', 'houses', 'latest-polls')}
 STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'census-countries'),
                               'participation': ('participation',), 'vote': ('vote', 'ecological'),
                               'prediction': ('last-seat',),
                               'sensitivity': ('sensitivity-grid', 'sensitivity-scenarios', 'placement-grid'),
                               'check': ('check',)},
                 'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
-                              'election': ('election-houses',)}}
+                              'election': ('election-houses',)},
+                'rebano': {'cycles': ('cycles',), 'weeks': ('weeks',), 'houses': ('houses',)},
+                'voto-oculto': {'elections': ('elections',), 'groups': ('groups',)},
+                'andorra': {'pairs': ('pairs',), 'elections': ('elections',), 'cells': ('cells',), 'houses': ('houses',),
+                            'latest': ('latest-polls',)}}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
@@ -145,6 +165,7 @@ SCHEMAS = {
     'event-pollsters': {'blocks': list, 'rows': list},
     'event-polls': {'blocks': list, 'rows': list},
     'event-cycle': {'parties': list, 'columns': list, 'polls': list},
+    'event-ban': {'parties': list, 'columns': list, 'polls': list, 'legal': list},
     'event-results': {'n_seats': int, 'rows': list},
     'event-model': {'horizons': list, 'shares': list, 'seats': list, 'blocks': list},
     'event-series': {'horizon': int, 'dates': list, 'parties': list, 'mean': dict, 'lo': dict, 'hi': dict},
@@ -170,6 +191,37 @@ SCHEMAS = {
     'sesgo-cis-matrix': {'events': list, 'houses': list, 'cells': list},
     'sesgo-cis-election': {'scope': str, 'date': str, 'name': NULLABLE_STR, 'blocks': dict, 'max_days': int,
                            'result': dict, 'cis': dict, 'consensus': dict, 'houses': list},
+    'rebano-meta': {'study': str, 'title': str, 'subtitle': str, 'scope': str, 'election': (dict, type(None)),
+                    'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                    'versions': dict, 'seconds': dict},
+    'rebano-summary': {'n_cycles': int, 'k_narrowed': int, 'narrowed': list, 'mean_before': (float, type(None)),
+                       'mean_last': (float, type(None)), 'mean_final': (float, type(None)), 'k_below_one': int,
+                       'below_one': list, 'sign': (dict, type(None)), 'current': (dict, type(None)),
+                       'houses_now': (dict, type(None)), 'cis': (dict, type(None)), 'accuracy': (dict, type(None))},
+    'rebano-cycles': {'rows': list},
+    'rebano-weeks': {'buckets': list, 'rows': list, 'mean': list},
+    'rebano-houses': {'rows': list},
+    'voto-oculto-meta': {'study': str, 'title': str, 'subtitle': str, 'scopes': list, 'election': (dict, type(None)),
+                         'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                         'versions': dict, 'seconds': dict},
+    'voto-oculto-summary': {'n_elections': int, 'n_general': int, 'n_regional': int, 'n_scopes': int,
+                            'first_year': int, 'first_year_regional': (int, type(None)), 'last_year': int,
+                            'left': dict, 'right': dict, 'lean': dict, 'vox': (dict, type(None)), 'parties': list,
+                            'size': dict, 'psoe_general': (dict, type(None)), 'pp': dict, 'podemos': dict,
+                            'current': (dict, type(None)), 'verdicts': dict},
+    'voto-oculto-elections': {'rows': list},
+    'voto-oculto-groups': {'rows': list},
+    'andorra-meta': {'study': str, 'title': str, 'subtitle': str, 'params': dict, 'inputs': dict,
+                     'next': (dict, type(None)), 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                     'versions': dict, 'seconds': dict},
+    'andorra-summary': {'pairs': dict, 'elections': (dict, type(None)), 'cells': dict, 'big': dict,
+                        'exception': (dict, type(None))},
+    'andorra-pairs': {'rows': list},
+    'andorra-elections': {'rows': list, 'period': dict},
+    'andorra-cells': {'rows': list},
+    'andorra-houses': {'rows': list, 'big_rows': list},
+    'andorra-latest': {'scope': str, 'event_date': str, 'label': str, 'parties': list, 'polls': list,
+                       'consensus': (dict, type(None)), 'frozen': (dict, type(None)), 'official': dict, 'error': dict},
 }
 
 
