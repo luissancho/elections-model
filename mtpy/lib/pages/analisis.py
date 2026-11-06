@@ -685,8 +685,8 @@ def herd_context(state: dict) -> dict:
         ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``current`` (the
         block of the election in progress, ``None`` without it), ``verdicts`` (``herd.verdicts``), ``kpis``,
         ``bars`` (``herd.bars`` of the ``elections`` rows), ``squares`` (``far_mid`` and ``mid_final``), ``live``
-        (``herd.live_text``), ``live_rows`` (``herd.live_rows``), ``chance`` and ``median`` (per comparison: the
-        probability of its sign test in words and its median change as a percentage), ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags``
+        (``herd.live_text``), ``live_rows`` (``herd.live_rows``), ``chance`` (per comparison: the probability of its
+        sign test in words), ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags``
         (``has_run``, ``held``, ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``,
         ``final_start``, ``final_started``).
 
@@ -712,8 +712,6 @@ def herd_context(state: dict) -> dict:
         live=herd.live_text(current, flag),
         live_rows=herd.live_rows(current),
         chance={key: herd.chance_text(_get(summary, 'comparisons', key, 'sign_p')) for key in HERD_COMPARISONS},
-        median={key: herd.percent(_get(summary, 'comparisons', key, 'median_change'), signed=False)
-                for key in HERD_COMPARISONS},
         csv_links=_csv_links(herd.HERD),
         sources=meta.get('sources') or [],
         published_at=_published_at(herd.HERD),

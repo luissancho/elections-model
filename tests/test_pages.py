@@ -5767,6 +5767,8 @@ def test_herd_live_rows(monkeypatch):
     assert (rows[0]['pairs'], rows[0]['r_a'], rows[0]['r_b'], rows[0]['change']) == (6, 1.05, 1.0, '−5 %')
     both = pages.herd.live_rows(dict(current, mid_final={'pairs': 4, 'r_a': 1.0, 'r_b': 1.2, 'change': 0.2}))
     assert [row['key'] for row in both] == ['far_mid', 'mid_final'] and both[1]['change'] == '+20 %'
+    empty = pages.herd.live_rows(dict(current, far_mid={'pairs': 2, 'r_a': None, 'r_b': None, 'change': None}))
+    assert (empty[0]['r_a'], empty[0]['change']) == (None, '–')
     assert pages.herd.live_rows(None) == [] and pages.herd.live_rows({}) == []
 
 
@@ -5825,12 +5827,14 @@ def test_herd_page_live_card_states(api, fresh_app, monkeypatch):
     status, page, text = herd_page(api)
     assert status == 200 and 'elección celebrada, pendiente del escrutinio' in text
     assert 'Elección celebrada: entra en la cuenta con el escrutinio.' in text and 'id="directo"' in page
+    assert 'Tras el escrutinio' not in text and 'mediana de −' not in text
     herd_today(monkeypatch, date(2026, 11, 12))
     publish_study(fresh_app.fs, study='rebano', parts={'current': {'current': dict(
         fixture_data('rebano-current')['current'], mid_final={
             'pairs': 4, 'rows_a': 9, 'rows_b': 7, 'r_a': 1.0, 'r_b': 0.88, 'change': -0.12, 'falls': True, 'p': 0.2})}})
     _, page, text = herd_page(api)
     assert 'difieren un 12 % menos que entre 3 y 8 semanas antes' in text and 'se actualiza cada día' in text
+    assert 'Tras el escrutinio' in text and 'bajada mediana del 15 %' in text and 'por azar, 1 entre 769' in text
     publish_study(fresh_app.fs, study='rebano', meta={'election': None}, parts={'current': {'current': None}})
     status, page, text = herd_page(api)
     assert status == 200 and 'id="directo"' not in page and 'Evidencia histórica' in text

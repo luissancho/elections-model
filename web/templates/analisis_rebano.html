@@ -12,6 +12,8 @@
 {% macro answer(verdict, n, question) -%}
 <a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
 {%- endmacro %}
+{#- A probability in words: «como una moneda» alone, «por azar, 1 entre 769» otherwise. -#}
+{% macro odds(text) -%}{% if text == 'como una moneda' %}{{ text }}{% else %}por azar, {{ text }}{% endif %}{%- endmacro %}
 {#- «k de n» with the site's integer format. -#}
 {% macro count(c) -%}{{ (c.get('k') or 0)|int }} de {{ (c.get('n') or 0)|int }}{%- endmacro %}
 {#- The squares of a comparison: one per election, filled when the houses get closer. -#}
@@ -62,10 +64,10 @@
         {{ shot('resumen') }}
         <div class="three two">
           {% call answer(v1, 1, '¿Se acercan al final?') -%}
-            {% if ff.get('n') %}En {{ count(ff) }} elecciones, las mismas casas difieren menos al final que lejos de la votación{% if chance.far_final %}; por azar, {{ chance.far_final }}{% endif %}.{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
+            {% if ff.get('n') %}En {{ count(ff) }} elecciones, las mismas casas difieren menos al final que lejos de la votación{% if chance.far_final %}; {{ odds(chance.far_final) }}{% endif %}.{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
           {%- endcall %}
           {% call answer(v2, 2, '¿Más cerca de la elección?') -%}
-            {% if mf.get('n') %}En las tres últimas semanas, {{ count(mf) }}{% if chance.mid_final %}; por azar, {{ chance.mid_final }}{% endif %}.{% if fm.get('n') %} Hasta tres semanas antes, {{ count(fm) }}{% if chance.far_mid %}: {{ chance.far_mid }}{% endif %}.{% endif %}{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
+            {% if mf.get('n') %}En las tres últimas semanas, {{ count(mf) }}{% if chance.mid_final %}; {{ odds(chance.mid_final) }}{% endif %}.{% if fm.get('n') %} Hasta tres semanas antes, {{ count(fm) }}{% if chance.far_mid %}: {{ chance.far_mid }}{% endif %}.{% endif %}{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
           {%- endcall %}
         </div>
         <p class="note blue">Medimos cuánto se acercan las cifras de las encuestadoras, no por qué.</p>
@@ -89,7 +91,7 @@
         {% endif %}
         {% if ff.get('n') %}
         <div class="sum">
-          <b>En {{ count(ff) }} elecciones las mismas casas se acercan al final</b>{% if median.far_final and ff.get('median_change') is not none and ff.median_change < 0 %}, con una bajada mediana de {{ median.far_final }}{% endif %}.
+          <b>En {{ count(ff) }} elecciones las mismas casas se acercan al final</b>{% set med = ff.get('median_change') %}{% if med is number and med != 0 %}, con {{ 'una bajada mediana' if med < 0 else 'una subida mediana' }} del {{ (med|abs * 100)|round|int }} %{% endif %}.
           En cada una por separado podría ser azar ({{ clear_text }}){% if chance.far_final %}. Que pase {{ count(ff) }} veces por azar: {{ chance.far_final }}{% endif %}.
         </div>
         {% endif %}
@@ -124,7 +126,7 @@
             </thead>
             <tbody>
               {% for row in live_rows %}
-              <tr><td>{% if row.key == 'far_mid' %}De más de {{ mid_weeks }} semanas a entre {{ final_weeks }} y {{ mid_weeks }}{% else %}De entre {{ final_weeks }} y {{ mid_weeks }} semanas a las tres últimas{% endif %}</td><td class="mut">{{ row.pairs|int }}</td><td>{{ row.r_a|num(2) }}</td><td>{{ row.r_b|num(2) }}</td><td><b>{{ row.change }}</b></td></tr>
+              <tr><td>{% if row.key == 'far_mid' %}De más de {{ mid_weeks }} semanas a entre {{ final_weeks }} y {{ mid_weeks }}{% else %}De entre {{ final_weeks }} y {{ mid_weeks }} semanas a las tres últimas{% endif %}</td><td class="mut">{{ row.pairs|int }}</td><td>{{ row.r_a|num(2) if row.r_a is number else '–' }}</td><td>{{ row.r_b|num(2) if row.r_b is number else '–' }}</td><td><b>{{ row.change }}</b></td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -132,7 +134,7 @@
         <p class="tnote">Antes y después son la separación entre las parejas de casas, en veces la que darían sus muestras: 1 es lo que cabe esperar sólo por el azar.</p>
         {% endif %}
         {% if live %}<div class="sum"><b>{{ live }}</b></div>{% endif %}
-        {% if year %}<p class="tnote">Tras el escrutinio, {{ year }} entra en la cuenta como la elección número {{ ((ff.get('n') or 0) + 1)|int }}.</p>{% endif %}
+        {% if year and not held %}<p class="tnote">Tras el escrutinio, {{ year }} entra en la cuenta como la elección número {{ ((ff.get('n') or 0) + 1)|int }}.</p>{% endif %}
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('como', 'Cómo lo medimos', 'Dos sondeos, una diferencia y lo que cabría esperar de sus muestras.', classes='shot') }}
@@ -162,7 +164,7 @@
           <div>
             <p class="ctitle">Método</p>
             <div class="tech">
-              Parejas de sondeos de casas distintas con fin de campo a menos de {{ params.get('pair_days') or 7 }} días, en los {{ params.get('n_series') or 4 }} partidos principales y con al menos {{ params.get('min_rows') or 3 }} sondeos por tramo.
+              Parejas de sondeos de casas distintas que acaban su campo con {{ params.get('pair_days') or 7 }} días o menos de diferencia, en los {{ params.get('n_series') or 4 }} partidos principales y con al menos {{ params.get('min_rows') or 3 }} sondeos por tramo.
               Los tramos cuentan desde el fin de campo hasta la elección: {{ (periods.get('final') or [0, 21])[0] }} a {{ (periods.get('final') or [0, 21])[1] }} días, {{ (periods.get('mid') or [21, 56])[0] }} a {{ (periods.get('mid') or [21, 56])[1] }} y {{ (periods.get('far') or [56, 365])[0] }} a {{ (periods.get('far') or [56, 365])[1] }}.
               La <b>permutación</b> baraja {{ (params.get('permutations') or 2000)|int }} veces a qué tramo pertenece cada sondeo y dice cuántas veces saldría una bajada tan grande sólo por azar: es lo que llamamos clara por sí sola.
               La <b>prueba del signo</b> cuenta en cuántas elecciones baja la separación y qué probabilidad tendría ese recuento con una moneda.

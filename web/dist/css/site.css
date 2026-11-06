@@ -952,6 +952,9 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 #p3 .table-wrap + .ctitle { margin-top: 14px; }
 td.blk { font-weight: 700; }
 #datos .src-list + .ctitle { margin-top: var(--space-3); }
+/* The blue of the third verdict (the shy-vote and Andorra studies): the card and the pill of the index */
+.qb { --qc: #1d4f86; --qc-ink: #1d4f86; --qc-soft: #e7eef8; }
+#study-head + .toc a.qb { border-color: var(--qc); color: var(--qc-ink); }
 /* The herd study (/analisis/rebano): the bars of the elections and the squares of the two comparisons, in HTML and
    CSS so that they come out the same in the image of the card. Blue = the houses get closer, orange = they part
    (written out, not as variables, for the card images). The summary has two answers, not three. */
