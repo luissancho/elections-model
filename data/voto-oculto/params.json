@@ -1,0 +1,48 @@
+{
+  "window_days": 14,
+  "recent_from": "2018-09-01",
+  "blocks": [
+    "Izquierda",
+    "Derecha"
+  ],
+  "lineages": {
+    "PSOE": [
+      "PSOE",
+      "PSC",
+      "PSE-EE"
+    ],
+    "PP": [
+      "PP",
+      "AP",
+      "CD"
+    ],
+    "VOX": [
+      "VOX"
+    ],
+    "UP": [
+      "SUMAR",
+      "FA",
+      "UP",
+      "IU",
+      "PCE"
+    ]
+  },
+  "labels": {
+    "UP": "IU / Podemos / Sumar",
+    "PP": "PP (AP, CD)",
+    "VOX": "Vox"
+  },
+  "size_parties": [
+    "PSOE",
+    "PP",
+    "VOX",
+    "UP"
+  ],
+  "size_threshold": 2,
+  "big_threshold": -3,
+  "pp_early": [
+    "1982-01-01",
+    "1996-01-01"
+  ],
+  "extremes": 3
+}
