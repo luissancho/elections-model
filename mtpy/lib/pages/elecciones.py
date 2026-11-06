@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import Callable, Optional, Sequence
 
 from ...core.api import HttpError
+from ..bundle import POLL_ERRORS_WINDOW
 from ..webapi import check_date, event_params, site
 from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color,
                      bundle_part, common_context, ink_color)
@@ -243,7 +244,8 @@ def error_rows(scope: str, dates: list, errors: Optional[dict] = None) -> Option
     Rows of the published ``poll-errors`` analysis of the given elections.
 
     Only the published elections count (the analysis has every election of the scope with results and polls), so
-    the filters, the histogram, the bullseye and the weeks table speak of the same elections as the list.
+    the filters, the histogram, the bullseye and the weeks table speak of the same elections as the list (and, through
+    ``final_stretch_rows``, of the final stretch only: the part has no upper bound of days since 2026-11-06).
 
     Parameters
     ----------
@@ -351,6 +353,30 @@ def history_rows(scopes: list, events: list, parts: Optional[dict] = None) -> li
             rows.append({key: row.get(key) for key in HISTORY_COLUMNS + tuple(blocks)})
 
     return rows
+
+
+def final_stretch_rows(rows: list) -> list:
+    """
+    The rows of ``poll-errors`` within the final stretch of their election.
+
+    The part is published without an upper bound of days since 2026-11-06 (the profile of a house shows its last poll
+    of every election it polled); the pages that speak of «the last poll of each house before the election» keep
+    the rows of the final stretch only, as before.
+
+    Parameters
+    ----------
+    rows : list of dict
+        ``poll-errors`` rows (``history_rows`` or ``error_rows``) with ``days``.
+
+    Returns
+    -------
+    list of dict
+        The rows whose ``days`` is a number not above ``bundle.POLL_ERRORS_WINDOW[1]`` (42), in their order; a row
+        without ``days`` stays out.
+    """
+    limit = POLL_ERRORS_WINDOW[1]
+
+    return [row for row in rows if isinstance(row.get('days'), (int, float)) and row['days'] <= limit]
 
 
 def poll_error_parts(scopes: list) -> dict:
@@ -491,7 +517,8 @@ def elecciones_context(state: dict, active: str = '/elecciones', today: Optional
     -------
     dict
         The common context with ``scopes`` replaced by ``history_scopes``, plus ``events``
-        (``history_events``), ``errors`` (``history_rows``), ``error_blocks`` (``error_blocks``), ``bias_colors``
+        (``history_events``), ``errors`` (``history_rows`` of the final stretch, ``final_stretch_rows``), ``error_blocks``
+        (``error_blocks``), ``bias_colors``
         (``bias_colors`` of that pair, for the bar of «Sesgo bloques» in the table of elections),
         ``filter_events`` (``key`` ``scope:date``, ``date``, ``name``, ``scope`` and ``scope_name``),
         ``filter_pollsters`` (house names, alphabetical), ``years`` (every year from the first election to
@@ -510,7 +537,7 @@ def elecciones_context(state: dict, active: str = '/elecciones', today: Optional
     scopes = history_scopes()
     events = history_events(scopes)
     parts = poll_error_parts(scopes)
-    errors = history_rows(scopes, events, parts)
+    errors = final_stretch_rows(history_rows(scopes, events, parts))
     with_analysis = {scope['code'] for scope in scopes if scope['analysis']}
     filter_events = [{'key': f"{event['scope']}:{event['date']}", 'date': event['date'], 'name': event['name'],
                       'scope': event['scope'], 'scope_name': event['scope_name'], 'href': event['href']}

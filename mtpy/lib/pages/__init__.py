@@ -29,7 +29,8 @@ from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OTHE
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
                          history_scopes,
-                         eleccion_context, elecciones_context, error_rows, event_part, fixed_rows, last_poll_rows,
+                         eleccion_context, elecciones_context, error_rows, event_part, final_stretch_rows, fixed_rows,
+                         last_poll_rows,
                          last_results, horizon_tables, majority_of, mark_shown, model_last, MODEL_ROW, party_blocks,
                          poll_error_parts, published_events, resolve_event, run_less_colours, shown_parties, split_sides,
                          table_blocks, with_abs, with_model_row, year_range)

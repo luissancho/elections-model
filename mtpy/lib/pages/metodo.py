@@ -16,7 +16,7 @@ from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
 from .casas import election_label
 from .common import analysis_part, api_url, bundle_part, catalog, common_context, part
-from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
+from .elecciones import error_blocks, final_stretch_rows, history_events, history_rows, history_scopes, poll_error_parts
 from .filters import DASH, _is_missing, delta_text, fmt_int, fmt_num
 from .slugs import PROFILE_PATH, slugify
 
@@ -348,7 +348,8 @@ def house_effects_example() -> Optional[dict]:
     dict or None
         ``pollster``, ``since``, ``href`` (its profile), ``blocks`` (the pair of the bullseye axes, the first two
         of ``error_blocks``), ``left`` and ``right`` (the blocks the text counts, ``HOUSE_EXAMPLE``), ``rows``
-        (its ``history_rows`` since the date with an error in both blocks, newest first and, on the same date, in
+        (its ``history_rows`` of the final stretch, ``final_stretch_rows``, since the date with an error in both blocks,
+        newest first and, on the same date, in
         catalogue order, each with ``name``, the name of its election, ``election_label``; the rows of a scope
         whose ``poll-errors`` part has no blocks lack their columns and stay out, as in the bullseye), ``n``
         (their number), ``over`` and ``under`` (``{block: n}`` for ``left`` and ``right``: the elections in which
@@ -379,7 +380,7 @@ def house_effects_example() -> Optional[dict]:
     scope_names = {scope['code']: scope['name'] for scope in scopes}
     order = {scope['code']: index for index, scope in enumerate(scopes)}
     rows = [dict(row, name=election_label(row['scope'], row['event_date'], names, scope_names))
-            for row in history_rows(scopes, events, parts)
+            for row in final_stretch_rows(history_rows(scopes, events, parts))
             if row.get('pollster') == name and (row.get('event_date') or '') >= since
             and all(row.get(block) is not None for block in (left, right))]
     rows.sort(key=lambda row: order[row['scope']])

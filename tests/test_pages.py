@@ -1897,6 +1897,19 @@ def test_elecciones_only_counts_the_published_elections(history_site, fresh_app)
     assert 'id="glosario"' in page and '¿Cómo calculamos el rating de las encuestadoras?' in page
 
 
+def test_elecciones_history_keeps_only_the_final_stretch(history_site, fresh_app):
+    """La parte `poll-errors` trae desde 2026-11-06 el último sondeo de cada casa aunque tenga más de 42 días; el
+    histórico (filtros, histograma, diana y semanas) sigue hablando de la recta final (`bundle.POLL_ERRORS_WINDOW`)."""
+    errors = fixture_data('poll-errors')
+    errors['rows'].append(dict(errors['rows'][0], pollster='SW Demoscopia', days=387))
+    errors['rows'].append(dict(errors['rows'][0], pollster='Sin días', days=None))
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es')
+    data = initial(call(history_site, '/elecciones')[2])
+    assert [row['pollster'] for row in data['errors']] == ['GAD3', 'Sigma Dos']
+    assert pages.elecciones.final_stretch_rows([{'days': 42}, {'days': 43}, {'days': None}, {}]) == [{'days': 42}]
+
+
 def test_elecciones_without_analysis_keeps_the_list(events_site):
     page = html(call(events_site, '/elecciones')[2])
     assert 'Análisis no publicado todavía' in page and 'id="events-table"' in page and 'class="headline"' not in page

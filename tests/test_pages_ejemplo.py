@@ -287,6 +287,18 @@ def test_house_example_counts_the_errors_of_the_pollster_since_the_date(house_si
     assert metodo.house_effects_example() is None
 
 
+def test_house_example_keeps_only_the_final_stretch(house_site, fresh_app):
+    """Un sondeo del CIS de más de 42 días antes (la parte los trae desde 2026-11-06) no cuenta en el ejemplo: su texto
+    dice «entre 6 y 42 días» (`bundle.POLL_ERRORS_WINDOW`)."""
+    rows = [dict(row, days=60) if row['pollster'] == 'CIS' and row['event_date'] == '2019-11-10' else row for row in HOUSE_ROWS]
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'), bundle.ANALYSIS_SCHEMAS['poll-errors'],
+                                                 {'blocks': ['Derecha', 'Izquierda'], 'rows': rows}, 'es')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    example = metodo.house_effects_example()
+    assert [row['event_date'] for row in example['rows']] == ['2023-07-23'] and example['n'] == 1
+
+
 def test_sign_chance_is_the_binomial_tail_of_a_fair_coin():
     # 21 or more of 23 on the same side: (C(23,21) + C(23,22) + C(23,23)) / 2^23 = 277 / 8388608, one in 30284
     assert metodo.sign_chance(23, 21) == {'n': 23, 'k': 21, 'ways': 277, 'total': 8388608, 'p': pytest.approx(277 / 2 ** 23),
