@@ -444,3 +444,84 @@ revisa.
 
 En 2017 y 2021 el Gobierno catalán estaba intervenido o en funciones; cuenta el partido del último presidente. Los
 nombres entre paréntesis son alternativas por si el principal no está en los resultados del evento.
+
+## Cierre (2026-11-06)
+
+### Lo que existe, tarea a tarea
+
+Ocho commits sobre `dev` (`8ff9874..e945f86`, partiendo de `23b4fab`), construidos con subagentes y revisión por tarea.
+
+- **Tarea 1** (`8ff9874`, «Estudios: registro, esquemas y fixtures del estudio voto-oculto»): `mtpy/lib/bundle.py`,
+  `mtpy/lib/publish/studies.py`, los cuatro fixtures `tests/fixtures/bundle/voto-oculto-*.json`, `tests/fakes.py`,
+  `tests/test_bundle_unit.py`, `tests/test_publish_unit.py`.
+- **Tarea 2** (`59ff8c3`, «Estudio voto-oculto: parámetros, tabla del Gobierno, catálogo y lectura de elecciones y run
+  actual»): `data/voto-oculto/params.json`, `data/voto-oculto/incumbents.json`, `mtpy/lib/studies/shy/__init__.py`,
+  `data.py`, `tests/test_shy_data.py`.
+- **Tarea 3** (`4f9ec5b`, «Estudio voto-oculto: error de bloques y linajes con la regla de suma, cifras, extremos y
+  tamaño»): `mtpy/lib/studies/shy/stats.py`, `tests/test_shy_stats.py`.
+- **Tarea 4** (`e7ab8cc` y `2dd957b`, «Estudio voto-oculto: el estudio entero desde las partes publicadas (filas,
+  resumen, grupos, veredictos)» y «Estudio voto-oculto: polls − results exacto en la fila, tamaño sobre errores sin
+  redondear, docstring y tipos»): `mtpy/lib/studies/shy/study.py`, `tests/test_shy_study.py`.
+- **Tarea 5** (`68786ac`, «Estudio voto-oculto: exportadores, meta con la entradilla viva, estudio vivo en el registro
+  y documentación»): `mtpy/lib/publish/shy.py`, `mtpy/lib/publish/__init__.py`, `mtpy/lib/publish/studies.py`,
+  `tests/test_publish_shy.py`, `tests/test_publish_studies.py`, `test_jobs_publish.py`, `test_pipelines_publish.py`,
+  `test_publish_herd.py`, `data/README.md`, `deploy/README.md`, `docs/web/contrato.md`.
+- **Tarea 6** (`15f3617` y `f8b051e`, «Web: página /analisis/voto-oculto con veredictos, textos vivos condicionados,
+  tablas y la isla de los gráficos; enlace desde /metodo/promedio» y la ronda de correcciones «Web: /analisis/voto-oculto
+  sólo dice que el PSOE y el Gobierno no pasan la prueba si no salen subestimados, …»): `mtpy/lib/pages/shy.py`,
+  `pages/__init__.py`, `pages/analisis.py`, `pages/metodo.py`, `web/templates/analisis_voto_oculto.html`,
+  `web/templates/metodo_promedio.html`, `web/dist/css/site.css`, `tests/test_pages.py`, `tests/test_web_api.py`.
+- **Tarea 7** (`e945f86`, «Web: gráficos de errores con signo (barras cronológicas y nube por partido) y script de
+  /analisis/voto-oculto»): `web/dist/js/charts/errors.js`, `web/dist/js/pages/analisis-voto-oculto.js`,
+  `tests/test_js_charts.py`.
+- **Tarea 8**: esta sección.
+
+### Decisiones tomadas al construir
+
+- P3: el veredicto es un «DE {SIGLAS}» por partido unidos con « Y » («DE PSOE Y DE IU / PODEMOS / SUMAR»); la cola del
+  subtítulo une las siglas con « y ».
+- `ShyStudy.scopes` son los códigos del catálogo con al menos una elección leída; `inputs[scope].events` cuenta
+  elecciones leídas, no carpetas.
+- `figures([])` devuelve `None` y las filas de partido guardan `figures: None`; la página pinta guiones.
+- Entre las tareas 1 y 5 la suite estuvo en rojo a propósito (12 fallos de `STUDY_RUNNERS` sin el ejecutor de
+  `voto-oculto`); la tarea 5 los dejó en verde. Lo mismo entre la 6 y la 7 (`test_referenced_assets_exist` por el
+  script que crea la 7).
+- Ajustes de texto de pruebas aceptados: manifiesto retirado por la ruta con prefijo del lector; `copy_event` desplaza
+  las fechas de los sondeos con la de la elección.
+- El paquete sintético de pruebas reescribe los linajes para añadir FA (el plan los dejaba sin ella).
+- Las cifras se calculan sobre errores sin redondear y en las filas `polls − results == error` exactamente;
+  `summary.size` también sale de los errores sin redondear.
+- El subtítulo usa el marcador `{vox_clause}` para poder quitar la cláusula de Vox sin datos; la cola del subtítulo
+  cambia según el veredicto.
+- Sin datos de Vox, el veredicto de P2 es «SIN DATOS».
+- La frase de Método va al final del primer párrafo de «Qué límites tiene el promedio», detrás de `shy_published`
+  (la línea original quedaba dentro de una rama `if house_example`).
+- Tres frases de la maqueta se reescribieron por ser falsas con las cifras: «ningún partido grande sale subestimado de
+  forma sistemática» (PSOE 49/43), «Vox aparece en nuestra base en {año}» (no «se presenta desde 2018») y la respuesta
+  sobre Tezanos sin «y el CIS tampoco desde entonces» (no está en las partes).
+- Condiciones extra en las frases de la racha del PSOE y de «racha desaparece».
+- Ejemplos del PP: generales desde 1996 con error del PP > 3.
+- No se muestra la cifra de Ciudadanos; el ejemplo de abril de 2019 del PP se lee de `elections`.
+- Bandera `generals_fail`; la caja 2 («no se distingue de cero») sólo sale con `not p2_yes`.
+- Los partidos de P3 salen del veredicto, no se recalculan de las filas.
+- Encabezado neutro de la nota de Podemos.
+- La pastilla no usa `meta.election` (sin «añade la fila de –»).
+- Aceptado sin tocar (menores): `_clean` copiado de `herd.py`, dos líneas de más de 120 columnas, `xMax` fijo en 8 en la
+  nube, `signColor(null)` en azul.
+
+### Lo que no se verificó
+
+- No se ha ejecutado ningún job contra S3 ni ECS; tampoco la cadena `update` de ECS con el estudio vivo nuevo.
+- No se ha visto la página en un móvil.
+- Sí se verificó: la suite completa (2191 passed, 81 skipped, 1 aviso previo; la base en `dev` era 2146 passed) y un render con Chrome sin cabeza de la página con el paquete
+  fixture (tres gráficos dibujados, sin errores en la consola).
+
+### Lista de Luis
+
+- `S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-oculto"}'` en local primero; después contra su S3
+  (o esperar al `update` diario, cuyo paso `studies` lo publica en cuanto la imagen esté desplegada).
+- Recorrer `/analisis/voto-oculto` (escritorio y móvil: las 92 barras, el desplazamiento de la tabla de P3, los botones
+  de descarga), `/analisis`, Inicio y `/metodo/promedio`.
+- Desplegar la imagen.
+- Tras el 29-N: `publish event` de `es/2026-11-29` y luego `publish '{"what":["studies"]}'` (la página añade sola la
+  fila de 2026).
