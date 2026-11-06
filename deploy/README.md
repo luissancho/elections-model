@@ -1375,9 +1375,16 @@ antes, y en una cadena va tras el análisis: `["analysis","study"]`. No necesita
 **Rebaño en la recta final.** `{"what":["study"],"study":"rebano"}` calcula «¿Se copian las encuestadoras en la recta
 final?» (`mtpy/lib/studies/herd/`) desde los sondeos de cada ciclo de las generales (`cycle`), las curvas publicadas del
 promedio (`series` de la elección y del run `latest`), los errores por casa (`pollsters`) y el rebaño del análisis
-nacional (`herding`); sin base de datos ni registro. **`studies`** republica, una vez por job y sin ámbito, los estudios
-vivos (`sesgo-cis` y `rebano`, los de `live` en `publish.STUDY_RUNNERS`), y es el último paso de `update`: la tarea
-diaria recalcula la página con el run del día.
+nacional (`herding`); sin base de datos ni registro.
+
+**Voto oculto.** `{"what":["study"],"study":"voto-oculto"}` calcula «¿Voto oculto de quién?» (`mtpy/lib/studies/shy/`)
+desde los sondeos finales (`cycle`) y los resultados (`results`) de todas las elecciones publicadas de los ámbitos del
+catálogo y los sondeos del run `latest` de `es` (`polls`), con los linajes y la tabla del Gobierno de
+`data/voto-oculto/`; sin base de datos ni registro; es un estudio vivo (`studies` lo republica en cada `update`).
+
+**`studies`** republica, una vez por job y sin ámbito, los estudios vivos (`sesgo-cis`, `rebano` y `voto-oculto`, los de
+`live` en `publish.STUDY_RUNNERS`), y es el último paso de `update`: la tarea diaria recalcula la página con el run del
+día.
 
 Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
 
@@ -1386,6 +1393,7 @@ S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-cera"}'
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"sesgo-cis"}'
 S3_BUCKET= python job.py publish '{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}'
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"rebano"}'
+S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-oculto"}'
 S3_BUCKET= python job.py publish '{"what":["analysis","studies"],"scopes":["es"]}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 ```
