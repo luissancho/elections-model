@@ -10,7 +10,7 @@ from typing import Optional
 
 import pandas as pd
 
-from ...bundle import BundleReader, path_analysis, path_event, path_manifest, path_part
+from ...bundle import BundleReader, POLL_ERRORS_WINDOW, path_analysis, path_event, path_manifest, path_part
 from ....core.io import FileSystem
 from ..labels import MONTHS, NATIONAL, election_code, election_label  # noqa: F401 (MONTHS kept for importers)
 
@@ -70,7 +70,9 @@ def read_error_rows(reader: BundleReader, catalogue: pd.DataFrame) -> tuple[list
     Rows of the ``poll-errors`` analysis of every scope, restricted to the published elections.
 
     The analysis has every election of the scope with results and polls, the site only the published ones (those
-    with an event folder), so the study speaks of the same elections as the pages.
+    with an event folder), so the study speaks of the same elections as the pages. Only the rows of the final stretch count
+    (``days`` not above ``POLL_ERRORS_WINDOW[1]``, 42): the part has no upper bound of days since 2026-11-06 and the
+    study speaks of «the last poll between 6 and 42 days before».
 
     Parameters
     ----------
@@ -103,7 +105,8 @@ def read_error_rows(reader: BundleReader, catalogue: pd.DataFrame) -> tuple[list
         envelope = reader.read_json(part)
         inputs[code] = {'run_id': envelope.get('run_id'), 'generated_at': envelope.get('generated_at')}
         published = set(reader.list_events(code))
-        scope_rows = [row for row in envelope['data'].get('rows') or [] if row['event_date'] in published]
+        scope_rows = [row for row in envelope['data'].get('rows') or [] if row['event_date'] in published
+                      and isinstance(row.get('days'), (int, float)) and row['days'] <= POLL_ERRORS_WINDOW[1]]
         years = pd.Series(sorted({row['event_date'] for row in scope_rows})).str[:4].value_counts()
         shared = set(years[years > 1].index)
 
