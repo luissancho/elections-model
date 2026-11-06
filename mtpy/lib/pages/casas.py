@@ -806,8 +806,9 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     The profile is global, whatever the scope of the request: the header takes the national ratings
     (``RATING_SCOPE``; the rating is the same number in every scope), the rating path runs through every election
     of every scope the pollster polled, the bullseye has its last poll in every published election of every scope
-    with analysis (the same elections as the error history) and the house effects and the herding tables cover
-    the elections and cycles of every scope.
+    with analysis that feeds the ratings (``featured``: the elections the ranking counts; the error history also
+    lists the published elections without analysis) and the house effects and the herding tables cover the
+    elections and cycles of every scope.
 
     Parameters
     ----------
@@ -875,10 +876,13 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
         return election_label(scope, date, names, scope_names)
 
     errors = history_rows(scopes, events, parts)
+    # only the elections that feed the ratings (`featured`): the same ones the «Elecciones» column of the ranking
+    # counts, so the two figures agree (Luis, 2026-11-06); a published election without analysis stays out
+    featured = {(event['scope'], event['date']) for event in events if event.get('featured', True)}
     bullseye = sorted(
         (dict({key: row.get(key) for key in ('event', 'event_date', 'year', 'days', 'scope') + tuple(blocks)},
               name=label(row['scope'], row['event_date']))
-         for row in errors if row.get('pollster') == name),
+         for row in errors if row.get('pollster') == name and (row['scope'], row['event_date']) in featured),
         key=lambda row: row['event_date'] or '', reverse=True)
     by_election = {}
 

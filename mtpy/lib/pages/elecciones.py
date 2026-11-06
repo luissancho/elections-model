@@ -177,7 +177,9 @@ def published_events(scope: str) -> list:
     list of dict
         One dict per published date, newest first, with ``date``, ``name``, ``n_polls``,
         ``n_pollsters``, ``error_avg``, ``error_blocks`` (signed), ``error_blocks_abs``, ``bias_blocks``,
-        ``bias`` (by block) and ``has_model``, all from its ``meta`` part. A date without ``meta`` is skipped.
+        ``bias`` (by block), ``has_model`` and ``featured`` (the election feeds the model and the ratings; an
+        election published without analysis says ``False``, an old meta without the key counts as ``True``), all
+        from its ``meta`` part. A date without ``meta`` is skipped.
     """
     events = []
 
@@ -191,6 +193,7 @@ def published_events(scope: str) -> list:
         event = {'date': date, 'name': meta.get('name')}
         event.update({key: summary.get(key) for key in SUMMARY_KEYS})
         event['has_model'] = bool(meta.get('has_model'))
+        event['featured'] = bool(meta.get('featured', True))
         events.append(event)
 
     return with_abs(events)

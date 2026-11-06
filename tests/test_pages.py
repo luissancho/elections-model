@@ -1651,6 +1651,27 @@ def test_casa_profile_bullseye_keeps_the_late_polls_and_averages_the_final_stret
     assert 'Si el último sondeo tiene más de seis semanas, la fila dice sus días antes' in page
 
 
+def test_casa_profile_bullseye_counts_only_the_featured_elections(houses, fresh_app):
+    """Luis, 2026-11-06: la diana (y el gráfico de puntos y las tablas del perfil, que salen de sus filas) sólo con las
+    elecciones que alimentan el rating, las destacadas, para que cuadre con la columna «Elecciones» del ranking. Una
+    elección publicada sin analizar (`featured` falso en su meta) queda fuera aunque la casa la sondeara."""
+    write_event(fresh_app.fs, date='2019-11-10', model=False, featured=False)
+    errors = fixture_data('poll-errors')
+    errors['rows'].append(dict(errors['rows'][0], event_date='2019-11-10', event='2019-10N', days=8))
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    assert [(e['date'], e['featured']) for e in pages.published_events('es')] == [('2023-07-23', True), ('2019-11-10', False)]
+    status, _, body = call(houses, '/casas/gad3')
+    page = html(body)
+    assert status == 200 and [row['event_date'] for row in initial(body)['bullseye']] == ['2023-07-23']
+    assert initial(body)['bullseye'][0]['others'] == -0.51  # la media de las demás no cambia
+    assert 'Sólo cuentan las elecciones que alimentan el rating' in page
+    # el histórico de errores sí lista la elección publicada sin analizar
+    assert '2019-11-10' in {row['event_date'] for row in initial(call(houses, '/elecciones')[2])['errors']}
+
+
 def test_casa_profile_without_analysis_has_no_bullseye(houses_without_analysis):
     page = html(call(houses_without_analysis, '/casas/gad3')[2])
     assert 'id="rating-path"' in page and 'id="bullseye-chart"' not in page and 'Análisis no publicado todavía' in page
@@ -2427,7 +2448,8 @@ def test_published_events_and_horizon_tables(events_site):
     assert [event['date'] for event in events] == ['2023-07-23', '2019-11-10']
     assert events[0]['name'] == 'Generales 2023' and events[0]['has_model'] and not events[1]['has_model']
     assert set(events[0]) == {'date', 'name', 'n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'error_blocks_abs',
-                              'bias_blocks', 'bias', 'has_model'}
+                              'bias_blocks', 'bias', 'has_model', 'featured'}
+    assert events[0]['featured'] is True and events[1]['featured'] is True
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
     tables = context['horizon_tables']
     assert [table['horizon'] for table in tables] == [6, 30]
