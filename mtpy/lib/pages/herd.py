@@ -16,7 +16,7 @@ from .lean import house_href
 
 HERD = 'rebano'
 QUESTIONS = ('¿Se acercan los sondeos cuando llega la elección?',
-             '¿Más de lo que permite el azar de sus muestras?',
+             '¿Más de lo que cabría esperar sólo por el azar de sus muestras?',
              '¿Quién va en rebaño en {}?')
 # Dispersion at or below which the polls differ «as if they all drew their samples from the same urn» (the threshold
 # of the subtitle in ``publish.herd.URN_RATIO``; the pages do not import ``publish``)
@@ -35,7 +35,7 @@ COOKING_RATIO, CLOSE_RATIO = 1.2, 1.3
 # them (spec D4)
 WINDOW_DAYS, FINAL_DAYS, MIN_POLLS = 56, 21, 3
 N_SERIES, LOCAL_WINDOW = 4, 10
-LUCK = '1 = lo que permite el azar de las muestras'
+LUCK = '1 = lo que cabría esperar sólo por el azar de las muestras'
 
 
 def _is_num(x) -> bool:
@@ -155,11 +155,15 @@ def verdict_rows(summary: Optional[dict], meta: Optional[dict] = None) -> list:
     list of dict
         ``{'label', 'tone', 'question'}`` per question: P1 «SÍ» (``q1``) when every past cycle narrowed, else
         «EN k DE n» (``q2``); P2 «SÍ» (``q1``) when every cycle fell below 1, «NO» (``q3``) when none did, else «EN k
-        DE n» (``q2``); P3 the houses below 1 in the window in progress (``qb``), «NINGUNA» without them or without run.
+        DE n» (``q2``); P3 (``qb``) the houses below 1 of those measurable in the window in progress, «k DE n
+        MEDIBLE(S)», so a lone house is not read as the only one in the herd; «NINGUNA» without them or without run and
+        «AÚN SIN DATOS» when no house reaches ``min_polls`` polls yet.
     """
     n = _get(summary, 'n_cycles') or 0
     narrowed, below = _get(summary, 'k_narrowed') or 0, _get(summary, 'k_below_one') or 0
-    herd = (_get(summary, 'houses_now', 'k') or 0) if _get(summary, 'current') else 0
+    current = bool(_get(summary, 'current'))
+    herd = (_get(summary, 'houses_now', 'k') or 0) if current else 0
+    measurable = (_get(summary, 'houses_now', 'n') or 0) if current else 0
     first = ('SÍ', 'q1') if n and narrowed == n else ('EN {} DE {}'.format(narrowed, n), 'q2')
 
     if n and below == n:
@@ -169,7 +173,12 @@ def verdict_rows(summary: Optional[dict], meta: Optional[dict] = None) -> list:
     else:
         second = ('EN {} DE {}'.format(below, n), 'q2')
 
-    third = ('NINGUNA' if herd == 0 else '1 CASA' if herd == 1 else '{} CASAS'.format(herd), 'qb')
+    if current and measurable == 0:
+        third = ('AÚN SIN DATOS', 'qb')
+    elif herd == 0:
+        third = ('NINGUNA', 'qb')
+    else:
+        third = ('{} DE {} MEDIBLE{}'.format(herd, measurable, '' if measurable == 1 else 'S'), 'qb')
     year = flags(summary, meta)['year'] or 'este año'
     questions = QUESTIONS[:2] + (QUESTIONS[2].format(year),)
 
@@ -247,10 +256,16 @@ def kpis(summary: Optional[dict], meta: Optional[dict], cycles: list = (), house
     cis = _get(summary, 'cis', 'current', 'ratio')
 
     if not herd and now.get('n'):
-        herd = ['ninguna de las casas con {} sondeos con muestra oscila menos de lo que permite el azar'.format(
-            f['min_polls'])]
+        herd = ['ninguna de las casas con {} sondeos con muestra oscila menos de lo que cabría esperar sólo por el '
+                'azar'.format(f['min_polls'])]
     elif not herd:
         herd = ['ninguna casa tiene aún {} sondeos con muestra en la ventana'.format(f['min_polls'])]
+
+    pending = len(now.get('pending') or [])
+
+    if now.get('n') and pending:
+        herd.append('otra casa aún sin sondeos suficientes' if pending == 1 else
+                    'otras {} casas aún sin sondeos suficientes'.format(fmt_int(pending)))
 
     if _is_num(cis):
         herd.append('el CIS, aparte: ' + _num(cis, 1))
@@ -309,11 +324,12 @@ def tests(summary: Optional[dict], cycles: list = (), meta: Optional[dict] = Non
     below = final_split(summary, list(cycles))['below']
 
     if k:
-        first = '{}: menos variación de la que permiten las muestras.'.format(
+        first = '{}: menos variación de la que cabría esperar sólo por el azar de las muestras.'.format(
             names(['{} ({})'.format(row['label'], _num(row['ratio'])) for row in below] or
                   list(_get(summary, 'below_one') or [])))
     else:
-        first = 'En ninguno bajó de 1: los sondeos variaron al menos lo que permiten sus muestras.'
+        first = ('En ninguno bajó de 1: los sondeos variaron al menos lo que cabría esperar por el azar de sus '
+                 'muestras.')
 
     if not _is_num(final):
         second = None
@@ -322,7 +338,7 @@ def tests(summary: Optional[dict], cycles: list = (), meta: Optional[dict] = Non
                   'la recta final: queda sólo el ruido de las muestras.').format(_num(before))
     elif _is_num(before) and final < before:
         second = ('Las diferencias entre casas se reducen en la recta final, desde {}, pero no desaparecen: siguen '
-                  'por encima de lo que permite el azar de las muestras.').format(_num(before))
+                  'por encima de lo que cabría esperar sólo por el azar de las muestras.').format(_num(before))
     else:
         second = 'Las diferencias entre casas no se reducen en la recta final.'
 
@@ -383,6 +399,34 @@ def pending_text(summary: Optional[dict]) -> Optional[str]:
     pending = _get(summary, 'houses_now', 'pending') or []
 
     return ', '.join('{} ({})'.format(row.get('pollster'), fmt_int(row.get('k'))) for row in pending) or None
+
+
+def chance_text(summary: Optional[dict], houses: list) -> Optional[str]:
+    """
+    The caveat under the table of the cycle in progress when a house below 1 is not yet beyond chance (``p`` of 0,05
+    or more): with three or four polls a low ``h`` still happens without herding.
+
+    Returns
+    -------
+    str or None
+        «Con 3 sondeos, el 0,43 de NC Report aún puede ser casualidad: sin rebaño, una oscilación tan baja saldría 17
+        veces de cada 100.» for one house; «Con tan pocos sondeos, el rebaño de A y B aún puede ser casualidad (p-valor
+        de 0,05 o más).» for several; ``None`` without such a house.
+    """
+    rows = [row for row in houses_now_rows(summary, houses) if row['herd'] and _is_num(row.get('p'))
+            and row['p'] >= 0.05]
+
+    if not rows:
+        return None
+
+    if len(rows) == 1:
+        row = rows[0]
+        return ('Con {} sondeos, el {} de {} aún puede ser casualidad: sin rebaño, una oscilación tan baja saldría {} '
+                'veces de cada 100.').format(fmt_int(row.get('k')), _num(row['h']), row.get('pollster'),
+                                             fmt_int(round(row['p'] * 100)))
+
+    return ('Con tan pocos sondeos, el rebaño de {} aún puede ser casualidad (p-valor de 0,05 o más).'
+            .format(names([row.get('pollster') for row in rows])))
 
 
 def cycle_ratio_text(houses: list, summary: Optional[dict]) -> Optional[str]:

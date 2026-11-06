@@ -684,7 +684,8 @@ def herd_context(state: dict) -> dict:
         ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``cycles`` (the rows,
         the cycle in progress last), ``verdicts`` (``herd.verdict_rows``), ``kpis``, ``tests``, ``cis_rows``,
         ``houses_now`` (``herd.houses_now_rows``), ``pending`` (``herd.pending_text``), ``cycle_ratio``
-        (``herd.cycle_ratio_text``), ``matrix_rows`` (the table of the matrix without JavaScript), ``repeaters``,
+        (``herd.cycle_ratio_text``), ``chance`` (``herd.chance_text``),
+        ``matrix_rows`` (the table of the matrix without JavaScript), ``repeaters``,
         ``notes`` (``herd.matrix_notes``), ``split`` (``herd.final_split``), ``drops`` (``herd.biggest_drops``),
         ``accuracy`` (``herd.accuracy_text``), ``result`` (``herd.result_text``), ``after_day`` (the election of the
         card «Después del 29-N»: the one in progress or the newest cycle), ``csv_links``, ``sources``,
@@ -714,6 +715,7 @@ def herd_context(state: dict) -> dict:
         houses_now=herd.houses_now_rows(summary, houses),
         pending=herd.pending_text(summary),
         cycle_ratio=herd.cycle_ratio_text(houses, summary),
+        chance=herd.chance_text(summary, houses),
         matrix_rows=herd.matrix_rows(initial['matrix']),
         repeaters=herd.repeaters(houses),
         notes=herd.matrix_notes(houses),

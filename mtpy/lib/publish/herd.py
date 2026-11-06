@@ -147,7 +147,7 @@ def _subtitle(template: str, study) -> str:
             who = f'{k_now} de las {n_now} casas con sondeos suficientes publican'
 
         current = (f" En {study.election['date'][:4]} ya van así desde el principio, y {who} cifras que oscilan "
-                   f"menos de lo que permite el azar de sus muestras.")
+                   f"menos de lo que cabría esperar sólo por el azar de sus muestras.")
 
     return template.format(n_words=str(n) if k == n else f'{k} de las {n}', since_year=study.params['since'][:4],
                            final_clause=final_clause, current=current)

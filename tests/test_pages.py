@@ -5668,7 +5668,7 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     status, _, body = call(api, '/analisis/rebano'); page = html(body)
     assert status == 200 and '<h1 class="study-title">¿Se copian las encuestadoras en la recta final?</h1>' in page
     assert '/dist/js/pages/analisis-rebano.js' in page and 'id="initial-data"' in page
-    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'EN 3 DE 7', '3 CASAS']
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'EN 3 DE 7', '3 DE 3 MEDIBLES']
     assert page.count('<div class="kpi">') == 3 and '7 de 7' in page
     assert 'Casas en rebaño en las últimas 8 semanas' in page
     for chart in ('weeks-chart', 'matrix-chart'):
@@ -5677,6 +5677,14 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     assert 'ya como una recta final' in page and 'misma urna' in page and 'hasta la veda del 23 de noviembre' in page
     assert 'SocioMétrica' in page and '/casas/sociometrica' in page and 'aún sin sondeos suficientes' in page
     assert 'NC Report' in visible_text(page) and 'Las de siempre' in page
+    # the third question says the houses below 1 are the only measurable ones, not the only ones in the herd
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert ('Sigma Dos (0,57) en las últimas 8 semanas: las 3 casas con 3 sondeos o más. Las otras 2 llevan uno o dos: '
+            'demasiado pocos para medir cuánto oscilan.') in text
+    assert '<td class="mut">2 casas más</td>' in page and 'GAD3 (2), 40dB (1). Entran en la tabla al llegar a 3.' in text
+    assert 'una casa que no aparece no se ha librado del rebaño, sólo no se puede medir todavía' in text
+    assert 'otras 2 casas aún sin sondeos suficientes' in text
+    assert 'Por qué.' not in text and 'permite el azar' not in text and 'permiten sus' not in text
     assert_public_wording(page, '/analisis/rebano')
     text = visible_text(page).lower()
     assert 'empresa' not in text and 'publicación' not in text and 'max-width' not in page
@@ -5766,7 +5774,7 @@ def test_herd_page_conditions_follow_the_figures(api, fresh_app):
                         'cerca estaba la elección.'}
     publish_study(fresh_app.fs, study='rebano', meta=meta, parts={'summary': summary})
     page = html(call(api, '/analisis/rebano')[2])
-    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['EN 5 DE 7', 'NO', '3 CASAS']
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['EN 5 DE 7', 'NO', '3 DE 3 MEDIBLES']
     assert 'En 5 de los 7 ciclos' in page and 'En los 7 ciclos' not in page
     assert 'misma urna' not in page and 'ya como una recta final' not in page and '3.º más bajo' in page
 
@@ -5776,7 +5784,7 @@ def test_herd_page_without_houses_in_the_window(api, fresh_app):
     summary = fixture_data('rebano-summary') | {'houses_now': houses_now}
     publish_study(fresh_app.fs, study='rebano', parts={'summary': summary})
     page = html(call(api, '/analisis/rebano')[2])
-    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page)[2] == 'NINGUNA'
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page)[2] == 'AÚN SIN DATOS'
     assert '0 de 0' in page and 'GAD3 (2)' in page
 
 

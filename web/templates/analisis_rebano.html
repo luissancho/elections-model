@@ -28,6 +28,7 @@
 {% set mf = summary.get('mean_final') %}
 {% set now = summary.get('current') or {} %}
 {% set hn = summary.get('houses_now') or {} %}
+{% set n_pending = (hn.get('pending') or [])|length %}
 {% set cis_now = ((summary.get('cis') or {}).get('current') or {}).get('ratio') %}
 {% set ww = window_weeks %}
 {% set fw = final_weeks %}
@@ -56,7 +57,7 @@
       <nav class="section-nav toc" aria-label="Secciones">
         <a href="#resumen">Resumen</a>
         <a href="#p1" class="{{ v1.tone }}">1 · ¿Se acercan?</a>
-        <a href="#p2" class="{{ v2.tone }}">2 · ¿Más de lo que permite el azar?</a>
+        <a href="#p2" class="{{ v2.tone }}">2 · ¿Más de lo esperable por azar?</a>
         <a href="#p3" class="{{ v3.tone }}">3 · {{ v3.question }}</a>
         <a href="#datos">Datos y método</a>
       </nav>
@@ -71,20 +72,23 @@
           {%- endcall %}
           {% call answer(v2, 2) -%}
             {% if k2 and k2 == n %}En las últimas {{ fw }} semanas de los {{ n|int }} ciclos los sondeos variaron menos de lo que
-            sus muestras permiten: eso no pasa sin mirar al vecino.
+            cabría esperar sólo por el azar de sus muestras: eso no pasa sin mirar al vecino.
             {%- elif k2 %}En las últimas {{ fw }} semanas de {{ names(split.below|map(attribute='label')|list) }} los sondeos
-            variaron menos de lo que sus muestras permiten: eso no pasa sin mirar al vecino.
+            variaron menos de lo que cabría esperar sólo por el azar de sus muestras: eso no pasa sin mirar al vecino.
             {%- if split.others %} En los otros {{ split.others|length }}, entre {{ r(split.lo) }} y {{ r(split.hi) }}.{% endif %}
             {%- else %}En ninguno de los {{ n|int }} ciclos los sondeos de las últimas {{ fw }} semanas variaron menos de lo
-            que permiten sus muestras{% if split.others %}: quedaron entre {{ r(split.lo) }} y {{ r(split.hi) }}{% endif %}.{% endif %}
+            que cabría esperar sólo por el azar de sus muestras{% if split.others %}: quedaron entre {{ r(split.lo) }} y {{ r(split.hi) }}{% endif %}.{% endif %}
           {%- endcall %}
           {% call answer(v3, 3) -%}
             {% if not has_run %}Sin ciclo en curso: la matriz recoge las últimas {{ ww }} semanas de los {{ n|int }} ciclos
             pasados, casa a casa.
             {%- elif hn.get('herd') %}
-            {%- for house in hn.herd %}{{ house.pollster }} ({{ r(house.h) }}){% if loop.revindex == 2 %} y {% elif not loop.last %}, {% endif %}{% endfor %} en las últimas {{ ww }} semanas.
-            {%- elif hn.get('n') %}Ninguna de las {{ hn.n|int }} casas con sondeos suficientes oscila menos de lo que permiten sus
-            muestras en las últimas {{ ww }} semanas.
+            {%- for house in hn.herd %}{{ house.pollster }} ({{ r(house.h) }}){% if loop.revindex == 2 %} y {% elif not loop.last %}, {% endif %}{% endfor %} en las últimas {{ ww }} semanas
+            {%- if hn.n == 1 %}: la única casa{% elif hn.k == hn.n %}: las {{ hn.n|int }} casas{% else %}: {{ hn.k|int }} de las {{ hn.n|int }} casas{% endif %} con {{ min_polls|int }} sondeos o más.
+            {%- if n_pending %} {{ 'Otra lleva' if n_pending == 1 else 'Las otras ' ~ n_pending ~ ' llevan' }} uno o dos:
+            demasiado pocos para medir cuánto oscilan.{% endif %}
+            {%- elif hn.get('n') %}Ninguna de las {{ hn.n|int }} casas con sondeos suficientes oscila menos de lo que cabría esperar sólo por el
+            azar de sus muestras en las últimas {{ ww }} semanas.
             {%- else %}Ninguna casa tiene aún {{ min_polls|int }} sondeos con muestra en las últimas {{ ww }} semanas.{% endif %}
             {%- if has_run and cis_now is number and cis_now > shade_top %} El CIS va por libre: se separa del promedio
             {{ cis_now|num(1) }} veces el error de su muestra.{% endif %}
@@ -97,8 +101,8 @@
         <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
         <p class="lead">
           Para cada sondeo con muestra publicada medimos cuánto se separa del promedio de su fecha en los
-          {{ n_series|int }} partidos principales, y lo comparamos con el error que permitiría su
-          muestra. El cociente es la dispersión: 1 significa que los sondeos difieren entre sí sólo lo que difieren
+          {{ n_series|int }} partidos principales, y lo comparamos con lo que se separaría sólo por el
+          azar de su muestra. El cociente es la dispersión: 1 significa que los sondeos difieren entre sí sólo lo que difieren
           sus muestras; 2, el doble. La curva de cada ciclo va de un año antes a la víspera.
         </p>
         <div class="grid2">
@@ -142,10 +146,11 @@
         <p>
           Cada línea gris es un ciclo de las generales, de un año antes de la elección a la víspera, agrupado por
           semanas; la discontinua negra es la media de los ciclos pasados{% if live %} y la azul, el ciclo de
-          {{ label_now }}, que avanza con cada actualización{% endif %}. La línea roja en 1 marca lo que permite el
-          azar de las muestras: por encima, las casas difieren entre sí más que sus muestras; por debajo, menos. La
+          {{ label_now }}, que avanza con cada actualización{% endif %}. La línea roja en 1 marca lo que cabría esperar sólo por
+          el azar de las muestras: por encima, las casas difieren entre sí más que sus muestras; por debajo, menos. La
           tabla junta las mismas cifras en tres tramos: el resto del ciclo, las últimas {{ ww }} semanas y las últimas
-          {{ fw }}; la flecha es el cambio al entrar en las últimas {{ ww }}.
+          {{ fw }}; la flecha es el cambio al entrar en las últimas {{ ww }}. Un tramo de semanas con menos de
+          {{ min_polls|int }} sondeos no se dibuja: un único sondeo no dice cuánto se parecen los sondeos entre sí.
         </p>
         {% endcall %}
       </section>
@@ -203,14 +208,14 @@
         </div>
         <div class="sum">
           {% if k2 and k2 == n %}<b>Sí, en los {{ n|int }} ciclos.</b> En las últimas {{ fw }} semanas de cada uno los sondeos se
-          parecieron más de lo que permite el azar de sus muestras.
+          parecieron más de lo que cabría esperar sólo por el azar de sus muestras.
           {%- elif k2 %}<b>Sí en {{ k2|int }} ciclos; en los otros {{ split.others|length }}, por encima de 1.</b> En las últimas
           {{ fw }} semanas de {{ names(split.below|map(attribute='label')|list) }} los sondeos se parecieron más de lo que
-          permite el azar de sus muestras.
+          cabría esperar sólo por el azar de sus muestras.
           {%- if split.others %} En {{ names(split.others|map(attribute='label')|list) }} quedaron entre {{ r(split.lo) }} y
           {{ r(split.hi) }}{% if split.hi <= close_ratio %}: las casas aún difieren, pero poco{% endif %}.{% endif %}
           {%- else %}<b>No.</b> En ninguno de los {{ n|int }} ciclos los sondeos de las últimas {{ fw }} semanas se parecieron
-          más de lo que permite el azar de sus muestras{% if split.others %}: quedaron entre {{ r(split.lo) }} y {{ r(split.hi) }}{% endif %}.{% endif %}
+          más de lo que cabría esperar sólo por el azar de sus muestras{% if split.others %}: quedaron entre {{ r(split.lo) }} y {{ r(split.hi) }}{% endif %}.{% endif %}
         </div>
       </section>
       <section class="card qcard shot {{ v3.tone }}" id="p3">
@@ -218,9 +223,16 @@
         <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
         <p class="lead">
           Casa a casa, la medida del modelo: cuánto oscilan los sondeos de una encuestadora alrededor del promedio,
-          descontada su inclinación propia, frente a lo que permiten sus muestras. Aquí, sólo en las últimas {{ ww }}
+          descontada su inclinación propia, frente a lo que oscilarían sólo por el azar de sus muestras. Aquí, sólo en las últimas {{ ww }}
           semanas de cada ciclo y con {{ min_polls|int }} o más sondeos con muestra publicada. El p-valor es la
           probabilidad de una oscilación tan baja sin rebaño.
+        </p>
+        <p class="lead">
+          Para medir cuánto oscila una encuestadora hacen falta varios sondeos suyos en la ventana: con uno no hay
+          oscilación que medir y con dos, casi nada. Muchas publican uno o dos al mes y sólo aprietan el ritmo en
+          campaña. Por eso hay tantas celdas en blanco en la matriz{% if has_run %} y la tabla de {{ label_now }} se
+          llena a medida que se acerca la elección{% endif %}: una casa que no aparece no se ha librado del rebaño,
+          sólo no se puede medir{% if has_run and not held %} todavía{% endif %}.
         </p>
         <div class="grid2">
           <div>
@@ -239,7 +251,7 @@
                   {% endfor %}
                   {% if pending %}
                   {% set pk = (hn.get('pending') or [])|map(attribute='k')|list %}
-                  <tr><td class="mut">{{ pending }}</td><td class="mut">{{ pk|min|int }}{% if pk|max != pk|min %}-{{ pk|max|int }}{% endif %}</td><td class="mut">–</td><td class="mut">–</td><td class="mut l">aún sin sondeos suficientes</td></tr>
+                  <tr><td class="mut">{{ 'Otra casa' if n_pending == 1 else n_pending ~ ' casas más' }}</td><td class="mut">{{ pk|min|int }}{% if pk|max != pk|min %}-{{ pk|max|int }}{% endif %}</td><td class="mut">–</td><td class="mut">–</td><td class="mut l">aún sin sondeos suficientes</td></tr>
                   {% endif %}
                   {% set cis_k = ((summary.get('cis') or {}).get('current') or {}).get('k') %}
                   {% if cis_k %}
@@ -248,7 +260,8 @@
                 </tbody>
               </table>
             </div>
-            <p class="tnote">La barra crece hacia la derecha cuanto más por debajo de 1.{% if cycle_ratio %} {{ cycle_ratio }}{% endif %}</p>
+            <p class="tnote">La barra crece hacia la derecha cuanto más por debajo de 1.{% if chance %} {{ chance }}{% endif %}{% if cycle_ratio %} {{ cycle_ratio }}{% endif %}</p>
+            {% if pending %}<p class="tnote">Aún sin sondeos suficientes, con uno o dos{% if window_start %} desde el {{ window_start }}{% endif %}: {{ pending }}. Entran en la tabla al llegar a {{ min_polls|int }}.</p>{% endif %}
             {% else %}
             <p class="ctitle">Sin ciclo en curso</p>
             <p class="notice">No hay una actualización del promedio de las generales en marcha: la tarjeta habla sólo de los ciclos pasados.</p>
@@ -285,7 +298,7 @@
         {% call m.how() %}
         <p>
           El rebaño de una casa compara cuánto oscilan sus sondeos alrededor del promedio, descontada su inclinación
-          propia, con lo que permitirían sus muestras: 1 es lo esperable; por debajo, sus cifras se mueven menos de lo
+          propia, con lo que oscilarían sólo por el azar de sus muestras: 1 es lo esperable; por debajo, sus cifras se mueven menos de lo
           que deberían. En la tabla{% if has_run %} de {{ label_now }}{% endif %}, el p-valor dice cómo de raro sería
           oscilar tan poco sin rebaño. En la matriz, cada fila es una encuestadora y cada columna un ciclo: rojo por
           debajo de 1, más intenso cuanto más bajo; azul por encima; gris claro cerca de 1; en blanco, la casa no

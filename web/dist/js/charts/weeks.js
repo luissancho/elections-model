@@ -7,7 +7,7 @@ import {fmtNum} from '../format.js';
 const GREYS = ['#9aa3b2', '#8d96a6', '#7f8898', '#aab2bf', '#737c8c', '#b5bcc8', '#67707f'];
 const REFERENCE_COLOR = '#ce3b3b';
 const BAND_COLOR = 'rgba(206,59,59,.06)';
-const REFERENCE_LABEL = 'lo que permite el azar de las muestras';
+const REFERENCE_LABEL = 'lo esperable sólo por el azar de las muestras';
 // Room on the right for the end label of the cycle in progress when it reaches the last bucket.
 const END_LABEL_ROOM = 80;
 

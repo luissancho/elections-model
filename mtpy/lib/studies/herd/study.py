@@ -99,8 +99,9 @@ def _measure(cycle: Cycle, params: dict, herding: dict) -> dict:
 
     Returns a dict with ``row`` (the row of ``cycles``), ``raw`` (unrounded ratios of ``before``, ``last``, ``final``
     and ``cycle``), ``cycle`` (the rounded ``{k, ratio}`` of the whole cycle), ``weeks`` (unrounded ``{k, ratio}``
-    per bucket of ``_buckets``), ``houses`` (its rows of ``houses``) and ``pending`` (``{pollster, k}`` of the houses
-    not excluded with fewer than ``min_polls`` polls in the final window).
+    per bucket of ``_buckets``, the ratio ``None`` below ``min_polls`` polls), ``houses`` (its rows of ``houses``)
+    and ``pending`` (``{pollster, k}`` of the houses not excluded with fewer than ``min_polls`` polls in the final
+    window).
     """
     exclude, windows = params['exclude'], _windows(params)
     election = pd.Timestamp(cycle.event_date)
@@ -143,8 +144,11 @@ def _measure(cycle: Cycle, params: dict, herding: dict) -> dict:
         elif not excluded and measure['k'] >= 1:
             pending.append({'pollster': pollster, 'k': measure['k']})
 
-    weeks = [dispersion(in_days(pooled, bucket['lo'] * 7, bucket['hi'] * 7 + 6), round_to=None)
-             for bucket in _buckets(params)]
+    # a bucket with fewer than ``min_polls`` polls has no ratio: one poll alone is not a dispersion between polls
+    weeks = []
+    for bucket in _buckets(params):
+        week = dispersion(in_days(pooled, bucket['lo'] * 7, bucket['hi'] * 7 + 6), round_to=None)
+        weeks.append(week if week['k'] >= params['min_polls'] else {'k': week['k'], 'ratio': None})
 
     return {'row': row, 'raw': ratios, 'cycle': _rounded(raw['cycle']), 'weeks': weeks, 'houses': houses,
             'pending': sorted(pending, key=lambda house: (-house['k'], house['pollster']))}

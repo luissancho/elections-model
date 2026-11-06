@@ -39,7 +39,8 @@ def test_export_herd_parts_validate(study):
     assert meta['subtitle'].startswith('En las 2 generales desde 2008, los sondeos se han parecido más entre sí')
     assert 'misma urna' in meta['subtitle']
     assert meta['subtitle'].endswith(' En 2026 ya van así desde el principio, y la única casa con sondeos suficientes '
-                                     'publica cifras que oscilan menos de lo que permite el azar de sus muestras.')
+                                     'publica cifras que oscilan menos de lo que cabría esperar sólo por el azar de sus '
+                                     'muestras.')
     assert meta['election'] == {'date': '2026-11-29', 'days_left': 24, 'as_of': '2026-11-05'}
     assert meta['params']['window_days'] == 56
     assert [s['url'] for s in meta['sources']][:2] == ['/elecciones', '/casas']

@@ -125,11 +125,12 @@ def test_compute_herd_weeks_and_houses(fresh_app, tmp_path):
     assert [b['label'] for b in study.weeks['buckets']] == ['27-52 sem.', '18-26 sem.', '12-17 sem.', '8-11 sem.',
                                                             '6-7 sem.', '4-5 sem.', '2-3 sem.', '0-1 sem.']
     w23 = {(r['lo'], r['hi']): (r['k'], r['ratio']) for r in study.weeks['rows'] if r['event_date'] == '2023-07-23'}
-    assert w23[(0, 1)] == (3, 1.11) and w23[(4, 5)] == (2, 1.75) and w23[(6, 7)] == (1, 0.78)
+    # a bucket below ``min_polls`` (3) polls keeps its count without a ratio (it drew 1,75 with 2 and 0,78 with 1)
+    assert w23[(0, 1)] == (3, 1.11) and w23[(4, 5)] == (2, None) and w23[(6, 7)] == (1, None)
     assert w23[(27, 52)] == (0, None)
     assert len(study.weeks['rows']) == 3 * 8
     mean = {(r['lo'], r['hi']): (r['k'], r['ratio']) for r in study.weeks['mean']}
-    assert mean[(0, 1)] == (2, 1.04) and mean[(12, 17)] == (2, 2.23) and mean[(27, 52)] == (0, None)
+    assert mean[(0, 1)] == (2, 1.04) and mean[(12, 17)] == (1, 2.88) and mean[(27, 52)] == (0, None)
     houses = [(h['event_date'], h['pollster'], h['k'], h['h'], h['p'], h['h_cycle'], h['last_error_avg'])
               for h in study.houses]
     assert houses == [('2023-07-23', 'GAD3', 3, 0.32, 0.0975, 0.61, 1.5),
