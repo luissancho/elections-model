@@ -33,6 +33,7 @@ RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
+DUMBBELL_JS = pathlib.Path(DIST, 'js', 'charts', 'dumbbell.js').as_uri()
 FORMAT_JS = pathlib.Path(DIST, 'js', 'format.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
@@ -49,7 +50,7 @@ def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
     dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
-    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas) y `rows` definidos y devuelve su JSON (las
+    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el de Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las
     funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
@@ -61,11 +62,12 @@ def run_js(expr, rows=ROWS):
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
         'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
+        'const db = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, json.dumps(rows), expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, DUMBBELL_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -967,3 +969,19 @@ def test_catalog_orders_the_block_view_left_rest_right_and_paints_otros_grey():
     assert run_js('%s.orderBlocks(["Derecha", "Otros", "Izquierda", "Separatista"])' % cat) == [
         'Izquierda', 'Otros', 'Derecha', 'Separatista']
     assert run_js('%s.blockColor("Otros")' % cat) == '#9e9e9e'
+
+
+def test_dumbbell_draws_one_custom_series_with_a_colour_per_row():
+    rows = [{'label': 'GESOP · 2015', 'error_legal': 2.71, 'error_ban': 1.57}, {'label': 'IMOP · 19 abr.', 'error_legal': 1.19, 'error_ban': 1.95}, {'label': 'X', 'error_legal': 1.0, 'error_ban': 1.0}]
+    option = run_js('db.dumbbellOption(rows)', rows=rows)
+    assert option['yAxis']['inverse'] is True and option['yAxis']['data'] == ['GESOP · 2015', 'IMOP · 19 abr.', 'X']
+    assert option['xAxis']['min'] == 0 and option['xAxis']['max'] == 3.5 and option['xAxis']['name'] == 'error medio por partido (puntos)'
+    series = option['series']
+    assert len(series) == 1 and series[0]['type'] == 'custom'
+    colours = [d['itemStyle']['color'] for d in series[0]['data']]
+    assert colours[0] != colours[1] and colours[2] not in (colours[0], colours[1])
+
+
+def test_dumbbell_axis_grows_with_the_errors():
+    option = run_js('db.dumbbellOption(rows)', rows=[{'label': 'A', 'error_legal': 4.2, 'error_ban': 3.9}])
+    assert option['xAxis']['max'] == 4.5
