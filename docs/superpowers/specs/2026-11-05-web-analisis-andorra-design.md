@@ -523,3 +523,15 @@ En este orden:
    `2026-11-29` en las tablas y en `ban.csv`, y `by_horizon.csv` y `run.json` cambiados); `backtest push`; commit de
    `backtest/results`; `publish event` de `es/2026-11-29` y `publish study andorra` (la tarjeta se abre con los sondeos
    clandestinos de 2026).
+
+### Ejecución de los pasos (2026-11-06)
+
+Luis pidió ejecutarlos desde la sesión. Backtest de `es` con `ban` y `out` en el portátil (54 min, 28 casos, commit
+`e260d10`): frente a las tablas publicadas en S3 (ejecución del 2026-10-28 en `eef919e`), `mae_shares` difiere en todos
+los casos por menos de una centésima (ruido de Monte Carlo y estado de la base), sin desviación especial en 2015 y
+2016 a 6 días: el filtro `drop_ctypes` no mueve el modelo. **Lo único que se mueve es `mae_last_poll` a 6 días en 2015
+(−0,23) y 2016 (−0,13)**: la línea base «último sondeo» tomaba como último un clandestino de peso cero (GESOP, campo a
+seis días) y ahora toma el último legal; es la consecuencia buscada del filtro y cambia por décimas la columna
+«último sondeo» de `/metodo/backtest` a 6 días. `backtest push` (11 ficheros), referencia del repositorio
+actualizada (`ffc3aa1`), `publish event` de todos los ámbitos y fechas, `publish study andorra` y despliegue: ver la
+entrega de la sesión.
