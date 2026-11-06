@@ -33,6 +33,7 @@ RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
+ERRORS_JS = pathlib.Path(DIST, 'js', 'charts', 'errors.js').as_uri()
 FORMAT_JS = pathlib.Path(DIST, 'js', 'format.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
@@ -49,7 +50,7 @@ def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
     dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
-    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas) y `rows` definidos y devuelve su JSON (las
+    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el del voto oculto (`er` errores) y `rows` definidos y devuelve su JSON (las
     funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
@@ -60,12 +61,12 @@ def run_js(expr, rows=ROWS):
         'const sw = await import("{}"); const c = await import("{}"); '
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
-        'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
+        'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); const er = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, json.dumps(rows), expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, ERRORS_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -967,3 +968,31 @@ def test_catalog_orders_the_block_view_left_rest_right_and_paints_otros_grey():
     assert run_js('%s.orderBlocks(["Derecha", "Otros", "Izquierda", "Separatista"])' % cat) == [
         'Izquierda', 'Otros', 'Derecha', 'Separatista']
     assert run_js('%s.blockColor("Otros")' % cat) == '#9e9e9e'
+
+
+BARS = [{'short': 'GEN 77', 'label': 'Generales 1977', 'value': -1.82, 'general': True}, {'short': 'MD 21', 'label': 'Madrid 2021', 'value': 3.99, 'general': False},
+        {'short': 'AN 18', 'label': 'Andalucía 2018', 'value': 8.77, 'general': False}]
+
+
+def test_error_bars_option_colors_by_sign_scales_the_axis_and_marks_the_mean():
+    option = run_js('er.errorBarsOption(%s, {mean: 0.47, rotate: 90})' % json.dumps(BARS))
+    data = option['series'][0]['data']
+    assert option['xAxis']['data'] == ['GEN 77', 'MD 21', 'AN 18'] and option['xAxis']['axisLabel']['rotate'] == 90 and option['xAxis']['axisLabel']['fontSize'] == 9
+    assert [d['itemStyle']['color'] for d in data] == ['#d62728', '#1d4f86', '#1d4f86'] and [d['itemStyle']['opacity'] for d in data] == [1, 0.55, 0.55]
+    assert (option['yAxis']['min'], option['yAxis']['max'], option['yAxis']['interval']) == (-10, 10, 2)
+    assert option['series'][0]['markLine']['data'][0]['yAxis'] == 0.47
+    labels = run_js('(() => { const o = er.errorBarsOption(%s); const f = o.xAxis.axisLabel.formatter; return [f("GEN 77", 0), f("MD 21", 1)]; })()' % json.dumps(BARS))
+    assert labels == ['{bold|GEN 77}', 'MD 21']
+    small = run_js('er.errorBarsOption(%s, {yMin: 5, step: 2.5})' % json.dumps(BARS[:2]))
+    assert (small['yAxis']['min'], small['yAxis']['max'], small['yAxis']['interval']) == (-5, 5, 2.5) and 'markLine' not in small['series'][0]
+
+
+def test_error_strip_option_lists_the_parties_with_their_means():
+    data = {'rows': [{'party': 'PSOE', 'label': 'Generales 2023', 'value': -3.42}, {'party': 'PP', 'label': 'Generales 2023', 'value': 1.15}, {'party': 'PP', 'label': 'Madrid 2021', 'value': -3.78}],
+            'means': {'PSOE': -0.12, 'PP': 0.02}, 'order': ['PP', 'PSOE']}
+    option = run_js('er.errorStripOption(%s)' % json.dumps(data))
+    assert option['yAxis']['data'] == ['PP', 'PSOE'] and (option['xAxis']['min'], option['xAxis']['max'], option['xAxis']['interval']) == (-8, 8, 2)
+    points = option['series'][0]['data']
+    assert [p['value'] for p in points] == [[-3.42, 'PSOE'], [1.15, 'PP'], [-3.78, 'PP']] and points[0]['itemStyle']['color'] == '#d62728' and points[1]['itemStyle']['color'] == '#1d4f86'
+    assert [m['value'] for m in option['series'][1]['data']] == [[0.02, 'PP'], [-0.12, 'PSOE']] and option['series'][1]['symbol'] == 'rect'
+    assert option['series'][0]['markLine']['data'][0]['xAxis'] == 0
