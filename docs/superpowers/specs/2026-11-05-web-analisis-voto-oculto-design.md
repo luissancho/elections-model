@@ -208,7 +208,7 @@ Un **bloque de cifras** (`figures`) es siempre el mismo dict: `n` (elecciones co
 | Parte | Contenido (claves obligatorias en el esquema; el constructor fija el resto) |
 |---|---|
 | `meta` | `study`, `title`, `subtitle` (plantilla de `STUDY_TITLES` con las cifras vivas), `scopes` (códigos leídos), `election` (`{date, days_left, as_of, run_id}` del ciclo actual o nulo), `params` (D4), `inputs` (por ámbito: `{events: n, skipped: [{date, reason}]}`; `run` con `run_id`/`as_of` o `skipped`; `incumbents` con las elecciones sin fila en la tabla), `sources` (las referencias de «Hechos del contexto», con URL), `commit`, `dirty`, `versions`, `seconds`. Sin claves de registro. |
-| `summary` | `n_elections`, `n_general`, `n_regional`, `n_scopes`, `first_year`, `first_year_regional`, `last_year`; `left` (`{all, general, regional, recent}` → `figures` del bloque Izquierda; `recent` = elecciones desde `params.recent_from`, 2018-09-01); `right` (lo mismo para el bloque Derecha); `lean` (lo mismo para Izquierda − Derecha); `vox` (`figures` de Vox, más `extremes` = `{under: [{label, error}] × 3, over: [{label, error}] × 3}`, las tres mayores en cada sentido); `parties` (lista en el orden de la tabla de P3: `[{key, label, figures}]` para `PSOE`, `PP`, `VOX`, `UP`, `Izquierda`, `Derecha`, `incumbent_general`, `incumbent_regional`); `size` (`{n_pairs, mean, share_over}`: pares elección-partido de los cuatro linajes `params.size_parties`); `psoe_general` (`figures` del PSOE en las generales + `big`: etiquetas con error < `params.big_threshold`, −3); `pp` (`{early: {from, to, errors: [{label, error}]}, late: figures, all: figures}` con `params.pp_early`); `podemos` (`{before: figures, general_recent: figures, regional_recent: figures}` con `recent_from`); `current` (`{as_of, days_left, n_polls, from, to, values: {Izquierda, Derecha, PSOE, PP, VOX, …}, names: [...]}`: la media de los sondeos de la ventana actual para los bloques y los partidos `main` del run, o nulo); `verdicts` (`{p1, p2, p3}`: `'NO'`/`'SÍ'`/`'DE NADIE'`/`'DE {label}'` según D6, para que la API y la página coincidan). |
+| `summary` | `n_elections`, `n_general`, `n_regional`, `n_scopes`, `first_year`, `first_year_regional`, `last_year`; `left` (`{all, general, regional, recent}` → `figures` del bloque Izquierda; `recent` = elecciones desde `params.recent_from`, 2018-09-01); `right` (lo mismo para el bloque Derecha); `lean` (lo mismo para Izquierda − Derecha); `vox` (`figures` de Vox, más `extremes` = `{under: [{label, error}] × 3, over: [{label, error}] × 3}`, las tres mayores en cada sentido); `parties` (lista en el orden de la tabla de P3: `[{key, label, figures}]` para `PSOE`, `PP`, `VOX`, `UP`, `Izquierda`, `Derecha`, `incumbent_general`, `incumbent_regional`); `size` (`{n_pairs, mean, share_over}`: pares elección-partido de los cuatro linajes `params.size_parties`); `psoe_general` (`figures` del PSOE en las generales + `big`: etiquetas con error < `params.big_threshold`, −3); `pp` (`{early: {from, to, errors: [{label, error}]}, late: figures, all: figures}` con `params.pp_early`); `podemos` (`{before: figures, general_recent: figures, regional_recent: figures}` con `recent_from`); `current` (`{as_of, days_left, n_polls, from, to, values: {Izquierda, Derecha, PSOE, PP, VOX, …}, names: [...]}`: la media de los sondeos de la ventana actual para los partidos `main` del run y, para cada bloque de `params.blocks`, la suma de las medias de sus miembros con estimación, o nulo); `verdicts` (`{p1, p2, p3}`: `'NO'`/`'SÍ'`/`'DE NADIE'`/`'DE {label}'` según D6, para que la API y la página coincidan). |
 | `elections` | Una fila por elección pasada: `scope`, `scope_name`, `event_date`, `label` («Generales abr. 2019», «Madrid 2021»), `short` («GEN 19A», «MD 21»), `general` (bool), `n_cycle`, `n_final`, `blocks` (`{Izquierda: [...], Derecha: [...]}` o nulo), `Izquierda`, `Derecha`, `lean`, `PSOE`, `PP`, `VOX`, `UP` (errores; nulo cuando el linaje no se presentó o ningún sondeo final lo estimó), `names` (`{PSOE: 'PSC', PP: 'AP', UP: 'UP+IU', ...}`: las marcas del linaje presentes en los resultados, unidas con `+`), `incumbent` (nombre o nulo), `incumbent_error`. Orden cronológico, y a igual fecha el orden del catálogo. CSV `elections` (plano: `blocks` como dos columnas con los partidos separados por `+`). |
 | `groups` | Las filas de todas las tablas de la página en formato largo: `rows: [{table, key, label, n, under, over, mean, median, p_t, p_sign, size, size_over}]` con `table` ∈ `left`, `lean`, `vox`, `parties`, `podemos`, `pp`. CSV `groups`. |
 
@@ -234,7 +234,8 @@ Paquete nuevo, ligero (`numpy`, `pandas`, `scipy.stats` dentro de funciones):
     o sin ningún partido del bloque en el sondeo, nulo. `lean` = `Izquierda − Derecha` (nulo si falta uno).
   - **Partido del Gobierno**: el primer nombre de la lista de `incumbents.json` para `(scope, date)` presente en
     `results`; error como un partido. Sin fila o sin nombre presente, nulo y anotación.
-  - `figures(values)`: el bloque de D3 (`scipy.stats.ttest_1samp` y `binomtest` bilateral; `p_t` nulo con n < 3).
+  - `figures(values)`: el bloque de D3 (`scipy.stats.ttest_1samp` y `binomtest` binomial de una cola,
+    `alternative='greater'` sobre `max(under, over)`; `p_t` nulo con n < 3).
   - `extremes(rows, k=3)`, `size(rows, parties, threshold)`.
 - `study.py`: `compute_shy(reader, data, params=None) -> ShyStudy` (dataclass con los bloques de D3) y la validación:
   sin elecciones, `MissingInput('events')`. Los veredictos (D6) se calculan aquí, no en la página.
@@ -444,3 +445,85 @@ revisa.
 
 En 2017 y 2021 el Gobierno catalán estaba intervenido o en funciones; cuenta el partido del último presidente. Los
 nombres entre paréntesis son alternativas por si el principal no está en los resultados del evento.
+
+## Cierre (2026-11-06)
+
+### Lo que existe, tarea a tarea
+
+Nueve commits en la rama `analisis-voto-oculto` (`23b4fab..e945f86`), más el de este cierre, construidos con subagentes y revisión por tarea.
+
+- **Tarea 1** (`8ff9874`, «Estudios: registro, esquemas y fixtures del estudio voto-oculto»): `mtpy/lib/bundle.py`,
+  `mtpy/lib/publish/studies.py`, los cuatro fixtures `tests/fixtures/bundle/voto-oculto-*.json`, `tests/fakes.py`,
+  `tests/test_bundle_unit.py`, `tests/test_publish_unit.py`.
+- **Tarea 2** (`59ff8c3`, «Estudio voto-oculto: parámetros, tabla del Gobierno, catálogo y lectura de elecciones y run
+  actual»): `data/voto-oculto/params.json`, `data/voto-oculto/incumbents.json`, `mtpy/lib/studies/shy/__init__.py`,
+  `data.py`, `tests/test_shy_data.py`.
+- **Tarea 3** (`4f9ec5b`, «Estudio voto-oculto: error de bloques y linajes con la regla de suma, cifras, extremos y
+  tamaño»): `mtpy/lib/studies/shy/stats.py`, `tests/test_shy_stats.py`.
+- **Tarea 4** (`e7ab8cc` y `2dd957b`, «Estudio voto-oculto: el estudio entero desde las partes publicadas (filas,
+  resumen, grupos, veredictos)» y «Estudio voto-oculto: polls − results exacto en la fila, tamaño sobre errores sin
+  redondear, docstring y tipos»): `mtpy/lib/studies/shy/study.py`, `tests/test_shy_study.py`.
+- **Tarea 5** (`68786ac`, «Estudio voto-oculto: exportadores, meta con la entradilla viva, estudio vivo en el registro
+  y documentación»): `mtpy/lib/publish/shy.py`, `mtpy/lib/publish/__init__.py`, `mtpy/lib/publish/studies.py`,
+  `tests/test_publish_shy.py`, `tests/test_publish_studies.py`, `test_jobs_publish.py`, `test_pipelines_publish.py`,
+  `test_publish_herd.py`, `data/README.md`, `deploy/README.md`, `docs/web/contrato.md`.
+- **Tarea 6** (`15f3617` y `f8b051e`, «Web: página /analisis/voto-oculto con veredictos, textos vivos condicionados,
+  tablas y la isla de los gráficos; enlace desde /metodo/promedio» y la ronda de correcciones «Web: /analisis/voto-oculto
+  sólo dice que el PSOE y el Gobierno no pasan la prueba si no salen subestimados, …»): `mtpy/lib/pages/shy.py`,
+  `pages/__init__.py`, `pages/analisis.py`, `pages/metodo.py`, `web/templates/analisis_voto_oculto.html`,
+  `web/templates/metodo_promedio.html`, `web/dist/css/site.css`, `tests/test_pages.py`, `tests/test_web_api.py`.
+- **Tarea 7** (`e945f86`, «Web: gráficos de errores con signo (barras cronológicas y nube por partido) y script de
+  /analisis/voto-oculto»): `web/dist/js/charts/errors.js`, `web/dist/js/pages/analisis-voto-oculto.js`,
+  `tests/test_js_charts.py`.
+- **Tarea 8**: esta sección.
+
+### Decisiones tomadas al construir
+
+- P3: el veredicto es un «DE {SIGLAS}» por partido unidos con « Y » («DE PSOE Y DE IU / PODEMOS / SUMAR»); la cola del
+  subtítulo une las siglas con « y ».
+- `ShyStudy.scopes` son los códigos del catálogo con al menos una elección leída; `inputs[scope].events` cuenta
+  elecciones leídas, no carpetas.
+- `figures([])` devuelve `None` y las filas de partido guardan `figures: None`; la página pinta guiones.
+- Entre las tareas 1 y 5 la suite estuvo en rojo a propósito (12 fallos de `STUDY_RUNNERS` sin el ejecutor de
+  `voto-oculto`); la tarea 5 los dejó en verde. Lo mismo entre la 6 y la 7 (`test_referenced_assets_exist` por el
+  script que crea la 7).
+- Ajustes de texto de pruebas aceptados: manifiesto retirado por la ruta con prefijo del lector; `copy_event` desplaza
+  las fechas de los sondeos con la de la elección.
+- El paquete sintético de pruebas reescribe los linajes para añadir FA (el plan los dejaba sin ella).
+- Las cifras se calculan sobre errores sin redondear y en las filas `polls − results == error` exactamente;
+  `summary.size` también sale de los errores sin redondear.
+- El subtítulo usa el marcador `{vox_clause}` para poder quitar la cláusula de Vox sin datos; la cola del subtítulo
+  cambia según el veredicto.
+- Sin datos de Vox, el veredicto de P2 es «SIN DATOS».
+- La frase de Método va al final del primer párrafo de «Qué límites tiene el promedio», detrás de `shy_published`
+  (la línea original quedaba dentro de una rama `if house_example`).
+- Tres frases de la maqueta se reescribieron por ser falsas con las cifras: «ningún partido grande sale subestimado de
+  forma sistemática» (PSOE 49/43), «Vox aparece en nuestra base en {año}» (no «se presenta desde 2018») y la respuesta
+  sobre Tezanos sin «y el CIS tampoco desde entonces» (no está en las partes).
+- Condiciones extra en las frases de la racha del PSOE y de «racha desaparece».
+- Ejemplos del PP: generales desde 1996 con error del PP > 3.
+- No se muestra la cifra de Ciudadanos; el ejemplo de abril de 2019 del PP se lee de `elections`.
+- Bandera `generals_fail`; la caja 2 («no se distingue de cero») sólo sale con `not p2_yes`.
+- Los partidos de P3 salen del veredicto, no se recalculan de las filas.
+- Encabezado neutro de la nota de Podemos.
+- Tarjeta «Después del 29-N» una vez publicada la elección: sin run y sin `meta.election`, muestra la fila de la última elección general sólo si su año coincide con `summary.last_year`, con sus tres filas (sondeos finales, resultado, error) leídas de los dicts `polls`/`results` de la fila de `elections`; si no, una frase neutra.
+- La pastilla no usa `meta.election` (sin «añade la fila de –»).
+- Aceptado sin tocar (menores): `_clean` copiado de `herd.py`, dos líneas de más de 120 columnas, `xMax` fijo en 8 en la
+  nube, `signColor(null)` en azul.
+
+### Lo que no se verificó
+
+- No se ha ejecutado ningún job contra S3 ni ECS; tampoco la cadena `update` de ECS con el estudio vivo nuevo.
+- No se ha visto la página en un móvil.
+- Sí se verificó: la suite completa (2191 passed, 81 skipped, 1 aviso previo; la base en `dev` era 2146 passed) y un render con Chrome sin cabeza de la página con el paquete
+  fixture (tres gráficos dibujados, sin errores en la consola).
+
+### Lista de Luis
+
+- `S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-oculto"}'` en local primero; después contra su S3
+  (o esperar al `update` diario, cuyo paso `studies` lo publica en cuanto la imagen esté desplegada).
+- Recorrer `/analisis/voto-oculto` (escritorio y móvil: las barras, el desplazamiento de la tabla de P3, los botones
+  de descarga), `/analisis`, Inicio y `/metodo/promedio`.
+- Desplegar la imagen.
+- Tras el 29-N: `python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2026-11-29"}'` y luego `python job.py publish '{"what":["studies"]}'` (la página añade sola la
+  fila de 2026).

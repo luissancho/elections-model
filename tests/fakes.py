@@ -677,3 +677,117 @@ def write_herd_bundle(fs):
                       bundle_fixture('analysis-meta') | {'scope': 'es', 'events': dates + ['2026-11-29']}, 'es')
 
     return {'dates': dates, 'run_id': HERD_RUN}
+
+
+SHY_RUN = '20261105-120000'
+SHY_BLOCKS = {
+    ('es', '1989-10-29'): {'Izquierda': ['PSOE', 'IU'], 'Derecha': ['AP', 'CDS']},
+    ('es', '2023-07-23'): {'Izquierda': ['PSOE', 'SUMAR'], 'Derecha': ['PP', 'VOX']},
+    ('es', '2016-06-26'): {'Izquierda': ['PSOE'], 'Derecha': ['PP']},
+    ('es-md', '2015-05-24'): {'Izquierda': ['PSOE', 'UP', 'IU'], 'Derecha': ['PP', 'Cs']},
+    ('es-md', '2019-05-26'): {'Izquierda': ['PSOE', 'UP'], 'Derecha': ['PP', 'Cs']},
+    ('es-md', '2021-05-04'): {'Izquierda': ['PSOE', 'MM', 'UP'], 'Derecha': ['PP', 'VOX']},
+}
+SHY_RESULTS = {
+    ('es', '1989-10-29'): {'AP': 25.8, 'PSOE': 39.6, 'IU': 9.1, 'CDS': 7.9},
+    ('es', '2023-07-23'): {'PP': 33.1, 'PSOE': 31.7, 'VOX': 12.4, 'SUMAR': 12.3},
+    ('es', '2016-06-26'): {'PP': 33.0, 'PSOE': 22.6},
+    ('es-md', '2015-05-24'): {'PP': 33.1, 'PSOE': 25.4, 'UP': 18.6, 'Cs': 12.1, 'IU': 4.2},
+    ('es-md', '2019-05-26'): {'PP': 22.2, 'PSOE': 27.3, 'UP': 14.0, 'Cs': 19.4},
+    ('es-md', '2021-05-04'): {'PP': 44.7, 'MM': 16.9, 'PSOE': 16.8, 'VOX': 9.1, 'UP': 7.2},
+}
+# (fecha, cifras por partido, peso) por elección
+SHY_POLLS = {
+    ('es', '1989-10-29'): (['AP', 'PSOE', 'IU', 'CDS'], [
+        ('1989-10-20', (24, 42, 8, 9), 1), ('1989-10-25', (23, 44, 10, None), 1),
+        ('1989-09-30', (30, 40, 9, 8), 1), ('1989-10-27', (20, 50, 10, 5), 0)]),
+    ('es', '2023-07-23'): (['PP', 'PSOE', 'VOX', 'SUMAR'], [
+        ('2023-07-10', (35, 27, 14, 13), 1), ('2023-07-16', (34, 28, 13, 12), 1),
+        ('2023-07-19', (33, 29, 13, 13), 1)]),
+    ('es-md', '2015-05-24'): (['PP', 'PSOE', 'UP', 'Cs', 'IU'], [
+        ('2015-05-15', (34, 24, 20, 13, 4), 1), ('2015-05-20', (35, 25, 18, 12, None), 1)]),
+    ('es-md', '2019-05-26'): (['PP', 'PSOE', 'UP', 'Cs'], [('2019-04-30', (25, 26, 14, 18), 1)]),
+    ('es-md', '2021-05-04'): (['PP', 'PSOE', 'MM', 'VOX', 'UP'], [
+        ('2021-04-25', (43, 20, 14, 10, 6), 1), ('2021-05-02', (42, 20, 16, 10, 6), 1)]),
+}
+SHY_CURRENT = (['PP', 'PSOE', 'VOX', 'FA', 'UP'], [
+    ('2026-10-20', (31, 27, 19, 7, 3), 1), ('2026-10-25', (32, 26, 20, 6, 3), 1),
+    ('2026-11-03', (30, 28, 18, 8, None), 1)])
+
+
+def write_shy_bundle(fs):
+    """
+    Paquete sintético con las entradas del estudio del voto oculto (sin base de datos).
+
+    Escribe, bajo `fs`, los eventos de `SHY_RESULTS` (`meta` y `results`; el `cycle` de los de `SHY_POLLS`, con todos
+    los sondeos con `sample_size` 1000 y `start_date = end_date = date`; `es/2016-06-26` sin `cycle`), el manifest con
+    `SHY_RUN` como `latest` de `es` y su `meta` (elección del 2026-11-29, `as_of` 2026-11-05) y `polls`; y una
+    carpeta de datos `shy-data/` con los parámetros (linajes cortos), la tabla del Gobierno y el catálogo de ámbitos.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        Raíz del paquete de prueba.
+
+    Returns
+    -------
+    dict
+        `dates` (las elecciones escritas por ámbito), `run_id` y `data` (el `FileSystem` de la carpeta de datos).
+    """
+    from mtpy.lib import bundle
+    from mtpy.lib.publish import POLL_COLUMNS
+
+    writer = bundle.BundleWriter(fs)
+
+    def records(names, rows):
+        out = []
+        for date, figures, weight in rows:
+            record = {'date': date, 'pollster_id': 1, 'pollster': 'GAD3', 'sponsor': None, 'start_date': date,
+                      'end_date': date, 'sample_size': 1000, 'mtype': None, 'rating': None, 'weight': weight}
+            out.append(record | {name: (None if figure is None else float(figure))
+                                 for name, figure in zip(names, figures)})
+        return out
+
+    dates = {}
+    for (scope, date), blocks in SHY_BLOCKS.items():
+        dates.setdefault(scope, []).append(date)
+        name = 'Generales' if scope == 'es' else 'Madrid'
+        meta = bundle_fixture('event-meta') | {'scope': scope, 'event_date': date, 'name': name, 'blocks': blocks}
+        rows = [{'party_id': i, 'party': party, 'votes': 1000, 'pct': pct, 'seats': 1}
+                for i, (party, pct) in enumerate(SHY_RESULTS[(scope, date)].items(), 1)]
+        parts = [('meta', 'event-meta', meta), ('results', 'event-results', {'n_seats': 350, 'rows': rows})]
+        if (scope, date) in SHY_POLLS:
+            names, polls = SHY_POLLS[(scope, date)]
+            cycle = {'parties': names, 'columns': list(POLL_COLUMNS), 'polls': records(names, polls)}
+            parts.append(('cycle', 'event-cycle', cycle))
+        for part, schema, content in parts:
+            writer.write_json(bundle.path_event(scope, date, part), schema, content, scope)
+
+    names, polls = SHY_CURRENT
+    bmaps = {'blocks': {'Izquierda': ['PSOE', 'FA', 'UP'], 'Derecha': ['PP', 'VOX']},
+             'main': ['PP', 'PSOE', 'VOX', 'FA']}
+    run_meta = bundle_fixture('meta') | {'scope': 'es', 'event_date': '2026-11-29', 'as_of': '2026-11-05',
+                                         'run_id': SHY_RUN, 'bmaps': bmaps}
+    run_polls = {'parties': names, 'columns': list(POLL_COLUMNS), 'polls': records(names, polls), 'results': []}
+    for part, content in (('meta', run_meta), ('polls', run_polls)):
+        writer.write_json(bundle.path_part('es', SHY_RUN, part), part, content, 'es', run_id=SHY_RUN)
+    headline = bundle_fixture('headline') | {'run_id': SHY_RUN, 'event_date': '2026-11-29', 'as_of': '2026-11-05'}
+    publish.update_manifest(writer, {'es': publish.latest_entry(headline)})
+
+    data = FileSystem(fs.get_path('shy-data'))
+    params = {'window_days': 14, 'recent_from': '2018-09-01', 'blocks': ['Izquierda', 'Derecha'],
+              'lineages': {'PSOE': ['PSOE', 'PSC'], 'PP': ['PP', 'AP'], 'VOX': ['VOX'], 'UP': ['SUMAR', 'UP', 'IU']},
+              'labels': {'UP': 'IU / Podemos / Sumar', 'PP': 'PP (AP, CD)', 'VOX': 'Vox'},
+              'size_parties': ['PSOE', 'PP', 'VOX', 'UP'], 'size_threshold': 2, 'big_threshold': -3,
+              'pp_early': ['1982-01-01', '1996-01-01'], 'extremes': 3}
+    incumbents = {'es': {'1989-10-29': ['PSOE'], '2016-06-26': ['PP'], '2023-07-23': ['PSOE'],
+                         '2026-11-29': ['PSOE']},
+                  'es-md': {'2015-05-24': ['PP'], '2019-05-26': ['PP'], '2021-05-04': ['PP']}}
+    os.makedirs(data.get_path('voto-oculto'), exist_ok=True)
+    for name, content in (('params', params), ('incumbents', incumbents)):
+        with open(data.get_path(f'voto-oculto/{name}.json'), 'w', encoding='utf-8') as fh:
+            json.dump(content, fh, ensure_ascii=False)
+    data.write_csv(pd.DataFrame({'scode': ['es', 'es-md', 'es-xx'], 'name': ['España', 'Madrid', 'Ámbito X']}),
+                   'es-scopes.csv')
+
+    return {'dates': {scope: sorted(found) for scope, found in dates.items()}, 'run_id': SHY_RUN, 'data': data}

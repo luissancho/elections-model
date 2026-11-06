@@ -30,6 +30,8 @@ resuelve en `mtpy.run()` (`app.data`, `app.datapath`); se puede cambiar con la v
 | `cera/consulados/{proceso}.csv` | Censo y votantes CERA por país de residencia (consulados sumados por país): Castilla y León 2026, Extremadura 2023 y 2025, Aragón 2026 | Juntas electorales de cada comunidad (BOCYL, DOE, BOA) |
 | `sesgo-cis/params.json` | Parámetros del estudio del sesgo del CIS (casa, periodos con y sin Tezanos, bloques, mínimo de elecciones, ventana de 2023, actividad en 2026, elección analizada) | Curación propia. |
 | `rebano/params.json` | Parámetros del estudio del rebaño en la recta final (ámbito, ciclos desde, ventanas en días, consenso local, series principales, mínimo de sondeos por casa, casas aparte, cubos de semanas) | Curación propia. |
+| `voto-oculto/params.json` | Parámetros del estudio del voto oculto (ventana de sondeos finales, periodo reciente, bloques, linajes y etiquetas, partidos del tamaño del error, umbrales, periodo del voto oculto del PP, extremos) | Curación propia. |
+| `voto-oculto/incumbents.json` | Partido del Gobierno (de España o de la comunidad) el día de cada elección publicada, por ámbito y fecha, con nombres alternativos | Curación propia (apéndice de la spec del estudio). |
 
 Las tablas de encuestas de Wikipedia se descargan en vivo con `WikipediaLoader`, y los resultados autonómicos con `WikipediaResultsLoader`; su contenido es CC BY-SA 4.0. `load/run_load.py` hace la carga por lotes de los ámbitos autonómicos y guarda una copia de los artículos en `files/stage/wikipedia/`.
 

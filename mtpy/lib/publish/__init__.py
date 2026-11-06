@@ -60,5 +60,7 @@ from .studies import (
     export_study_prediction, export_study_sensitivity, export_study_vote, publish_study, registered_claim,
     compute_for_publish, export_lean_election, export_lean_elections, export_lean_houses, export_lean_matrix,
     export_lean_meta, export_lean_summary, export_herd_cycles, export_herd_houses, export_herd_meta,
-    export_herd_summary, export_herd_weeks, STUDY_EXPORTERS, STUDY_META, STUDY_RUNNERS, STUDY_TITLES, study_sources
+    export_herd_summary, export_herd_weeks, compute_shy_for_publish, export_shy_elections,
+    export_shy_groups, export_shy_meta, export_shy_summary, STUDY_EXPORTERS, STUDY_META, STUDY_RUNNERS, STUDY_TITLES,
+    study_sources
 )

@@ -30,7 +30,15 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                 # The subtitle is a template rendered from the summary (the clauses depend on its figures)
                 'rebano': ('¿Se copian las encuestadoras en la recta final?',
                            'En las {n_words} generales desde {since_year}, los sondeos se han parecido más entre sí '
-                           'cuanto más cerca estaba la elección{final_clause}.{current}')}
+                           'cuanto más cerca estaba la elección{final_clause}.{current}'),
+                # The subtitle is a template rendered from the summary: {vox_clause} and {tail} depend on its figures
+                'voto-oculto': ('¿Voto oculto de quién?',
+                                'Se dice que la gente de izquierdas contesta menos a las encuestas y que los '
+                                'votantes de Vox esconden su voto, y que por eso los sondeos infravaloran a unos y a '
+                                'otros. En las {n} elecciones con sondeos de nuestra base, los sondeos finales han '
+                                'dado a la izquierda menos voto del que sacó en {k_under} y más en '
+                                '{k_over}{vox_clause}. Los sondeos se equivocan con cada partido grande en {size} '
+                                'puntos de media{tail}.')}
 
 REGISTRATION_KEYS = ('registered_at', 'registered_commit', 'registered', 'registered_changed_at')
 
@@ -575,6 +583,10 @@ from .herd import (  # noqa: E402
     compute_for_publish as compute_herd_for_publish, export_herd_cycles, export_herd_houses, export_herd_meta,
     export_herd_summary, export_herd_weeks
 )
+from .shy import (  # noqa: E402
+    compute_for_publish as compute_shy_for_publish, export_shy_elections, export_shy_groups, export_shy_meta,
+    export_shy_summary
+)
 
 STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation': export_study_participation,
                                  'vote': export_study_vote, 'placement': export_study_placement,
@@ -584,15 +596,19 @@ STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation':
                                  'houses': export_lean_houses, 'matrix': export_lean_matrix,
                                  'election': export_lean_election},
                    'rebano': {'summary': export_herd_summary, 'cycles': export_herd_cycles,
-                              'weeks': export_herd_weeks, 'houses': export_herd_houses}}
+                              'weeks': export_herd_weeks, 'houses': export_herd_houses},
+                   'voto-oculto': {'summary': export_shy_summary, 'elections': export_shy_elections,
+                                   'groups': export_shy_groups}}
 
-STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 'rebano': export_herd_meta}
+STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 'rebano': export_herd_meta,
+              'voto-oculto': export_shy_meta}
 
 # How each study is computed (``compute(data, writer)``), whether it has a registered prediction and whether its page
 # is live (recomputed with the data) rather than a fixed piece
 STUDY_RUNNERS = {'voto-cera': {'compute': _cera_compute, 'registrable': True, 'live': False},
                  'sesgo-cis': {'compute': compute_for_publish, 'registrable': False, 'live': True},
-                 'rebano': {'compute': compute_herd_for_publish, 'registrable': False, 'live': True}}
+                 'rebano': {'compute': compute_herd_for_publish, 'registrable': False, 'live': True},
+                 'voto-oculto': {'compute': compute_shy_for_publish, 'registrable': False, 'live': True}}
 
 
 def publish_study(study_id: str, writer: BundleWriter, register: bool = False, force: bool = False,

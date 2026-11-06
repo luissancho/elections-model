@@ -94,4 +94,4 @@ def test_publish_study_rebano_writes_the_parts_and_the_manifest(tmp_path):
 
 def test_study_runners_know_which_studies_are_live():
     assert {s: r['live'] for s, r in publish.STUDY_RUNNERS.items()} == {
-        'voto-cera': False, 'sesgo-cis': True, 'rebano': True}
+        'voto-cera': False, 'sesgo-cis': True, 'rebano': True, 'voto-oculto': True}
