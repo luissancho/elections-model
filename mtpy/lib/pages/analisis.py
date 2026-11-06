@@ -64,6 +64,10 @@ CSV_LABELS = {
         'weeks': 'Dispersión por ciclo y semanas hasta la elección',
         'houses': 'Rebaño por casa en las últimas 8 semanas de cada ciclo',
     },
+    'voto-oculto': {
+        'elections': 'Error de los sondeos finales por elección, bloque y partido',
+        'groups': 'Resumen por grupo de elecciones y por partido',
+    },
 }
 
 

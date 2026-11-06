@@ -1,0 +1,449 @@
+{
+  "schema": "voto-oculto-summary@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "n_elections": 92,
+    "n_general": 16,
+    "n_regional": 76,
+    "n_scopes": 18,
+    "first_year": 1977,
+    "first_year_regional": 2009,
+    "last_year": 2026,
+    "left": {
+      "all": {
+        "n": 92,
+        "under": 40,
+        "over": 52,
+        "mean": 0.47,
+        "median": 0.63,
+        "p_t": 0.128,
+        "p_sign": 0.126,
+        "size": 2.42,
+        "size_over": 0.52
+      },
+      "general": {
+        "n": 16,
+        "under": 10,
+        "over": 6,
+        "mean": -0.46,
+        "median": -0.48,
+        "p_t": 0.523,
+        "p_sign": 0.227,
+        "size": 2.35,
+        "size_over": 0.5
+      },
+      "regional": {
+        "n": 76,
+        "under": 30,
+        "over": 46,
+        "mean": 0.67,
+        "median": 0.91,
+        "p_t": 0.052,
+        "p_sign": 0.042,
+        "size": 2.43,
+        "size_over": 0.53
+      },
+      "recent": {
+        "n": 41,
+        "under": 17,
+        "over": 24,
+        "mean": 0.8,
+        "median": 0.61,
+        "p_t": 0.059,
+        "p_sign": 0.174,
+        "size": 2.04,
+        "size_over": 0.44
+      }
+    },
+    "right": {
+      "all": {
+        "n": 92,
+        "under": 45,
+        "over": 47,
+        "mean": 0.63,
+        "median": 0.45,
+        "p_t": 0.069,
+        "p_sign": 0.459,
+        "size": 2.66,
+        "size_over": 0.52
+      },
+      "general": {
+        "n": 16,
+        "under": 8,
+        "over": 8,
+        "mean": 0.82,
+        "median": 0.24,
+        "p_t": 0.196,
+        "p_sign": 0.598,
+        "size": 2.1,
+        "size_over": 0.44
+      },
+      "regional": {
+        "n": 76,
+        "under": 37,
+        "over": 39,
+        "mean": 0.59,
+        "median": 0.46,
+        "p_t": 0.141,
+        "p_sign": 0.454,
+        "size": 2.77,
+        "size_over": 0.54
+      },
+      "recent": {
+        "n": 41,
+        "under": 20,
+        "over": 21,
+        "mean": 0.4,
+        "median": 0.3,
+        "p_t": 0.3,
+        "p_sign": 0.5,
+        "size": 2.1,
+        "size_over": 0.44
+      }
+    },
+    "lean": {
+      "all": {
+        "n": 92,
+        "under": 43,
+        "over": 49,
+        "mean": -0.16,
+        "median": 0.46,
+        "p_t": 0.778,
+        "p_sign": 0.301,
+        "size": 4.21,
+        "size_over": 0.75
+      },
+      "general": {
+        "n": 16,
+        "under": 9,
+        "over": 7,
+        "mean": -1.28,
+        "median": -1.78,
+        "p_t": 0.324,
+        "p_sign": 0.402,
+        "size": 4.38,
+        "size_over": 0.81
+      },
+      "regional": {
+        "n": 76,
+        "under": 34,
+        "over": 42,
+        "mean": 0.08,
+        "median": 0.51,
+        "p_t": 0.894,
+        "p_sign": 0.211,
+        "size": 4.18,
+        "size_over": 0.74
+      },
+      "recent": {
+        "n": 41,
+        "under": 19,
+        "over": 22,
+        "mean": 0.4,
+        "median": 0.5,
+        "p_t": 0.6,
+        "p_sign": 0.4,
+        "size": 3.9,
+        "size_over": 0.7
+      }
+    },
+    "vox": {
+      "n": 39,
+      "under": 22,
+      "over": 17,
+      "mean": -0.33,
+      "median": -0.17,
+      "p_t": 0.278,
+      "p_sign": 0.261,
+      "size": 1.37,
+      "size_over": 0.18,
+      "extremes": {
+        "under": [
+          {
+            "label": "Andalucía 2018",
+            "error": -6.01
+          },
+          {
+            "label": "Castilla y León 2022",
+            "error": -3.92
+          },
+          {
+            "label": "Canarias 2023",
+            "error": -3.68
+          }
+        ],
+        "over": [
+          {
+            "label": "Andalucía 2022",
+            "error": 3.39
+          },
+          {
+            "label": "Asturias 2019",
+            "error": 2.57
+          },
+          {
+            "label": "La Rioja 2019",
+            "error": 2.13
+          }
+        ]
+      }
+    },
+    "parties": [
+      {
+        "key": "PSOE",
+        "label": "PSOE",
+        "figures": {
+          "n": 92,
+          "under": 49,
+          "over": 43,
+          "mean": -0.12,
+          "median": -0.3,
+          "p_t": 0.679,
+          "p_sign": 0.301,
+          "size": 2.26,
+          "size_over": 0.47
+        }
+      },
+      {
+        "key": "PP",
+        "label": "PP (AP, CD)",
+        "figures": {
+          "n": 91,
+          "under": 46,
+          "over": 45,
+          "mean": 0.02,
+          "median": -0.14,
+          "p_t": 0.93,
+          "p_sign": 0.5,
+          "size": 2.12,
+          "size_over": 0.44
+        }
+      },
+      {
+        "key": "VOX",
+        "label": "Vox",
+        "figures": {
+          "n": 39,
+          "under": 22,
+          "over": 17,
+          "mean": -0.33,
+          "median": -0.17,
+          "p_t": 0.278,
+          "p_sign": 0.261,
+          "size": 1.37,
+          "size_over": 0.18
+        }
+      },
+      {
+        "key": "UP",
+        "label": "IU / Podemos / Sumar",
+        "figures": {
+          "n": 77,
+          "under": 26,
+          "over": 51,
+          "mean": 0.8,
+          "median": 0.86,
+          "p_t": 0.00263,
+          "p_sign": 0.00294,
+          "size": 1.78,
+          "size_over": 0.3
+        }
+      },
+      {
+        "key": "Izquierda",
+        "label": "Izquierda (bloque)",
+        "figures": {
+          "n": 92,
+          "under": 40,
+          "over": 52,
+          "mean": 0.47,
+          "median": 0.63,
+          "p_t": 0.128,
+          "p_sign": 0.126,
+          "size": 2.42,
+          "size_over": 0.52
+        }
+      },
+      {
+        "key": "Derecha",
+        "label": "Derecha (bloque)",
+        "figures": {
+          "n": 92,
+          "under": 45,
+          "over": 47,
+          "mean": 0.63,
+          "median": 0.45,
+          "p_t": 0.069,
+          "p_sign": 0.459,
+          "size": 2.66,
+          "size_over": 0.52
+        }
+      },
+      {
+        "key": "incumbent_general",
+        "label": "Gobierno, generales",
+        "figures": {
+          "n": 16,
+          "under": 11,
+          "over": 5,
+          "mean": -1.23,
+          "median": -1.53,
+          "p_t": 0.0793,
+          "p_sign": 0.105,
+          "size": 2.4,
+          "size_over": 0.56
+        }
+      },
+      {
+        "key": "incumbent_regional",
+        "label": "Gobierno, autonómicas",
+        "figures": {
+          "n": 76,
+          "under": 34,
+          "over": 42,
+          "mean": 0.23,
+          "median": 0.35,
+          "p_t": 0.504,
+          "p_sign": 0.211,
+          "size": 2.4,
+          "size_over": 0.5
+        }
+      }
+    ],
+    "size": {
+      "n_pairs": 299,
+      "mean": 1.98,
+      "share_over": 0.38
+    },
+    "psoe_general": {
+      "n": 16,
+      "under": 10,
+      "over": 6,
+      "mean": -1.29,
+      "median": -1.27,
+      "p_t": 0.0848,
+      "p_sign": 0.227,
+      "size": 2.55,
+      "size_over": 0.56,
+      "big": [
+        "Generales 1977",
+        "Generales 1986",
+        "Generales 1993",
+        "Generales 1996",
+        "Generales 2004",
+        "Generales 2023"
+      ]
+    },
+    "pp": {
+      "early": {
+        "from": "1982-01-01",
+        "to": "1996-01-01",
+        "errors": [
+          {
+            "label": "Generales 1982",
+            "error": -5.26
+          },
+          {
+            "label": "Generales 1986",
+            "error": -1.16
+          },
+          {
+            "label": "Generales 1989",
+            "error": -3.36
+          },
+          {
+            "label": "Generales 1993",
+            "error": -0.48
+          }
+        ]
+      },
+      "late": {
+        "n": 10,
+        "under": 4,
+        "over": 6,
+        "mean": 0.6,
+        "median": 0.65,
+        "p_t": 0.507,
+        "p_sign": 0.377,
+        "size": 2.26,
+        "size_over": 0.5
+      },
+      "all": {
+        "n": 91,
+        "under": 46,
+        "over": 45,
+        "mean": 0.02,
+        "median": -0.14,
+        "p_t": 0.93,
+        "p_sign": 0.5,
+        "size": 2.12,
+        "size_over": 0.44
+      }
+    },
+    "podemos": {
+      "before": {
+        "n": 42,
+        "under": 22,
+        "over": 20,
+        "mean": -0.06,
+        "median": -0.05,
+        "p_t": 0.866,
+        "p_sign": 0.439,
+        "size": 1.59,
+        "size_over": 0.21
+      },
+      "general_recent": {
+        "n": 3,
+        "under": 2,
+        "over": 1,
+        "mean": -0.29,
+        "median": -0.57,
+        "p_t": 0.679,
+        "p_sign": 0.5,
+        "size": 0.86,
+        "size_over": 0.0
+      },
+      "regional_recent": {
+        "n": 32,
+        "under": 2,
+        "over": 30,
+        "mean": 2.03,
+        "median": 1.94,
+        "p_t": 1.6e-07,
+        "p_sign": 1.5e-07,
+        "size": 2.11,
+        "size_over": 0.44
+      }
+    },
+    "current": {
+      "as_of": "2026-11-05",
+      "days_left": 24,
+      "n_polls": 12,
+      "from": "2026-10-22",
+      "to": "2026-11-05",
+      "values": {
+        "Izquierda": 35.4,
+        "Derecha": 52.6,
+        "PSOE": 26.4,
+        "PP": 31.3,
+        "VOX": 19.5,
+        "FA": 6.5
+      },
+      "names": [
+        "PP",
+        "PSOE",
+        "VOX",
+        "FA"
+      ]
+    },
+    "verdicts": {
+      "p1": "NO",
+      "p2": "NO",
+      "p3": "DE NADIE"
+    }
+  }
+}

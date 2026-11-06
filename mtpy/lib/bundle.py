@@ -29,7 +29,7 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             meta.json pollsters.json polls.json results.json model.json
             csv/
                 pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
-        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano), overwritten on each publication
+        studies/{study}/                        one published study (voto-cera, sesgo-cis, rebano, voto-oculto), overwritten on each publication
             meta.json {part}.json               the parts of STUDY_PARTS[study]
             csv/
                 {name}.csv                      the tables of STUDY_CSV[study]
@@ -76,17 +76,20 @@ BACKTEST_CSV = BACKTEST_PARTS[1:]
 EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
 EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks', 'series')
-STUDIES = ('voto-cera', 'sesgo-cis', 'rebano')
+STUDIES = ('voto-cera', 'sesgo-cis', 'rebano', 'voto-oculto')
 STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
                'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election'),
-               'rebano': ('meta', 'summary', 'cycles', 'weeks', 'houses')}
+               'rebano': ('meta', 'summary', 'cycles', 'weeks', 'houses'),
+               'voto-oculto': ('meta', 'summary', 'elections', 'groups')}
 STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['voto-cera']},
                  'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']},
-                 'rebano': {part: 'rebano-' + part for part in STUDY_PARTS['rebano']}}
+                 'rebano': {part: 'rebano-' + part for part in STUDY_PARTS['rebano']},
+                 'voto-oculto': {part: 'voto-oculto-' + part for part in STUDY_PARTS['voto-oculto']}}
 STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
                            'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
              'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses'),
-             'rebano': ('cycles', 'weeks', 'houses')}
+             'rebano': ('cycles', 'weeks', 'houses'),
+             'voto-oculto': ('elections', 'groups')}
 STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'census-countries'),
                               'participation': ('participation',), 'vote': ('vote', 'ecological'),
                               'prediction': ('last-seat',),
@@ -94,7 +97,8 @@ STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'c
                               'check': ('check',)},
                 'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
                               'election': ('election-houses',)},
-                'rebano': {'cycles': ('cycles',), 'weeks': ('weeks',), 'houses': ('houses',)}}
+                'rebano': {'cycles': ('cycles',), 'weeks': ('weeks',), 'houses': ('houses',)},
+                'voto-oculto': {'elections': ('elections',), 'groups': ('groups',)}}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
@@ -184,6 +188,16 @@ SCHEMAS = {
     'rebano-cycles': {'rows': list},
     'rebano-weeks': {'buckets': list, 'rows': list, 'mean': list},
     'rebano-houses': {'rows': list},
+    'voto-oculto-meta': {'study': str, 'title': str, 'subtitle': str, 'scopes': list, 'election': (dict, type(None)),
+                         'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                         'versions': dict, 'seconds': dict},
+    'voto-oculto-summary': {'n_elections': int, 'n_general': int, 'n_regional': int, 'n_scopes': int,
+                            'first_year': int, 'first_year_regional': (int, type(None)), 'last_year': int,
+                            'left': dict, 'right': dict, 'lean': dict, 'vox': (dict, type(None)), 'parties': list,
+                            'size': dict, 'psoe_general': (dict, type(None)), 'pp': dict, 'podemos': dict,
+                            'current': (dict, type(None)), 'verdicts': dict},
+    'voto-oculto-elections': {'rows': list},
+    'voto-oculto-groups': {'rows': list},
 }
 
 

@@ -84,7 +84,7 @@ def test_analysis_exists_needs_the_meta(tmp_path):
 
 
 def test_study_registry_is_per_study():
-    assert bundle.STUDIES == ('voto-cera', 'sesgo-cis', 'rebano')
+    assert bundle.STUDIES[:3] == ('voto-cera', 'sesgo-cis', 'rebano')
     assert bundle.STUDY_PARTS['voto-cera'] == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
     assert bundle.STUDY_PARTS['sesgo-cis'] == ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')
     assert bundle.STUDY_SCHEMAS['voto-cera'] == {part: 'study-' + part for part in bundle.STUDY_PARTS['voto-cera']}
@@ -103,6 +103,14 @@ def test_study_registry_is_per_study():
     assert bundle.path_study_csv('rebano', 'houses') == 'studies/rebano/csv/houses.csv'
     with pytest.raises(ValueError):
         bundle.path_study('rebano', 'matrix')
+    assert 'voto-oculto' in bundle.STUDIES and bundle.STUDIES.index('voto-oculto') > bundle.STUDIES.index('rebano')
+    assert bundle.STUDY_PARTS['voto-oculto'] == ('meta', 'summary', 'elections', 'groups')
+    assert bundle.STUDY_SCHEMAS['voto-oculto'] == {part: 'voto-oculto-' + part for part in bundle.STUDY_PARTS['voto-oculto']}
+    assert bundle.STUDY_CSV['voto-oculto'] == ('elections', 'groups')
+    assert bundle.path_study('voto-oculto', 'groups') == 'studies/voto-oculto/groups.json'
+    assert bundle.path_study_csv('voto-oculto', 'elections') == 'studies/voto-oculto/csv/elections.csv'
+    with pytest.raises(ValueError):
+        bundle.path_study('voto-oculto', 'houses')
     assert bundle.path_study('voto-cera', 'meta') == 'studies/voto-cera/meta.json'
     assert bundle.path_study_csv('voto-cera', 'last-seat') == 'studies/voto-cera/csv/last-seat.csv'
     for call in (lambda: bundle.path_study('nope', 'meta'), lambda: bundle.path_study('voto-cera', 'summary'),
