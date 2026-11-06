@@ -271,3 +271,65 @@ Un revisor leyó la especificación como constructor. Lo que planteó y cómo qu
   de `read_current` de hoy.
 - **Cambios sin commit de la versión 1 en el árbol** (arreglos del 2026-11-06: umbral de semanas, «cabría esperar sólo
   por el azar», pregunta 3): pendiente de Luis.
+
+## Cierre (2026-11-06)
+
+Construido en la rama `analisis-rebano-v2` (8 commits, `c6f6529..fff4310`, base `c3aa20e` de `dev`), con revisión por
+tarea y sin comentarios abiertos.
+
+**Qué existe**
+
+- Paquete `mtpy/lib/studies/herd/`: `stats.py` (comparaciones entre parejas de casas, tramos semiabiertos,
+  permutación de 2.000 barajados, prueba del signo), `data.py` (lectura de todas las elecciones publicadas) y
+  `study.py` (`compute_herd`).
+- Exportadores `mtpy/lib/publish/herd.py`: partes `meta`, `summary`, `elections` y `current` (+ CSV
+  `elections`); las partes de la versión 1 (`cycles`, `weeks`, `houses`) ya no se escriben.
+- Página `mtpy/lib/pages/herd.py` + `web/templates/analisis_rebano.html` + `web/dist/js/pages/analisis-rebano.js`
+  (barras por elección, cuadritos, tabla en directo), ajustes en `web/dist/css/site.css`; fixtures y pruebas
+  nuevas.
+
+**Cifras con el bundle real (2026-11-06, `compute_herd` en 34,0 s; pre-comprobación de la tarea 2: 33,7 s)**
+
+| Comparación | Elecciones a favor | `sign_p` | Claras por sí solas |
+|---|---|---|---|
+| lejos → final (`far_final`) | 19 de 23 | 0,0013 (1 entre 769) | 3 |
+| lejos → medio (`far_mid`) | 9 de 17 | 0,5 (moneda) | 4 |
+| medio → final (`mid_final`) | 23 de 29 | 0,00116 (1 entre 862) | 8 |
+
+Bajada mediana de `far_final`: −15 %. Generales 8 de 10 (p 0,055), autonómicas 11 de 13 (p 0,011). 34 elecciones,
+9 ámbitos, desde 1982. Generales 2026 en directo: `far_mid` +8 % (37 parejas, 1,00 → 1,08), a 23 días; el tramo
+final empieza el 9-11. Coinciden con el spike y con la pre-comprobación; ninguna diferencia que explicar. Páginas
+y textos comprobados con esas cifras (`task-6-live-1280.png` y `task-6-live-390.png` en el espacio de trabajo
+SDD); veredictos: pregunta 1 «SÍ, EN CONJUNTO», pregunta 2 «SÍ, EN LAS TRES ÚLTIMAS SEMANAS».
+
+**Decisiones tomadas en la ejecución**
+
+- `main_series` se retiró de `stats.py` y se recoloca en `data.py` con la definición de la versión 1; las
+  distancias de empate de la permutación llevan tolerancia de 1e-9.
+- La pareja extra de es/2023 (A3-B8, 5 días) se acepta tal cual: las cifras comprobadas no cambian.
+- Subtítulo: segunda frase sólo si `far_mid` no es significativa y `mid_final` sí; con `k*2 <= n` la frase es «En
+  sólo {k} de las {n} …; en las demás, no»; guarda con `n == 0`.
+- Texto del KPI 2 («hasta tres semanas antes, {k} de {n}: como una moneda» bajo «En las tres últimas semanas»):
+  es el de D4, aprobado por Luis, y se mantiene.
+- «a 1 día» en singular; sin frase de directo si falta la fecha del tramo final; «bajada mediana del 15 %» sin
+  doble negativo; «como una moneda» sin «por azar».
+- Se restauró la clase `.qb` del CSS compartido (la usaban `/analisis/voto-oculto` y `/analisis/andorra`).
+- En la prueba de palabras prohibidas, «copi» se comprueba como inicio de palabra (choca con «Demoscopio»).
+
+**Menores aplazados** (no bloquean): `n <= 0` sin guardar en `comparisons`; `p` puede ser 0,0; `main_series` sin
+prueba de orden; importes privados `_is_number`/`_sig3`; orden de columnas de `elections` sin prueba; KPI 3 con
+fallbacks sin probar; «tres últimas semanas» fijo en la página y no leído de `params`; «Que pase N veces por azar:
+como una moneda» cuando `far_final` fuera moneda; «subida mediana del 0 %»; guion de la tabla en directo sin
+prueba a nivel HTML. Observados en la aceptación: en 390 px la página desborda a la derecha (píldora de cabecera,
+barra de pastillas y tabla en directo se cortan) y el pie muestra el id de ejecución crudo («20261008-120000»).
+
+**Sin verificar**: los botones de descarga de las tarjetas no se han probado en un navegador; la página con
+Chrome sin cabeza sólo se ha visto estática; el pie «Actualizado / Último sondeo» se vio con una procedencia
+ficticia (la de los fixtures), no con la de un `publish` real.
+
+**Pasos de Luis**
+
+1. `python job.py publish '{"what":["study"],"study":"rebano"}'`.
+2. Borrar de su S3 `studies/rebano/{cycles,weeks,houses}.json` y `studies/rebano/csv/{cycles,weeks,houses}.csv`.
+3. Desplegar la imagen para que el `update` diario lo republique.
+4. Tras el 29-N, `publish event` de `es/2026-11-29` y una republicación.
