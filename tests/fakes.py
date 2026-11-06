@@ -717,3 +717,156 @@ def write_herd_bundle(fs):
                       bundle_fixture('analysis-meta') | {'scope': 'es', 'events': dates + ['2026-11-29']}, 'es')
 
     return {'dates': dates, 'run_id': HERD_RUN}
+
+
+BAN_RUN = '20261106-120000'
+BAN_IDS = {'CIS': 1, 'GAD3': 2, '40dB': 3, 'ElectoPanel': 4, 'Sigma Dos': 5, 'YouGov': 9}
+BAN_MTYPES = {'ElectoPanel': 'online', 'YouGov': 'aggr'}  # el resto, `cati`
+BAN_EVENTS = {  # (ámbito, fecha) -> lo que escribe `write_ban_bundle`
+    ('es', '2019-11-10'): {
+        'name': 'Generales nov. 2019', 'main': ['PSOE', 'PP', 'VOX'], 'official': [28.0, 20.8, 15.1],
+        'frozen': [27.4, 20.3, 13.9], 'ban_rows': [27.3, 19.9, 14.8],
+        'polls': [  # (casa, fin de campo, días, muestra, error_avg, cifras)
+            ('GAD3', '2019-11-09', 1, 13000, 0.86, [27.0, 20.1, 16.3]),
+            ('GAD3', '2019-11-10', 0, 13000, 0.80, [27.3, 20.1, 16.0]),
+            ('ElectoPanel', '2019-11-08', 2, 1250, 0.67, [27.1, 20.4, 15.5]),
+        ],
+        'legal': [('GAD3', 10, 3000, 0.77), ('ElectoPanel', 6, 1250, 0.61)],  # (casa, días, muestra, error_avg)
+        'pollsters': [('GAD3', 10, 0.77), ('40dB', 12, 1.11)],  # (casa, last_days, last_error_avg)
+    },
+    ('es', '2023-07-23'): {
+        'name': 'Generales 2023', 'main': ['PP', 'PSOE', 'VOX', 'SUMAR'], 'official': [33.1, 31.7, 12.4, 12.3],
+        'frozen': [34.2, 28.3, 13.1, 13.1], 'ban_rows': None,
+        'polls': [
+            ('YouGov', '2023-07-18', 5, 1000, 1.5, [33.0, 29.0, 13.0, 13.0]),
+            ('40dB', '2023-07-21', 2, 2000, 1.71, [31.7, 29.4, 13.8, 13.8]),
+            ('GAD3', '2023-07-22', 1, 10004, 2.10, [35.5, 28.6, 12.7, 11.9]),
+        ],
+        'legal': [('40dB', 7, 2000, 1.45), ('GAD3', 6, 3000, 2.73), ('YouGov', 8, 1000, 1.6)],
+        'pollsters': [('40dB', 7, 1.45), ('GAD3', 6, 2.73), ('CIS', 13, 1.9)],
+    },
+    ('es-md', '2021-05-04'): {
+        'name': 'Madrid', 'main': ['PP', 'MM', 'PSOE'], 'official': [44.7, 17.0, 16.9], 'frozen': None,
+        'ban_rows': None,
+        'polls': [
+            ('GAD3', '2021-05-03', 1, 8500, 0.97, [44.0, 17.5, 17.0]),
+            ('Sigma Dos', '2021-05-03', 1, 1000, 1.20, [43.0, 18.0, 17.5]),
+        ],
+        'legal': [('GAD3', 60, 8500, 1.72), ('Sigma Dos', 8, 1000, 1.50)],
+        'pollsters': [('GAD3', 60, 1.72), ('Sigma Dos', 8, 1.50)],
+    },
+}
+BAN_CURRENT = '2026-11-29'  # la elección en curso: `meta` y `ban` sin `results` (la guarda legal)
+BAN_CURRENT_SHARE = 31.4  # la cifra del PP del sondeo de GAD3 de la elección en curso, que el estudio no debe leer
+
+
+def _ban_record(house, end, days, sample_size, error_avg, names, shares):
+    """One poll of an `event-ban` part as `export_event_ban` writes it."""
+    start = (pd.Timestamp(end) - pd.Timedelta(days=3)).strftime('%Y-%m-%d')
+    return {'date': end, 'pollster_id': BAN_IDS[house], 'pollster': house, 'sponsor': f'Medio de {house}',
+            'start_date': start, 'end_date': end, 'sample_size': sample_size, 'mtype': BAN_MTYPES.get(house, 'cati'),
+            'rating': 0.8, 'weight': 1.0, 'days': days, 'error_avg': error_avg, 'error_blocks': 2.0,
+            'bias_blocks': 0.5} | dict(zip(names, shares))
+
+
+def write_ban_bundle(fs):
+    """
+    Paquete sintético con las entradas del estudio de los sondeos «clandestinos» (sin base de datos).
+
+    Escribe el manifest con `es` (run `BAN_RUN`, cuya `meta` lleva la elección del 29-11-2026) y `es-md`; los eventos
+    de `BAN_EVENTS` (`meta`, `ban`, `pollsters`, `results` y, en los nacionales, `model` con las filas del horizonte
+    6, otras del 30 y una de `Cs` fuera de los principales; en 2019, también las filas `ban`); y la elección en curso
+    `es/2026-11-29` con `meta` y un `ban` de un sondeo de GAD3 pero sin `results`. Las cifras legales de cada casa
+    son las del clandestino menos un punto.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        Raíz del paquete de prueba.
+
+    Returns
+    -------
+    dict
+        Las cifras calculadas a mano que comprueban los tests: `pairs` (`(ámbito, fecha, casa) -> d`), `summary`,
+        `consensus`, `cells` (`(fecha, partido) -> (closer, direction, crossed, half)`), `errors` (por fecha:
+        `legal`, `frozen`, `consensus`, `with`) y `next`.
+    """
+    from mtpy.lib import bundle
+
+    writer = bundle.BundleWriter(fs)
+    columns = list(bundle_fixture('event-ban')['columns'])
+
+    for (scope, date), event in BAN_EVENTS.items():
+        names = event['main']
+        meta = bundle_fixture('event-meta') | {'scope': scope, 'event_date': date, 'name': event['name'],
+                                               'main': names, 'blocks': {'Todos': names}, 'featured': True}
+        polls = [_ban_record(house, end, days, sample, error, names, shares)
+                 for house, end, days, sample, error, shares in event['polls']]
+        legal = [_ban_record(house, (pd.Timestamp(date) - pd.Timedelta(days=days)).strftime('%Y-%m-%d'), days,
+                             sample, error, names, [share - 1 for share in event['polls'][0][5]])
+                 for house, days, sample, error in event['legal']]
+        pollsters = {'blocks': ['Todos'], 'rows': [
+            {'pollster_id': BAN_IDS[house], 'pollster': house, 'n_polls': 5, 'sample_size': 1000, 'error_avg': 1.0,
+             'error_blocks': 2.0, 'bias_blocks': 0.5, 'last_days': last_days, 'last_error_avg': last_error,
+             'last_error_blocks': 2.0}
+            for house, last_days, last_error in event['pollsters']]}
+        results = {'n_seats': 350, 'rows': [
+            {'party_id': index, 'party': party, 'votes': 1000 * (10 - index), 'pct': pct, 'seats': 10}
+            for index, (party, pct) in enumerate(list(zip(names, event['official'])) + [('Cs', 4.2)])]}
+        parts = [('meta', 'event-meta', meta),
+                 ('ban', 'event-ban', {'parties': names, 'columns': columns, 'polls': polls, 'legal': legal}),
+                 ('pollsters', 'event-pollsters', pollsters), ('results', 'event-results', results)]
+
+        if event['frozen'] is not None:
+            def rows(horizon, figures):
+                return [{'event_date': date, 'horizon': horizon, 'party': party, 'main': True, 'official': official,
+                         'model': model}
+                        for party, official, model in zip(names, event['official'], figures)] + [
+                    {'event_date': date, 'horizon': horizon, 'party': 'Cs', 'main': False, 'official': 4.2,
+                     'model': 9.9}]
+            model = {'horizons': [6, 30], 'seats': [], 'blocks': [],
+                     'shares': rows(6, event['frozen']) + rows(30, [share + 5 for share in event['frozen']])}
+            if event['ban_rows'] is not None:
+                model['ban'] = rows(0, event['ban_rows'])
+            parts.append(('model', 'event-model', model))
+
+        for part, schema, content in parts:
+            writer.write_json(bundle.path_event(scope, date, part), schema, content, scope)
+
+    names = ['PP', 'PSOE', 'VOX', 'FA']
+    meta = bundle_fixture('event-meta') | {'scope': 'es', 'event_date': BAN_CURRENT, 'name': 'Generales 2026',
+                                           'main': names, 'blocks': {'Todos': names}, 'featured': True}
+    ban = {'parties': names, 'columns': columns, 'legal': [],
+           'polls': [_ban_record('GAD3', '2026-11-27', 2, 9000, None, names, [BAN_CURRENT_SHARE, 28.0, 15.0, 9.0])]}
+    writer.write_json(bundle.path_event('es', BAN_CURRENT, 'meta'), 'event-meta', meta, 'es')
+    writer.write_json(bundle.path_event('es', BAN_CURRENT, 'ban'), 'event-ban', ban, 'es')
+
+    run_meta = bundle_fixture('meta') | {'scope': 'es', 'event_date': BAN_CURRENT, 'as_of': '2026-11-06',
+                                         'run_id': BAN_RUN}
+    writer.write_json(bundle.path_part('es', BAN_RUN, 'meta'), 'meta', run_meta, 'es', run_id=BAN_RUN)
+    headline = bundle_fixture('headline') | {'run_id': BAN_RUN, 'event_date': BAN_CURRENT, 'as_of': '2026-11-06'}
+    regional = bundle_fixture('headline') | {'run_id': '20261106-130000', 'event_date': '2027-05-23'}
+    publish.update_manifest(writer, {'es-md': publish.latest_entry(regional), 'es': publish.latest_entry(headline)})
+
+    return {
+        'pairs': {('es', '2019-11-10', 'GAD3'): 0.03, ('es', '2019-11-10', 'ElectoPanel'): 0.06,
+                  ('es', '2023-07-23', '40dB'): 0.26, ('es', '2023-07-23', 'GAD3'): -0.63,
+                  ('es-md', '2021-05-04', 'Sigma Dos'): -0.30},
+        'summary': {'pairs': {'n': 5, 'k': 2, 'ties': 0, 'share': 0.4, 'mean_d': -0.12, 'p': 0.812,
+                              'generals': {'n': 4, 'k': 1, 'mean_d': -0.07, 'n_events': 2},
+                              'regional': {'n': 1, 'k': 1, 'mean_d': -0.3, 'n_events': 1}},
+                    'elections': {'n': 2, 'k_beaten': 1, 'mean_legal': 1.48, 'mean_frozen': 1.13,
+                                  'mean_consensus': 0.96, 'mean_with': 0.63, 'k_with': 1},
+                    'cells': {'n': 7, 'k_closer': 4, 'k_direction': 4, 'k_crossed': 1, 'k_half': 1},
+                    'big': {'threshold': 5000, 'n': 2, 'k': 1, 'mean_d': -0.3}},
+        'consensus': {'2019-11-10': {'PSOE': 27.3, 'PP': 20.1, 'VOX': 16.0},
+                      '2023-07-23': {'PP': 33.6, 'PSOE': 29.0, 'VOX': 13.25, 'SUMAR': 12.85}},
+        'cells': {  # (closer, direction, crossed, half)
+            ('2019-11-10', 'PSOE'): (False, False, False, False), ('2019-11-10', 'PP'): (False, False, False, False),
+            ('2019-11-10', 'VOX'): (True, True, True, False), ('2023-07-23', 'PP'): (True, True, False, True),
+            ('2023-07-23', 'PSOE'): (True, True, False, False), ('2023-07-23', 'VOX'): (False, False, False, False),
+            ('2023-07-23', 'SUMAR'): (True, True, False, False)},
+        'errors': {'2019-11-10': {'legal': 0.94, 'frozen': 0.77, 'consensus': 0.77, 'with': 0.63},
+                   '2023-07-23': {'legal': 2.03, 'frozen': 1.5, 'consensus': 1.15, 'with': None}},
+        'next': {'event_date': BAN_CURRENT, 'open': False},
+    }
