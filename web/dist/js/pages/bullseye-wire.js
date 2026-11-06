@@ -3,8 +3,8 @@
 // (`#bullseye-table`), redrawn from the rows that pass them. No hash: the filters are the only state. The download
 // button of the card (`#bullseye-download`, the profile) draws the bullseye as filtered, the filters and the count
 // in the subtitle and the file name. A profile also has, in its own card, the house against the mean of the other
-// houses in the same election (`wireConsensus`: `#consensus-chart`, the chart of question 2 of the CIS bias study,
-// from the same rows, without filters, with its own download button `#consensus-download`).
+// houses in the same election in the gap between the two blocks (`wireConsensus`: `#consensus-chart`, the `gap` and
+// `others` of the same rows, without filters, with its own download button `#consensus-download`).
 import {fmtDate, fmtNum, shadeAround} from '../format.js';
 import {fadeByDate, filterRows, imageTexts, yearsText} from '../errors.js';
 import {mountChart, THEME} from '../charts/base.js';
@@ -35,32 +35,42 @@ const BULLSEYE_FIXED_COLUMNS = 3;
 const CONSENSUS_STEP = 5;
 
 /**
- * Option of the house against the mean of the other houses: one point per election with a mean of the others
- * (`others`) and an error of the house in the left block, named `event-scope`, the general elections in the
- * accent and the regional ones in the contrasting tone, over a dashed diagonal between symmetric axes
- * (`CONSENSUS_STEP`); both axes named, so the downloaded image reads on its own.
+ * Whether a bullseye row has a point in the chart of the house against the others: its error in the gap between the
+ * blocks (`gap`) and the mean of the other houses (`others`).
  *
- * @param {object[]} rows bullseye rows (`others`, `scope`, `event` and the error of each block)
+ * @param {object} row a bullseye row
+ * @returns {boolean} both numbers present
+ */
+const hasConsensus = (row) => Number.isFinite(row.others) && Number.isFinite(row.gap);
+
+/**
+ * Option of the house against the mean of the other houses in the gap between the two blocks (the error in the left
+ * block minus the error in the right one, the signed `error_blocks`): one point per election with a mean of the
+ * others (`others`) and an error of the house (`gap`), named `event-scope`, the general elections in the accent and
+ * the regional ones in the contrasting tone, over a dashed diagonal between symmetric axes (`CONSENSUS_STEP`); both
+ * axes named, so the downloaded image reads on its own.
+ *
+ * @param {object[]} rows bullseye rows (`gap`, `others`, `scope` and `event`)
  * @param {string} left the left block (`initial.left`)
+ * @param {string} right the right block (`initial.right`)
  * @param {string} house the name of the house (the y axis in the tooltip)
  * @returns {object} the ECharts option
  */
-export function consensusOption(rows, left, house) {
-  const points = rows
-    .filter((row) => Number.isFinite(row.others) && Number.isFinite(row[left]))
-    .map((row) => ({...row, label: `${row.event}-${row.scope}`}));
-  const reach = Math.max(0, ...points.flatMap((row) => [Math.abs(row.others), Math.abs(row[left])]));
+export function consensusOption(rows, left, right, house) {
+  const points = rows.filter(hasConsensus).map((row) => ({...row, label: `${row.event}-${row.scope}`}));
+  const reach = Math.max(0, ...points.flatMap((row) => [Math.abs(row.others), Math.abs(row.gap)]));
+  const measure = `error en ${left} − ${right}`;
   const limit = Math.max(CONSENSUS_STEP, Math.ceil(reach / CONSENSUS_STEP) * CONSENSUS_STEP);
   return scatterOption(points, {
     x: 'others',
-    y: left,
+    y: 'gap',
     name: 'label',
     labelled: points.map((row) => row.label),
     diagonal: true,
     axes: {xMin: -limit, xMax: limit, yMin: -limit, yMax: limit, interval: CONSENSUS_STEP},
     colorOf: (row) => (row.scope === NATIONAL_SCOPE ? THEME.accentColor : REGIONAL_COLOR),
-    xName: `Media de las demás casas, error en ${left}`,
-    yName: `${house}, error en ${left}`,
+    xName: `Media de las demás casas, ${measure}`,
+    yName: `${house}, ${measure}`,
     xLabel: 'demás casas',
     yLabel: house,
   });
@@ -177,20 +187,22 @@ export function wireBullseye(bullseye, blocks) {
 /**
  * The house against the mean of the other houses, in its own card of the profile: draw `#consensus-chart` from the
  * bullseye rows (every election, no filters) and wire its download button (`#consensus-download`, the chart alone,
- * the count of elections drawn in the subtitle). Nothing without the chart, the rows or the left block.
+ * the count of elections drawn in the subtitle). Nothing without the chart, the rows or the pair of blocks.
  *
- * @param {object[]} bullseye the bullseye rows (`others`, `scope`, `event` and the block errors)
+ * @param {object[]} bullseye the bullseye rows (`gap`, `others`, `scope` and `event`)
  * @param {string|null} left the left block of the pair (`initial.left`)
+ * @param {string|null} right the right block of the pair (`initial.right`)
  */
-export function wireConsensus(bullseye, left) {
+export function wireConsensus(bullseye, left, right) {
   const target = document.getElementById('consensus-chart');
-  if (!target || !bullseye.length || !left) {
+  if (!target || !bullseye.length || !left || !right) {
     return;
   }
   const house = target.dataset.house || '';
-  tryDraw(() => mountChart(target, consensusOption(bullseye, left, house)), 'the house against the others');
-  const drawn = bullseye.filter((row) => Number.isFinite(row.others) && Number.isFinite(row[left])).length;
-  wireDownload(document.getElementById('consensus-download'), () => consensusOption(bullseye, left, house), showError, {
+  const option = () => consensusOption(bullseye, left, right, house);
+  tryDraw(() => mountChart(target, option()), 'the house against the others');
+  const drawn = bullseye.filter(hasConsensus).length;
+  wireDownload(document.getElementById('consensus-download'), option, showError, {
     chartHeight: BULLSEYE_IMAGE_HEIGHT,
     texts: (dataset) => imageTexts(dataset, [], `${drawn} ${drawn === 1 ? 'elección' : 'elecciones'}`),
   });

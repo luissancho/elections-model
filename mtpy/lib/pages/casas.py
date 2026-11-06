@@ -797,6 +797,31 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
     }
 
 
+def block_gap(row: dict, left: Optional[str], right: Optional[str]) -> Optional[float]:
+    """
+    Error of a poll in the gap between the two blocks: its error in ``left`` minus its error in ``right``, the signed
+    ``error_blocks`` (positive: the poll gave the left block more lead over the right one than the result).
+
+    Parameters
+    ----------
+    row : dict
+        A ``poll-errors`` row with the signed error of each block.
+    left, right : str or None
+        The two blocks of the pair (``table_blocks``).
+
+    Returns
+    -------
+    float or None
+        The difference rounded to two decimals; ``None`` without a block or without a number in either.
+    """
+    values = [row.get(block) if block is not None else None for block in (left, right)]
+
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and value == value for value in values):
+        return None
+
+    return round(values[0] - values[1], 2)
+
+
 def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: Optional[date] = None) -> dict:
     """
     Template context of the profile of a pollster.
@@ -836,17 +861,18 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
         ``dev_result_c`` and ``dev_cycle``, with the elections named by ``election_label``), ``herding_table``
         (its herding by cycle, ``HERDING_KEYS`` plus ``label``), ``bullseye`` (its rows of the ``poll-errors``
         parts of the published elections: ``event``, ``event_date``, ``year``, ``days``, ``scope``, ``name``,
-        the error of each block, ``others`` (the mean error of the other houses in the left block, ``left``, in
-        that election, with their rows of the final stretch, rounded to two decimals; ``None`` without any) and
-        ``n_others`` (how many); the rows of the final stretch only, ``final_stretch_rows``; empty without analysis),
-        ``left`` (the left block of the pair, ``table_blocks``; ``None`` without blocks), ``bullseye_scopes``
+        the error of each block, ``gap`` (its error in the gap between the blocks, ``block_gap``), ``others`` (the
+        mean ``gap`` of the other houses in that election, with their rows of the final stretch, rounded to two
+        decimals; ``None`` without any) and ``n_others`` (how many); the rows of the final stretch only,
+        ``final_stretch_rows``; empty without analysis), ``left`` and ``right`` (the blocks of the pair,
+        ``table_blocks``; ``None`` without blocks), ``bullseye_scopes``
         (``{code, name}`` of the scopes
         with a bullseye row, in catalogue order) and ``bullseye_years`` (every year from the first row to today,
         ``year_range``), the options of the bullseye filters, ``blocks`` (the pair of ``error_blocks``, the axes of
         the bullseye), ``table_blocks`` (the same pair in the order of the table columns, ``table_blocks``),
         ``analysis_missing`` (no scope
         has a published analysis) and ``initial`` (``state``, ``meta``, ``path`` = ``path_points``, ``today``,
-        ``bullseye``, ``blocks``, ``left`` and ``scopes`` = ``bullseye_scopes``). Every table runs from the newest election
+        ``bullseye``, ``blocks``, ``left``, ``right`` and ``scopes`` = ``bullseye_scopes``). Every table runs from the newest election
         to the oldest.
 
     Raises
@@ -886,12 +912,16 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     for row in errors:
         by_election.setdefault((row['scope'], row['event_date']), []).append(row)
 
-    # the mean error of the other houses in the left block with their last polls of the same election
-    left = table_blocks(blocks)[0] if blocks else None
+    # the error in the gap between the two blocks (left minus right, the signed `error_blocks`) of the house and the
+    # mean of the other houses with their last polls of the same election (Luis, 2026-11-06: one axis with the left
+    # block alone mixed the tilt with the error of both blocks against the rest)
+    left, right = table_blocks(blocks)[:2] if blocks else (None, None)
 
     for row in bullseye:
-        rest = [other[left] for other in by_election.get((row['scope'], row['event_date'])) or []
-                if left is not None and other.get('pollster') != name and isinstance(other.get(left), (int, float))]
+        row['gap'] = block_gap(row, left, right)
+        rest = [gap for gap in (block_gap(other, left, right)
+                                for other in by_election.get((row['scope'], row['event_date'])) or []
+                                if other.get('pollster') != name) if gap is not None]
         row['others'] = round(sum(rest) / len(rest), 2) if rest else None
         row['n_others'] = len(rest)
 
@@ -946,8 +976,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     context['blocks'] = blocks
     context['table_blocks'] = table_blocks(blocks)
     context['left'] = left
+    context['right'] = right
     context['analysis_missing'] = not any(scope['analysis'] for scope in scopes)
     context['initial'] = {'state': full, 'meta': context['meta'], 'path': context['path_points'], 'today': path['today'],
-                          'bullseye': bullseye, 'blocks': blocks, 'left': left, 'scopes': bullseye_scopes}
+                          'bullseye': bullseye, 'blocks': blocks, 'left': left, 'right': right,
+                          'scopes': bullseye_scopes}
 
     return context

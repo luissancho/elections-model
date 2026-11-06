@@ -940,17 +940,20 @@ def test_scatter_diagonal_and_fixed_axes():
     assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]
 
 
-def test_consensus_option_names_both_axes_and_fits_symmetric_axes():
-    """El gráfico «frente a las demás casas» del perfil (`bullseye-wire.js: consensusOption`): un punto por elección con
-    `others`, nombrado evento-ámbito, ejes simétricos al primer múltiplo de 5, la diagonal, el eje x
-    con la media de las demás y el eje y con la casa (revisión final: la imagen descargada se lee sola)."""
-    rows = [dict(ROWS[0], others=-0.51), dict(ROWS[1], others=7.2), dict(ROWS[3], others=None)]
-    option = run_js('bw.consensusOption(rows, "Izquierda", "GAD3")', rows=rows)
+def test_consensus_option_draws_the_gap_and_names_both_axes_over_symmetric_axes():
+    """El gráfico «frente a las demás encuestadoras» del perfil (`bullseye-wire.js: consensusOption`): un punto por
+    elección con `gap` (el error en la ventaja de la izquierda sobre la derecha, Luis 2026-11-06) y `others`, nombrado
+    evento-ámbito, ejes simétricos al primer múltiplo de 5, la diagonal y los dos ejes nombrados con la ventaja (la
+    imagen descargada se lee sola). Sin `gap` o sin `others` la elección no tiene punto."""
+    rows = [dict(ROWS[0], gap=-1.4, others=-0.51), dict(ROWS[1], gap=3.5, others=7.2), dict(ROWS[2], gap=None, others=1.0),
+            dict(ROWS[3], gap=-10.7, others=None)]
+    option = run_js('bw.consensusOption(rows, "Izquierda", "Derecha", "GAD3")', rows=rows)
     points = option['series'][0]['data']
-    assert [p['name'] for p in points] == ['2023-23J-es', '2019-10N-es'] and points[0]['value'] == [-0.51, -0.7]
+    assert [p['name'] for p in points] == ['2023-23J-es', '2019-10N-es'] and points[0]['value'] == [-0.51, -1.4]
     assert points[1]['itemStyle'] == {'color': '#1d4f86'} and all('borderColor' not in p.get('itemStyle', {}) for p in points)
     assert option['xAxis']['min'] == -10 and option['yAxis']['max'] == 10 and option['xAxis']['interval'] == 5
-    assert option['xAxis']['name'] == 'Media de las demás casas, error en Izquierda' and option['yAxis']['name'] == 'GAD3, error en Izquierda'
+    assert option['xAxis']['name'] == 'Media de las demás casas, error en Izquierda − Derecha'
+    assert option['yAxis']['name'] == 'GAD3, error en Izquierda − Derecha'
     assert option['series'][-1]['data'] == [[-10, -10], [10, 10]]
 
 

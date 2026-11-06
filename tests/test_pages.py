@@ -1499,7 +1499,7 @@ def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas/gad3', query='scope=es')[2])
-    assert list(data) == ['state', 'meta', 'path', 'today', 'bullseye', 'blocks', 'left', 'scopes'] and data['path'][0]['event_date'] == '2021-05-04'
+    assert list(data) == ['state', 'meta', 'path', 'today', 'bullseye', 'blocks', 'left', 'right', 'scopes'] and data['path'][0]['event_date'] == '2021-05-04'
 
 
 @pytest.mark.parametrize('query, status, text', [('id=abc', 400, 'Encuestadora no válida'),
@@ -1558,6 +1558,9 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert '<h2>Frente a las demás encuestadoras' in card and 'class="chart big" id="consensus-chart"' in card and 'data-house="GAD3"' in card
     assert 'frente a la media de los últimos sondeos de las demás encuestadoras en esa misma elección' in card
     assert 'Cuentan las mismas elecciones que la diana' in card and 'hueco' not in page
+    # desde 2026-11-06 (Luis), el error en la ventaja de la izquierda sobre la derecha y no en la izquierda sola
+    assert 'Error en la ventaja de Izquierda sobre Derecha (Izquierda − Derecha)' in card
+    assert 'El error en la ventaja es el error en la izquierda menos el error en la derecha' in card
     assert_public_wording(page, 'perfil')
     effects = page[page.index('id="profile-effects"'):]
     effects = effects[:effects.index('</table>')]
@@ -1571,8 +1574,9 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert list(data['path'][0]) == ['event_date', 'scopes', 'label', 'kind', 'n_polls', 'error_avg', 'error_blocks',
                                      'bias_dev_adj', 'rating', 'change']
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'year': 2023, 'days': 7, 'scope': 'es',
-                                 'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24,
-                                 'others': -0.51, 'n_others': 1}]  # Sigma Dos, la otra casa de la elección
+                                 'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24, 'gap': -3.05,
+                                 'others': -4.11, 'n_others': 1}]  # Sigma Dos, la otra casa: -0,51 - 3,6
+    assert data['right'] == 'Derecha'
     assert data['left'] == 'Izquierda'
     assert data['blocks'] == ['Derecha', 'Izquierda'] and data['scopes'] == [{'code': 'es', 'name': 'España'}]
     # los filtros de la diana: ámbito (sólo los que tienen sondeos suyos) y años, ocultos hasta que el JS los cablea
@@ -1622,6 +1626,19 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     assert data['path'] == [] and data['today'] is None and data['bullseye'] == []
 
 
+def test_block_gap_is_the_left_error_minus_the_right_one():
+    """`block_gap`: el error en la ventaja entre los dos bloques, el `error_blocks` con signo; sin uno de los dos
+    bloques, sin un número en uno de ellos (o un NaN, o un booleano) no hay ventaja."""
+    from mtpy.lib.pages.casas import block_gap
+    row = {'Izquierda': -0.24, 'Derecha': 2.81, 'Otros': 1.0}
+    assert block_gap(row, 'Izquierda', 'Derecha') == -3.05
+    assert block_gap(row, 'Derecha', 'Izquierda') == 3.05
+    assert block_gap(row, 'Izquierda', None) is None and block_gap(row, None, None) is None
+    assert block_gap({'Izquierda': 1.0, 'Derecha': None}, 'Izquierda', 'Derecha') is None
+    assert block_gap({'Izquierda': float('nan'), 'Derecha': 1.0}, 'Izquierda', 'Derecha') is None
+    assert block_gap({'Izquierda': True, 'Derecha': 1.0}, 'Izquierda', 'Derecha') is None
+
+
 def test_casa_profile_bullseye_keeps_only_the_final_stretch(houses, fresh_app):
     """La diana cuenta sólo las elecciones con un sondeo entre 6 y 42 días antes (`bundle.POLL_ERRORS_WINDOW`), como
     la parte publicada; una fila tardía de la casa queda fuera, y una de otra casa no entra en la media de las demás
@@ -1658,7 +1675,7 @@ def test_casa_profile_bullseye_counts_only_the_featured_elections(houses, fresh_
     status, _, body = call(houses, '/casas/gad3')
     page = html(body)
     assert status == 200 and [row['event_date'] for row in initial(body)['bullseye']] == ['2023-07-23']
-    assert initial(body)['bullseye'][0]['others'] == -0.51  # la media de las demás no cambia
+    assert initial(body)['bullseye'][0]['others'] == -4.11  # la media de las demás no cambia
     assert 'Sólo cuentan las elecciones que alimentan el rating' in page
     # el histórico de errores sí lista la elección publicada sin analizar
     assert '2019-11-10' in {row['event_date'] for row in initial(call(houses, '/elecciones')[2])['errors']}

@@ -40,7 +40,7 @@ function paint() {
   wireMore('ranking-more', 'ranking-table');
   wireViewSwitch('last-view', 'lview', {resultado: 'profile-last-wrap', consenso: 'profile-last-consensus-wrap'});
   wireViewSwitch('effects-view', 'eview', {resultado: 'profile-effects-wrap', ciclo: 'profile-effects-cycle-wrap'});
-  const {grid = null, path = [], today = null, bullseye = [], blocks = [], left = null} = readInitial();
+  const {grid = null, path = [], today = null, bullseye = [], blocks = [], left = null, right = null} = readInitial();
 
   const heatmap = document.getElementById('effects-heatmap');
   if (heatmap && grid && grid.rows.length) {
@@ -55,7 +55,7 @@ function paint() {
   }
 
   wireBullseye(bullseye, blocks);
-  wireConsensus(bullseye, left);
+  wireConsensus(bullseye, left, right);
 }
 
 wireControls();
