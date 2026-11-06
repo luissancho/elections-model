@@ -55,10 +55,21 @@ def compute_for_publish(data: FileSystem, writer: bundle.BundleWriter):
     -------
     BanStudy
         The computed study.
+
+    Raises
+    ------
+    NothingToPublish
+        If no national election has clandestine polls (nothing is written).
     """
     from ..studies.ban.study import compute_ban
 
-    return compute_ban(bundle.BundleReader(writer.fs, prefix=bundle.PREFIX), data)
+    study = compute_ban(bundle.BundleReader(writer.fs, prefix=bundle.PREFIX), data)
+
+    if study.latest is None:
+        # Before any part is written: a failure in the last part would leave new parts beside the old ``meta``
+        raise NothingToPublish('andorra: no national election with clandestine polls')
+
+    return study
 
 
 def _significant(p, figures: int = P_FIGURES):
@@ -185,7 +196,7 @@ def _subtitle(template: str, study) -> str:
                 f"clandestino estuvo más cerca del resultado que el último legal en {pairs['k']}.")
 
     cells = study.summary['cells']
-    return template.format(n=elections['n'], k=elections['k_beaten'], kc=cells['k_closer'], nc=cells['n'])
+    return template.format(year=study.params['chart_since'][:4], n=elections['n'], k=elections['k_beaten'], kc=cells['k_closer'], nc=cells['n'])
 
 
 def export_ban_meta(study, study_id: str = 'andorra', registration: Optional[dict] = None,

@@ -6,7 +6,7 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
 from mtpy.lib.studies.ban.study import compute_ban
-from tests.fakes import RecordingFileSystem, write_ban_bundle
+from tests.fakes import BAN_EVENTS, RecordingFileSystem, write_ban_bundle
 from tests.test_publish_unit import fake_prov, make_writer
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -124,3 +124,23 @@ def test_publish_study_andorra_refuses_register(study, fresh_app, tmp_path):
 def test_andorra_is_a_live_study():
     assert publish.STUDY_RUNNERS['andorra'] == {'compute': publish.STUDY_RUNNERS['andorra']['compute'],
                                                 'registrable': False, 'live': True}
+
+
+def test_publish_study_andorra_writes_nothing_without_clandestine_polls(fresh_app, tmp_path):
+    """Sin sondeos clandestinos en ninguna elección nacional el cálculo para antes de escribir: no queda ningún
+    fichero de `studies/andorra/` (partes nuevas junto a un `meta` viejo)."""
+    fs = FileSystem(str(tmp_path))
+    write_ban_bundle(fs)
+    writer = make_writer(tmp_path, fs)
+
+    for (scope, date) in BAN_EVENTS:
+        if scope == 'es':
+            path = bundle.path_event(scope, date, 'ban')
+            part = writer.read_json(path)
+            writer.write_json(path, 'event-ban', {**part['data'], 'polls': [], 'legal': []}, scope)
+
+    with pytest.raises(publish.NothingToPublish):
+        publish.publish_study('andorra', writer, data=FileSystem(os.path.join(ROOT, 'data')), prov=fake_prov)
+
+    assert not writer.study_exists('andorra')
+    assert not [p for p in tmp_path.rglob('*') if p.is_file() and '/studies/andorra/' in str(p)]

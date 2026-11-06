@@ -41,7 +41,7 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                 # consensus beat the frozen average, {kc} of {nc} party figures closer to the result
                 'andorra': ('El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última '
                             'hora?',
-                            BAN_INTRO + ' En las {n} generales desde 2015, el consenso de esos sondeos estuvo más '
+                            BAN_INTRO + ' En las {n} generales desde {year}, el consenso de esos sondeos estuvo más '
                             'cerca del resultado que el promedio congelado en {k}, y quedó más cerca del resultado '
                             'en {kc} de las {nc} cifras de partido.')}
 
