@@ -952,34 +952,32 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 #p3 .table-wrap + .ctitle { margin-top: 14px; }
 td.blk { font-weight: 700; }
 #datos .src-list + .ctitle { margin-top: var(--space-3); }
-/* The herd study (/analisis/rebano): the blue of question 3, the row of the cycle in progress and the six shades of
-   the house × cycle matrix (its table without JavaScript and its legend): red below 1, grey near it, blue above */
-.qb { --qc: #1d4f86; --qc-ink: #1d4f86; --qc-soft: #e7eef8; }
-#study-head + .toc a.qb { border-color: var(--qc); color: var(--qc-ink); }
-tr.now td { background: var(--color-accent-soft); }
-.shade-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0; font-size: 11.5px; color: var(--color-muted); }
-.shade-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.shade-legend i { width: 14px; height: 10px; border-radius: 3px; }
-#matrix-table td + td { text-align: center; }
-/* the colours of the chart (`matrixOption` with `center: 1`) at a value inside each band: 0,4, 0,6, 0,8, 1,4 and 2;
-   the label in white from the opacity 0,6, as in the chart */
-:is(#matrix-table td, .shade-legend i).h1 { background: rgba(214,39,40,0.90); color: #fff; }
-:is(#matrix-table td, .shade-legend i).h2 { background: rgba(214,39,40,0.75); color: #fff; }
-:is(#matrix-table td, .shade-legend i).h3 { background: rgba(214,39,40,0.45); }
-:is(#matrix-table td, .shade-legend i).h4 { background: #f4f5f8; }
-.shade-legend i.h4 { border: 1px solid var(--color-line-strong); }
-:is(#matrix-table td, .shade-legend i).h5 { background: rgba(29,79,134,0.45); }
-:is(#matrix-table td, .shade-legend i).h6 { background: rgba(29,79,134,0.90); color: #fff; }
-/* its two charts: the dispersion by weeks, lower on phones, and the matrix scrolling sideways in its column (few
-   cycles, so narrower than the matrix of the CIS bias study, which is not in a `.grid2`) */
-.qcard .chart#weeks-chart { height: 340px; }
-.grid2 .chart-scroll > .chart#matrix-chart { min-width: 420px; }
-@media (max-width: 699px) {
-  .qcard .chart#weeks-chart { height: 280px; }
+/* The herd study (/analisis/rebano): the bars of the elections and the squares of the two comparisons, in HTML and
+   CSS so that they come out the same in the image of the card. Blue = the houses get closer, orange = they part
+   (written out, not as variables, for the card images). The summary has two answers, not three. */
+@media (min-width: 900px) {
+  .three.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-/* the image of question 1 (`card-image.js` marks the clone `.shot-image`): the chart above the cycles table, so the
-   whole table fits the 1200 px of the image */
-.shot-image .grid2:has(#cycles-table) { grid-template-columns: 1fr; }
+.herd-bars { display: grid; gap: 6px; margin: var(--space-3) 0 0; }
+.herd-bar { display: grid; grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr) 4.5rem; align-items: center; gap: 10px; font-size: 13px; }
+.herd-label { font-weight: 600; }
+.herd-track { position: relative; display: grid; grid-template-columns: 1fr 1fr; height: 18px; }
+.herd-track::after { content: ''; position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: #5a5f72; }
+.herd-track .half { display: flex; height: 100%; }
+.herd-track .half.left { justify-content: flex-end; }
+.herd-track i { display: block; height: 100%; }
+.herd-track i.down { background: #1d4f86; border-radius: 4px 0 0 4px; }
+.herd-track i.up { background: #e8912b; border-radius: 0 4px 4px 0; }
+.herd-value { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.herd-block .ctitle { font-size: 15px; }
+.herd-count { margin: 2px 0 10px; font: 600 15px var(--font-head); color: var(--color-muted); }
+.herd-count b { font-size: 30px; font-weight: 800; color: var(--color-text); }
+.herd-squares { display: flex; flex-wrap: wrap; gap: 5px; }
+.herd-squares .sq { width: 20px; height: 20px; border: 2px solid #1d4f86; border-radius: 4px; background: #fff; }
+.herd-squares .sq.on { background: #1d4f86; }
+@media (max-width: 719px) {
+  .herd-bar { grid-template-columns: 6.5rem minmax(0, 1fr) 3.6rem; gap: 6px; font-size: 12px; }
+}
 /* The shy-vote study (/analisis/voto-oculto): the bars of the left at full width and lower on phones, the bars of
    Vox, the strip of the parties beside the wider table of question 3, the quote of question 2 with its pill and the
    bold cells and rows of its tables */

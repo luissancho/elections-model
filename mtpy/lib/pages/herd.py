@@ -318,6 +318,34 @@ def squares(comparison: Optional[dict]) -> dict:
             'chance': chance_text(_get(comparison, 'sign_p'))}
 
 
+def live_rows(current: Optional[dict]) -> list:
+    """
+    The figures of the live card: one row per comparison of the election in progress that already has pairs of houses.
+
+    Parameters
+    ----------
+    current : dict or None
+        The ``current`` block.
+
+    Returns
+    -------
+    list of dict
+        ``{'key', 'pairs', 'r_a', 'r_b', 'change'}`` for ``far_mid`` and ``mid_final`` (in that order, those that are
+        not ``None``); ``change`` is written by ``percent``, ``r_a`` and ``r_b`` are the dispersion of the earlier and
+        of the later period.
+    """
+    rows = []
+
+    for key in ('far_mid', 'mid_final'):
+        block = _get(current, key)
+
+        if block:
+            rows.append({'key': key, 'pairs': block.get('pairs'), 'r_a': block.get('r_a'), 'r_b': block.get('r_b'),
+                         'change': percent(block.get('change'))})
+
+    return rows
+
+
 def live_text(current: Optional[dict], flag: dict) -> Optional[str]:
     """
     The sentence of the live card.
