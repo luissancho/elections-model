@@ -24,6 +24,37 @@
 <button type="button" class="card-img-btn" hidden data-file="{{ file }}" data-sign="{{ sign }}" title="Descargar la tarjeta como imagen" aria-label="Descargar la tarjeta como imagen"><svg aria-hidden="true"><use href="#i-download"/></svg></button>
 {%- endmacro %}
 
+{#- The scope and years filters of a chart of the errors by election (the bullseye, the house against the others):
+    `{prefix}-filter` with the scope (`scopes`, open «Todos» first) and the first and last year (`years`, the
+    open extremes chosen), and the count `{prefix}-count`. Hidden: it only works with JS (`bullseye-wire.js`). -#}
+{% macro errors_filter(prefix, scopes, years) -%}
+<form id="{{ prefix }}-filter" class="series-controls filters-bar" hidden>
+  <label>Ámbito
+    <select name="ambito">
+      <option value="" selected>Todos</option>
+      {% for scope in scopes %}
+      <option value="{{ scope.code }}">{{ scope.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Desde
+    <select name="desde">
+      {% for year in years %}
+      <option value="{{ year }}"{% if loop.first %} selected{% endif %}>{{ year }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Hasta
+    <select name="hasta">
+      {% for year in years %}
+      <option value="{{ year }}"{% if loop.last %} selected{% endif %}>{{ year }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <span class="muted" id="{{ prefix }}-count" aria-live="polite"></span>
+</form>
+{%- endmacro %}
+
 {% macro card_end() -%}
 </section>
 {%- endmacro %}

@@ -1584,6 +1584,10 @@ def test_casa_profile_tables_and_bullseye(houses):
     years = [str(year) for year in range(2023, date.today().year + 1)]  # todos los años desde el primer evento hasta hoy (2026-10-17)
     assert re.findall(r'<option value="([^"]*)"', form) == ['', 'es'] + years + years and 'id="bullseye-count"' in form
     assert page.index('id="bullseye-filter"') < page.index('id="bullseye-chart"') < page.index('id="bullseye-table"')
+    # «frente a las demás encuestadoras» con los mismos filtros, en su propio formulario
+    form = re.search(r'<form id="consensus-filter"[^>]*hidden>(.*?)</form>', page, re.S).group(1)
+    assert re.findall(r'<option value="([^"]*)"', form) == ['', 'es'] + years + years and 'id="consensus-count"' in form
+    assert page.index('id="consensus"') < page.index('id="consensus-filter"') < page.index('id="consensus-chart"')
 
 
 def test_casas_ranking_and_profile_header_are_national_whatever_the_panel_scope(houses, fresh_app, monkeypatch):
