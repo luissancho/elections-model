@@ -12,7 +12,9 @@ from ..mtypes import DROP_MTYPES
 from ..quality import level_text, load_criteria, max_points, quality_breakdown
 from ..webapi import query_pollster, query_pollster_path, query_ratings, site
 from .common import OTHERS_COLOR, analysis_part, api_url, block_color, common_context
-from .elecciones import (error_blocks, event_part, history_events, history_rows, history_scopes, poll_error_parts,
+from ..bundle import POLL_ERRORS_WINDOW
+from .elecciones import (error_blocks, event_part, final_stretch_rows, history_events, history_rows, history_scopes,
+                         poll_error_parts,
                          table_blocks, year_range)
 from .filters import _madrid_tz, fmt_num, fmt_date
 
@@ -831,14 +833,19 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
         ``results`` parts of the election), ``effects_table`` and ``cycle_table`` (``effects_table`` of
         ``dev_result_c`` and ``dev_cycle``, with the elections named by ``election_label``), ``herding_table``
         (its herding by cycle, ``HERDING_KEYS`` plus ``label``), ``bullseye`` (its rows of the ``poll-errors``
-        parts of the published elections: ``event``, ``event_date``, ``year``, ``days``, ``scope``, ``name`` and
-        the error of each block; empty without analysis), ``bullseye_scopes`` (``{code, name}`` of the scopes
+        parts of the published elections: ``event``, ``event_date``, ``year``, ``days``, ``scope``, ``name``,
+        the error of each block, ``late`` (the poll is older than the final stretch, ``days`` above
+        ``POLL_ERRORS_WINDOW[1]``: the part has no upper bound since 2026-11-06), ``others`` (the mean error of the
+        other houses in the left block, ``left``, in that election, with their rows of the final stretch only,
+        rounded to two decimals; ``None`` without any) and ``n_others`` (how many); empty without analysis),
+        ``left`` (the left block of the pair, ``table_blocks``; ``None`` without blocks), ``bullseye_scopes``
+        (``{code, name}`` of the scopes
         with a bullseye row, in catalogue order) and ``bullseye_years`` (every year from the first row to today,
         ``year_range``), the options of the bullseye filters, ``blocks`` (the pair of ``error_blocks``, the axes of
         the bullseye), ``table_blocks`` (the same pair in the order of the table columns, ``table_blocks``),
         ``analysis_missing`` (no scope
         has a published analysis) and ``initial`` (``state``, ``meta``, ``path`` = ``path_points``, ``today``,
-        ``bullseye``, ``blocks`` and ``scopes`` = ``bullseye_scopes``). Every table runs from the newest election
+        ``bullseye``, ``blocks``, ``left`` and ``scopes`` = ``bullseye_scopes``). Every table runs from the newest election
         to the oldest.
 
     Raises
@@ -873,6 +880,18 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
 
     for row in errors:
         by_election.setdefault((row['scope'], row['event_date']), []).append(row)
+
+    # The last poll of the house in every election it polled, whatever its age (`late` beyond the final stretch), and
+    # the mean error of the other houses in the left block with their last polls of the final stretch only
+    left = table_blocks(blocks)[0] if blocks else None
+    limit = POLL_ERRORS_WINDOW[1]
+
+    for row in bullseye:
+        rest = [other[left] for other in final_stretch_rows(by_election.get((row['scope'], row['event_date'])) or [])
+                if left is not None and other.get('pollster') != name and isinstance(other.get(left), (int, float))]
+        row['late'] = isinstance(row.get('days'), (int, float)) and row['days'] > limit
+        row['others'] = round(sum(rest) / len(rest), 2) if rest else None
+        row['n_others'] = len(rest)
 
     last_records = []
     wanted = [(row['scope'], row['event_date'], part) for row in bullseye for part in ('cycle', 'results')]
@@ -924,8 +943,9 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     context['bullseye_years'] = bullseye_years
     context['blocks'] = blocks
     context['table_blocks'] = table_blocks(blocks)
+    context['left'] = left
     context['analysis_missing'] = not any(scope['analysis'] for scope in scopes)
     context['initial'] = {'state': full, 'meta': context['meta'], 'path': context['path_points'], 'today': path['today'],
-                          'bullseye': bullseye, 'blocks': blocks, 'scopes': bullseye_scopes}
+                          'bullseye': bullseye, 'blocks': blocks, 'left': left, 'scopes': bullseye_scopes}
 
     return context

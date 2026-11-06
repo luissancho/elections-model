@@ -1499,7 +1499,7 @@ def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas/gad3', query='scope=es')[2])
-    assert list(data) == ['state', 'meta', 'path', 'today', 'bullseye', 'blocks', 'scopes'] and data['path'][0]['event_date'] == '2021-05-04'
+    assert list(data) == ['state', 'meta', 'path', 'today', 'bullseye', 'blocks', 'left', 'scopes'] and data['path'][0]['event_date'] == '2021-05-04'
 
 
 @pytest.mark.parametrize('query, status, text', [('id=abc', 400, 'Encuestadora no válida'),
@@ -1562,7 +1562,9 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert list(data['path'][0]) == ['event_date', 'scopes', 'label', 'kind', 'n_polls', 'error_avg', 'error_blocks',
                                      'bias_dev_adj', 'rating', 'change']
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'year': 2023, 'days': 7, 'scope': 'es',
-                                 'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24}]
+                                 'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24,
+                                 'late': False, 'others': -0.51, 'n_others': 1}]  # Sigma Dos, la otra casa de la elección
+    assert data['left'] == 'Izquierda'
     assert data['blocks'] == ['Derecha', 'Izquierda'] and data['scopes'] == [{'code': 'es', 'name': 'España'}]
     # los filtros de la diana: ámbito (sólo los que tienen sondeos suyos) y años, ocultos hasta que el JS los cablea
     form = re.search(r'<form id="bullseye-filter"[^>]*hidden>(.*?)</form>', page, re.S).group(1)
@@ -1608,6 +1610,27 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
     data = initial(body)
     assert data['path'] == [] and data['today'] is None and data['bullseye'] == []
+
+
+def test_casa_profile_bullseye_keeps_the_late_polls_and_averages_the_final_stretch_of_the_others(houses, fresh_app):
+    """Desde 2026-11-06 la diana trae el último sondeo de cada elección aunque tenga más de 42 días (`late`); la media
+    de las demás casas en el bloque de izquierdas (`others`) sólo cuenta sus sondeos de la recta final."""
+    errors = fixture_data('poll-errors')
+    errors['rows'][0]['days'] = 60          # GAD3, tardío: sigue en la diana
+    errors['rows'][1]['days'] = 50          # Sigma Dos, tardío: no entra en la media de las demás
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    [row] = initial(call(houses, '/casas/gad3')[2])['bullseye']
+    assert row['late'] is True and row['days'] == 60 and row['others'] is None and row['n_others'] == 0
+    errors['rows'][1]['days'] = 8
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es')
+    webapi.site().manifest_cache_clear()  # the analysis parts live in the TTL cache
+    webapi.site().files.clear()
+    [row] = initial(call(houses, '/casas/gad3')[2])['bullseye']
+    assert row['late'] is True and row['others'] == -0.51 and row['n_others'] == 1
 
 
 def test_casa_profile_without_analysis_has_no_bullseye(houses_without_analysis):
