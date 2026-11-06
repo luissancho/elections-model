@@ -96,8 +96,9 @@ def check_rating_exponent(value: Any) -> float:
 
     Parameters
     ----------
-    value : float
-        Exponent applied to `weight_rating`: 1 keeps it, 0 makes every poll weigh the same.
+    value : Any
+        Exponent applied to `weight_rating` (1 keeps it, 0 makes every poll weigh the same): a number or a value
+        `float()` accepts; booleans are rejected.
 
     Returns
     -------
@@ -109,6 +110,8 @@ def check_rating_exponent(value: Any) -> float:
     ValueError
         If it is not a finite number greater than or equal to 0.
     """
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError('rating_exponent: expected a finite number >= 0')
     try:
         exponent = float(value)
     except (TypeError, ValueError):

@@ -149,7 +149,7 @@ Brier +12,5 %) mientras las autonómicas se mueven dentro del ±1 % en el voto; 
 −0,4 a −1,1 puntos sobre todos los casos); la banda estrecha (γ = 0,5) pierde en más casos de los que gana (38 / 56 en
 el MAE de voto). Lectura declarada de antemano, cumplida: la curva es plana dentro del ±2 % en el voto (y en los escaños
 salvo el CRPS de las autonómicas a γ = 3, +2,4 %, a peor), así que **la anchura de la banda es cosmética**; los recuentos
-(γ = 0,5 pierde 56 de 94 casos, γ = 1,5 gana 49 de 92) dicen que el rating ayuda un poco y que alrededor de 1 una banda
+(γ = 0,5 pierde 56 de 94 casos, γ = 1,5 gana 49 de 92) dicen que el signo, si acaso, favorece al rating por muy poco (+0,5 % de error de voto sin él en el backtest; al revés en la prueba 1b), sin distinguirse del ruido, y que alrededor de 1 una banda
 acierta lo mismo que otra. El valor por defecto se queda en 1 y el modelo vivo no cambia: no hay commit de default.
 
 **Pasos de Luis que quedan.** Integrar `dev` (el código de la palanca y del script de comparación). No hay nada que publicar ni

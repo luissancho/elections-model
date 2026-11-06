@@ -186,7 +186,7 @@ La regla para cambiar el valor por defecto, fijada antes de las corridas (spec, 
 
 Las filas de γ = 0 son la prueba 1b de la fase C con el signo al revés (allí, con rating − sin rating: +0,011 y 37 / 34).
 
-**La curva es plana.** En el conjunto, el MAE va de 1,929 a γ = 0 a 1,940 a γ = 1 y 1,934 a γ = 3; ninguna diferencia frente a γ = 1 pasa de 0,011 puntos (en las autonómicas, 0,012 a γ = 0), un 0,5 % del error, y todos los intervalos cruzan el 0. Los recuentos tampoco separan: las bandas anchas ganan algo más elecciones de las que pierden en el conjunto (de 38 / 33 a 40 / 31), la estrecha (γ = 0,5) pierde más de las que gana (31 / 40), y en las generales todos los γ distintos de 1 pierden más de las que ganan (6 / 7 o 5 / 8), siempre por milésimas de punto de media. En el promedio simple, la anchura de la banda es cosmética.
+**La curva es plana.** En el conjunto, el MAE va de 1,929 a γ = 0 a 1,940 a γ = 1 y 1,934 a γ = 3; ninguna diferencia frente a γ = 1 pasa de 0,011 puntos (en las autonómicas, 0,012 a γ = 0), un 0,5 % del error, y todos los intervalos cruzan el 0. Los recuentos tampoco separan: las bandas anchas ganan algo más elecciones de las que pierden en el conjunto (de 38 / 33 a 40 / 31), la estrecha (γ = 0,5) pierde más de las que gana (31 / 40), y en las generales todos los γ distintos de 1 pierden más de las que ganan (6 / 7 o 5 / 8), con diferencias de milésimas de punto en la media. En el promedio simple, la anchura de la banda es cosmética.
 
 ### El backtest emparejado por γ (el que decide)
 
@@ -237,7 +237,7 @@ Las medias de γ = 1, con las que se calculan los %: en las generales, MAE de vo
 - **La banda estrecha pierde en más casos de los que gana**: γ = 0,5 empeora el MAE de voto en 56 de los 94 casos (38 / 56; 26 / 40 en las autonómicas), con medias apenas peores (+0,3 %). El rating plano (γ = 0) es la prueba 1a: +0,5 % de error de voto, 45 / 48.
 - **El Brier de las generales sigue a la anchura en todo el tramo** (−8,9, −4,5, 0, +5,9, +8,3 y +12,5 % de γ = 0 a 3), pero sobre 22 casos y lo mueven pocas elecciones: en la prueba 1a, los seis casos de 2023 decidían el de γ = 0. No es una señal para estrechar la banda, porque el voto y los escaños de las generales también empeoran hacia γ = 0.
 
-La lectura declarada de antemano se cumple: **la curva es plana dentro del ±2 % en el voto, en todos los γ y las dos poblaciones (lo más, +1,8 % en las generales a γ = 3), y en los escaños salvo el CRPS de las autonómicas a γ = 3 (+2,4 %, a peor), así que la anchura de la banda es cosmética para la predicción.** Los recuentos añaden lo que las medias no dicen: γ = 0,5 pierde 56 de los 94 casos y γ = 1,5 gana 49 de 92 (con una media un 0,1 % peor). El rating ayuda un poco, y alrededor de 1 una banda acierta lo mismo que otra: la de hoy está en el tramo plano de la curva.
+La lectura declarada de antemano se cumple: **la curva es plana dentro del ±2 % en el voto, en todos los γ y las dos poblaciones (lo más, +1,8 % en las generales a γ = 3), y en los escaños salvo el CRPS de las autonómicas a γ = 3 (+2,4 %, a peor), así que la anchura de la banda es cosmética para la predicción.** Los recuentos añaden lo que las medias no dicen: γ = 0,5 pierde 56 de los 94 casos y γ = 1,5 gana 49 de 92 (con una media un 0,1 % peor). El signo, si acaso, favorece al rating por muy poco (+0,5 % de error de voto sin él en el backtest; al revés en la prueba 1b), sin distinguirse del ruido, y alrededor de 1 una banda acierta lo mismo que otra: la de hoy está en el tramo plano de la curva.
 
 Decisión: el valor por defecto se queda en γ = 1 y el modelo vivo no cambia (no hay commit de ese tipo). `rating_exponent` queda en el código como palanca del backtest.
 
@@ -254,7 +254,7 @@ Decisión: el valor por defecto se queda en γ = 1 y el modelo vivo no cambia (n
 
 ```bash
 # La rejilla, encadenada en segundo plano (≈ 2 h por γ en el portátil); γ = 0 es results_flat de la prueba 1a
-nohup sh -c 'for g in 1 0.5 1.5 2 3; do python backtest/run_backtest.py --scope es --rating-exponent $g --out backtest/results_exp$g && python backtest/run_backtest.py --scopes es-md es-an es-ct es-vc es-ga --rating-exponent $g --out backtest/results_exp$g || exit 1; done' > backtests.log 2>&1 &
+nohup sh -c 'for g in 1 0.5 1.5 2 3; do python backtest/run_backtest.py --scope es --rating-exponent $g --out backtest/results_exp$g && python backtest/run_backtest.py --scopes es-md es-an es-ct es-vc es-ga --rating-exponent $g --out backtest/results_exp$g || exit 1; done' > /tmp/backtests-exp.log 2>&1 &
 # La base no cambió: diferencia 0 y 94 casos empatados
 python backtest/compare_results.py backtest/results_rated backtest/results_exp1
 # Cada punto de la curva frente a γ = 1
