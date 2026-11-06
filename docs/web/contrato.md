@@ -403,9 +403,9 @@ Como el análisis y el backtest, **se sobrescribe** en cada publicación: sin `r
 La fuente de verdad en código es `bundle.EVENT_PARTS`, `EVENT_SCHEMAS`, `EVENT_CSV` (`path_event`, `path_event_csv`,
 `BundleReader.list_events`, `event_exists`) y `publish.publish_event`.
 
-Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Seis partes
+Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Ocho partes
 (`cycle` desde la enmienda 2026-10-14; una elección publicada antes no la tiene y la página lo avisa hasta que se
-republica):
+republica; `ban` desde la enmienda 2026-11-05, ver abajo):
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
@@ -421,7 +421,9 @@ republica):
 - `meta.summary`: `n_polls`, `n_pollsters`, `error_avg`, `error_blocks`, `bias_blocks` (medias de los sondeos ponderadas
   por `weight`, 2 decimales) y `bias` = `{bloque: media ponderada de su desviación con signo}` (positivo: los
   sondeos dieron de más a ese bloque). `bias_blocks` no tiene signo: es una magnitud en la escala del error. `has_model` es
-  `true` si `horizons` no está vacío; `horizons`, los horizontes del modelo.
+  `true` si `horizons` no está vacío; `horizons`, los horizontes del modelo. `meta.n_ban` (entero, desde la enmienda
+  2026-11-05) es el número de sondeos de `ban.polls`, 0 cuando la elección no tiene clandestinos; no es clave
+  obligatoria: una elección publicada antes no lo tiene hasta que se republica.
 - `pollsters.rows`: una fila por casa, de menor a mayor `error_blocks` (nulos al final): `pollster_id` (o `null`),
   `pollster`, `n_polls`, `sample_size` (mediana de las muestras conocidas, `null` si ninguna), `error_avg`,
   `error_blocks`, `bias_blocks` (medias, 2 decimales) y los `last_*` de su sondeo más cercano a la elección
@@ -437,8 +439,10 @@ republica):
   de muestra; los escaños salen de `forecaster.published_seats`. El gemelo CSV añade `seats_min_*`/`seats_max_*`.
 - `ban` (opcional): los sondeos publicados durante la veda (`ctype` `wban`, los «clandestinos») de la elección, con la
   forma de `cycle` (`parties`, `columns` y `polls`, cada uno con `error_avg`, `error_blocks` y `bias_blocks`) y `legal`,
-  el último sondeo legal de cada casa que publicó uno clandestino (la misma forma). Sólo existe si la elección tiene
-  alguno; lo lee el estudio `andorra`. Sus gemelos CSV son `ban` y `ban-legal`.
+  el último sondeo legal de cada casa que publicó uno clandestino (la misma forma). `publish event` la escribe siempre:
+  sin sondeos clandestinos, `polls` y `legal` van vacíos (con `parties` y `columns`) y `meta.n_ban` es 0. Es opcional
+  sólo para las elecciones publicadas antes de la enmienda 2026-11-05, que no la tienen hasta que se republican; lo
+  lee el estudio `andorra`. Sus gemelos CSV son `ban` y `ban-legal`.
 - `results.rows`: `party_id`, `party`, `votes` (entero), `pct` (2 decimales) y `seats` (entero) del resultado oficial
   nacional (región 0), por votos descendente; `n_seats` es la suma de `seats`.
 - `model` es el **corte del backtest** (ver "Backtest") a esta elección: `shares`, `seats` y `blocks` son las filas

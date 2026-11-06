@@ -1324,8 +1324,22 @@ trae `calibration.csv`, `calibration`, con sus gemelos CSV; formato en "Backtest
 - **Caso `ban`.** `backtest {"scopes":["es"],"ban":true}` añade, por cada elección con sondeos publicados durante la
   veda, un caso a horizonte 0 con ellos dentro; sus filas de `shares` van a `ban.csv`, aparte de las métricas (que no se
   mueven), y `run.json` registra el flag. Sin el flag se borra el `ban.csv` anterior. `publish backtest` no lo publica
-  como parte: lo lee `publish event`, que lo pone en la clave `ban` de `model` de la elección. Tras correrlo,
-  `backtest push` lo siembra en S3 y `publish event` de las elecciones lo refresca; el estudio `andorra` lo lee de ahí.
+  como parte: lo lee `publish event`, que lo pone en la clave `ban` de `model` de la elección; el estudio `andorra` lo
+  lee de ahí. Se corre en el portátil sobre la copia del repositorio (`"out":"backtest/results"`, el flujo de
+  "Backtest del modelo"), se comprueba y después se siembra:
+
+  ```
+  cp backtest/results/series.csv /tmp/series-antes.csv
+  python job.py backtest '{"scopes":["es"],"ban":true,"out":"backtest/results"}'
+  git diff --stat backtest/results; cmp backtest/results/series.csv /tmp/series-antes.csv
+  set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"push","scopes":["es"]}'
+  ```
+
+  La comprobación de identidad espera `metrics.csv`, `by_horizon.csv`, `shares.csv` y `series.csv` sin cambios y sólo
+  `ban.csv` y `run.json` nuevos o cambiados (`meta.csv`, como mucho en `seconds` y en columnas de parámetros nuevas);
+  si cambia algo más, parar antes del `push`. Después, commit de `ban.csv` con `run.json` y `publish event` de las
+  elecciones. **Sin `out` no**: el job escribiría en el sistema de ficheros de la app (S3 con `S3_BUCKET`, `files/` sin
+  él) y el `push`, que replica en él la copia del repositorio y borra lo que ésta no tiene, se llevaría el `ban.csv`.
 
 Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante; sin `source`, `publish
 backtest` y `publish event` leen las tablas del mismo sistema de ficheros que escribe el job `backtest`, y con
@@ -1390,8 +1404,10 @@ frente al promedio congelado) y lo escribe en `studies/andorra/` (partes `summar
 `houses` y `latest` con sus gemelos CSV, y `meta` la última). Es vivo, como el rebaño: lo republica `studies`. **Sólo lee
 partes ya publicadas** del paquete vivo: de cada elección, `meta`, `ban`, `pollsters`, `results` y `model` (con la
 clave `ban` del backtest), y el run de `es` para la elección en curso; sin base de datos ni registro. Tras el 29-N: añadir
-`2026-11-29` a `DEFAULT_EVENTS` (`mtpy/lib/backtest.py`), `backtest {"scopes":["es"],"ban":true}`, `backtest push`,
-`publish event es/2026-11-29` y `publish study andorra`.
+`2026-11-29` a `DEFAULT_EVENTS` (`mtpy/lib/backtest.py`), `backtest {"scopes":["es"],"ban":true,"out":"backtest/results"}`
+en el portátil (con `out`: ver "Caso `ban`" en "Backtest"), `git diff backtest/results` (sólo filas nuevas de
+`2026-11-29`, más `by_horizon.csv` y `run.json`), `backtest push`, commit de `backtest/results`, `publish event
+es/2026-11-29` y `publish study andorra`.
 
 Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
 

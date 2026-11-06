@@ -216,8 +216,15 @@ STUDY_CSV_OF['andorra'] = {'pairs': ('pairs',), 'elections': ('elections',), 'ce
   horizonte más corto como «Lo que dijo el modelo» y no debe encontrar el contrafactual ahí.
 - El job `backtest` gana el parámetro `ban` (bool, falso por defecto; `python job.py backtest
   '{"scopes":["es"],"ban":true}'`); el `push` sube `ban.csv` con el resto. Coste: ~80 s por elección nacional.
-- Guía de Luis: `backtest {"scopes":["es"],"ban":true}` → `backtest push` → `publish event` de las cinco generales
-  desde 2015 → `publish study andorra`. Si no corre el backtest con `ban`, la página funciona sin la columna.
+- Guía de Luis (corregida en la revisión final, 2026-11-06), en el portátil y sobre la copia del repositorio (el
+  flujo de «Backtest del modelo» de `deploy/README.md`: sin `out` el job escribiría en el sistema de ficheros de la
+  app, y el `push`, que replica en él `backtest/results` y borra lo que la copia no tiene, se llevaría el `ban.csv`):
+  `python job.py backtest '{"scopes":["es"],"ban":true,"out":"backtest/results"}'` → comprobación de identidad
+  `git diff --stat backtest/results` (lo esperado: `metrics.csv`, `by_horizon.csv`, `shares.csv` y `series.csv` sin
+  cambios, sólo `ban.csv` y `run.json` nuevos o cambiados; es la comprobación en que descansa «nada se mueve» de
+  arriba; detalle en «Lo que queda para Luis») →
+  `backtest push` → commit de `ban.csv` con `run.json` → `publish event` de las cinco generales desde 2015 →
+  `publish study andorra`. Si no corre el backtest con `ban`, la página funciona sin la columna.
 
 ## D4. Las entradas y el cálculo: `mtpy/lib/studies/ban/`
 
@@ -427,8 +434,9 @@ Un revisor independiente leyó la spec como constructor. Tres preguntas:
    predicción que de verdad se publicó (el run congelado) en vez de con la reconstrucción del backtest a horizonte 6.
    **Decidido por Luis (A, 2026-11-05)**: la reconstrucción del backtest a horizonte 6, como el resto de filas y como
    «Lo que dijo el modelo» de la página de la elección; el estudio no lee ningún run. Pasos tras el 29-N (guía de
-   Luis, también en `deploy/README.md`): `DEFAULT_EVENTS` gana `2026-11-29` (como en cada elección), `backtest
-   {"scopes":["es"],"ban":true}`, `backtest push`, `publish event` de `es/2026-11-29`, `publish study andorra`. Hasta
+   Luis, también en `deploy/README.md`): `DEFAULT_EVENTS` gana `2026-11-29` (como en cada elección),
+   `backtest {"scopes":["es"],"ban":true,"out":"backtest/results"}` (con `out`: ver la guía de D3), `backtest push`,
+   `publish event` de `es/2026-11-29`, `publish study andorra`. Hasta
    entonces la fila de 2026 no existe y la tarjeta «El 29-N» sigue cerrada (D7).
 
 ## Cierre (2026-11-06)
@@ -489,14 +497,29 @@ Construida en la rama `analisis-andorra` (diez tareas, de `f56d33c` a este cierr
 
 En este orden:
 
-1. `python job.py backtest '{"scopes":["es"],"ban":true}'` en el portátil (unos 80 s más por elección).
-2. `backtest push`.
-3. `publish '{"what":["event"],"scopes":"all","event_date":"all"}'` (cada elección con resultado de cada ámbito gana la
+1. `cp backtest/results/series.csv /tmp/series-antes.csv` (`series.csv` no va en git) y
+   `python job.py backtest '{"scopes":["es"],"ban":true,"out":"backtest/results"}'` en el portátil (unos 80 s más por
+   elección). Con `out` escribe en la copia del repositorio, el flujo de «Backtest del modelo» de `deploy/README.md`;
+   **sin `out` no**: escribiría en el sistema de ficheros de la app (S3 con `S3_BUCKET`, `files/` sin él) y el
+   `backtest push` del paso 3, que replica `backtest/results` en ese destino y borra lo que la copia no tiene, se
+   llevaría el `ban.csv`.
+2. Comprobación de identidad (en ella descansa que el default `drop_ctypes` de la tarea 3 no mueve nada publicado):
+   `git diff --stat backtest/results` y `cmp backtest/results/series.csv /tmp/series-antes.csv`. Lo esperado:
+   `metrics.csv`, `by_horizon.csv`, `shares.csv` y `series.csv` sin cambios; sólo `ban.csv` (nuevo) y `run.json`
+   nuevos o cambiados (`meta.csv` sólo puede cambiar en `seconds` y en las columnas de parámetros que la referencia no
+   tenía). Si cambia algo más, parar antes del `push`.
+3. `backtest push`, con S3 desde el portátil:
+   `set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"push","scopes":["es"]}'`; y commit de
+   `backtest/results/ban.csv` con `run.json`.
+4. `publish '{"what":["event"],"scopes":"all","event_date":"all"}'` (cada elección con resultado de cada ámbito gana la
    parte `ban`; unos 25 s cada una).
-4. `publish '{"what":["study"],"study":"andorra"}'` (después, el `update` diario lo republica como estudio vivo).
-5. Recorrer `/analisis`, `/analisis/andorra` (escritorio y móvil: el gráfico con 25 filas, la tabla de celdas, la
+5. `publish '{"what":["study"],"study":"andorra"}'` (después, el `update` diario lo republica como estudio vivo).
+6. Recorrer `/analisis`, `/analisis/andorra` (escritorio y móvil: el gráfico con 25 filas, la tabla de celdas, la
    tarjeta cerrada «El 29-N») y `/metodo` (el enlace en el punto «Veda»).
-6. Integrar la rama en `dev` y desplegar.
-7. Tras el 29-N: `DEFAULT_EVENTS` de `mtpy/lib/backtest.py` gana `'2026-11-29'`, `backtest '{"scopes":["es"],"ban":true}'`,
-   `backtest push`, `publish event` de `es/2026-11-29` y `publish study andorra` (la tarjeta se abre con los sondeos
+7. Integrar la rama en `dev` y desplegar.
+8. Tras el 29-N: `DEFAULT_EVENTS` de `mtpy/lib/backtest.py` gana `'2026-11-29'`;
+   `python job.py backtest '{"scopes":["es"],"ban":true,"out":"backtest/results"}'` (con `out`, como en el paso 1);
+   `git diff backtest/results` (lo esperado: las filas de las cinco generales anteriores sin cambios, filas nuevas de
+   `2026-11-29` en las tablas y en `ban.csv`, y `by_horizon.csv` y `run.json` cambiados); `backtest push`; commit de
+   `backtest/results`; `publish event` de `es/2026-11-29` y `publish study andorra` (la tarjeta se abre con los sondeos
    clandestinos de 2026).
