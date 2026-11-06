@@ -121,6 +121,7 @@ def _ban_rows(frame: pd.DataFrame, names: Sequence[str], order: Sequence[str] = 
     for column in BAN_EXTRA_COLUMNS[1:]:
         extras[column] = extras[column].astype(float).round(PCT_DECIMALS)
     records = data['polls']
+    assert len(records) == len(extras)
     for record, extra in zip(records, extras.astype(object).where(extras.notna(), None).to_dict(orient='records')):
         record.update(extra)
         record.pop('seats', None)
@@ -135,7 +136,7 @@ def export_event_ban(polls: pd.DataFrame, legal: pd.DataFrame, names: Sequence[s
     Parameters
     ----------
     polls : pandas.DataFrame
-        Polls of the ban (``ctype == 'wban'``), as ``Computer.filter_polls`` gives them, with ``date`` and
+        Polls of the ban (``ctype == 'wban'``), as the ``Computer.series`` rows are, with ``date`` and
         ``pollster_id`` as columns or index levels (see ``export_event_cycle``), plus ``days``, ``error_avg``,
         ``error_blocks`` and ``bias_blocks``.
     legal : pandas.DataFrame
@@ -439,7 +440,8 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     election with an official result is published, ``featured`` or not (``meta.featured`` tells which). The polls
     errors come from a ``Computer`` of the election alone (``get_polls_metric('error', bmap='vs',
     featured='results')``), the polls of the cycle as published from the same polls (``filter_polls('results')``,
-    so every poll of the table has its error) with the seat projections of the loader, the results from the
+    so every poll of the table has its error), the polls of the ban from ``comp.series`` (every ``wban`` poll of the
+    election, even the zero-weight rows of a daily tracking; ``legal`` from ``filter_polls`` without ban nor exit polls) with the seat projections of the loader, the results from the
     database and the model from the backtest tables (see ``export_event_model``). The manifest and the runs are
     not touched. The backtest tables are read before anything is written: when the live publication has a model
     slice (``meta.has_model``) or a daily series and the tables found lack it, the publication is refused unless
@@ -516,8 +518,8 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
         blocks, main = bmaps['vs'], list(bmaps.get('main', []))
         errors = comp.get_polls_metric('error', bmap='vs', featured='results')
         cycle = comp.filter_polls('results')
-        ban = comp.filter_polls('results', drop_ctypes=['exit'])
-        ban = ban[ban['ctype'] == 'wban']
+        series = comp.series  # ``filter_polls`` drops the rows without weight: a daily tracking of the ban has them
+        ban = series.loc[series['pollster'].notnull() & (series['ctype'] == 'wban')]
         legal = comp.filter_polls('results', drop_mtypes=[], drop_ctypes=['wban', 'exit'])
     except ValueError as e:
         raise NothingToPublish(str(e)) from e

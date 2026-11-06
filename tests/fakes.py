@@ -370,7 +370,7 @@ def synthetic_ban():
         _ban_poll('2023-07-22', 2, 0, 'GAD3', None, 'cati', 1, 10004, [35.5, 28.6, 12.7],
                   error_avg=2.1, error_blocks=6.96, bias_blocks=15.16),
         _ban_poll('2023-07-21', 2, 0, 'GAD3', None, 'cati', 2, 3000, [34.8, 29.0, 12.8],
-                  error_avg=2.3, error_blocks=6.2, bias_blocks=12.0),
+                  error_avg=2.3, error_blocks=6.2, bias_blocks=12.0, weight_over=0.0),
         _ban_poll('2023-07-21', 4, 30, 'ElectoPanel', 'Electomanía', 'online', 2, 1250, [34.0, 29.5, 13.0],
                   error_avg=1.6, error_blocks=3.1, bias_blocks=-2.0),
     ])
@@ -435,7 +435,8 @@ class FakeComputer:
         frames = synthetic_analysis()
         bmaps = {'main': list(BMAPS['main']), 'blocks': dict(BMAPS['blocks']), 'vs': dict(BMAPS['vs'])}
         comp = types.SimpleNamespace(scope=scope, path=path, event_dates=list(ANALYSIS_EVENTS), herding=None,
-                                     event_params={dt: {'bmaps': bmaps} for dt in ANALYSIS_EVENTS}, names=list(NAMES))
+                                     event_params={dt: {'bmaps': bmaps} for dt in ANALYSIS_EVENTS}, names=list(NAMES),
+                                     series=pd.concat([synthetic_legal(), synthetic_ban()]))
 
         def load_herding():
             comp.herding = frames.herding.copy()
@@ -456,8 +457,6 @@ class FakeComputer:
 
         def filter_polls(featured=True, **kw):
             self.calls.append(('filter_polls', featured, kw))
-            if kw.get('drop_ctypes') == ['exit']:
-                return pd.concat([synthetic_cycle().assign(pollster=lambda d: d['pollster'].astype(object)), synthetic_ban()])
             return synthetic_legal() if kw.get('drop_mtypes') == [] else synthetic_cycle()
 
         comp.build_series = lambda: comp

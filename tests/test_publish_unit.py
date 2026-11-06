@@ -1357,7 +1357,8 @@ def test_publish_event_writes_the_ban_part_and_counts_it_in_meta(tmp_path):
     assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'ban')) and writer.exists(bundle.path_event_csv('es', '2023-07-23', 'ban-legal'))
     cycle = read(bundle.path_event('es', '2023-07-23', 'cycle'))['data']['polls']
     assert len(cycle) == 3  # the ban polls stay out of the cycle
-    assert ('filter_polls', 'results', {'drop_ctypes': ['exit']}) in comp.calls
+    assert ('filter_polls', 'results', {'drop_ctypes': ['exit']}) not in comp.calls
+    assert any(row['pollster'] == 'GAD3' and row['days'] == 2 for row in ban['polls'])  # the zero-weight tracking row stays
     assert ('filter_polls', 'results', {'drop_mtypes': [], 'drop_ctypes': ['wban', 'exit']}) in comp.calls
 
 
