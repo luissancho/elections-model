@@ -1,7 +1,7 @@
 // Houses page and pollster profile: the "Cargar más" of the ranking, the house-effects heat map, the rating path
 // (every election the house polled, up to today) and the bullseye, drawn from the data embedded by the server. The
 // bullseye of a profile has a scope and a years filter (no hash: the profile has no other state), which redraws it
-// and its table.
+// and its table; the house against the other houses has the same filters, its own.
 import {THEME} from '../charts/base.js';
 import {renderHeatmap} from '../charts/heatmap.js';
 import {renderRatingPath} from '../charts/path.js';

@@ -4,7 +4,8 @@
 // button of the card (`#bullseye-download`, the profile) draws the bullseye as filtered, the filters and the count
 // in the subtitle and the file name. A profile also has, in its own card, the house against the mean of the other
 // houses in the same election in the gap between the two blocks (`wireConsensus`: `#consensus-chart`, the `gap` and
-// `others` of the same rows, without filters, with its own download button `#consensus-download`).
+// `others` of the same rows, with the same filters in its own form `#consensus-filter`, independent of the bullseye's,
+// and its own download button `#consensus-download`).
 import {fmtDate, fmtNum, shadeAround} from '../format.js';
 import {fadeByDate, filterRows, imageTexts, yearsText} from '../errors.js';
 import {mountChart, THEME} from '../charts/base.js';
@@ -124,6 +125,45 @@ export function chosenLabel(select) {
 }
 
 /**
+ * Wire a scope and years filter form (`{prefix}-filter`, the `errors_filter` macro): call `draw` with the rows that
+ * pass the filters chosen, their labels (`scope`, the name of the scope chosen or null; `from` and `to`, the years
+ * chosen or null for an open extreme), on every change. The form only works with JavaScript, so the server renders
+ * it hidden and this shows it. Nothing without the form.
+ *
+ * @param {HTMLFormElement|null} form the form
+ * @param {object[]} rows the rows (`scope` and `year`)
+ * @param {function({rows: object[], scope: (string|null), from: (number|null), to: (number|null)}): void} draw
+ */
+function wireFilters(form, rows, draw) {
+  if (!form) {
+    return;
+  }
+  form.addEventListener('submit', (event) => event.preventDefault());
+  // The years offered run from the first election of the house to today (the server fills both selects with the
+  // same list); an extreme chosen is an open bound.
+  const {ambito, desde, hasta} = form.elements;
+  const first = Number(desde.options[0]?.value);
+  const last = Number(hasta.options[hasta.options.length - 1]?.value);
+  form.addEventListener('change', () => {
+    const filters = {
+      scope: ambito.value || null,
+      from: Number(desde.value) === first ? null : Number(desde.value),
+      to: Number(hasta.value) === last ? null : Number(hasta.value),
+    };
+    draw({rows: filterRows(rows, filters), scope: chosenLabel(ambito), from: filters.from, to: filters.to});
+  });
+  form.hidden = false;
+}
+
+/**
+ * Text of the count of elections drawn («1 elección», «4 elecciones»).
+ *
+ * @param {number} n the elections
+ * @returns {string} the text
+ */
+const electionsText = (n) => `${n} ${n === 1 ? 'elección' : 'elecciones'}`;
+
+/**
  * Bullseye with its filters (a pollster profile, the model in the backtest page): draw it and its table from the rows that pass the chosen scope and
  * years; the form only works with JavaScript, so the server renders it hidden and this shows it. The download
  * button, when the card has one, exports the bullseye as filtered.
@@ -136,7 +176,6 @@ export function wireBullseye(bullseye, blocks) {
   if (!target || !bullseye.length || blocks.length < 2) {
     return;
   }
-  const form = document.getElementById('bullseye-filter');
   const table = document.getElementById('bullseye-table');
   const count = document.getElementById('bullseye-count');
   let current = {rows: bullseye, scope: null, from: null, to: null};  // what is drawn, what the button exports
@@ -155,28 +194,13 @@ export function wireBullseye(bullseye, blocks) {
     tryDraw(() => renderBullseye(target, rows, options), 'the bullseye');
     fillBullseyeTable(table, rows);
     if (count) {
-      count.textContent = `${rows.length} ${rows.length === 1 ? 'elección' : 'elecciones'}`;
+      count.textContent = electionsText(rows.length);
     }
   };
-  if (form) {
-    form.addEventListener('submit', (event) => event.preventDefault());
-    // The years offered run from the first election of the house to today (the server fills both selects with the
-    // same list); an extreme chosen is an open bound.
-    const {desde, hasta} = form.elements;
-    const first = Number(desde.options[0]?.value);
-    const last = Number(hasta.options[hasta.options.length - 1]?.value);
-    form.addEventListener('change', () => {
-      const {ambito} = form.elements;
-      const filters = {
-        scope: ambito.value || null,
-        from: Number(desde.value) === first ? null : Number(desde.value),
-        to: Number(hasta.value) === last ? null : Number(hasta.value),
-      };
-      current = {rows: filterRows(bullseye, filters), scope: chosenLabel(ambito), from: filters.from, to: filters.to};
-      draw(current.rows);
-    });
-    form.hidden = false;
-  }
+  wireFilters(document.getElementById('bullseye-filter'), bullseye, (chosen) => {
+    current = chosen;
+    draw(current.rows);
+  });
   draw(bullseye);
   wireDownload(document.getElementById('bullseye-download'), () => bullseyeOption(current.rows, options), showError, {
     chartHeight: BULLSEYE_IMAGE_HEIGHT,
@@ -186,10 +210,12 @@ export function wireBullseye(bullseye, blocks) {
 
 /**
  * The house against the mean of the other houses, in its own card of the profile: draw `#consensus-chart` from the
- * bullseye rows (every election, no filters) and wire its download button (`#consensus-download`, the chart alone,
- * the count of elections drawn in the subtitle). Nothing without the chart, the rows or the pair of blocks.
+ * bullseye rows that pass its own scope and years filters (`#consensus-filter`, the same as the bullseye's but
+ * independent of them), with the count of elections drawn (`#consensus-count`), and wire its download button
+ * (`#consensus-download`, the chart as filtered, the filters and the count in the subtitle and the file name).
+ * Nothing without the chart, the rows or the pair of blocks.
  *
- * @param {object[]} bullseye the bullseye rows (`gap`, `others`, `scope` and `event`)
+ * @param {object[]} bullseye the bullseye rows (`gap`, `others`, `scope`, `year` and `event`)
  * @param {string|null} left the left block of the pair (`initial.left`)
  * @param {string|null} right the right block of the pair (`initial.right`)
  */
@@ -199,11 +225,23 @@ export function wireConsensus(bullseye, left, right) {
     return;
   }
   const house = target.dataset.house || '';
-  const option = () => consensusOption(bullseye, left, right, house);
-  tryDraw(() => mountChart(target, option()), 'the house against the others');
-  const drawn = bullseye.filter(hasConsensus).length;
+  const count = document.getElementById('consensus-count');
+  let current = {rows: bullseye, scope: null, from: null, to: null};  // what is drawn, what the button exports
+  const option = () => consensusOption(current.rows, left, right, house);
+  const drawnText = () => electionsText(current.rows.filter(hasConsensus).length);
+  const draw = () => {
+    tryDraw(() => mountChart(target, option()), 'the house against the others');
+    if (count) {
+      count.textContent = drawnText();
+    }
+  };
+  wireFilters(document.getElementById('consensus-filter'), bullseye, (chosen) => {
+    current = chosen;
+    draw();
+  });
+  draw();
   wireDownload(document.getElementById('consensus-download'), option, showError, {
     chartHeight: BULLSEYE_IMAGE_HEIGHT,
-    texts: (dataset) => imageTexts(dataset, [], `${drawn} ${drawn === 1 ? 'elección' : 'elecciones'}`),
+    texts: (dataset) => imageTexts(dataset, [current.scope, yearsText(current.from, current.to)], drawnText()),
   });
 }

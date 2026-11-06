@@ -7,8 +7,8 @@
   "generated_at": "2026-11-05T12:00:00Z",
   "data": {
     "study": "rebano",
-    "title": "¿Se copian las encuestadoras en la recta final?",
-    "subtitle": "En las siete generales desde 2008, los sondeos se han parecido más entre sí cuanto más cerca estaba la elección: en las últimas tres semanas, tanto como si todas las casas sacaran sus muestras de la misma urna. En 2026 ya van así desde el principio, y las tres casas con más sondeos publican cifras que oscilan menos de lo que permite el azar de sus muestras.",
+    "title": "¿Se comportan las encuestadoras como un rebaño?",
+    "subtitle": "En 19 de las 23 elecciones con sondeos lejos y cerca de la votación, desde 1986, las mismas encuestadoras se parecen más entre sí en las tres últimas semanas que lejos de ella: por azar, 1 entre 769. Hasta tres semanas antes, no: 9 de 17, como una moneda.",
     "scope": "es",
     "election": {
       "date": "2026-11-29",
@@ -16,71 +16,57 @@
       "as_of": "2026-11-05"
     },
     "params": {
-      "scope": "es",
-      "since": "2008-01-01",
+      "scopes": "all",
+      "since": null,
+      "live_scope": "es",
       "max_days": 365,
-      "window_days": 56,
-      "final_days": 21,
-      "local_window": 10,
+      "pair_days": 7,
+      "periods": {
+        "final": [
+          0,
+          21
+        ],
+        "mid": [
+          21,
+          56
+        ],
+        "far": [
+          56,
+          365
+        ]
+      },
+      "min_rows": 3,
       "n_series": 4,
-      "min_polls": 3,
       "exclude": [
         "CIS"
       ],
-      "buckets": [
-        [
-          0,
-          1
-        ],
-        [
-          2,
-          3
-        ],
-        [
-          4,
-          5
-        ],
-        [
-          6,
-          7
-        ],
-        [
-          8,
-          11
-        ],
-        [
-          12,
-          17
-        ],
-        [
-          18,
-          26
-        ],
-        [
-          27,
-          52
-        ]
-      ]
+      "permutations": 2000,
+      "seed": 0
     },
     "inputs": {
-      "events": {
-        "generated_at": "2026-11-05T10:00:00Z"
+      "elections": {
+        "es": {
+          "read": [
+            "2019-11-10",
+            "2023-07-23"
+          ],
+          "skipped": {}
+        }
       },
-      "run": {
-        "run_id": "20261105-103609"
-      },
-      "herding": {
-        "generated_at": "2026-11-05T10:00:00Z"
+      "current": {
+        "run_id": "20261105-103609",
+        "as_of": "2026-11-05",
+        "event_date": "2026-11-29"
       }
     },
     "sources": [
       {
-        "label": "Histórico de errores de las encuestas por elección",
+        "label": "Histórico de elecciones",
         "url": "/elecciones"
       },
       {
-        "label": "Ranking de encuestadoras",
-        "url": "/casas"
+        "label": "Análisis",
+        "url": "/analisis"
       }
     ],
     "commit": "abc1234",

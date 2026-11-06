@@ -108,10 +108,10 @@ def test_weights_part_is_served_with_the_run(api):
 
 def test_study_routes_serve_rebano_parts_and_csv(api, fresh_app):
     write_study(fresh_app.fs, study='rebano'); webapi.site().manifest_cache_clear()
-    status, _, body = call(api, '/api/v1/studies/rebano/weeks')
-    assert status == 200 and len(json.loads(body)['data']['buckets']) == 8
-    status, headers, body = call(api, '/api/v1/studies/rebano/houses', query='format=csv')
-    assert status == 200 and headers['content-disposition'] == 'attachment; filename="rebano-houses.csv"'
+    status, _, body = call(api, '/api/v1/studies/rebano/current')
+    assert status == 200 and json.loads(body)['data']['current']['days_left'] == 24
+    status, headers, body = call(api, '/api/v1/studies/rebano/elections', query='format=csv')
+    assert status == 200 and headers['content-disposition'] == 'attachment; filename="rebano-elections.csv"'
     status, _, body = call(api, '/api/v1/studies/rebano/matrix')
     assert status == 404
 

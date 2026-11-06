@@ -60,8 +60,8 @@
           {% call answer(v2, 2) -%}
             {% if has_vox %}En {{ vox.n|int }} elecciones desde {{ texts.vox_since or '–' }}, Vox sacó más de lo que decían los sondeos en {{ vox.under|int }} y menos en {{ vox.over|int }}; el sesgo medio es de {{ vox.mean|delta(1) }} puntos.
             {%- if vox_chance %} Las sorpresas van en los dos sentidos.
-            {%- elif vox_under_more %} Los sondeos se quedan cortos más veces de lo que permite el azar.
-            {%- else %} Los sondeos se pasan más veces de lo que permite el azar.{% endif %}
+            {%- elif vox_under_more %} Los sondeos se quedan cortos más veces de lo que cabría esperar sólo por el azar.
+            {%- else %} Los sondeos se pasan más veces de lo que cabría esperar sólo por el azar.{% endif %}
             {%- else %}Ninguna elección de nuestra base tiene a la vez sondeos y resultado de Vox.{% endif %}
           {%- endcall %}
           {% call answer(v3, 3) -%}
@@ -100,7 +100,7 @@
           {% if p1_yes %}<b>Sí.</b> La izquierda sale subestimada en {{ count(la.under, la.n) }}, {{ la.mean|delta(1) }} de media: la creencia se sostiene.
           {%- else %}<b>No.</b> En {{ la.n|int }} elecciones la izquierda salió subestimada en {{ la.under|int }} y sobreestimada en {{ la.over|int }}; el sesgo medio es {{ la.mean|delta(1) }} puntos
           {%- if la.mean is number and la.mean > 0 %}, es decir, en conjunto los sondeos le dan algo <b>de más</b>
-          {%- elif la.mean is number and la.mean < 0 %}, es decir, en conjunto le dan algo de menos, pero no más de lo que permite el azar{% endif %}.{% endif %}
+          {%- elif la.mean is number and la.mean < 0 %}, es decir, en conjunto le dan algo de menos, pero no más de lo que cabría esperar sólo por el azar{% endif %}.{% endif %}
           {%- if streak %} En las generales el signo se inclina un poco hacia la subestimación ({{ count(lg.under, lg.n) }}) por {{ texts.big_elections }} en que el PSOE sacó más de {{ big_points }} puntos por encima de sus sondeos ({{ texts.big_years }}); una racha así sale por azar {{ texts.general_odds }} de las veces.
           {%- else %} En las generales, la izquierda salió subestimada en {{ count(lg.under, lg.n) }} ({{ lg.mean|delta(1) }} de media).{% endif %}
           {%- if regional_both_over %} En las autonómicas {{ 'pasa lo contrario' if streak else 'los sondeos se pasan más veces' }} ({{ count(lr.over, lr.n) }} de más), pero ahí los sondeos dan de más a los dos bloques ({{ lr.mean|delta(1) }} a la izquierda y {{ rr.mean|delta(1) }} a la derecha, porque reparten poco voto a los partidos pequeños): la cuenta que vale es Izquierda − Derecha, {{ 'repartida' if lean_regional_chance else 'inclinada' }} {{ lean_r.under|int }} a {{ lean_r.over|int }}.

@@ -33,10 +33,8 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                               'izquierdas más voto del que obtuvo en {k} de {n} elecciones generales y autonómicas '
                               'celebradas. Es imposible que tal cosa pueda ocurrir por azar ni por un fallo general de '
                               'las encuestas. Y no, en 2023 tampoco «acertó».'),
-                # The subtitle is a template rendered from the summary (the clauses depend on its figures)
-                'rebano': ('¿Se copian las encuestadoras en la recta final?',
-                           'En las {n_words} generales desde {since_year}, los sondeos se han parecido más entre sí '
-                           'cuanto más cerca estaba la elección{final_clause}.{current}'),
+                # The subtitle is not a template: ``herd._subtitle`` writes it from the summary
+                'rebano': ('¿Se comportan las encuestadoras como un rebaño?', None),
                 # The subtitle is a template rendered from the summary: {vox_clause} and {tail} depend on its figures
                 'voto-oculto': ('¿Voto oculto de quién?',
                                 'Se dice que la gente de izquierdas contesta menos a las encuestas y que los '
@@ -593,8 +591,8 @@ from .lean import (  # noqa: E402
     export_lean_meta, export_lean_summary
 )
 from .herd import (  # noqa: E402
-    compute_for_publish as compute_herd_for_publish, export_herd_cycles, export_herd_houses, export_herd_meta,
-    export_herd_summary, export_herd_weeks
+    compute_for_publish as compute_herd_for_publish, export_herd_current, export_herd_elections, export_herd_meta,
+    export_herd_summary
 )
 from .shy import (  # noqa: E402
     compute_for_publish as compute_shy_for_publish, export_shy_elections, export_shy_groups, export_shy_meta,
@@ -613,8 +611,8 @@ STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation':
                    'sesgo-cis': {'summary': export_lean_summary, 'elections': export_lean_elections,
                                  'houses': export_lean_houses, 'matrix': export_lean_matrix,
                                  'election': export_lean_election},
-                   'rebano': {'summary': export_herd_summary, 'cycles': export_herd_cycles,
-                              'weeks': export_herd_weeks, 'houses': export_herd_houses},
+                   'rebano': {'summary': export_herd_summary, 'elections': export_herd_elections,
+                              'current': export_herd_current},
                    'voto-oculto': {'summary': export_shy_summary, 'elections': export_shy_elections,
                                    'groups': export_shy_groups},
                    'andorra': {'summary': export_ban_summary, 'pairs': export_ban_pairs,
