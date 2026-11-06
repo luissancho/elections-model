@@ -39,7 +39,11 @@ RESULTS_PREFIX = 'backtest/results'
 
 # Files of the results of a scope in its folder
 RESULT_FILES = ('shares.csv', 'seats.csv', 'blocks.csv', 'provinces.csv', 'series.csv', 'meta.csv', 'metrics.csv',
-                'by_horizon.csv', 'calibration.csv', 'run.json')
+                'by_horizon.csv', 'calibration.csv', 'ban.csv', 'run.json')
+
+# Columns of the `shares` table of a nowcast case (the ban table of `run_backtest` when no ban case ran)
+BAN_COLUMNS = ['event_date', 'horizon', 'party', 'main', 'official', 'model', 'fc_lo', 'fc_hi', 'last_poll', 'mean_4w',
+               'prev_result', 'lo50', 'hi50', 'lo80', 'hi80', 'lo95', 'hi95'] + ['q{:02d}'.format(q) for q in range(5, 100, 5)]
 
 # Root of the repository (to show local folders relative to it)
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -125,6 +129,27 @@ def default_events(scope: str, since: str = '2019-01-01') -> list[str]:
         return list(DEFAULT_EVENTS)
 
     return get_event_dates(scope=scope, date_from=since, featured=True)
+
+
+def has_ban_polls(scope: str, event_date: str) -> bool:
+    """
+    Whether an election has polls published abroad during the electoral ban (context `wban`).
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the election.
+    event_date : str
+        Date of the election.
+
+    Returns
+    -------
+    bool
+        True when any poll of the last five days has `ctype == 'wban'`.
+    """
+    polls = get_poll_series(scope, [event_date], drange=(0, 5))
+
+    return 'ctype' in polls.columns and bool((polls['ctype'] == 'wban').any())
 
 
 def official_provinces(scope: str, event_date: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -456,7 +481,10 @@ def run_case(
         if config is not None and config.get('weights'):
             # Imported here: `tuning` imports this module
             from .tuning import reweighted_overrides
-            polls = get_poll_series(scope, [event_date], drange=(horizon, None), drop_mtypes=list(DROP_MTYPES))
+            polls = get_poll_series(
+                scope, [event_date], drange=(horizon, None), drop_mtypes=list(DROP_MTYPES),
+                drop_contexts=drop_ctypes if drop_ctypes is not None else ['wban', 'exit']
+            )
             tuned['weight_overrides'] = reweighted_overrides(polls, config['weights'])
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
@@ -981,6 +1009,7 @@ def run_backtest(
     config: Optional[dict[str, Any]] = None,
     rating_exponent: float = 1.0,
     drop_ctypes: Optional[list[str]] = None,
+    ban: bool = False,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -988,19 +1017,23 @@ def run_backtest(
     `error_model`, `drift_scale`, `tail_dof`, `weight_ratings`, `config` and `rating_exponent` are passed to every
     case (`weight_ratings` may be the string `'flat'`: every poll weighs with rating 1; `rating_exponent` raises the
     rating weight of every poll to that power, phase C2a). `drop_ctypes` (poll contexts left out, see `run_case`)
-    is passed to every case when given.
+    is passed to every case when given. With `ban`, each election that has polls published during the ban
+    (`has_ban_polls`) gets one extra nowcast case at horizon 0 with them inside (only the `exit` polls left out);
+    its `shares` rows go to `ban` and nowhere else.
 
     Returns
     -------
     dict
         `shares`, `seats`, `blocks`, `provinces`, `calibration`, `meta` (concatenated per case), `series` (the
         daily series of the average of the shortest horizon that ran of each election, `shortest_horizon`),
-        `metrics` (one row per case) and `by_horizon` (means over the events, per horizon).
+        `metrics` (one row per case) and `by_horizon` (means over the events, per horizon); with `ban`, also `ban`
+        (the `shares` rows of the ban cases, empty with the `shares` columns when none ran).
     """
     events = events or default_events(scope)
     horizons = horizons or DEFAULT_HORIZONS
 
     parts = {'shares': [], 'seats': [], 'blocks': [], 'provinces': [], 'calibration': [], 'series': [], 'meta': []}
+    parts_ban = []
     metrics = []
     for event_date in events:
         for horizon in horizons:
@@ -1026,7 +1059,28 @@ def run_backtest(
                 parts[key].append(case[key])
             metrics.append({'event_date': event_date, 'horizon': horizon} | summarize_case(case['shares'], case['seats'], case['blocks'], case['provinces']))
 
+        if ban and has_ban_polls(scope, event_date):
+            if verbose > 0:
+                print('Backtest {} with the ban polls...'.format(event_date))
+
+            try:
+                case = run_case(
+                    scope, event_date, 0, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
+                    nowcast_only=True, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
+                    herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
+                    error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
+                    weight_ratings=weight_ratings, config=config, rating_exponent=rating_exponent,
+                    drop_ctypes=['exit']
+                )
+            except Exception as e:
+                warnings.warn('Backtest {} with the ban polls skipped: {}'.format(event_date, e))
+                parts['meta'].append(pd.DataFrame([{'event_date': event_date, 'horizon': 0, 'error': str(e)}]))
+            else:
+                parts_ban.append(case['shares'])
+
     out = {key: pd.concat(frames, ignore_index=True) if len(frames) > 0 else pd.DataFrame() for key, frames in parts.items()}
+    if ban:
+        out['ban'] = pd.concat(parts_ban, ignore_index=True) if len(parts_ban) > 0 else pd.DataFrame(columns=BAN_COLUMNS)
     out['series'] = shortest_horizon(out['series'])
     out['metrics'] = pd.DataFrame(metrics)
     if len(metrics) == 0:
@@ -1284,6 +1338,7 @@ def backtest_scope(
     recompute_ratings: bool = False,
     flat_ratings: bool = False,
     rating_exponent: float = 1.0,
+    ban: bool = False,
     verbose: int = 0,
     runner=None,
     stats=None,
@@ -1321,6 +1376,10 @@ min_events, error_model, drift_scale, tail_dof
     rating_exponent : float, default 1.0
         Power the rating weight of every poll is raised to (phase C2a: 1 is the model as it is, 0 the flat rating);
         passed to every case and recorded in `run.json` and in the `meta.csv` of every case.
+    ban : bool, default False
+        Add to every election with polls published during the ban a nowcast case at horizon 0 that includes
+        them; its `shares` rows go to `ban.csv` only. Recorded in `run.json`; without it a stale `ban.csv` of the
+        folder is removed.
     verbose : int, default 0
         Verbosity of `run_backtest` (1 prints one line per case).
     runner : callable, optional
@@ -1353,7 +1412,7 @@ min_events, error_model, drift_scale, tail_dof
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                   regional_noise=regional_noise, min_events=min_events, error_model=error_model,
-                  drift_scale=drift_scale, tail_dof=tail_dof, config=config, rating_exponent=rating_exponent)
+                  drift_scale=drift_scale, tail_dof=tail_dof, config=config, rating_exponent=rating_exponent, ban=ban)
     if config is not None:
         params.update({key: config[key] for key in CONFIG_SWITCHES})
     weight_ratings = 'flat' if flat_ratings else (rating_overrides(scope) if recompute_ratings else None)
@@ -1366,6 +1425,8 @@ min_events, error_model, drift_scale, tail_dof
     fs, folder = results_fs(out, scope)
     for key, frame in results.items():
         fs.write_csv(frame, results_path(folder, '{}.csv'.format(key)))
+    if 'ban' not in results and fs.exists(results_path(folder, 'ban.csv')):
+        fs.remove(results_path(folder, 'ban.csv'))
     if prov is None:
         from .publish.common import provenance as prov
     evaluated = results['metrics']['event_date'].unique().tolist()

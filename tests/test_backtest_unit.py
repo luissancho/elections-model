@@ -270,7 +270,7 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
                         'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
                         'error_model', 'drift_scale', 'tail_dof', 'config', 'rating_exponent', 'recompute_ratings', 'flat_ratings', 'events',
-                        'horizons', 'db_polls', 'db_last_poll'}
+                        'horizons', 'db_polls', 'db_last_poll', 'ban'}
     assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
     assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
     assert run['error_model'] == 'polls' and seen['error_model'] == 'polls'
@@ -762,10 +762,19 @@ def test_run_case_builds_the_simulator_with_the_config_and_the_recomputed_weight
     assert init['weight_overrides'] is recording['overrides'] and fit['max_fc'] == 3
     (args, kwargs), = recording['polls']
     assert args == ('es', ['2023-07-23']) and tuple(kwargs['drange']) == (30, None)
-    assert kwargs['drop_mtypes'] == list(DROP_MTYPES)
+    assert kwargs['drop_mtypes'] == list(DROP_MTYPES) and kwargs['drop_contexts'] == ['wban', 'exit']
     (frame, weights), = recording['reweighted']
     assert frame is recording['polls_frame'] and weights == {'wspan': 7, 'ol_max': 900}
     assert TUNED['disp_params'] == {'herd_prior': 10.} and TUNED['reg_params'] == {'bw_type': 'fixed', 'bw': 45}
+
+
+def test_run_case_reweights_over_the_polls_the_simulator_sees(recording):
+    """The weights-config path reads the polls with the same contexts dropped as the model (`drop_ctypes`)."""
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 0, config=TUNED, drop_ctypes=['exit'])
+    (args, kwargs), = recording['polls']
+    assert kwargs['drop_contexts'] == ['exit']
 
 
 def test_run_case_keeps_the_stored_weights_with_a_config_without_weights(recording):
@@ -913,3 +922,103 @@ def test_load_results_reads_root_and_subfolders_and_warns_on_missing(tmp_path):
     with pytest.warns(UserWarning, match='es-ct'):
         df = load_results(str(tmp_path), ['es', 'es-md', 'es-ct'])
     assert df['scope'].tolist() == ['es', 'es-md']
+
+
+def ban_case(scope, event_date, horizon, **kwargs):
+    """A `run_case` replacement: a case whose tables carry the `horizon` it was asked for."""
+    import pandas as pd
+    shares = pd.DataFrame({'event_date': event_date, 'horizon': horizon, 'party': ['A', 'B'], 'main': True,
+                           'official': [40., 30.], 'model': [41., 29.]})
+    series = pd.DataFrame({'event_date': event_date, 'horizon': horizon, 'date': ['2023-07-01'], 'name': ['A'],
+                           'mean': [40.], 'lo': [39.], 'hi': [41.]})
+    empty = pd.DataFrame({'event_date': [event_date], 'horizon': [horizon]})
+    return {'shares': shares, 'seats': empty, 'blocks': empty, 'provinces': empty, 'calibration': empty,
+            'series': series, 'meta': empty}
+
+
+@pytest.fixture
+def light_metrics(monkeypatch):
+    """`summarize_case` reduced to a stub, so the thin tables of `ban_case` are enough."""
+    from mtpy.lib import backtest
+    monkeypatch.setattr(backtest, 'summarize_case', lambda *args: {'mae_shares': 1., 'mae_seats': 1.})
+
+
+def test_run_backtest_adds_the_ban_case_apart_from_the_tables(monkeypatch, light_metrics):
+    """With `ban`, the elections with clandestine polls get a nowcast case at horizon 0 (only `exit` dropped) whose
+    shares go to `ban` and to no other table."""
+    from mtpy.lib import backtest
+    calls = []
+
+    def fake_case(scope, event_date, horizon, **kwargs):
+        calls.append((horizon, kwargs.get('nowcast_only'), kwargs.get('drop_ctypes')))
+        return ban_case(scope, event_date, horizon, **kwargs)
+
+    monkeypatch.setattr(backtest, 'run_case', fake_case)
+    monkeypatch.setattr(backtest, 'has_ban_polls', lambda scope, date: date == '2023-07-23')
+    out = backtest.run_backtest(scope='es', events=['2019-11-10', '2023-07-23'], horizons=[6], ban=True)
+    assert calls == [(6, False, None), (6, False, None), (0, True, ['exit'])]
+    assert set(out['ban']['event_date']) == {'2023-07-23'} and set(out['ban']['horizon']) == {0}
+    assert set(out['metrics']['horizon']) == {6} and set(out['shares']['horizon']) == {6}
+    assert set(out['series']['horizon']) <= {6}
+
+
+def test_run_backtest_without_ban_has_no_ban_table(monkeypatch, light_metrics):
+    """Without `ban` no clandestine poll is looked up, no extra case runs and the result has no `ban` key."""
+    from mtpy.lib import backtest
+    calls = []
+    monkeypatch.setattr(backtest, 'run_case', lambda scope, event_date, horizon, **kw: calls.append(horizon) or ban_case(scope, event_date, horizon))
+    monkeypatch.setattr(backtest, 'has_ban_polls', lambda scope, date: pytest.fail('looked up the ban polls'))
+    out = backtest.run_backtest(scope='es', events=['2023-07-23'], horizons=[6])
+    assert 'ban' not in out and calls == [6]
+
+
+def test_run_backtest_records_a_failed_ban_case_and_keeps_an_empty_table(monkeypatch, light_metrics):
+    """A ban case that fails is warned and recorded in `meta` with horizon 0; `ban` stays, empty, with its columns."""
+    import warnings
+    from mtpy.lib import backtest
+
+    def fake_case(scope, event_date, horizon, **kwargs):
+        if horizon == 0:
+            raise ValueError('no usable polls')
+        return ban_case(scope, event_date, horizon)
+
+    monkeypatch.setattr(backtest, 'run_case', fake_case)
+    monkeypatch.setattr(backtest, 'has_ban_polls', lambda scope, date: True)
+    with pytest.warns(UserWarning, match='ban polls skipped'):
+        out = backtest.run_backtest(scope='es', events=['2023-07-23'], horizons=[6], ban=True)
+    assert out['ban'].shape[0] == 0 and list(out['ban'].columns) == backtest.BAN_COLUMNS
+    failed = out['meta'].loc[out['meta']['error'].notna()]
+    assert failed['horizon'].tolist() == [0] and failed['error'].tolist() == ['no usable polls']
+    assert out['metrics'].shape[0] == 1
+
+
+def test_has_ban_polls_reads_the_ctype_of_the_last_five_days(monkeypatch):
+    import pandas as pd
+    from mtpy.lib import backtest
+    seen = []
+
+    def fake_series(scope, event_dates, drange=None, **kwargs):
+        seen.append((scope, event_dates, drange))
+        return pd.DataFrame({'ctype': [None, 'wban']})
+
+    monkeypatch.setattr(backtest, 'get_poll_series', fake_series)
+    assert backtest.has_ban_polls('es', '2023-07-23') is True
+    assert seen == [('es', ['2023-07-23'], (0, 5))]
+    monkeypatch.setattr(backtest, 'get_poll_series', lambda *a, **k: pd.DataFrame({'ctype': [None, 'exit']}))
+    assert backtest.has_ban_polls('es', '2023-07-23') is False
+
+
+def test_backtest_scope_writes_ban_csv_and_removes_a_stale_one(tmp_path):
+    """`ban.csv` is written when the result carries `ban`; a run without it removes the stale file; `run.json`
+    records the flag."""
+    import json
+    from mtpy.lib import backtest
+    common = dict(out=str(tmp_path), events=['2023-05-28'], stats=lambda scope: {'db_polls': 1, 'db_last_poll': None},
+                  prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    results = fake_results() | {'ban': fake_results()['shares'].assign(horizon=0)}
+    backtest.backtest_scope('es-md', ban=True, runner=lambda **kw: results, **common)
+    assert (tmp_path / 'es-md' / 'ban.csv').exists()
+    assert json.load(open(tmp_path / 'es-md' / 'run.json'))['ban'] is True
+    backtest.backtest_scope('es-md', runner=lambda **kw: fake_results(), **common)
+    assert not (tmp_path / 'es-md' / 'ban.csv').exists()
+    assert json.load(open(tmp_path / 'es-md' / 'run.json'))['ban'] is False
