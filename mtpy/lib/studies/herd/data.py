@@ -15,7 +15,7 @@ import pandas as pd
 
 from ...bundle import BundleReader, path_analysis, path_event, path_manifest, path_part
 from ....core.io import FileSystem
-from ..lean.data import MONTHS
+from ..labels import short_year_label
 
 PARAMS_FILE = 'rebano/params.json'
 # The poll columns the study keeps, before one column per party
@@ -116,10 +116,7 @@ def cycle_label(event_date: str, dates: list) -> str:
     """
     year = event_date[:4]
 
-    if sum(date[:4] == year for date in set(dates) | {event_date}) > 1:
-        return f'{year} {MONTHS[int(event_date[5:7]) - 1]}.'
-
-    return year
+    return short_year_label(event_date, sum(date[:4] == year for date in set(dates) | {event_date}) > 1)
 
 
 def is_published(reader: BundleReader, scope: str, date: str) -> bool:
