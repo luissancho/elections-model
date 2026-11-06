@@ -986,24 +986,45 @@ def test_run_backtest_records_a_failed_ban_case_and_keeps_an_empty_table(monkeyp
     monkeypatch.setattr(backtest, 'has_ban_polls', lambda scope, date: True)
     with pytest.warns(UserWarning, match='ban polls skipped'):
         out = backtest.run_backtest(scope='es', events=['2023-07-23'], horizons=[6], ban=True)
-    assert out['ban'].shape[0] == 0 and list(out['ban'].columns) == backtest.BAN_COLUMNS
+    assert out['ban'].shape[0] == 0 and list(out['ban'].columns) == backtest.BAN_SHARES_COLUMNS
     failed = out['meta'].loc[out['meta']['error'].notna()]
     assert failed['horizon'].tolist() == [0] and failed['error'].tolist() == ['no usable polls']
     assert out['metrics'].shape[0] == 1
 
 
-def test_has_ban_polls_reads_the_ctype_of_the_last_five_days(monkeypatch):
+def test_run_backtest_records_a_failed_ban_lookup_and_keeps_the_scope(monkeypatch, light_metrics):
+    """A failed lookup of the clandestine polls (the database query) after the regular cases is warned and recorded
+    in `meta` like a failed ban case: the regular cases and the next elections are kept."""
+    from mtpy.lib import backtest
+
+    def lookup(scope, date):
+        if date == '2019-11-10':
+            raise ConnectionError('query timed out')
+        return True
+
+    monkeypatch.setattr(backtest, 'run_case', lambda scope, event_date, horizon, **kw: ban_case(scope, event_date, horizon))
+    monkeypatch.setattr(backtest, 'has_ban_polls', lookup)
+    with pytest.warns(UserWarning, match='2019-11-10 with the ban polls skipped: query timed out'):
+        out = backtest.run_backtest(scope='es', events=['2019-11-10', '2023-07-23'], horizons=[6], ban=True)
+    assert out['metrics'].shape[0] == 2 and set(out['ban']['event_date']) == {'2023-07-23'}
+    failed = out['meta'].loc[out['meta']['error'].notna()]
+    assert failed[['event_date', 'horizon']].values.tolist() == [['2019-11-10', 0]]
+
+
+def test_has_ban_polls_reads_every_poll_of_the_election(monkeypatch):
+    """Every poll of the election is read (no `drange`): a `wban` poll with `days = 6` (published on the first day of
+    the ban, fieldwork ended the day before) counts, as the ban case takes it."""
     import pandas as pd
     from mtpy.lib import backtest
     seen = []
 
     def fake_series(scope, event_dates, drange=None, **kwargs):
         seen.append((scope, event_dates, drange))
-        return pd.DataFrame({'ctype': [None, 'wban']})
+        return pd.DataFrame({'ctype': [None, None, 'wban'], 'days': [40, 8, 6]})
 
     monkeypatch.setattr(backtest, 'get_poll_series', fake_series)
     assert backtest.has_ban_polls('es', '2023-07-23') is True
-    assert seen == [('es', ['2023-07-23'], (0, 5))]
+    assert seen == [('es', ['2023-07-23'], None)]
     monkeypatch.setattr(backtest, 'get_poll_series', lambda *a, **k: pd.DataFrame({'ctype': [None, 'exit']}))
     assert backtest.has_ban_polls('es', '2023-07-23') is False
 

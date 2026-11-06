@@ -120,7 +120,7 @@
         <p class="lead">
           El promedio se congela {{ counts.horizon }} días antes de la elección con el último sondeo legal. Comparamos lo
           que dijo entonces, cifra a cifra, con el consenso clandestino (la media del último sondeo de cada casa durante
-          la veda) y con el resultado.{% if el %} Sólo las {{ counts.model }} generales con modelo publicado.{% endif %}
+          la veda) y con el resultado.{% if el %} Sólo {{ counts.model }} con modelo publicado.{% endif %}
         </p>
         {% if not el %}
         <p class="notice">No hay generales con modelo publicado: sin promedio congelado no hay con qué comparar el consenso clandestino. La pregunta 1, casa a casa, no lo necesita.</p>
@@ -277,7 +277,7 @@
       {% else %}
       {{ m.card_start('veintinueve', day_title ~ ': el mercado de la fruta' ~ (' de ' ~ card.year if card.year else ''), ('Desde el ' ~ card.veda_from ~ ' los sondeos de ' ~ card.year ~ ' sólo se publican fuera de España. ' if card.veda_from else '') ~ 'Los cargamos en la base, como siempre, pero no los enseñamos: la ley no lo permite y esta página tampoco lo hará. Cuando se publique el escrutinio, esta tarjeta se abrirá con los sondeos clandestinos, su consenso, el promedio congelado y el resultado, y las tablas de arriba ganarán la nueva fila.', subtitle='cerrado hasta el cierre de urnas', subtitle_class='warn', classes='shot') }}
         {{ shot('veintinueve') }}
-        <div class="locked"><div><b>Se abre tras el cierre de urnas{% if card.day_month %} del {{ card.day_month }}{% endif %}</b><p>Hasta entonces, la cuenta de arriba es la de {% if el %}las {{ counts.model }} generales anteriores con modelo{% else %}las elecciones anteriores{% endif %}. Si los sondeos clandestinos apuntan bien, lo sabremos aquí.</p></div></div>
+        <div class="locked"><div><b>Se abre tras el cierre de urnas{% if card.day_month %} del {{ card.day_month }}{% endif %}</b><p>Hasta entonces, la cuenta de arriba es la de {% if el %}{{ counts.model_previous }} con modelo{% else %}las elecciones anteriores{% endif %}. Si los sondeos clandestinos apuntan bien, lo sabremos aquí.</p></div></div>
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y los promedios publicados en Demoscopio y se puede descargar.', classes='shot') }}

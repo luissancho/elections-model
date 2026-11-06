@@ -3002,10 +3002,12 @@ class Computer(Core):
         for event_date in dates_:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
+                # Every context, as before the explicit filter: dropping ban/exit here is a separate, measured decision
                 fc = Forecaster(
                     scope=self.scope,
                     event_date=event_date,
                     drop_mtypes=self.drop_mtypes,
+                    drop_ctypes=None,
                     drange=None,
                     alpha=self.alpha,
                     bmap=bmap if (bmap is not None and bmap in self.event_params[event_date]['bmaps']) else None,
@@ -3169,10 +3171,12 @@ class Computer(Core):
                 try:
                     with warnings.catch_warnings():
                         warnings.simplefilter('ignore')
+                        # Every context, as before the explicit filter: dropping ban/exit here is a separate, measured decision
                         fc = Forecaster(
                             scope=self.scope,
                             event_date=event_date,
                             drop_mtypes=self.drop_mtypes,
+                            drop_ctypes=None,
                             drange=int(d),
                             alpha=self.alpha,
                             bmap=bmap,
@@ -3455,10 +3459,12 @@ class Computer(Core):
         for event_date in events_:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
+                # Every context, as before the explicit filter: dropping ban/exit here is a separate, measured decision
                 fc = Forecaster(
                     scope=self.scope,
                     event_date=event_date,
                     drop_mtypes=self.drop_mtypes,
+                    drop_ctypes=None,
                     drange=None,
                     alpha=self.alpha,
                     bmap=None,
@@ -3577,9 +3583,11 @@ class Computer(Core):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 try:
+                    # Every context, as before the explicit filter: dropping ban/exit here is a separate, measured decision
                     fc = Forecaster(
-                        scope=self.scope, event_date=event_date, drop_mtypes=self.drop_mtypes, drange=None,
-                        alpha=self.alpha, bmap=None, house_effects=False, dispersion=False, verbose=0, path=self.path
+                        scope=self.scope, event_date=event_date, drop_mtypes=self.drop_mtypes, drop_ctypes=None,
+                        drange=None, alpha=self.alpha, bmap=None, house_effects=False, dispersion=False, verbose=0,
+                        path=self.path
                     ).build_series()
                     herd = fc.measure_herding(n_series=n_series, min_polls=min_polls)
                 except Exception as e:  # A cycle without enough polls to fit an average
@@ -3867,9 +3875,10 @@ class Computer(Core):
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            fc = Forecaster(scope=self.scope, event_date=current, drop_mtypes=self.drop_mtypes, drange=None, alpha=self.alpha,
-                            bmap=None, reg_params=self.reg_params, house_effects=True, he_params={'prior': None},
-                            verbose=0, path=self.path).build_series()
+            # Every context, as before the explicit filter: dropping ban/exit here is a separate, measured decision
+            fc = Forecaster(scope=self.scope, event_date=current, drop_mtypes=self.drop_mtypes, drop_ctypes=None,
+                            drange=None, alpha=self.alpha, bmap=None, reg_params=self.reg_params, house_effects=True,
+                            he_params={'prior': None}, verbose=0, path=self.path).build_series()
             effects = fc.fit_house_effects(prior=None).reset_index()
         cycle = pd.DataFrame({
             'event_date': pd.Timestamp(current), 'pollster': effects['pollster'], 'party': effects['name'],

@@ -16,7 +16,7 @@ from .data import Event
 
 # Absolute tolerance of the comparisons of errors and distances (points of vote share)
 TOLERANCE = 1e-9
-# Pairs a scope needs to be the exception of the summary (the scope with the lowest share of closer pairs)
+# Pairs a scope needs to be the exception of the summary (the regional scope with the lowest share of closer pairs)
 EXCEPTION_MIN_PAIRS = 10
 
 
@@ -453,9 +453,12 @@ def _summary_elections(elections: list) -> Optional[dict]:
             'k_with': sum(model['beaten_with'] for model in with_ban) if with_ban else None}
 
 
-def _exception(by_scope: list) -> Optional[dict]:
-    """The scope with the lowest share of closer pairs among those with ``EXCEPTION_MIN_PAIRS`` pairs or more."""
-    candidates = [row for row in by_scope if row['n'] >= EXCEPTION_MIN_PAIRS]
+def _exception(by_scope: list, national: str) -> Optional[dict]:
+    """
+    The regional scope with the lowest share of closer pairs among those with ``EXCEPTION_MIN_PAIRS`` pairs or
+    more; the national scope (``national``) is never a candidate: the exception is a community, not the generals.
+    """
+    candidates = [row for row in by_scope if row['n'] >= EXCEPTION_MIN_PAIRS and row['scope'] != national]
 
     if not candidates:
         return None
@@ -480,7 +483,7 @@ def summarize(events: list, pairs: list, elections: list, cells: list, params: d
     cells : list of dict
         Every cell (``cell_rows``).
     params : dict
-        Parameters of the study; uses ``big_sample``.
+        Parameters of the study; uses ``big_sample`` and ``national`` (left out of the ``exception``).
 
     Returns
     -------
@@ -491,7 +494,7 @@ def summarize(events: list, pairs: list, elections: list, cells: list, params: d
         with a model, the means of the unrounded errors, ``mean_with`` and ``k_with`` ``None`` without ``ban``
         rows; ``None`` without any model), ``cells`` (``{n, k_closer, k_direction, k_crossed, k_half, missed}``,
         ``missed`` the ``{label, party}`` of the cells not closer), ``big`` (``{threshold, n, k, mean_d}``) and
-        ``exception`` (``{scope, n, k}`` or ``None``). Every figure unrounded.
+        ``exception`` (``{scope, n, k}`` of a regional scope, or ``None``). Every figure unrounded.
     """
     scopes = list(dict.fromkeys([event.scope for event in events if event.national]
                                 + [event.scope for event in events]))
@@ -506,5 +509,5 @@ def summarize(events: list, pairs: list, elections: list, cells: list, params: d
                   'k_crossed': sum(cell['crossed'] for cell in cells), 'k_half': sum(cell['half'] for cell in cells),
                   'missed': [{'label': cell['label'], 'party': cell['party']} for cell in cells if not cell['closer']]},
         'big': {'threshold': params['big_sample']} | big,
-        'exception': _exception(summary_pairs['by_scope']),
+        'exception': _exception(summary_pairs['by_scope'], params['national']),
     }

@@ -62,6 +62,14 @@ def words(n) -> str:
     return WORDS[n] if isinstance(n, int) and 0 <= n < len(WORDS) else fmt_int(n)
 
 
+def the_count(n, plural: str = '', singular: str = '') -> str:
+    """
+    A feminine count after the article: «las cinco generales», and «la única general» for one («las una» is never
+    right). Without nouns, «las cinco» and «la única».
+    """
+    return ('la única ' + singular if n == 1 else 'las {} {}'.format(words(n), plural)).strip()
+
+
 def the(party: Optional[str]) -> str:
     """A party in prose with its article when it takes one: «el PSOE», «Vox»."""
     return 'el ' + party if party in WITH_ARTICLE else party or DASH
@@ -238,11 +246,14 @@ def lead_text(summary: Optional[dict], cells: list, params: dict) -> str:
                                                          (params.get('since') or '')[:4] or DASH, fmt_int(pairs.get('k')))
 
     n, k = elections.get('n'), elections.get('k_beaten')
-    where = 'en todas' if k == n else 'en ninguna' if k == 0 else 'en ' + words(k)
-    text = ('En las {} generales desde {}, el consenso de esos sondeos estuvo más cerca del resultado que el promedio '
-            'congelado {}, y quedó más cerca del resultado en {} de las {} cifras de partido.').format(
-        words(n), (params.get('chart_since') or '')[:4] or DASH, where, fmt_int(_get(summary, 'cells', 'k_closer')),
-        fmt_int(_get(summary, 'cells', 'n')))
+    if n == 1:  # «En la única general…, estuvo (no estuvo) más cerca», without «en todas» / «en ninguna»
+        verb, where = 'estuvo' if k == 1 else 'no estuvo', ''
+    else:
+        verb, where = 'estuvo', ' en todas' if k == n else ' en ninguna' if k == 0 else ' en ' + words(k)
+    text = ('En {} desde {}, el consenso de esos sondeos {} más cerca del resultado que el promedio congelado{}, y '
+            'quedó más cerca del resultado en {} de las {} cifras de partido.').format(
+        the_count(n, 'generales', 'general'), (params.get('chart_since') or '')[:4] or DASH, verb, where,
+        fmt_int(_get(summary, 'cells', 'k_closer')), fmt_int(_get(summary, 'cells', 'n')))
     blind = blind_cell(cells, last=True)
 
     if blind:
@@ -352,8 +363,10 @@ def kpis(summary: Optional[dict], elections: list, cells: list, params: dict) ->
     if parties:
         lo, hi = min(parties.values()), max(parties.values())
         count = lambda x: words(x) if x >= 2 else fmt_int(x)  # noqa: E731 (masculine: «un partido» stays a figure)
-        second.append('{} generales, {} partidos principales cada una'.format(
-            words(len(parties)), 'con ' + count(lo) if lo == hi else 'de {} a {}'.format(count(lo), count(hi))))
+        second.append('{}, {} partidos principales{}'.format(
+            'una general' if len(parties) == 1 else words(len(parties)) + ' generales',
+            'con ' + count(lo) if lo == hi else 'de {} a {}'.format(count(lo), count(hi)),
+            '' if len(parties) == 1 else ' cada una'))
 
     second.append('{} apuntaron en la dirección correcta y {} pasaron de largo'.format(
         fmt_int(cs.get('k_direction')), fmt_int(cs.get('k_crossed'))))
@@ -448,7 +461,7 @@ def tests(summary: Optional[dict], elections: list, cells: list) -> list:
         {'key': 'beaten', 'label': '1 · Elecciones en que el consenso clandestino batió al promedio congelado',
          'value': _count(k, n), 'note': None, 'text': ' '.join(first) or None,
          'tone': 'ok' if n and k is not None and k * 2 > n else ''},
-        {'key': 'mean', 'label': '2 · Error medio de las {}'.format(words(n)), 'value': _num(consensus),
+        {'key': 'mean', 'label': '2 · Error medio de {}'.format(the_count(n)), 'value': _num(consensus),
          'note': 'desde ' + _num(frozen) if _is_num(frozen) else None, 'text': second, 'tone': ''},
         {'key': 'cells', 'label': '3 · Cifras que quedaron más cerca del resultado',
          'value': _count(cs.get('k_closer'), cs.get('n')), 'note': None, 'text': ' '.join(third), 'tone': ''},
@@ -481,8 +494,8 @@ def answers(summary: Optional[dict], elections: list, houses: list) -> list:
         margin = (', por {} puntos de media'.format(_num(frozen - consensus))
                   if _is_num(frozen) and _is_num(consensus) and consensus < frozen else '')
         second = ('El consenso clandestino bate al promedio congelado en {}{}.'.format(names(beaten), margin) if beaten
-                  else 'El consenso clandestino no bate al promedio congelado en ninguna de las {}.'.format(
-                      words(el.get('n'))))
+                  else 'El consenso clandestino no bate al promedio congelado en {}.'.format(
+                      'la única general' if el.get('n') == 1 else 'ninguna de ' + the_count(el.get('n'))))
         short = cs.get('k_half') is not None and cs.get('k_closer') and cs['k_half'] * 2 < cs['k_closer']
         second += ' Y queda más cerca del resultado en {} cifras{}.'.format(
             _count(cs.get('k_closer'), cs.get('n')) or DASH, ', aunque se quede corto' if short else '')
@@ -566,9 +579,13 @@ def p2_sum(summary: Optional[dict], elections: list, cells: list) -> Optional[di
 
     n, k = el.get('n'), el.get('k_beaten')
     models = _model_rows(elections)
-    strong = ('En las {} generales' if k == n else 'En ninguna de las {} generales' if k == 0 else
-              'En {} de {{}} generales'.format(fmt_int(k))).format(fmt_int(n))
-    strong += ' los sondeos clandestinos habrían afinado el promedio'
+    if n == 1:  # «En la única general», never «En las 1 generales»
+        strong = 'En la única general los sondeos clandestinos {}habrían afinado el promedio'.format(
+            '' if k == 1 else 'no ')
+    else:
+        strong = ('En las {} generales' if k == n else 'En ninguna de las {} generales' if k == 0 else
+                  'En {} de {{}} generales'.format(fmt_int(k))).format(fmt_int(n))
+        strong += ' los sondeos clandestinos habrían afinado el promedio'
     others = _not_beaten(models)
     rest = []
 
@@ -601,7 +618,8 @@ def p2_sum(summary: Optional[dict], elections: list, cells: list) -> Optional[di
                 'su error de {} a {}').format('bajado' if with_ < frozen else 'subido', _num(frozen), _num(with_))
 
         if better:
-            text += ': mejor en las mismas {} elecciones'.format(words(len(better))) if same else \
+            text += (': mejor en la misma elección' if len(better) == 1 else
+                     ': mejor en las mismas {} elecciones'.format(words(len(better)))) if same else \
                 ': mejor en {} de {}'.format(fmt_int(len(better)), fmt_int(len(with_rows)))
 
         worse = [row for row in with_rows if not _get(row, 'model', 'beaten_with')]
@@ -1023,9 +1041,14 @@ def counts(summary: Optional[dict], params: dict) -> dict:
     Returns
     -------
     dict
-        ``model`` (the general elections with a model, «cinco»), ``horizon`` (the days of the frozen average,
-        «seis»), ``min_pairs`` (the pairs a house needs for its table, «tres») and ``house_min`` (those it needs to be
-        named in the texts, «diez»).
+        ``model`` (the general elections with a model, «las cinco generales», «la única general»),
+        ``model_previous`` (the same before the election in course, «las cinco generales anteriores»), ``horizon``
+        (the days of the frozen average, «seis»), ``min_pairs`` (the pairs a house needs for its table, «tres») and
+        ``house_min`` (those it needs to be named in the texts, «diez»).
     """
-    return {'model': words(_get(summary, 'elections', 'n') or 0), 'horizon': words(params.get('frozen_horizon')),
+    n = _get(summary, 'elections', 'n') or 0
+
+    return {'model': the_count(n, 'generales', 'general'),
+            'model_previous': the_count(n, 'generales anteriores', 'general anterior'),
+            'horizon': words(params.get('frozen_horizon')),
             'min_pairs': words(params.get('min_pairs')), 'house_min': words(HOUSE_MIN)}

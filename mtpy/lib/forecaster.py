@@ -467,8 +467,9 @@ class Forecaster(Core):
     def load_poll_seats(self) -> dict:
         """
         Seat projections published with the polls of the cycle (the pollsters' own figures, read by the loader
-        from the polling tables), with the filters of `load_polls`. Not part of `build_series`: the publication
-        calls it, the model never uses them. See `published_seats`.
+        from the polling tables), with the `drange` and `drop_mtypes` of `load_polls` but not its `drop_ctypes`:
+        the publication reads them by the polls of the series, so those of a poll left out are never read. Not
+        part of `build_series`: the publication calls it, the model never uses them. See `published_seats`.
 
         Returns
         -------

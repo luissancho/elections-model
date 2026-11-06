@@ -5829,6 +5829,47 @@ def test_andorra_verdicts_follow_the_thresholds():
         ('NO', 'q3'), (None, 'q2'), ('GAD3', 'qb')]
 
 
+
+def test_andorra_texts_with_a_single_general_election():
+    """Con una sola general con modelo, los textos no dicen «las una» («En las una generales», «Error medio de las
+    una»): «la única general», «la misma elección», y sin «en todas» ni «cada una»."""
+    ban = pages.ban
+    params = {'since': '1996-01-01', 'chart_since': '2015-01-01', 'frozen_horizon': 6, 'min_pairs': 3}
+    row = {'scope': 'es', 'event_date': '2023-07-23', 'label': '2023', 'national': True,
+           'model': {'error_legal': 1.89, 'error_frozen': 1.52, 'error_consensus': 1.22, 'error_with': 1.2,
+                     'beaten': True, 'beaten_with': True}}
+    missed = dict(row, model=dict(row['model'], error_consensus=1.6, beaten=False))
+    cells = [{'event_date': '2023-07-23', 'label': '2023', 'party': party, 'closer': True, 'direction': True,
+              'crossed': False, 'half': True, 'move': 1.0, 'gap': 0.5} for party in ('PP', 'PSOE', 'VOX', 'SUMAR')]
+    summary = {'pairs': {'n': 7, 'k': 5, 'ties': 0, 'share': 5 / 7, 'mean_d': -0.3, 'p': 0.2,
+                         'generals': {'n': 7, 'k': 5}},
+               'elections': {'n': 1, 'k_beaten': 1, 'mean_legal': 1.89, 'mean_frozen': 1.52, 'mean_consensus': 1.22,
+                             'mean_with': 1.2, 'k_with': 1},
+               'cells': {'n': 4, 'k_closer': 4, 'k_direction': 4, 'k_crossed': 0, 'k_half': 4, 'missed': []},
+               'big': {'threshold': 5000, 'n': 0, 'k': 0}}
+    lost = dict(summary, elections=dict(summary['elections'], k_beaten=0, mean_consensus=1.6))
+    texts = [ban.lead_text(summary, cells, params), ban.lead_text(lost, cells, params),
+             ' '.join(str(box) for box in ban.tests(summary, [row], cells)),
+             ' '.join(ban.answers(lost, [missed], [])), str(ban.p2_sum(summary, [row], cells)),
+             ' '.join(str(kpi) for kpi in ban.kpis(summary, [row], cells, params))]
+    joined = ' '.join(texts)
+    assert 'las una' not in joined and 'una generales' not in joined and 'Error medio de la única' in joined
+    assert texts[0].startswith('En la única general desde 2015, el consenso de esos sondeos estuvo más cerca del '
+                               'resultado que el promedio congelado, y quedó')
+    assert 'no estuvo más cerca del resultado que el promedio congelado, y' in texts[1] and 'en ninguna' not in texts[1]
+    assert 'no bate al promedio congelado en la única general.' in texts[3]
+    assert 'mejor en la misma elección' in texts[4] and 'una general, con cuatro partidos principales' in texts[5]
+    assert ban.p2_sum(summary, [row], cells)['strong'] == ('En la única general los sondeos clandestinos habrían '
+                                                           'afinado el promedio')
+    assert ban.p2_sum(lost, [missed], cells)['strong'].startswith('En la única general los sondeos clandestinos no')
+    assert 'las 1 generales' not in joined
+    assert 'cada una' not in texts[5]
+    words = ban.counts(summary, params)
+    assert (words['model'], words['model_previous']) == ('la única general', 'la única general anterior')
+    five = ban.counts(dict(summary, elections=dict(summary['elections'], n=5)), params)
+    assert (five['model'], five['model_previous']) == ('las cinco generales', 'las cinco generales anteriores')
+    assert ban.the_count(5) == 'las cinco' and ban.the_count(1) == 'la única'
+
 # a ranking where the CIS leads: two houses behind it, one of them with the same share as the next
 LEAN_HOUSES = [{'pollster': 'GAD3', 'n': 30, 'k_left': 12, 'share_left': 0.4, 'mean_lean': -1.0, 'cis': False},
                {'pollster': 'Sigma Dos', 'n': 30, 'k_left': 23, 'share_left': 23 / 30, 'mean_lean': 2.5, 'cis': False},

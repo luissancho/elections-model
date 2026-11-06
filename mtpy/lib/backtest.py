@@ -41,8 +41,9 @@ RESULTS_PREFIX = 'backtest/results'
 RESULT_FILES = ('shares.csv', 'seats.csv', 'blocks.csv', 'provinces.csv', 'series.csv', 'meta.csv', 'metrics.csv',
                 'by_horizon.csv', 'calibration.csv', 'ban.csv', 'run.json')
 
-# Columns of the `shares` table of a nowcast case (the ban table of `run_backtest` when no ban case ran)
-BAN_COLUMNS = ['event_date', 'horizon', 'party', 'main', 'official', 'model', 'fc_lo', 'fc_hi', 'last_poll', 'mean_4w',
+# Columns of the `shares` table of a nowcast case (the ban table of `run_backtest` when no ban case ran); not the
+# poll columns of the event part `ban` (`publish.BAN_COLUMNS`)
+BAN_SHARES_COLUMNS = ['event_date', 'horizon', 'party', 'main', 'official', 'model', 'fc_lo', 'fc_hi', 'last_poll', 'mean_4w',
                'prev_result', 'lo50', 'hi50', 'lo80', 'hi80', 'lo95', 'hi95'] + ['q{:02d}'.format(q) for q in range(5, 100, 5)]
 
 # Root of the repository (to show local folders relative to it)
@@ -145,9 +146,11 @@ def has_ban_polls(scope: str, event_date: str) -> bool:
     Returns
     -------
     bool
-        True when any poll of the last five days has `ctype == 'wban'`.
+        True when any poll of the election has `ctype == 'wban'`: every poll of the cycle is read, as the ban
+        case takes every `wban` poll (those with `days = 6` included, published on the first day of the ban with
+        the fieldwork ended the day before).
     """
-    polls = get_poll_series(scope, [event_date], drange=(0, 5))
+    polls = get_poll_series(scope, [event_date])
 
     return 'ctype' in polls.columns and bool((polls['ctype'] == 'wban').any())
 
@@ -1059,28 +1062,31 @@ def run_backtest(
                 parts[key].append(case[key])
             metrics.append({'event_date': event_date, 'horizon': horizon} | summarize_case(case['shares'], case['seats'], case['blocks'], case['provinces']))
 
-        if ban and has_ban_polls(scope, event_date):
-            if verbose > 0:
-                print('Backtest {} with the ban polls...'.format(event_date))
-
+        if ban:
+            # The lookup goes inside the `try` too: a failed query skips the ban case of this election, not the scope
             try:
-                case = run_case(
-                    scope, event_date, 0, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
-                    nowcast_only=True, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
-                    herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
-                    error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
-                    weight_ratings=weight_ratings, config=config, rating_exponent=rating_exponent,
-                    drop_ctypes=['exit']
-                )
+                case = None
+                if has_ban_polls(scope, event_date):
+                    if verbose > 0:
+                        print('Backtest {} with the ban polls...'.format(event_date))
+                    case = run_case(
+                        scope, event_date, 0, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
+                        nowcast_only=True, house_effects=house_effects, industry_bias=industry_bias,
+                        dispersion=dispersion, herding=herding, composition=composition,
+                        regional_noise=regional_noise, min_events=min_events, error_model=error_model,
+                        drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings, config=config,
+                        rating_exponent=rating_exponent, drop_ctypes=['exit']
+                    )
             except Exception as e:
                 warnings.warn('Backtest {} with the ban polls skipped: {}'.format(event_date, e))
                 parts['meta'].append(pd.DataFrame([{'event_date': event_date, 'horizon': 0, 'error': str(e)}]))
             else:
-                parts_ban.append(case['shares'])
+                if case is not None:
+                    parts_ban.append(case['shares'])
 
     out = {key: pd.concat(frames, ignore_index=True) if len(frames) > 0 else pd.DataFrame() for key, frames in parts.items()}
     if ban:
-        out['ban'] = pd.concat(parts_ban, ignore_index=True) if len(parts_ban) > 0 else pd.DataFrame(columns=BAN_COLUMNS)
+        out['ban'] = pd.concat(parts_ban, ignore_index=True) if len(parts_ban) > 0 else pd.DataFrame(columns=BAN_SHARES_COLUMNS)
     out['series'] = shortest_horizon(out['series'])
     out['metrics'] = pd.DataFrame(metrics)
     if len(metrics) == 0:

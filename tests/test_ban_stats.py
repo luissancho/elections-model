@@ -83,6 +83,24 @@ def test_summary_counts_a_tie_in_n_and_ties_but_not_in_k_and_tests_without_it():
     assert block['mean_d'] == pytest.approx(0.1 / 3)
 
 
+
+def test_the_exception_is_never_the_national_scope():
+    """With the generals the worst scope (and enough pairs), the exception is the worst community, not «España»."""
+    def scope_pairs(scope, national, wins, n):
+        return [{'scope': scope, 'event_date': '2023-07-23', 'national': national, 'pollster_id': index,
+                 'd': -0.1 if index < wins else 0.1, 'closer': index < wins, 'sample_size': 1000, 'label': '2023'}
+                for index in range(n)]
+
+    import types
+
+    events = [types.SimpleNamespace(scope=scope, national=scope == 'es') for scope in ('es', 'es-md', 'es-an')]
+    pairs = scope_pairs('es', True, 2, 12) + scope_pairs('es-md', False, 6, 12) + scope_pairs('es-an', False, 8, 12)
+    summary = stats.summarize(events, pairs, [], [], PARAMS)
+    assert [row['scope'] for row in summary['pairs']['by_scope']] == ['es', 'es-md', 'es-an']
+    assert summary['exception'] == {'scope': 'es-md', 'n': 12, 'k': 6}
+    only_national = stats.summarize(events[:1], scope_pairs('es', True, 2, 12), [], [], PARAMS)
+    assert only_national['exception'] is None
+
 def test_consensus_leaves_out_the_panel_and_the_aggregator(ban):
     events, figures = ban
     for date in ('2019-11-10', '2023-07-23'):
