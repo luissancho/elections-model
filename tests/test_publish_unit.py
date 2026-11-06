@@ -13,7 +13,7 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
 from mtpy.lib.forecaster import NoPollsError
-from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
+from tests.fakes import (BACKTEST_HORIZONS, BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
                          synthetic_backtest, synthetic_ban, synthetic_cycle, synthetic_legal, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
                          synthetic_rating_check)
 
@@ -1281,6 +1281,31 @@ def test_export_event_model_accepts_a_file_system_and_a_folder(tmp_path):
     by_fs, _ = publish.export_event_model((FileSystem(str(tmp_path / 'bt')), ''), '2023-07-23')
     assert repr(by_path) == repr(by_fs) and by_fs['horizons'] == [6, 30]  # repr: the NaN of a missing value is never equal
     assert publish.export_event_series((FileSystem(str(tmp_path / 'bt')), ''), '2023-07-23') == (None, None)
+
+
+def test_export_event_model_exports_the_ban_rows_apart_from_the_horizons(tmp_path):
+    folder = write_backtest_source(str(tmp_path / 'bt'), ban=True)
+    data, frames = publish.export_event_model(folder, '2023-07-23')
+    assert data['horizons'] == list(BACKTEST_HORIZONS) and {r['horizon'] for r in data['ban']} == {0}
+    assert 'model-ban' in frames and {r['party'] for r in data['ban']} == set(NAMES)
+    data, frames = publish.export_event_model(folder, '2019-11-10')
+    assert 'ban' not in data and 'model-ban' not in frames
+    data, frames = publish.export_event_model(write_backtest_source(str(tmp_path / 'nb')), '2023-07-23')
+    assert 'ban' not in data and 'model-ban' not in frames
+
+
+def test_publish_event_retires_a_stale_model_ban_csv(tmp_path):
+    ev = synthetic_event()
+    site = FileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(site)
+    for name, ban in (('with', True), ('without', False)):
+        source = str(tmp_path / name)
+        write_backtest_source(source, ban=ban)
+        publish.publish_event('es', '2023-07-23', writer, computer=FakeComputer(), source=source, prov=fake_prov,
+                              **event_readers(ev))
+        twin = bundle.path_event_csv('es', '2023-07-23', 'model-ban')
+        model = writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data']
+        assert writer.exists(twin) is ban and ('ban' in model) is ban
 
 
 def event_readers(ev):

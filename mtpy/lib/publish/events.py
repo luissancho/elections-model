@@ -27,6 +27,7 @@ EVENT_POLLSTER_COLUMNS = ['pollster_id', 'pollster', 'n_polls', 'sample_size', '
 
 
 EVENT_MODEL_PARTS = ('shares', 'seats', 'blocks')
+EVENT_BAN_FILE = 'ban.csv'
 
 
 def _records(table: pd.DataFrame) -> list:
@@ -256,7 +257,8 @@ def export_event_model(source: Optional[str], event_date: str) -> tuple:
     tuple of (dict, dict of pandas.DataFrame)
         Data for the ``event-model`` schema (``horizons``, ascending, and the rows of each slice) and the CSV
         twins ``model-shares``, ``model-seats`` and ``model-blocks`` of the tables found. Rounded as
-        ``export_backtest_table``.
+        ``export_backtest_table``. When ``ban.csv`` has rows of the election they go apart, in ``ban`` and
+        ``model-ban``, never in ``horizons`` (the election page reads the shortest horizon).
     """
     source = _source(source)
     data = {'horizons': [], **{part: [] for part in EVENT_MODEL_PARTS}}
@@ -273,6 +275,14 @@ def export_event_model(source: Optional[str], event_date: str) -> tuple:
         frames['model-' + part] = frame
         horizons.update(int(h) for h in table['horizon'].unique())
     data['horizons'] = sorted(horizons)
+    path = _results_path(source[1], EVENT_BAN_FILE) if source else None
+    if path is not None and source[0].exists(path):
+        table = source[0].read_csv(path)
+        table = table.loc[table['event_date'].astype(str) == event_date].reset_index(drop=True)
+        if len(table):
+            slice_, frame = export_backtest_table(table)
+            data['ban'] = slice_['rows']
+            frames['model-ban'] = frame
 
     return data, frames
 

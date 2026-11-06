@@ -303,15 +303,19 @@ def synthetic_backtest():
                                  seats=seats, calibration=calibration)
 
 
-def write_backtest_source(root, scope='es'):
+def write_backtest_source(root, scope='es', ban=False):
     """Escribe en `backtest.results_dir(root, scope)` los seis CSV de `synthetic_backtest` (`by_horizon.csv` y
-    `calibration.csv` incluidos) y su `run.json`; devuelve esa carpeta."""
+    `calibration.csv` incluidos) y su `run.json`; devuelve esa carpeta. Con `ban`, también `ban.csv`: las filas `shares` de `2023-07-23` con horizonte 0."""
     from mtpy.lib import backtest
     folder = backtest.results_dir(root, scope)
     os.makedirs(folder, exist_ok=True)
     tables = synthetic_backtest()
     for part, name in publish.BACKTEST_FILES.items():
         getattr(tables, part.replace('-', '_')).to_csv(os.path.join(folder, name), index=False)
+    if ban:
+        shares = tables.shares
+        shares.loc[shares['event_date'].astype(str) == '2023-07-23'].assign(horizon=0).to_csv(
+            os.path.join(folder, publish.EVENT_BAN_FILE), index=False)
     with open(os.path.join(folder, 'run.json'), 'w', encoding='utf-8') as fh:
         json.dump({**tables.run, 'scope': scope}, fh)
     return folder

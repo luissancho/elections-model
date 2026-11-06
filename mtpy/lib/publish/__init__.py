@@ -41,7 +41,7 @@ from .common import (
     SEATS_DECIMALS
 )
 from .events import (
-    BAN_COLUMNS, event_dates_to_publish, EVENT_MODEL_PARTS, EVENT_POLLSTER_COLUMNS, event_summary, export_event_ban,
+    BAN_COLUMNS, event_dates_to_publish, EVENT_BAN_FILE, EVENT_MODEL_PARTS, EVENT_POLLSTER_COLUMNS, event_summary, export_event_ban,
     export_event_cycle, export_event_meta, export_event_model, export_event_polls, export_event_pollsters, export_event_results,
     export_event_series, publish_event
 )
