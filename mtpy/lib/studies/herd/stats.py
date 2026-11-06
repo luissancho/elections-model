@@ -1,12 +1,12 @@
 """
-Pure statistics of the herd study: how the polls of a cycle disperse around the published average, relative to the
-sampling error of their samples, and the herding of each house.
+Pure statistics of the herd study: how far apart the polls of two different houses are, relative to what their
+samples allow, and whether that distance shrinks as the election nears.
 
-A poll's residual in a series is its share minus the level of the average at the end of its fieldwork (the published
-curve, or the local consensus of the other houses when the cycle has no curve). Its expected variance, were it a
-simple random sample around that level, is ``1e4 · p(1 − p) / n`` in squared points. The dispersion of a set of rows
-is the root of the mean squared residual over the mean expected variance: about 1 for polls that only differ by
-sampling error, below 1 for polls closer to each other than their samples allow.
+Two polls of different houses, fielded within a few days of each other, measure the same opinion: their difference in a
+series, squared (``d2``), has an expectation of ``v = 1e4 · p(1 − p) · (1/n_i + 1/n_j)`` squared points were both
+simple random samples. The dispersion of a set of comparisons is ``sqrt(Σ d2 / Σ v)``: about 1 for polls that only
+differ by sampling error, below 1 for polls closer to each other than their samples allow. Herding shows as the
+dispersion of the same pair of houses falling from far away from the election to its last weeks.
 """
 import math
 from typing import Optional
@@ -14,11 +14,11 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from .data import Cycle
-
-# Bounds of the level, as a proportion, in the expected variance of a share
+# Bounds of the level, as a proportion, in the expected variance of a difference
 LEVEL_BOUNDS = (0.005, 0.995)
-ROW_COLUMNS = ['poll', 'pollster', 'days', 'name', 'resid', 'var']
+COMPARISON_COLUMNS = ['pair', 'poll_i', 'poll_j', 'days', 'period', 'name', 'd2', 'v']
+# Relative tolerance when comparing a permuted statistic with the observed one (floating-point noise)
+PERMUTATION_TOLERANCE = 1e-9
 
 
 def _sig3(value: float) -> float:
@@ -31,231 +31,204 @@ def _is_number(value) -> bool:
     return value is not None and not (isinstance(value, float) and math.isnan(value))
 
 
-def main_series(polls: pd.DataFrame, parties: list[str], n_series: int) -> list[str]:
+def period_of(days: float, periods: dict) -> Optional[str]:
     """
-    The series the study measures: the parties with the highest mean share over the polls.
+    Period of the cycle a number of days before the election falls in.
+
+    Parameters
+    ----------
+    days : float
+        Days to the election.
+    periods : dict
+        Name of each period mapped to its ``[lo, hi)`` bounds in days (half-open: ``lo`` included, ``hi`` not),
+        except the period with the largest ``hi``, which also includes it (the last day of the cycle counts).
+
+    Returns
+    -------
+    str or None
+        The name of the period containing ``days``; ``None`` outside all of them.
+    """
+    last = max(hi for _, hi in periods.values())
+
+    for name, (lo, hi) in periods.items():
+        if lo <= days < hi or days == hi == last:
+            return name
+
+    return None
+
+
+def comparisons(polls: pd.DataFrame, names: list[str], params: dict) -> pd.DataFrame:
+    """
+    Comparisons between the polls of different houses fielded close in time, one row per pair of polls and series.
 
     Parameters
     ----------
     polls : pandas.DataFrame
-        The polls of a cycle (``Cycle.polls``), one float column per party.
-    parties : list of str
-        The candidate parties, in the order that breaks ties.
-    n_series : int
-        How many series to keep.
+        Columns ``poll`` (label), ``pollster``, ``days`` (int, days to the election), ``n`` (float, sample) and one
+        float column per series in ``names``. ``poll_i`` of a pair is the earlier row in this order, ``poll_j`` the
+        later one.
+    names : list of str
+        The series compared.
+    params : dict
+        Uses ``pair_days`` (maximum ``|days_i − days_j|``) and ``periods`` (see ``period_of``).
 
     Returns
     -------
-    list of str
-        The ``n_series`` parties with the highest mean share, descending, ties in the order of ``parties``.
+    pandas.DataFrame
+        Columns ``COMPARISON_COLUMNS``: ``pair`` (both houses sorted and joined by ``|``), ``poll_i``, ``poll_j``,
+        ``days`` (mean of the two), ``period``, ``name``, ``d2`` (squared difference of the shares) and ``v``
+        (``1e4 · p(1 − p) · (1/n_i + 1/n_j)``, ``p`` the mean share as a proportion within ``LEVEL_BOUNDS``). Only
+        the series with both shares finite enter.
     """
-    means = [(-polls[name].mean(), position, name) for position, name in enumerate(parties)
-             if name in polls and _is_number(polls[name].mean())]
+    rows = []
+    frame = polls.reset_index(drop=True)
 
-    return [name for _, _, name in sorted(means)[:n_series]]
+    for i in range(len(frame)):
+        for j in range(i + 1, len(frame)):
+            first, second = frame.iloc[i], frame.iloc[j]
+
+            if first['pollster'] == second['pollster'] or abs(first['days'] - second['days']) > params['pair_days']:
+                continue
+
+            days = (first['days'] + second['days']) / 2
+            pair = '|'.join(sorted([first['pollster'], second['pollster']]))
+
+            for name in names:
+                x_i, x_j = first[name], second[name]
+
+                if not (np.isfinite(x_i) and np.isfinite(x_j)):
+                    continue
+
+                p = min(max((x_i + x_j) / 200, LEVEL_BOUNDS[0]), LEVEL_BOUNDS[1])
+                rows.append({'pair': pair, 'poll_i': first['poll'], 'poll_j': second['poll'], 'days': days,
+                             'period': period_of(days, params['periods']), 'name': name,
+                             'd2': float((x_i - x_j) ** 2),
+                             'v': float(1e4 * p * (1 - p) * (1 / first['n'] + 1 / second['n']))})
+
+    return pd.DataFrame(rows, columns=COMPARISON_COLUMNS)
 
 
-def curve_level(curve: pd.DataFrame, name: str, when: pd.Timestamp) -> Optional[float]:
+def dispersion(rows: pd.DataFrame) -> Optional[float]:
     """
-    Level of the average of one series on a day.
+    Dispersion of a set of comparisons relative to the sampling error.
 
     Parameters
     ----------
-    curve : pandas.DataFrame
-        The average (``Cycle.curve``), indexed by ``Timestamp`` with one column per party.
-    name : str
-        The series.
-    when : pandas.Timestamp
-        The day.
+    rows : pandas.DataFrame
+        Rows of ``comparisons`` (``d2`` and ``v`` columns).
 
     Returns
     -------
     float or None
-        The value on the last date of the curve not after ``when`` (the last date when ``when`` is after the end of
-        the curve); ``None`` when ``when`` is before its first date, without the series or with a missing value.
+        ``sqrt(Σ d2 / Σ v)``, unrounded; ``None`` without rows.
     """
-    if name not in curve or when < curve.index.min():
+    if len(rows) == 0:
         return None
 
-    value = float(curve[name].loc[:when].iloc[-1])
-
-    return value if _is_number(value) else None
+    return math.sqrt(float(rows['d2'].sum()) / float(rows['v'].sum()))
 
 
-def local_level(polls: pd.DataFrame, index, name: str, window: int, exclude: list[str]) -> Optional[float]:
+def _shared_pairs(rows: pd.DataFrame, a: str, b: str, min_rows: int) -> pd.DataFrame:
+    """The rows of periods ``a`` and ``b`` of the pairs of houses with at least ``min_rows`` rows in each."""
+    in_a = rows[rows['period'] == a].groupby('pair').size()
+    in_b = rows[rows['period'] == b].groupby('pair').size()
+    pairs = in_a[in_a >= min_rows].index.intersection(in_b[in_b >= min_rows].index)
+
+    return rows[rows['pair'].isin(pairs) & rows['period'].isin([a, b])]
+
+
+def compare(rows: pd.DataFrame, a: str, b: str, min_rows: int) -> Optional[dict]:
     """
-    Local consensus of one series around one poll, for the cycles without a published curve: the mean share of the
-    polls of the other houses.
+    Dispersion of the same pairs of houses in two periods.
 
     Parameters
     ----------
-    polls : pandas.DataFrame
-        The polls of the cycle with ``pollster``, ``weight`` and ``end`` (end of fieldwork as ``Timestamp``) columns
-        and one float column per party; the polls with a weight above zero count, with or without sample (those
-        without weight never entered the average).
-    index
-        Label of the poll in ``polls``.
-    name : str
-        The series.
-    window : int
-        Days either side of the poll's end within which another poll counts.
-    exclude : list of str
-        Houses that never enter the consensus (the CIS).
+    rows : pandas.DataFrame
+        Rows of ``comparisons``.
+    a, b : str
+        The periods compared (``a`` the reference, ``b`` the one expected to be closer).
+    min_rows : int
+        Minimum rows a pair of houses needs in each of the two periods to count.
+
+    Returns
+    -------
+    dict or None
+        ``pairs`` (pairs of houses counted), ``rows_a``, ``rows_b``, ``r_a``, ``r_b`` (dispersions), ``change``
+        (``r_b / r_a − 1``) and ``falls`` (``r_b < r_a``), all unrounded; ``None`` without pairs or when ``r_a`` is 0.
+    """
+    shared = _shared_pairs(rows, a, b, min_rows)
+
+    if len(shared) == 0:
+        return None
+
+    in_a, in_b = shared[shared['period'] == a], shared[shared['period'] == b]
+    r_a, r_b = dispersion(in_a), dispersion(in_b)
+
+    if r_a == 0:
+        return None
+
+    return {'pairs': int(shared['pair'].nunique()), 'rows_a': len(in_a), 'rows_b': len(in_b), 'r_a': r_a, 'r_b': r_b,
+            'change': r_b / r_a - 1, 'falls': bool(r_b < r_a)}
+
+
+def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutations: int,
+                  seed: int) -> Optional[float]:
+    """
+    Permutation test of the fall in dispersion between two periods.
+
+    Within each pair of houses counted by ``compare``, the labels ``a``/``b`` of its rows are shuffled; the statistic is
+    ``(Σ d2_b / Σ v_b) / (Σ d2_a / Σ v_a)`` over all the pairs.
+
+    Parameters
+    ----------
+    rows : pandas.DataFrame
+        Rows of ``comparisons``.
+    a, b : str
+        The periods compared.
+    min_rows : int
+        As in ``compare``.
+    permutations : int
+        Number of shuffles.
+    seed : int
+        Seed of the generator.
 
     Returns
     -------
     float or None
-        The plain mean of the shares of the polls with weight (a NaN weight counts as zero) of houses other than the
-        poll's and not in ``exclude``, ending within ``± window`` days of it with a finite share; ``None`` with fewer
-        than two such polls.
+        Share of the permuted statistics not above the observed one (the p-value of a fall); ``None`` when
+        ``compare`` is ``None``.
     """
-    own = polls.loc[index]
-    near = (polls['end'] - own['end']).abs() <= pd.Timedelta(days=window)
-    other = (polls['pollster'] != own['pollster']) & ~polls['pollster'].isin(exclude)
-    others = polls[near & other & (polls['weight'] > 0)][name].dropna()
+    if compare(rows, a, b, min_rows) is None:
+        return None
 
-    return float(others.mean()) if len(others) >= 2 else None
+    shared = _shared_pairs(rows, a, b, min_rows)
+    generator = np.random.default_rng(seed)
+    sum_d2_a = np.zeros(permutations)
+    sum_v_a = np.zeros(permutations)
+    total_d2 = total_v = 0.0
+    obs_d2_b = obs_v_b = 0.0
 
+    for _, group in shared.groupby('pair'):
+        d2, v = group['d2'].to_numpy(float), group['v'].to_numpy(float)
+        is_a = (group['period'] == a).to_numpy()
+        size = len(group)
+        # A random arrangement per permutation: the rows with the smallest keys take the label a
+        order = np.argsort(generator.random((permutations, size)), axis=1)
+        label_a = np.zeros((permutations, size), dtype=bool)
+        np.put_along_axis(label_a, order[:, :int(is_a.sum())], True, axis=1)
+        sum_d2_a += label_a @ d2
+        sum_v_a += label_a @ v
+        total_d2 += d2.sum()
+        total_v += v.sum()
+        obs_d2_b += d2[~is_a].sum()
+        obs_v_b += v[~is_a].sum()
 
-def residual_rows(cycle: Cycle, names: list[str], election: pd.Timestamp, params: dict) -> pd.DataFrame:
-    """
-    Residuals of the polls of a cycle around the level of the average, one row per poll and series.
+    observed = (obs_d2_b / obs_v_b) / ((total_d2 - obs_d2_b) / (total_v - obs_v_b))
 
-    Parameters
-    ----------
-    cycle : Cycle
-        The cycle; its ``curve`` gives the level, or the local consensus (``local_level``) when it is ``None``.
-    names : list of str
-        The series measured (``main_series``).
-    election : pandas.Timestamp
-        Election date.
-    params : dict
-        Parameters of the study; uses ``local_window`` and ``exclude`` (for the local consensus only).
+    with np.errstate(divide='ignore', invalid='ignore'):
+        permuted = ((total_d2 - sum_d2_a) / (total_v - sum_v_a)) / (sum_d2_a / sum_v_a)
 
-    Returns
-    -------
-    pandas.DataFrame
-        Columns ``poll`` (label of the poll in ``cycle.polls``), ``pollster``, ``days`` (int, days from the end of
-        fieldwork, ``end_date`` or ``date`` without it, to the election), ``name``, ``resid`` (share minus level) and
-        ``var`` (``1e4 · p(1 − p) / n``, ``p`` the level as a proportion within ``LEVEL_BOUNDS`` and ``n`` the
-        sample). Only the polls with ``sample_size`` and ``weight`` above zero enter, and of them the series with a
-        finite share and level. The excluded houses keep their rows: the caller splits them.
-    """
-    polls = cycle.polls.assign(end=pd.to_datetime(cycle.polls['end_date'].fillna(cycle.polls['date'])))
-    entered = polls[(polls['sample_size'] > 0) & (polls['weight'] > 0)]
-    rows = []
-
-    for index, poll in entered.iterrows():
-        days = int((election - poll['end']).days)
-
-        for name in names:
-            share = poll[name]
-
-            if not _is_number(share):
-                continue
-
-            if cycle.curve is not None:
-                level = curve_level(cycle.curve, name, poll['end'])
-            else:
-                level = local_level(polls, index, name, params['local_window'], params['exclude'])
-
-            if level is None:
-                continue
-
-            p = min(max(level / 100, LEVEL_BOUNDS[0]), LEVEL_BOUNDS[1])
-            rows.append({'poll': index, 'pollster': poll['pollster'], 'days': days, 'name': name,
-                         'resid': float(share - level), 'var': 1e4 * p * (1 - p) / poll['sample_size']})
-
-    return pd.DataFrame(rows, columns=ROW_COLUMNS).astype({'days': int, 'resid': float, 'var': float})
-
-
-def in_days(rows: pd.DataFrame, lo: int, hi: int) -> pd.DataFrame:
-    """
-    The rows whose poll ended between ``lo`` and ``hi`` days before the election, both included.
-
-    Parameters
-    ----------
-    rows : pandas.DataFrame
-        Rows of ``residual_rows``.
-    lo, hi : int
-        Bounds of ``days``.
-
-    Returns
-    -------
-    pandas.DataFrame
-        The filtered rows.
-    """
-    return rows[(rows['days'] >= lo) & (rows['days'] <= hi)]
-
-
-def dispersion(rows: pd.DataFrame, round_to: Optional[int] = 2) -> dict:
-    """
-    Dispersion of a set of residuals relative to the sampling error.
-
-    Parameters
-    ----------
-    rows : pandas.DataFrame
-        Rows of ``residual_rows``.
-    round_to : int, optional
-        Decimals of the ratio; ``None`` keeps it unrounded (for means and comparisons rounded later).
-
-    Returns
-    -------
-    dict
-        ``k`` (distinct polls) and ``ratio`` (``sqrt(mean(resid²) / mean(var))`` rounded to ``round_to`` decimals,
-        ``None`` without polls).
-    """
-    k = int(rows['poll'].nunique())
-
-    if k == 0:
-        return {'k': 0, 'ratio': None}
-
-    ratio = math.sqrt(float((rows['resid'] ** 2).mean()) / float(rows['var'].mean()))
-
-    return {'k': k, 'ratio': ratio if round_to is None else round(ratio, round_to)}
-
-
-def house_ratio(rows: pd.DataFrame) -> dict:
-    """
-    Herding of one house: the spread of its polls around their own mean, relative to what their samples allow.
-
-    In each series, ``ss_obs = Σ(r − r̄)²`` over the residuals of the house and ``ss_exp = (1 − 1/k_s) · Σ var``,
-    its expectation for independent samples (``k_s`` the rows of the series); both are summed over the series and
-    ``h = sqrt(ss_obs / ss_exp)``. Under independent sampling ``h² · (k − 1)`` is about a chi-squared of ``k − 1``
-    degrees of freedom, whose lower tail is ``p``: a small ``p`` says the polls are closer to each other than chance.
-
-    Parameters
-    ----------
-    rows : pandas.DataFrame
-        Rows of ``residual_rows`` of one house (the caller filters the window).
-
-    Returns
-    -------
-    dict
-        ``k`` (distinct polls), ``h`` rounded to 2 decimals and ``p`` (``chi2.cdf(h² · (k − 1), k − 1)``) with three
-        significant figures; ``h`` and ``p`` ``None`` with fewer than two polls.
-    """
-    from scipy.stats import chi2
-
-    k = int(rows['poll'].nunique())
-
-    if k < 2:
-        return {'k': k, 'h': None, 'p': None}
-
-    ss_obs = ss_exp = 0.0
-
-    for _, series in rows.groupby('name'):
-        resid = series['resid']
-        ss_obs += float(((resid - resid.mean()) ** 2).sum())
-        ss_exp += (1 - 1 / len(series)) * float(series['var'].sum())
-
-    if ss_exp <= 0:
-        return {'k': k, 'h': None, 'p': None}
-
-    h = math.sqrt(ss_obs / ss_exp)
-    p = chi2.cdf(h ** 2 * (k - 1), k - 1)
-
-    return {'k': k, 'h': round(h, 2), 'p': _sig3(p)}
+    return float(np.mean(permuted <= observed * (1 + PERMUTATION_TOLERANCE)))
 
 
 def sign_test(n: int, k: int) -> Optional[dict]:
@@ -282,35 +255,28 @@ def sign_test(n: int, k: int) -> Optional[dict]:
     return {'n': n, 'k': k, 'p': _sig3(binom.sf(k - 1, n, 0.5))}
 
 
-def _error_group(rows: list) -> dict:
-    """``k``, mean ``last_error_avg`` and mean ``abs(last_error_blocks)`` of a group of rows, rounded to 2."""
-    blocks = [abs(row['last_error_blocks']) for row in rows if _is_number(row.get('last_error_blocks'))]
-
-    return {'k': len(rows), 'error_avg': round(float(np.mean([row['last_error_avg'] for row in rows])), 2),
-            'error_blocks': round(float(np.mean(blocks)), 2) if blocks else None}
-
-
-def accuracy(rows: list[dict]) -> Optional[dict]:
+def count(results: list[dict], alpha: float = 0.05) -> dict:
     """
-    Whether the houses that herd (``h < 1``) erred less than the rest with their last poll.
+    Tally of the results of ``compare`` (with their ``p`` from ``permutation_p``) over several elections.
 
     Parameters
     ----------
-    rows : list of dict
-        Rows of the houses with ``h``, ``last_error_avg`` and ``last_error_blocks``; only those with an
-        ``last_error_avg`` and an ``h`` enter.
+    results : list of dict
+        Dicts with ``falls``, ``p`` and ``change``.
+    alpha : float, optional
+        Significance level of a clear fall.
 
     Returns
     -------
-    dict or None
-        ``n`` (houses entered), ``herd`` and ``rest`` (each ``k``, ``error_avg`` the mean of ``last_error_avg`` and
-        ``error_blocks`` the mean of ``abs(last_error_blocks)``, rounded to 2); ``None`` when a group is empty.
+    dict
+        ``n`` (results), ``k`` (those that fall), ``sign_p`` (``sign_test(n, k)['p']``), ``clear`` (those with
+        ``p < alpha``) and ``median_change``; without results ``n``, ``k`` and ``clear`` are 0 and the rest ``None``.
     """
-    entered = [row for row in rows if _is_number(row.get('last_error_avg')) and _is_number(row.get('h'))]
-    herd = [row for row in entered if row['h'] < 1]
-    rest = [row for row in entered if row['h'] >= 1]
+    if not results:
+        return {'n': 0, 'k': 0, 'sign_p': None, 'clear': 0, 'median_change': None}
 
-    if not herd or not rest:
-        return None
+    k = sum(1 for result in results if result['falls'])
 
-    return {'n': len(entered), 'herd': _error_group(herd), 'rest': _error_group(rest)}
+    return {'n': len(results), 'k': k, 'sign_p': sign_test(len(results), k)['p'],
+            'clear': sum(1 for result in results if result['p'] < alpha),
+            'median_change': float(np.median([result['change'] for result in results]))}
