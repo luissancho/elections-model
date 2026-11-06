@@ -413,6 +413,7 @@ republica):
 | `pollsters` | `event-pollsters@1` | `blocks`, `rows` |
 | `polls` | `event-polls@1` | `blocks`, `rows` |
 | `cycle` | `event-cycle@1` | `parties`, `columns`, `polls` |
+| `ban` | `event-ban@1` | `parties`, `columns`, `polls`, `legal` |
 | `results` | `event-results@1` | `n_seats`, `rows` |
 | `model` | `event-model@1` | `horizons`, `shares`, `seats`, `blocks` |
 | `series` | `event-series@1` | `horizon`, `dates`, `parties`, `mean`, `lo`, `hi` |
@@ -434,11 +435,18 @@ republica):
   sondeos que `polls.rows` (`Computer.filter_polls(featured=True)`: cada fila de la tabla tiene su error), por
   fecha y casa ascendentes, con `sample_size` nulo cuando no se conoce y `weight` el producto del peso global y el
   de muestra; los escaños salen de `forecaster.published_seats`. El gemelo CSV añade `seats_min_*`/`seats_max_*`.
+- `ban` (opcional): los sondeos publicados durante la veda (`ctype` `wban`, los «clandestinos») de la elección, con la
+  forma de `cycle` (`parties`, `columns` y `polls`, cada uno con `error_avg`, `error_blocks` y `bias_blocks`) y `legal`,
+  el último sondeo legal de cada casa que publicó uno clandestino (la misma forma). Sólo existe si la elección tiene
+  alguno; lo lee el estudio `andorra`. Sus gemelos CSV son `ban` y `ban-legal`.
 - `results.rows`: `party_id`, `party`, `votes` (entero), `pct` (2 decimales) y `seats` (entero) del resultado oficial
   nacional (región 0), por votos descendente; `n_seats` es la suma de `seats`.
 - `model` es el **corte del backtest** (ver "Backtest") a esta elección: `shares`, `seats` y `blocks` son las filas
   (`{columna: valor}`, mismos redondeos) de `shares.csv`, `seats.csv` y `blocks.csv` con ese `event_date`, y
-  `horizons` los horizontes que aparecen, ascendentes. Sin backtest, las tres listas y `horizons` van vacías.
+  `horizons` los horizontes que aparecen, ascendentes. Sin backtest, las tres listas y `horizons` van vacías. Si el
+  backtest corrió con `ban` (`ban.csv`), `model` gana la clave `ban`: las filas de esa elección a horizonte 0, con los
+  sondeos clandestinos dentro, con las mismas columnas que `shares`. El horizonte 0 no se suma a `horizons`; su gemelo
+  CSV es `model-ban`.
 - `series` es la serie diaria del promedio del modelo del horizonte más corto del backtest (`series.csv` de
   `backtest/results`, normalmente a 6 días), hasta el día en que se congeló el modelo: `horizon` y, con la forma de la
   parte `series` de un run, `dates`, `parties`, `mean`, `lo` y `hi` (2 decimales, `null` en los huecos de la banda).
@@ -454,7 +462,7 @@ que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` d
 ## Estudios
 
 Enmienda 2026-10-19 (estudio del voto CERA). Un estudio vive en `studies/{study}/` (en `site/v1/`, o en `site-dry/v1/` con
-`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay tres: `voto-cera`, `sesgo-cis` y `rebano`.
+`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay cuatro: `voto-cera`, `sesgo-cis`, `rebano` y `andorra`.
 Como el análisis, **se sobrescribe** en cada publicación: sin `run_id` y fuera de `history.json`. Su única huella en
 el manifest es su entrada en `manifest.studies` (ver «Punteros»).
 
@@ -531,7 +539,7 @@ Gemelos CSV:
 ### `rebano`
 
 «¿Se copian las encuestadoras en la recta final?». Cinco partes, sin `slug`; se calcula con las partes ya publicadas
-del paquete y no se registra. Los estudios con `live` en `publish.STUDY_RUNNERS` (`sesgo-cis` y `rebano`) los
+del paquete y no se registra. Los estudios con `live` en `publish.STUDY_RUNNERS` (`sesgo-cis`, `rebano` y `andorra`) los
 republica la acción `studies` del publicador y, como último paso, `update`:
 
 | Parte | `schema` | `data` (claves obligatorias) |
@@ -545,6 +553,29 @@ republica la acción `studies` del publicador y, como último paso, `update`:
 Gemelos CSV: `cycles`, `weeks` y `houses`, con el nombre de la parte.
 
 `meta`, `summary` no tienen gemelo.
+
+### `andorra`
+
+«El mercado de la fruta en Andorra»: los sondeos publicados fuera durante los cinco días de veda («clandestinos»)
+frente al último sondeo legal de cada casa y frente al promedio congelado. Siete partes; las filas llevan `pollster_id`
+y `pollster` y **no `slug`** (la página calcula los enlaces a los perfiles). Se calcula con las partes ya publicadas del
+paquete (`event` de cada elección, con su parte `ban` y la clave `ban` de `model`), es vivo (`live`) y no se registra
+(`"register":true` termina `refused`):
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `andorra-meta@1` | `study`, `title`, `subtitle`, `params` (dict), `inputs` (dict), `next` (`{event_date, open}` o `null`), `sources` (lista de `{label, url}`), `commit` (texto o `null`), `dirty`, `versions` (dict), `seconds` (dict) |
+| `summary` | `andorra-summary@1` | `pairs` (dict; `p` con tres cifras significativas), `elections` (dict o `null` sin modelo), `cells`, `big` (dicts), `exception` (dict o `null`) |
+| `pairs` | `andorra-pairs@1` | `rows` (lista) |
+| `elections` | `andorra-elections@1` | `rows` (lista, con `model` dict o `null`), `period` (dict) |
+| `cells` | `andorra-cells@1` | `rows` (lista; cifras de voto a 1 decimal) |
+| `houses` | `andorra-houses@1` | `rows`, `big_rows` (listas) |
+| `latest` | `andorra-latest@1` | `scope`, `event_date`, `label`, `parties`, `polls`, `consensus` (dict o `null`), `frozen` (dict o `null`), `official`, `error` (dicts) |
+
+Los errores, diferencias y medias van a 2 decimales y las cifras de voto a 1. Gemelos CSV: `pairs`, `elections` (plano:
+`model_error_legal`, `model_error_frozen`, `model_error_consensus`, `model_error_with`, `model_beaten`,
+`model_beaten_with`, nulos sin modelo), `cells`, `houses` y `latest-polls` (una fila por sondeo, una columna por
+partido). `meta` y `summary` no tienen gemelo.
 
 ### Escritura
 
@@ -820,7 +851,7 @@ sobrescriben en cada publicación.
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
-| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `cycles`, `weeks`, `houses`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `cycles`, `weeks`, `houses` |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`, `andorra`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `cycles`, `weeks`, `houses`; `andorra`: `meta`, `summary`, `pairs`, `elections`, `cells`, `houses`, `latest`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `cycles`, `weeks`, `houses`; de `andorra`: `pairs`, `elections`, `cells`, `houses`, `latest-polls` (`latest`) |
 
 - `meta`, `placement` y `summary` no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
   no pertenece a la parte.

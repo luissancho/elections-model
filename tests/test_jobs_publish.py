@@ -723,7 +723,7 @@ def test_publish_studies_action_runs_once_and_needs_no_study_slug(fresh_app, tmp
     with monkeypatch.context() as m:
         m.setattr(publish, 'resolve_scopes', no_db)
         result = Publish().run(what=['studies'], fs=fs)
-    assert result['studies']['status'] == 'published' and set(result['studies']['studies']) == {'sesgo-cis', 'rebano'}
+    assert result['studies']['status'] == 'published' and set(result['studies']['studies']) == {'sesgo-cis', 'rebano', 'andorra'}
     capsys.readouterr()
     result = Publish().run(what=['studies', 'analysis'], scopes=['es'], fs=fs)
     out = capsys.readouterr().out

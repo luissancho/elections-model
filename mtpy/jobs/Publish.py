@@ -33,17 +33,18 @@ class Publish(SequenceJob):
     or ``failed``.
 
     ``study`` computes a study (``voto-cera``, the CERA vote study, or ``sesgo-cis``, the lean of the CIS computed
-    from the published analyses and events) and overwrites ``studies/{study}/`` (``publish.publish_study``), updating
-    its entry of the manifest. It needs ``study``, has no LOREG guard (it publishes no polls) and registers the
-    prediction of the study only with ``register`` (and a clean tree; ``force`` replaces an existing registration;
+    from the published analyses and events, ``rebano`` or ``andorra``, the polls published abroad during the ban) and
+    overwrites ``studies/{study}/`` (``publish.publish_study``), updating its entry of the
+    manifest. It needs ``study``, has no LOREG guard (it publishes no polls) and registers the prediction of the study
+    only with ``register`` (and a clean tree; ``force`` replaces an existing registration;
     ``sesgo-cis`` has nothing to register and refuses it). ``sesgo-cis`` reads the live bundle, so it is republished
     after ``analysis`` and ``event``. With ``dry_run`` it writes under ``site-dry/v1/``. The study ends
     ``published``, ``refused`` (``publish.PublishRefused``: the registration was refused) or ``failed``.
 
     ``studies`` republishes, once per job and with no ``study`` or scopes, the live studies (those flagged ``live`` in
-    ``publish.STUDY_RUNNERS``: ``sesgo-cis`` and ``rebano``) in the order of ``bundle.STUDIES``, and never registers.
-    One study that fails does not stop the next; the action ends ``failed`` if any did. It is also the last step of
-    ``update``, so the daily task recomputes those pages with the run of the day.
+    ``publish.STUDY_RUNNERS``: ``sesgo-cis``, ``rebano`` and ``andorra``) in the order of ``bundle.STUDIES``, and
+    never registers. One study that fails does not stop the next; the action ends ``failed`` if any did. It is also
+    the last step of ``update``, so the daily task recomputes those pages with the run of the day.
 
     ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
     results and the slice and daily series of the model backtest of the election), overwriting them. It needs
@@ -78,6 +79,7 @@ class Publish(SequenceJob):
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-23"}'
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
         python job.py publish '{"what":["study"],"study":"voto-cera"}'
+        python job.py publish '{"what":["study"],"study":"andorra"}'
         python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
         python job.py publish '{"what":["study"],"study":"sesgo-cis"}'
         python job.py publish '{"what":["study"],"study":"rebano"}'

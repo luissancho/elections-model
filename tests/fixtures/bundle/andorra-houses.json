@@ -10,7 +10,6 @@
       {
         "pollster_id": 19,
         "pollster": "Celeste Tel",
-        "slug": "celeste-tel",
         "n": 4,
         "k": 4,
         "share": 1.0,
@@ -19,7 +18,6 @@
       {
         "pollster_id": 3,
         "pollster": "GAD3",
-        "slug": "gad3",
         "n": 20,
         "k": 16,
         "share": 0.8,
@@ -28,7 +26,6 @@
       {
         "pollster_id": 6,
         "pollster": "Sigma Dos",
-        "slug": "sigma-dos",
         "n": 13,
         "k": 10,
         "share": 0.77,
@@ -37,7 +34,6 @@
       {
         "pollster_id": 24,
         "pollster": "Sondaxe",
-        "slug": "sondaxe",
         "n": 4,
         "k": 3,
         "share": 0.75,
@@ -46,7 +42,6 @@
       {
         "pollster_id": 28,
         "pollster": "ElectoPanel",
-        "slug": "electopanel",
         "n": 21,
         "k": 15,
         "share": 0.71,
@@ -55,7 +50,6 @@
       {
         "pollster_id": 14,
         "pollster": "NC Report",
-        "slug": "nc-report",
         "n": 7,
         "k": 5,
         "share": 0.71,
@@ -64,7 +58,6 @@
       {
         "pollster_id": 16,
         "pollster": "Demoscopia",
-        "slug": "demoscopia",
         "n": 3,
         "k": 2,
         "share": 0.67,
@@ -73,7 +66,6 @@
       {
         "pollster_id": 25,
         "pollster": "Gizaker",
-        "slug": "gizaker",
         "n": 3,
         "k": 2,
         "share": 0.67,
@@ -82,7 +74,6 @@
       {
         "pollster_id": 5,
         "pollster": "SocioMétrica",
-        "slug": "sociometrica",
         "n": 12,
         "k": 8,
         "share": 0.67,
@@ -91,7 +82,6 @@
       {
         "pollster_id": 11,
         "pollster": "GESOP",
-        "slug": "gesop",
         "n": 9,
         "k": 5,
         "share": 0.56,
@@ -100,7 +90,6 @@
       {
         "pollster_id": 26,
         "pollster": "Feedback",
-        "slug": "feedback",
         "n": 3,
         "k": 0,
         "share": 0.0,

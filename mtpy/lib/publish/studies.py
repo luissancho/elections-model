@@ -20,6 +20,10 @@ from .common import (
 from .pointers import update_manifest
 
 
+# The two first sentences of the subtitle of ``andorra`` (the figures that follow depend on the summary)
+BAN_INTRO = ('Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y '
+             'en las redes circulan como precios de la fruta.')
+
 STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley de Nietos»',
                               '¿Es posible orquestar con éxito un fraude electoral significativo a través del censo '
                               'exterior?'),
@@ -33,9 +37,13 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                 'rebano': ('¿Se copian las encuestadoras en la recta final?',
                            'En las {n_words} generales desde {since_year}, los sondeos se han parecido más entre sí '
                            'cuanto más cerca estaba la elección{final_clause}.{current}'),
-                # Stub until the study is built (the subtitle is replaced by a template rendered from its summary)
-                'andorra': ('El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última hora?',
-                            'Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y en las redes circulan como precios de la fruta. En las cinco generales desde 2015, el consenso de esos sondeos estuvo más cerca del resultado que el promedio congelado en cuatro, y quedó más cerca del resultado en 19 de las 24 cifras de partido. Lo que no vio nadie, tampoco lo vio la fruta: en 2023 dejó al PSOE tres puntos por debajo de lo que sacó.')}
+                # The subtitle is a template: {n} general elections with a model, {k} of them where the clandestine
+                # consensus beat the frozen average, {kc} of {nc} party figures closer to the result
+                'andorra': ('El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última '
+                            'hora?',
+                            BAN_INTRO + ' En las {n} generales desde 2015, el consenso de esos sondeos estuvo más '
+                            'cerca del resultado que el promedio congelado en {k}, y quedó más cerca del resultado '
+                            'en {kc} de las {nc} cifras de partido.')}
 
 REGISTRATION_KEYS = ('registered_at', 'registered_commit', 'registered', 'registered_changed_at')
 
@@ -581,10 +589,10 @@ from .herd import (  # noqa: E402
     export_herd_summary, export_herd_weeks
 )
 
-def _study_not_built(*args, **kwargs):
-    """Placeholder of the compute and the meta of a study declared but not built yet: nothing to publish."""
-    raise NothingToPublish('andorra: study not built yet')
-
+from .ban import (  # noqa: E402
+    compute_for_publish as compute_ban_for_publish, export_ban_cells, export_ban_elections, export_ban_houses,
+    export_ban_latest, export_ban_meta, export_ban_pairs, export_ban_summary
+)
 
 STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation': export_study_participation,
                                  'vote': export_study_vote, 'placement': export_study_placement,
@@ -595,17 +603,19 @@ STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation':
                                  'election': export_lean_election},
                    'rebano': {'summary': export_herd_summary, 'cycles': export_herd_cycles,
                               'weeks': export_herd_weeks, 'houses': export_herd_houses},
-                   'andorra': {}}
+                   'andorra': {'summary': export_ban_summary, 'pairs': export_ban_pairs,
+                               'elections': export_ban_elections, 'cells': export_ban_cells,
+                               'houses': export_ban_houses, 'latest': export_ban_latest}}
 
 STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta, 'rebano': export_herd_meta,
-              'andorra': _study_not_built}
+              'andorra': export_ban_meta}
 
 # How each study is computed (``compute(data, writer)``), whether it has a registered prediction and whether its page
 # is live (recomputed with the data) rather than a fixed piece
 STUDY_RUNNERS = {'voto-cera': {'compute': _cera_compute, 'registrable': True, 'live': False},
                  'sesgo-cis': {'compute': compute_for_publish, 'registrable': False, 'live': True},
                  'rebano': {'compute': compute_herd_for_publish, 'registrable': False, 'live': True},
-                 'andorra': {'compute': _study_not_built, 'registrable': False, 'live': False}}
+                 'andorra': {'compute': compute_ban_for_publish, 'registrable': False, 'live': True}}
 
 
 def publish_study(study_id: str, writer: BundleWriter, register: bool = False, force: bool = False,

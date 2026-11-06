@@ -1609,7 +1609,7 @@ def test_publish_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(publish.__path__))
-    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'herd', 'lean', 'parties', 'pointers',
+    assert names == ['analysis', 'backtest', 'ban', 'common', 'events', 'forecast', 'herd', 'lean', 'parties', 'pointers',
                      'studies']
     for name in names:
         assert inspect.ismodule(getattr(publish, name)), name
