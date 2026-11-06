@@ -1,0 +1,311 @@
+{% extends 'base.html' %}
+{% block title %}{{ study_meta.get('title') or '¿Voto oculto de quién?' }}{% endblock %}
+{% block description %}{{ study_meta.get('subtitle') or 'Si los sondeos finales subestiman a la izquierda, a Vox o a algún partido, elección a elección.' }}{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/analisis-voto-oculto.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{#- The square button that downloads a card of this page as an image: file by `slug`, signed with the study. -#}
+{% macro shot(slug) -%}{{ m.card_image_button(site_title|lower ~ '-voto-oculto-' ~ slug ~ '.png', (study_meta.get('title') or '¿Voto oculto de quién?') ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}{%- endmacro %}
+{#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
+{% macro answer(verdict, n) -%}
+<a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
+{%- endmacro %}
+{#- «k de n» with the site's integer format. -#}
+{% macro count(k, n) -%}{{ k|int }} de {{ n|int }}{%- endmacro %}
+{#- Every sentence of the texts goes on one line: the tests read them whole. -#}
+{% set v1, v2, v3 = verdicts %}
+{% set n = summary.get('n_elections') %}
+{% set last_year = summary.get('last_year') %}
+{% set la, lg, lr = fig.left_all, fig.left_general, fig.left_regional %}
+{% set rr, lean_all, lean_r = fig.right_regional, fig.lean_all, fig.lean_regional %}
+{% set vox, psoe, size = fig.vox, fig.psoe_general, fig.size %}
+{% set ig, ir = fig.incumbent_general, fig.incumbent_regional %}
+{% set pp_late, pp_all = fig.pp_late, fig.pp_all %}
+{% set pod_before, pod_general, pod_regional = fig.podemos_before, fig.podemos_general, fig.podemos_regional %}
+{% set has_vox = summary.get('vox') is not none %}
+{% set streak = psoe_streak and general_under %}
+{% set after_title = 'Después del ' ~ after.day if after.day else 'Después de la elección' %}
+    <div id="content" class="stack">
+      <header id="study-head">
+        <div class="tags">
+          <span class="pill brand">Análisis</span>
+          <span class="pill">Evidencia histórica · {{ n|int }} elecciones con sondeos · {{ summary.get('n_general')|int }} generales desde {{ summary.get('first_year') or '–' }} y {{ summary.get('n_regional')|int }} autonómicas desde {{ summary.get('first_year_regional') or '–' }}</span>
+          {% if has_run %}
+          <span class="pill ok">Página viva · añade la fila de {{ election_year or '–' }} en cuanto haya escrutinio</span>
+          {% elif after.label %}
+          <span class="pill ok">Página viva · con la fila de {{ last_year }}</span>
+          {% endif %}
+        </div>
+        <h1 class="study-title">{{ study_meta.get('title') or '¿Voto oculto de quién?' }}</h1>
+        {% if study_meta.get('subtitle') %}<p class="study-subtitle">{{ study_meta.subtitle }}</p>{% endif %}
+      </header>
+      <nav class="section-nav toc" aria-label="Secciones">
+        <a href="#resumen">Resumen</a>
+        <a href="#p1" class="{{ v1.tone }}">1 · ¿Subestiman a la izquierda?</a>
+        <a href="#p2" class="{{ v2.tone }}">2 · ¿Voto oculto de Vox?</a>
+        <a href="#p3" class="{{ v3.tone }}">3 · ¿De quién, entonces?</a>
+        <a href="#despues">{{ after_title }}</a>
+        <a href="#datos">Datos y método</a>
+      </nav>
+      {{ m.kpis(kpis) }}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'Cada campaña vuelve la misma idea: hay un voto que las encuestas no ven. Unos dicen que es el de la izquierda, porque sus votantes contestan menos; otros, que es el de Vox, porque sus votantes no lo confiesan. Lo comprobamos con la cuenta más simple: lo que decían los últimos sondeos de cada elección frente a lo que salió de las urnas.', classes='shot') }}
+        {{ shot('resumen') }}
+        <div class="three">
+          {% call answer(v1, 1) -%}
+            En {{ la.n|int }} elecciones, la izquierda salió por encima de los sondeos en {{ la.under|int }} y por debajo en {{ la.over|int }}.
+            Frente a la derecha, la diferencia se equivoca de signo {{ lean_all.under|int }} veces en un sentido y {{ lean_all.over|int }} en el otro.
+          {%- endcall %}
+          {% call answer(v2, 2) -%}
+            {% if has_vox %}En {{ vox.n|int }} elecciones desde {{ texts.vox_since or '–' }}, Vox sacó más de lo que decían los sondeos en {{ vox.under|int }} y menos en {{ vox.over|int }}; el sesgo medio es de {{ vox.mean|delta(1) }} puntos.
+            {%- if vox_chance %} Las sorpresas van en los dos sentidos.
+            {%- elif vox_under_more %} Los sondeos se quedan cortos más veces de lo que permite el azar.
+            {%- else %} Los sondeos se pasan más veces de lo que permite el azar.{% endif %}
+            {%- else %}Ninguna elección de nuestra base tiene a la vez sondeos y resultado de Vox.{% endif %}
+          {%- endcall %}
+          {% call answer(v3, 3) -%}
+            {% if p3_someone %}Los sondeos finales dan a {{ texts.hidden }} menos de lo que {{ 'saca' if texts.hidden_n == 1 else 'sacan' }}, y la diferencia media no se explica por azar. El error típico es de {{ size.mean|num(1) }} puntos.
+            {%- else %}Ningún partido grande sale subestimado de forma sistemática: ni el PSOE, ni el PP{% if not incumbent_hidden %}, ni el partido que gobierna{% endif %}.
+            El error típico es de {{ size.mean|num(1) }} puntos y cambia de signo de una elección a otra.{% endif %}
+          {%- endcall %}
+        </div>
+        <p class="note blue">Medimos lo que publicaron las encuestadoras, no lo que contestó la gente. Si los votantes de un partido contestaran menos, las casas lo corrigen al ponderar; si se avergonzaran de su voto, lo veríamos en la cifra final. Lo que cuenta es si la cifra publicada se queda corta o se pasa, elección tras elección.</p>
+      {{ m.card_end() }}
+      <section class="card qcard shot {{ v1.tone }}" id="p1">
+        {{ shot('pregunta-1') }}
+        <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
+        <p class="lead">
+          Para cada elección sumamos lo que los sondeos de las {{ window_weeks }} últimas semanas daban a los partidos del bloque de la izquierda, el mismo bloque que usa la página de esa elección, y lo comparamos con lo que sacaron.
+          Un valor negativo significa que la izquierda sacó más de lo que decían los sondeos: voto oculto. Un valor positivo, que sacó menos.
+        </p>
+        <p class="ctitle">Error de los sondeos finales con la izquierda, elección a elección</p>
+        <p class="csub">Puntos de voto: sondeos − resultado · por debajo de 0, la izquierda sacó más de lo que decían · generales en negrita · la raya naranja es la media</p>
+        <div class="chart" id="left-chart" role="img" aria-label="Error de los sondeos finales con la izquierda en {{ la.n|int }} elecciones: salió subestimada en {{ la.under|int }} y de más en {{ la.over|int }}, con un sesgo medio de {{ la.mean|delta(1) }} puntos"></div>
+        <p class="ctitle">La cuenta, por grupos de elecciones</p>
+        <p class="csub">«Subestimada»: sacó más de lo que decían los sondeos · «De más»: sacó menos · p: probabilidad de un sesgo medio así por azar</p>
+        <div class="table-wrap">
+          <table id="left-table">
+            <caption class="sr-only">Error de los sondeos finales con la izquierda por grupos de elecciones: elecciones, veces subestimada y de más, sesgo medio y su probabilidad por azar.</caption>
+            <thead><tr><th>Elecciones</th><th>N</th><th>Subestimada</th><th>De más</th><th>Sesgo medio</th><th>p</th></tr></thead>
+            <tbody>
+              {% for row in left_rows %}
+              <tr{% if row.bold %} class="b"{% endif %}><td class="b">{{ row.label }}</td><td class="mut">{{ row.n|int }}</td><td>{{ row.under|int }}</td><td>{{ row.over|int }}</td><td class="b">{{ row.mean|delta(1) }}</td><td class="mut">{{ row.p }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="tnote">La última fila mide a la izquierda frente a la derecha: si los sondeos inflaran a la derecha a costa de la izquierda, saldría negativa. Sale en {{ lean_all.mean|delta(1) }} de media y con el signo {{ 'repartido' if lean_chance else 'inclinado' }} {{ lean_all.under|int }} a {{ lean_all.over|int }}.</p>
+        <div class="sum">
+          {% if p1_yes %}<b>Sí.</b> La izquierda sale subestimada en {{ count(la.under, la.n) }}, {{ la.mean|delta(1) }} de media: la creencia se sostiene.
+          {%- else %}<b>No.</b> En {{ la.n|int }} elecciones la izquierda salió subestimada en {{ la.under|int }} y sobreestimada en {{ la.over|int }}; el sesgo medio es {{ la.mean|delta(1) }} puntos
+          {%- if la.mean is number and la.mean > 0 %}, es decir, en conjunto los sondeos le dan algo <b>de más</b>
+          {%- elif la.mean is number and la.mean < 0 %}, es decir, en conjunto le dan algo de menos, pero no más de lo que permite el azar{% endif %}.{% endif %}
+          {%- if streak %} En las generales el signo se inclina un poco hacia la subestimación ({{ count(lg.under, lg.n) }}) por {{ texts.big_elections }} en que el PSOE sacó más de {{ big_points }} puntos por encima de sus sondeos ({{ texts.big_years }}); una racha así sale por azar {{ texts.general_odds }} de las veces.
+          {%- else %} En las generales, la izquierda salió subestimada en {{ count(lg.under, lg.n) }} ({{ lg.mean|delta(1) }} de media).{% endif %}
+          {%- if regional_both_over %} En las autonómicas {{ 'pasa lo contrario' if streak else 'los sondeos se pasan más veces' }} ({{ count(lr.over, lr.n) }} de más), pero ahí los sondeos dan de más a los dos bloques ({{ lr.mean|delta(1) }} a la izquierda y {{ rr.mean|delta(1) }} a la derecha, porque reparten poco voto a los partidos pequeños): la cuenta que vale es Izquierda − Derecha, repartida {{ lean_r.under|int }} a {{ lean_r.over|int }}.
+          {%- else %} En las autonómicas, la izquierda salió subestimada en {{ count(lr.under, lr.n) }} ({{ lr.mean|delta(1) }} de media); frente a la derecha, el signo va {{ lean_r.under|int }} a {{ lean_r.over|int }}.{% endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          Cada barra es una elección, en orden de fecha: lo que los sondeos de las {{ window_weeks }} últimas semanas daban a los partidos de la izquierda, sumados, menos lo que sacaron.
+          Por debajo de 0, la izquierda sacó más de lo que decían los sondeos; por encima, menos.
+          Las generales van en negrita y las autonómicas, más claras; la raya naranja es la media de todas.
+          En la tabla, la «p» es la probabilidad de un sesgo medio como ése si los sondeos no tuvieran ninguno: por debajo de 0,05, difícilmente es azar.
+          La última fila resta el error de la derecha al de la izquierda, la medida que no depende de cuánto voto reparten los sondeos a los partidos pequeños.
+        </p>
+        {% endcall %}
+      </section>
+      <section class="card qcard shot {{ v2.tone }}" id="p2">
+        {{ shot('pregunta-2') }}
+        <div class="qh"><div class="qn">2</div><h2 class="qt">{{ v2.question }}</h2><span class="verdict">{{ v2.label }}<i></i></span></div>
+        <p class="quote">
+          {%- if p2_yes %}<span class="pill ok">Confirmada</span>{% elif v2.label == 'NO' %}<span class="pill bad">Refutada</span>{% endif -%}
+          «Probablemente hay personas que no quieren reconocer su opción». <b>José Félix Tezanos, presidente del CIS, marzo de 2022</b>, al admitir que el CIS había estimado a Vox a la baja y anunciar un cambio de método.
+          {%- if p2_yes %} Los datos de abajo le dan la razón: los sondeos finales dan a Vox menos de lo que saca.
+          {%- elif v2.label == 'NO' %} Los datos de abajo dicen otra cosa: el conjunto de las encuestadoras no lo estima a la baja.{% endif %}
+        </p>
+        {% if has_vox %}
+        <p class="lead">
+          Vox aparece en nuestra base en {{ texts.vox_since or '–' }}. Hay {{ vox.n|int }} elecciones con sondeos y resultado de Vox:
+          {%- if texts.vox_general.n == 1 %} la general de {{ texts.vox_general.years }} y {{ texts.vox_regional|int }} autonómicas.
+          {%- elif texts.vox_general.n %} las {{ texts.vox_general.k }} generales de {{ texts.vox_general.years }} y {{ texts.vox_regional|int }} autonómicas.
+          {%- else %} todas autonómicas.{% endif %}
+          Misma cuenta: lo que le daban los sondeos de las {{ window_weeks }} últimas semanas menos lo que sacó.
+        </p>
+        <div class="tests">
+          {% for box in vox_tests %}
+          <div class="test">
+            <div class="k">{{ box.label }}</div>
+            <div class="v">{{ box.value }}{% if box.unit %} <small>{{ box.unit }}</small>{% endif %}</div>
+            {% if box.text %}<p>{{ box.text }}</p>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <p class="ctitle">Error de los sondeos finales con Vox, elección a elección</p>
+        <p class="csub">Puntos de voto: sondeos − resultado · por debajo de 0, Vox sacó más de lo que decían · generales en negrita</p>
+        <div class="chart" id="vox-chart" role="img" aria-label="Error de los sondeos finales con Vox en {{ vox.n|int }} elecciones: salió subestimado en {{ vox.under|int }} y de más en {{ vox.over|int }}, con un sesgo medio de {{ vox.mean|delta(1) }} puntos"></div>
+        <div class="sum">
+          {% if p2_yes %}<b>Sí.</b> Vox sale subestimado en {{ count(vox.under, vox.n) }}, {{ vox.mean|delta(1) }} de media: la creencia se sostiene.
+          {%- elif v2.label == 'NO' %}<b>No.</b>{% endif %}
+          {%- if has_vox %}
+          {%- if texts.vox_up and texts.vox_down %} Vox sorprendió al alza en {{ texts.vox_up }} y a la baja en {{ texts.vox_down }}.{% endif %}
+          {%- if not p2_yes %} En {{ vox.n|int }} elecciones el sesgo medio es de {{ vox.mean|delta(1) }} puntos y el signo {{ 'se reparte' if vox_chance else 'va' }} {{ vox.under|int }} a {{ vox.over|int }}{% if vox_chance %}: lo que se espera de unos sondeos sin sesgo{% endif %}.{% endif %}
+          {%- if v2.label == 'NO' %} Que el CIS lo estimara a la baja es un problema del CIS, no de las encuestas.{% endif %}
+          {%- else %} Sin elecciones con sondeos y resultado de Vox no hay cuenta que hacer.{% endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          Cada barra es una elección con Vox, en orden de fecha: lo que le daban los sondeos de las {{ window_weeks }} últimas semanas menos lo que sacó; por debajo de 0, sacó más de lo que decían.
+          La primera caja cuenta las elecciones en que los sondeos se quedaron cortos y lo compara con una moneda al aire: si los sondeos no tuvieran sesgo, se quedarían cortos la mitad de las veces.
+          La segunda da la media y la mediana del error; la tercera, las mayores sorpresas en cada sentido.
+        </p>
+        {% endcall %}
+      </section>
+      <section class="card qcard shot {{ v3.tone }}" id="p3">
+        {{ shot('pregunta-3') }}
+        <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
+        <p class="lead">
+          La misma cuenta para cada partido grande, con su linaje: AP y Coalición Democrática cuentan como PP; PSC y PSE-EE, como PSOE; PCE, Izquierda Unida, Podemos y Sumar como un solo espacio, sumando las marcas que concurren.
+          Y una creencia más, la del partido que gobierna{% if incumbent_general_under and incumbent_vanishes %}, que en las generales parece subestimado y en las autonómicas no{% endif %}.
+          Añadimos el tamaño del error, con independencia del signo: es la cifra que de verdad se repite.
+        </p>
+        <div class="grid2 wide">
+          <div>
+            <p class="ctitle">Todos los partidos, todas las elecciones</p>
+            <p class="csub">Sondeos de las {{ window_weeks }} últimas semanas − resultado · «Subestimado»: sacó más de lo que decían · «Tamaño»: error medio sin signo</p>
+            <div class="table-wrap">
+              <table id="parties-table">
+                <caption class="sr-only">Error de los sondeos finales con cada partido, bloque y partido del Gobierno: elecciones, veces subestimado y de más, sesgo medio, su probabilidad por azar y tamaño medio del error.</caption>
+                <thead><tr><th>Quién</th><th>N</th><th>Subest.</th><th>De más</th><th>Sesgo</th><th>p</th><th>Tamaño</th></tr></thead>
+                <tbody>
+                  {% for row in party_rows %}
+                  <tr><td class="b">{{ row.label }}</td><td class="mut">{{ row.n|int }}</td><td>{{ row.under|int }}</td><td>{{ row.over|int }}</td><td class="b">{{ row.mean|delta(1) }}</td><td class="mut">{{ row.p }}</td><td class="b">{{ row.size|num(1) }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <p class="scroll-hint">Desliza para ver más →</p>
+            <p class="tnote">{% if regional_both_over %}En las autonómicas los dos bloques salen con sesgo positivo porque los sondeos reparten menos voto a los partidos pequeños y locales; por eso la comparación justa entre bloques es la diferencia Izquierda − Derecha de la pregunta 1.{% else %}La comparación justa entre bloques es la diferencia Izquierda − Derecha de la pregunta 1: no depende de cuánto voto reparten los sondeos a los partidos pequeños.{% endif %}</p>
+          </div>
+          <div>
+            <p class="ctitle">Todos los errores, partido a partido</p>
+            <p class="csub">Cada punto es una elección · a la izquierda del 0, el partido sacó más de lo que decían los sondeos · la raya naranja es la media</p>
+            <div class="chart" id="parties-chart" role="img" aria-label="Error de los sondeos finales con {{ initial.party_strip.order|reverse|join(', ') }}, elección a elección: el tamaño medio del error con un partido grande es de {{ size.mean|num(1) }} puntos"></div>
+          </div>
+        </div>
+        <div class="sum">
+          {% if p3_someone %}<b>De {{ texts.hidden }}.</b> Los sondeos finales {{ 'le dan menos de lo que saca' if texts.hidden_n == 1 else 'les dan menos de lo que sacan' }}, y la diferencia media no se explica por azar.
+          {%- else %}<b>De nadie.</b> Ningún partido grande sale subestimado de forma sistemática{% endif %}
+          {%- if far_from_zero == 0 %}{{ ' Las medias' if p3_someone else ', y las medias' }} quedan a menos de un punto del cero en todos los casos.
+          {%- else %}{{ ' Las medias' if p3_someone else ', y las medias' }} quedan a menos de un punto del cero en todos los casos salvo {{ 'uno' if far_from_zero == 1 else far_from_zero|int }}.{% endif %}
+          {%- if incumbent_vanishes and incumbent_general_under %} El PSOE en las generales ({{ count(psoe.under, psoe.n) }}, {{ psoe.mean|delta(1) }}) y el partido del Gobierno ({{ count(ig.under, ig.n) }}) no pasan la prueba: en las {{ ir.n|int }} autonómicas la racha desaparece ({{ count(ir.under, ir.n) }}, {{ ir.mean|delta(1) }}).
+          {%- else %} El PSOE salió subestimado en {{ count(psoe.under, psoe.n) }} generales ({{ psoe.mean|delta(1) }} de media), y el partido del Gobierno, en {{ count(ig.under, ig.n) }} generales y {{ count(ir.under, ir.n) }} autonómicas.{% endif %}
+          {%- if p3_someone %} El tamaño medio del error es de {{ size.mean|num(1) }} puntos por partido.
+          {%- else %} Lo que se repite es el <b>tamaño</b> del error, {{ size.mean|num(1) }} puntos por partido, no su signo.{% endif %}
+        </div>
+        <div class="note blue">
+          <b>La creencia más antigua: el voto oculto del PP.</b>
+          {%- if pp_early_under %} Nació con razón: entre {{ texts.pp_early.span }}, Alianza Popular y el PP sacaron más de lo que decían los sondeos {{ texts.pp_early.times }} ({{ texts.pp_early.errors }}).
+          {%- elif texts.pp_early.errors %} Entre {{ texts.pp_early.span }}, el error de los sondeos con Alianza Popular y el PP fue {{ texts.pp_early.errors }}.{% endif %}
+          {%- if pp_late_against %} Desde {{ pp_late_year }} el signo va {{ pp_late.over|int }} a {{ pp_late.under|int }} en contra{% if texts.pp_examples %}: {{ texts.pp_examples }}{% endif %}.
+          {%- else %} Desde {{ pp_late_year }}, el PP sacó más de lo que decían los sondeos en {{ count(pp_late.under, pp_late.n) }} generales.{% endif %}
+          En las {{ pp_all.n|int }} elecciones con PP, {{ pp_all.under|int }} subestimado y {{ pp_all.over|int }} sobreestimado, {{ pp_all.mean|delta(1) }} de media.
+        </div>
+        <div class="note">
+          <b>La única excepción, contada como lo que es.</b>
+          Desde finales de {{ recent_year }}, en las {{ pod_regional.n|int }} autonómicas con Podemos o sus marcas, los sondeos le dieron de más en {{ 'todas' if podemos_all else pod_regional.over|int }}, {{ pod_regional.mean|delta(1) }} puntos de media.
+          {%- if podemos_general_under %} En las {{ texts.podemos_general }} generales del mismo periodo pasó lo contrario {{ texts.podemos_contrary }} ({{ pod_general.mean|delta(1) }} de media)
+          {%- else %} En las {{ texts.podemos_general }} generales del mismo periodo le dieron de más en {{ pod_general.over|int }} ({{ pod_general.mean|delta(1) }} de media){% endif %}, y antes de {{ recent_year }}
+          {%- if podemos_before_chance %} el signo estaba repartido ({{ count(pod_before.over, pod_before.n) }})
+          {%- else %} le dieron de más en {{ count(pod_before.over, pod_before.n) }}{% endif %}.
+          {%- if podemos_over %} No es voto oculto de nadie: es el retrato de un partido en caída al que los sondeos siguen con retraso{% if texts.pp_april is number %}, igual que al PP en abril de 2019 ({{ texts.pp_april|delta(1) }}){% endif %}.{% endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          Cada fila de la tabla es un partido con su linaje, un bloque o el partido que gobernaba el día de la elección: en cuántas elecciones se presentó, en cuántas sacó más de lo que decían los sondeos («Subestimado») y en cuántas menos, el sesgo medio, la probabilidad de un sesgo así por azar y el tamaño medio del error sin su signo.
+          En la nube, cada punto es una elección: a la izquierda del 0, el partido sacó más de lo que decían los sondeos; a la derecha, menos. La raya naranja de cada fila es su media.
+        </p>
+        {% endcall %}
+      </section>
+      {% if has_run %}
+      {% set after_lead = 'Lo que dicen hoy los sondeos de las ' ~ window_weeks ~ ' últimas semanas, la misma cifra que la página compara con el resultado en cada elección pasada. ' ~ ('La elección ya se ha celebrado: en cuanto haya escrutinio' if held else ('El ' ~ election_day if election_day else 'El día de la elección') ~ ', en cuanto haya escrutinio') ~ ', esta tarjeta añade la fila de ' ~ (election_year or 'la elección') ~ ' a las ' ~ (n|int) ~ ' y vuelve a hacer las cuentas de las tres preguntas.' %}
+      {% elif after.label %}
+      {% set after_lead = 'La fila de ' ~ last_year ~ ' ya está en las cuentas de arriba: lo que dijeron los sondeos de las ' ~ window_weeks ~ ' últimas semanas, lo que salió de las urnas y el error, la misma cuenta que en cada elección pasada.' %}
+      {% else %}
+      {% set after_lead = 'Cuando haya unas generales en curso, esta tarjeta enseña lo que dicen sus sondeos finales y, con el escrutinio, añade su fila a las cuentas de las tres preguntas.' %}
+      {% endif %}
+      {{ m.card_start('despues', after_title, after_lead, classes='shot') }}
+        {{ shot('despues') }}
+        {% if has_run and after.columns %}
+        <div class="table-wrap">
+          <table id="after-table">
+            <caption class="sr-only">Media de los sondeos de las {{ window_weeks }} últimas semanas, resultado y error de los bloques y partidos principales.</caption>
+            <thead><tr><th>{{ election_year or '–' }} · sondeos {{ after.period or 'finales' }}</th>{% for column in after.columns %}<th>{{ column.label }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              <tr class="now"><td class="b">Sondeos finales{% if not held %}, hoy{% endif %}</td>{% for column in after.columns %}<td>{{ after.now[column.key]|num(1) }}</td>{% endfor %}</tr>
+              <tr><td class="b">Resultado{% if after.day %} del {{ after.day }}{% endif %}</td>{% for column in after.columns %}<td class="mut">–</td>{% endfor %}</tr>
+              <tr><td class="b">Error</td>{% for column in after.columns %}<td class="mut">–</td>{% endfor %}</tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tnote">
+          {%- if after.belief %}Si la creencia tuviera razón, {{ 'el ' ~ after.day ~ ' ' if after.day }}{{ after.belief }}. {% endif -%}
+          Si la historia sirve de guía, cada una de esas cifras fallará en unos {{ size.mean|num(0) }} puntos{% if not (p1_yes or p2_yes or p3_someone) %}, y el sentido no se puede saber hoy{% endif %}.
+        </p>
+        {% elif has_run %}
+        <p class="notice">Todavía no hay sondeos de las {{ window_weeks }} últimas semanas: la fila aparece con el primero.</p>
+        {% elif after.label %}
+        <div class="table-wrap">
+          <table id="after-table">
+            <caption class="sr-only">Media de los sondeos finales, resultado y error de {{ after.label }}.</caption>
+            <thead><tr><th>{{ after.label }}</th>{% for column in after.columns %}<th>{{ column.label }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              <tr><td class="b">Sondeos finales</td>{% for column in after.columns %}<td>{{ after.polls.get(column.key)|num(1) }}</td>{% endfor %}</tr>
+              <tr><td class="b">Resultado</td>{% for column in after.columns %}<td>{{ after.results.get(column.key)|num(1) }}</td>{% endfor %}</tr>
+              <tr class="now"><td class="b">Error</td>{% for column in after.columns %}<td>{{ after.error[column.key]|delta(1) }}</td>{% endfor %}</tr>
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      {{ m.card_end() }}
+      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y resultados publicados en Demoscopio y se puede descargar.', classes='shot') }}
+        {{ shot('datos') }}
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Datos</p>
+            <ul class="src-list">
+              <li>Los sondeos de las {{ n|int }} elecciones publicadas en el <a href="/elecciones">Histórico</a>, tal como se publicaron, con sus fechas de campo: {{ summary.get('n_general')|int }} generales ({{ summary.get('first_year') or '–' }}-{{ texts.last_general or '–' }}) y {{ summary.get('n_regional')|int }} autonómicas de {{ texts.n_communities|int }} comunidades ({{ summary.get('first_year_regional') or '–' }}-{{ last_year or '–' }}). Sin agregadores ni paneles abiertos.</li>
+              <li>Los resultados oficiales de cada elección y el bloque de cada partido, los mismos que enseña la página de la elección.</li>
+              <li>Linajes: AP y CD como PP; PSC y PSE-EE como PSOE; PCE, IU, Podemos (y sus marcas autonómicas) y Sumar como un espacio: en cada sondeo se suman las marcas que estima y, en el resultado, esas mismas. El partido del Gobierno, por elección, en una tabla propia.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="ctitle">Método</p>
+            <div class="tech">
+              <b>Sondeos finales</b>: los que acaban el campo en los {{ window_days|int }} días anteriores a la elección.
+              <b>Error</b> de un partido o bloque: la media simple de sus cifras en esos sondeos menos el resultado; un bloque suma, en cada sondeo, los partidos del bloque que el sondeo estima y, en el resultado, esos mismos partidos; un linaje con dos marcas en la misma elección, igual.
+              <b>Subestimado</b>: error negativo. <b>Tamaño</b>: la media del error sin su signo.
+              La <b>p</b> es la de una t de Student sobre la media de los errores; la «probabilidad de k o más por azar» es la binomial de una cola.
+              Con ventanas de 7 ó 30 días, o con el último sondeo de cada casa, el cuadro no cambia.
+            </div>
+          </div>
+        </div>
+        {% if sources %}
+        <p class="ctitle">Fuentes</p>
+        <ul class="src-list">
+          {% for source in sources %}
+          <li><a href="{{ source.url }}">{{ source.label }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if csv_links %}
+        <p class="csv-links">
+          {% for link in csv_links %}<a class="pill brand" href="{{ link.href }}">CSV: {{ link.label }}</a>{% endfor %}
+        </p>
+        {% endif %}
+        {% if published_at %}<p class="tnote">Página actualizada el {{ published_at|date }}.</p>{% endif %}
+      {{ m.card_end() }}
+    </div>
+{% endblock %}

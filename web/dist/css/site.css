@@ -978,6 +978,24 @@ tr.now td { background: var(--color-accent-soft); }
 /* the image of question 1 (`card-image.js` marks the clone `.shot-image`): the chart above the cycles table, so the
    whole table fits the 1200 px of the image */
 .shot-image .grid2:has(#cycles-table) { grid-template-columns: 1fr; }
+/* The shy-vote study (/analisis/voto-oculto): the bars of the left at full width and lower on phones, the bars of
+   Vox, the strip of the parties beside the wider table of question 3, the quote of question 2 with its pill and the
+   bold cells and rows of its tables */
+.qcard .chart#left-chart { height: 340px; }
+.qcard .chart#vox-chart { height: 260px; }
+.qcard .chart#parties-chart { height: 340px; }
+#p1 .chart + .ctitle { margin-top: 14px; }
+.grid2.wide { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.quote { margin: 0 0 12px; padding: 8px 14px; border-left: 3px solid var(--color-line-strong); font-size: 13px; font-style: italic; color: var(--color-muted); }
+.quote b { font-style: normal; color: var(--color-text); }
+.quote .pill { margin-right: 8px; font-style: normal; }
+:is(#p1, #p3, #despues) td.b, :is(#p1, #p3, #despues) tr.b td { font-weight: 700; }
+@media (max-width: 899px) {
+  .grid2.wide { grid-template-columns: 1fr; }
+}
+@media (max-width: 699px) {
+  .qcard .chart#left-chart { height: 280px; }
+}
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {

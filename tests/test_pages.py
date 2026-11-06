@@ -1838,7 +1838,7 @@ def test_pages_package_layout():
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
     assert names == ['analisis', 'backtest', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters', 'herd',
-                     'inicio', 'lean', 'metodo', 'promedios', 'slugs']
+                     'inicio', 'lean', 'metodo', 'promedios', 'shy', 'slugs']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -3513,10 +3513,12 @@ def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site,
     publish_study(fresh_app.fs)
     publish_study(fresh_app.fs, study='sesgo-cis')
     publish_study(fresh_app.fs, study='rebano')
+    publish_study(fresh_app.fs, study='voto-oculto')
     for path, query in (('/', ''), ('/es', ''), ('/elecciones', ''),
                         ('/elecciones', 'scope=es&date=2023-07-23'), ('/metodo', ''), ('/metodo/promedio', ''),
                         ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', ''),
-                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', ''), ('/analisis/rebano', '')):
+                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', ''), ('/analisis/rebano', ''),
+                        ('/analisis/voto-oculto', '')):
         status, _, body = call(events_site, path, query=query)
         assert status == 200 or not path.startswith('/analisis'), path
         assert_public_wording(html(body), path + '?' + query)
@@ -5679,6 +5681,98 @@ def test_analisis_index_lists_rebano_when_published(api, fresh_app):
     publish_study(fresh_app.fs, study='rebano')
     page = html(call(api, '/analisis')[2])
     assert '/analisis/rebano' in page and '¿Se copian las encuestadoras en la recta final?' in page
+
+
+def test_shy_page_structure_and_wording(api, fresh_app):
+    publish_study(fresh_app.fs, study='voto-oculto')
+    status, _, body = call(api, '/analisis/voto-oculto'); page = html(body)
+    assert status == 200 and '<h1 class="study-title">¿Voto oculto de quién?</h1>' in page
+    assert '/dist/js/pages/analisis-voto-oculto.js' in page and 'id="initial-data"' in page
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['NO', 'NO', 'DE NADIE']
+    assert page.count('<div class="kpi">') == 3 and '40 de 92' in page and '22 de 39' in page and '2,0<small> puntos</small>' in page
+    assert 'Evidencia histórica · 92 elecciones con sondeos · 16 generales desde 1977 y 76 autonómicas desde 2009' in page
+    for chart in ('left-chart', 'vox-chart', 'parties-chart'):
+        assert re.search(r'<div class="chart[^"]*" id="%s" role="img" aria-label="[^"]+"></div>' % chart, page), chart
+    assert page.count('class="pill brand" href="/api/v1/studies/voto-oculto/') == 2
+    assert 'Refutada' in page and 'Tezanos' in page and 'con una moneda saldrían 19 ó 20' in page and 'del 26 %' in page
+    assert 'más veces le dan de más que de menos' in page and '(1977, 1986, 1993, 1996, 2004 y 2023)' in page
+    assert 'la cuenta que vale es Izquierda − Derecha, repartida 34 a 42' in page and 'en las 76 autonómicas la racha desaparece' in page
+    assert 'Desde finales de 2018, en las 32 autonómicas' in page and 'de más en 30' in page and 'Andalucía 2018' in page
+    assert 'Sondeos finales, hoy' in page and '35,4' in page and 'sondeos del 22 de octubre al 5 de noviembre (12)' in page
+    assert 'Frente Amplio' not in page and 'FA' in visible_text(page)   # the column is the run's party name
+    assert_public_wording(page, '/analisis/voto-oculto')
+    assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
+    data = initial(body)
+    assert len(data['left_bars']) == 8 and all(isinstance(bar['general'], bool) for bar in data['left_bars'])
+    assert len(data['vox_bars']) == 6
+    assert len(data['party_strip']['order']) == 6 and data['party_strip']['means']['PSOE'] == -0.12
+
+
+def test_shy_page_conditions_follow_the_figures(api, fresh_app):
+    summary = fixture_data('voto-oculto-summary')
+    summary = summary | {'verdicts': {'p1': 'SÍ', 'p2': 'SÍ', 'p3': 'DE PSOE'},
+                         'left': summary['left'] | {'all': summary['left']['all'] | {'under': 60, 'over': 32, 'mean': -1.1, 'p_t': 0.004}},
+                         'vox': summary['vox'] | {'under': 30, 'over': 9, 'mean': -1.4, 'p_t': 0.001, 'p_sign': 0.0004}}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'SÍ', 'DE PSOE']
+    assert 'Confirmada' in page and 'Refutada' not in page and 'más veces de menos que de más' in page
+    assert 'la creencia se sostiene' in page and 'lo que se espera de unos sondeos sin sesgo' not in page and 'del 0,04 %' in page
+
+
+def test_shy_page_after_card_shows_only_the_values_present(api, fresh_app):
+    summary = fixture_data('voto-oculto-summary')
+    summary['current'] = summary['current'] | {'values': {'PSOE': 26.4, 'PP': 31.3}, 'names': ['PP', 'PSOE', 'VOX']}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    table = page[page.index('id="despues"'):]
+    assert '<th>PP</th><th>PSOE</th>' in table and 'Izquierda' not in table[:table.index('</thead>')] and 'VOX' not in table[:table.index('</thead>')]
+
+
+def test_shy_page_once_the_election_is_published(api, fresh_app):
+    summary = fixture_data('voto-oculto-summary') | {'current': None, 'n_elections': 93, 'last_year': 2026}
+    elections = fixture_data('voto-oculto-elections')
+    elections['rows'].append(elections['rows'][-1] | {'scope': 'es', 'scope_name': 'España', 'event_date': '2026-11-29', 'label': 'Generales 2026',
+                                                      'short': 'GEN 26', 'general': True, 'Izquierda': -1.2, 'Derecha': 0.8, 'incumbent': 'PSOE',
+                                                      'polls': {'Izquierda': 35.4, 'Derecha': 52.6}, 'results': {'Izquierda': 36.6, 'Derecha': 51.8}})
+    publish_study(fresh_app.fs, study='voto-oculto', meta={'election': None}, parts={'summary': summary, 'elections': elections})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    assert 'Página viva · con la fila de 2026' in page and 'La fila de 2026 ya está en las cuentas de arriba' in page
+    assert 'Sondeos finales, hoy' not in page and 'Generales 2026' in page and '36,6' in page and '−1,2' in page
+
+
+def test_shy_page_without_a_run_speaks_of_the_past(api, fresh_app):
+    summary = fixture_data('voto-oculto-summary') | {'current': None}
+    publish_study(fresh_app.fs, study='voto-oculto', meta={'election': None}, parts={'summary': summary})
+    status, _, body = call(api, '/analisis/voto-oculto'); page = html(body)
+    assert status == 200 and 'Sondeos finales, hoy' not in page and 'a 24 días' not in page and 'Si la creencia tuviera razón' not in page
+
+
+def test_shy_page_table_rows_and_dashes(api, fresh_app):
+    summary = fixture_data('voto-oculto-summary')
+    summary['parties'][7] = summary['parties'][7] | {'figures': None}
+    publish_study(fresh_app.fs, study='voto-oculto', parts={'summary': summary})
+    page = html(call(api, '/analisis/voto-oculto')[2])
+    rows = re.findall(r'<tr[^>]*><td class="b">([^<]+)</td>', page[page.index('id="p3"'):page.index('id="despues"')])
+    assert rows[:8] == ['PSOE', 'PP (AP, CD)', 'Vox', 'IU / Podemos / Sumar', 'Izquierda (bloque)', 'Derecha (bloque)', 'Gobierno, generales', 'Gobierno, autonómicas']
+    assert 'Gobierno, autonómicas</td><td class="mut">–</td>' in page
+
+
+def test_analisis_index_lists_voto_oculto_when_published(api, fresh_app):
+    publish_study(fresh_app.fs, study='voto-oculto')
+    page = html(call(api, '/analisis')[2])
+    assert '/analisis/voto-oculto' in page and '¿Voto oculto de quién?' in page
+    home = html(call(api, '/')[2])
+    assert '/analisis/voto-oculto' in home
+
+
+def test_metodo_promedio_links_to_voto_oculto_only_when_published(api, fresh_app):
+    page = html(call(api, '/metodo/promedio')[2])
+    assert '/analisis/voto-oculto' not in page
+    publish_study(fresh_app.fs, study='voto-oculto')
+    page = html(call(api, '/metodo/promedio')[2])
+    assert '<a href="/analisis/voto-oculto">¿Voto oculto de quién?</a>' in page
+    assert_public_wording(page, '/metodo/promedio')
 
 
 # a ranking where the CIS leads: two houses behind it, one of them with the same share as the next

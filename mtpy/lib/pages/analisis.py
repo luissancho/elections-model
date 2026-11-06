@@ -16,13 +16,14 @@ from ..webapi import site
 from .common import api_url, bundle_part, common_context
 from .cera import (MONTHS_LONG, SCENARIOS, UNIFORM_SPLIT, _census_version, _check, _debate, _get, _question_1,
                    _question_2, _question_3, _sigla, _two_periods, _version)
-from . import herd, lean
+from . import herd, lean, shy
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
 STUDIES = {'voto-cera': {'template': 'analisis_voto_cera.html'},
            'sesgo-cis': {'template': 'analisis_sesgo_cis.html'},
-           'rebano': {'template': 'analisis_rebano.html'}}
+           'rebano': {'template': 'analisis_rebano.html'},
+           'voto-oculto': {'template': 'analisis_voto_oculto.html'}}
 CERA = 'voto-cera'
 # Verdict of each of the three questions of the CERA study and the colour class of its card
 VERDICTS = [('SÍ', 'q1'), ('SIN EVIDENCIA', 'q2'), ('NO', 'q3')]
@@ -166,7 +167,8 @@ def study_context(state: dict, study: str) -> dict:
     Returns
     -------
     dict
-        The context of the study (``CONTEXTS[study]``: ``cera_context``, ``lean_context`` or ``herd_context``).
+        The context of the study (``CONTEXTS[study]``: ``cera_context``, ``lean_context``, ``herd_context`` or
+        ``shy_context``).
 
     Raises
     ------
@@ -722,5 +724,55 @@ def herd_context(state: dict) -> dict:
     return context
 
 
+def shy_context(state: dict) -> dict:
+    """
+    Template context of the page of the shy-vote study (``/analisis/voto-oculto``).
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+
+    Returns
+    -------
+    dict
+        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``elections`` (the
+        rows of the part), ``fig`` (``shy.figure_blocks``), ``verdicts`` (``shy.verdict_rows``), ``kpis``,
+        ``left_rows`` (the table of question 1), ``vox_tests`` (the boxes of question 2), ``party_rows`` (the table
+        of question 3), ``after`` (``shy.after_rows``: the card «Después del 29-N»), ``texts`` (``shy.texts``: the prose fragments of the
+        conditioned sentences), ``csv_links``, ``sources``, ``published_at``, ``initial`` (``shy.island`` plus the
+        common ``state``) and the flags of ``shy.flags`` (``has_run``, ``held``, ``p1_yes``, ``psoe_streak``...).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle.
+    """
+    context = common_context(state, '/analisis')
+    parts = {part: study_part(shy.SHY, part) or {} for part in bundle.STUDY_PARTS[shy.SHY]}
+    meta, summary = parts['meta'], parts['summary']
+    elections = _get(parts['elections'], 'rows') or []
+    context.update(shy.flags(summary, meta))
+    context.update(
+        study_meta=meta,
+        summary=summary,
+        elections=elections,
+        fig=shy.figure_blocks(summary),
+        verdicts=shy.verdict_rows(summary),
+        kpis=shy.kpis(summary, meta),
+        left_rows=shy.left_rows(summary, elections, meta),
+        vox_tests=shy.vox_tests(summary),
+        party_rows=shy.party_rows(summary),
+        after=shy.after_rows(summary, elections, meta),
+        texts=shy.texts(summary, elections, meta),
+        csv_links=_csv_links(shy.SHY),
+        sources=meta.get('sources') or [],
+        published_at=_published_at(shy.SHY),
+        initial=dict(shy.island(parts), state=context['state']),
+    )
+
+    return context
+
+
 # Context builder of each study of ``STUDIES``
-CONTEXTS = {CERA: cera_context, lean.LEAN: lean_context, herd.HERD: herd_context}
+CONTEXTS = {CERA: cera_context, lean.LEAN: lean_context, herd.HERD: herd_context, shy.SHY: shy_context}
