@@ -965,8 +965,10 @@ td.blk { font-weight: 700; }
 .herd-bar { display: grid; grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr) 4.5rem; align-items: center; gap: 10px; font-size: 13px; }
 .herd-label { font-weight: 600; }
 .herd-track { position: relative; display: grid; grid-template-columns: 1fr 1fr; height: 18px; }
-.herd-track::after { content: ''; position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: #5a5f72; }
+/* the zero axis is the left border of the right half, not a pseudo-element: html2canvas misplaces an absolute
+   ::after at left: 50% in the card image */
 .herd-track .half { display: flex; height: 100%; }
+.herd-track .half.right { border-left: 1px solid #5a5f72; }
 .herd-track .half.left { justify-content: flex-end; }
 .herd-track i { display: block; height: 100%; }
 .herd-track i.down { background: #1d4f86; border-radius: 4px 0 0 4px; }
