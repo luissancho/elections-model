@@ -913,9 +913,11 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
             la de hoy, que es la del indicador del perfil y la de la columna «Confianza». La prueba por criterio de la
             tabla centra el diferencial de cada encuestadora en cada elección por la media de esa elección y remuestrea
             encuestadoras con reemplazo, 2.000 réplicas, sobre 59 encuestadoras evaluadas y 775 pares de encuestadora y
-            elección; la Implantación y las generales previas se calculan a la fecha de cada elección. El tope de
+            elección; la Implantación y las generales previas se calculan a la fecha de cada elección. El máximo de
             {{ rubric.cap }} y los {{ rubric.per_point }} puntos de calidad por punto de rúbrica son una convención:
-            con 10 por punto, una encuestadora nueva perfecta pesaría más que las mejores con historial.
+            con 10 por punto, una encuestadora nueva perfecta habría valido 100, más que las mejores con historial.
+            Desde el 7 de noviembre de 2026, además, ninguna encuestadora sin elecciones pasa de la mediana de los
+            ratings, sea cual sea su calidad previa (la nota de la mezcla).
           </p>
         {% endcall %}
         {% call m.note_item('evidencia') %}<strong>Pesos, evidencia, σ y el peso del prior.</strong>
@@ -978,8 +980,8 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
             sin sondeos evaluables tiene <var>W</var> = 0 y <var>R</var> = min(<var>Q</var>, <var>m</var>). Los
             agregadores y los paneles en línea abiertos no reciben <var>R</var><sub>aj</sub> ni <var>R</var>, y quedan
             fuera de la media <var>R̄</var> del factor del promedio, ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100),
-            que se calcula sobre todas las encuestadoras calificadas, también las que no tienen sondeos y valen su
-            calidad previa. El logaritmo es creciente y cóncavo: preserva la ordenación y comprime las diferencias
+            que se calcula sobre todas las encuestadoras calificadas, también las que no tienen sondeos y valen
+            min(<var>Q</var>, <var>m</var>). El logaritmo es creciente y cóncavo: preserva la ordenación y comprime las diferencias
             respecto a la ponderación proporcional al rating. Para las encuestadoras sin fila de rating, el promedio
             sustituye <var>R</var> por <var>Q</var> y <var>R̄</var> por la calidad previa media. Φ es sólo una
             transformación a la escala de 0 a 100, no una probabilidad de nada: 84 no significa que la encuestadora

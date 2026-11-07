@@ -2369,7 +2369,7 @@ class Computer(Core):
             dr.loc[rated, 'rating'] = (
                 (dr['num_events_w'] * dr['rating_adj']) + (k * quality_eff)
             )[rated] / (dr['num_events_w'] + k)[rated]
-            if self.verbose > 1:
+            if self.verbose > 0:
                 print('Quality cap ({}): {:.4f}'.format(self.quality_cap, cap))
         # Compute the weight that each pollster's predictions will have in the polling average forecaster.
         # The weight is computed using the logarithm of the rating, which compresses the differences between the

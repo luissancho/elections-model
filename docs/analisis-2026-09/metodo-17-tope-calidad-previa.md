@@ -52,7 +52,7 @@ Sobre la tabla viva de `es` del 2026-11-07 (ratings para las generales del 29-N,
 | GAD3 | 56 | 14,5 | 72,2 | 2,26 | 71,8 | 2,46 |
 | Sigma Dos | 64 | 17,1 | 66,4 | 2,12 | 66,0 | 2,30 |
 
-Las casas con calidad por debajo del listón no cambian de rating; su peso sube una o dos centésimas porque baja la media que normaliza. Las veteranas recuperan casi toda su calidad (`W/(W + k)` es 0,88 con 15 elecciones) y suben una décima por el mismo normalizador. El peso de las nueve casas sin elecciones en los últimos 60 días de `es` pasa del 10,7 % al 7,7 %.
+Las casas con calidad por debajo del listón no cambian de rating; su peso sube unas centésimas (entre tres y seis en la tabla) porque baja la media que normaliza. Las veteranas recuperan casi toda su calidad (`W/(W + k)` es 0,88 con 15 elecciones) y suben una décima por el mismo normalizador. El peso de las nueve casas sin elecciones en los últimos 60 días de `es` pasa del 10,7 % al 7,7 %.
 
 Cómo crece Opina 360 con cada elección, si midiera como una casa media (desviación 50), peso con la regla de antes → con el tope: 0 elecciones 1,63 → 0,81; 1 elección 1,65 → 1,40; 2 elecciones 1,66 → 1,60; 3 elecciones 1,67 → 1,68; 10 elecciones 1,68 → 1,81.
 

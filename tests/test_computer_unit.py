@@ -386,6 +386,14 @@ def test_every_pollster_without_evidence_above_the_median_falls_to_it():
     assert out.loc[4, 'rating'] == pytest.approx(.2)
 
 
+def test_the_quality_cap_is_printed_with_verbose(capsys):
+    """El listón no se guarda en ninguna columna: con `verbose > 0` se imprime, como el resto del cálculo."""
+    c = bare_computer()
+    c.verbose = 1
+    c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters)
+    assert 'Quality cap (median)' in capsys.readouterr().out
+
+
 def test_more_elections_shrink_the_standard_error():
     """Tres elecciones del mismo peso: n_eff = 3 y se = sigma / sqrt(3)."""
     c = bare_computer()

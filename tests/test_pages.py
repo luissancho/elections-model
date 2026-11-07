@@ -3159,11 +3159,14 @@ def test_metodo_rating_text(api):
                    'Las cuentas de cuatro encuestadoras reales', 'El rebaño, aparte', 'Qué límites tiene el rating',
                    # tope de la calidad previa (2026-11-07): en el cuerpo y en la nota de la mezcla
                    'sólo lo da cuando hay elecciones que la respalden', 'la mediana de los ratings de la tabla',
-                   '<var>R</var> = min(<var>Q</var>, <var>m</var>)'):
+                   '<var>R</var> = min(<var>Q</var>, <var>m</var>)',
+                   # revisión 2026-11-07: la media del factor y la convención de la rúbrica hablan del tope
+                   'también las que no tienen sondeos y valen min(<var>Q</var>, <var>m</var>)', 'habría valido 100'):
         assert phrase in text, phrase
     for phrase in ('Por su cercanía a la votación', 'multiplica el peso por 0,7', 'puesta a mano', 'Calidad</strong>',
                    'entre 3 y 4', 'no cambia:', 'lo que se sabía', 'En resumen',
-                   'tiene como rating su calidad previa.', '<var>R</var> = <var>Q</var>.'):
+                   'tiene como rating su calidad previa.', '<var>R</var> = <var>Q</var>.',
+                   'y valen su calidad previa', 'pesaría más que las mejores con historial'):
         assert phrase not in text, phrase
     # the dated snapshot: the ratings of 20 October 2026 and their factors, the herding by cycle, the backtest
     assert 'id="ratings-example-table"' in page and 'Datos del cálculo de los ratings del 20 de octubre de 2026' in text
