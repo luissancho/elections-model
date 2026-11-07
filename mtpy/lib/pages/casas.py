@@ -177,7 +177,7 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
         'quality': (
             'Lo que se supone de la encuestadora antes de mirar sus sondeos, de 0 a 100, según una rúbrica pública de '
             'cuatro criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras ha '
-            'sondeado pocas elecciones.' + rule),
+            'sondeado pocas elecciones; sin ninguna, no cuenta por encima de la mediana de los ratings.' + rule),
         'num_events': ('En cuántas elecciones publicó sondeos, contando cada ámbito y fecha por separado: dos '
                        'autonómicas del mismo día cuentan dos. Entre paréntesis, cuántas de ellas fueron elecciones '
                        'generales: el dato con el que se calcula el criterio «Implantación» de la confianza.'),

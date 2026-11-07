@@ -338,8 +338,10 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           <var>k</var> es el peso de la calidad previa, contado en elecciones:
           <var>k</var> = (σ/τ)<sup>2</sup> = (0,014/0,01)<sup>2</sup> = 1,96, unas 2 elecciones. Con
           <var>W</var> = 2, mitad y mitad; con menos, manda la calidad previa; con muchas más, lo medido. Una
-          encuestadora sin sondeos evaluables tiene como rating su calidad previa. Es la regla de un modelo
-          jerárquico sencillo: si cada elección añade un ruido σ al diferencial verdadero de la encuestadora, y los
+          encuestadora sin sondeos evaluables tiene como rating su calidad previa o, si la suya es mayor, la mediana
+          de los ratings de la tabla: la calidad previa puede quitar peso desde el primer sondeo, pero sólo lo da
+          cuando hay elecciones que la respalden (la fórmula, en la nota de la mezcla). La mezcla es la regla de un
+          modelo jerárquico sencillo: si cada elección añade un ruido σ al diferencial verdadero de la encuestadora, y los
           diferenciales verdaderos se reparten con una anchura τ, la mejor estimación mezcla lo medido con el prior
           en esa proporción. La nota{{ m.note('evidencia', note_keys) }} desarrolla esa lectura y cómo se midió σ.
         </p>
@@ -911,9 +913,11 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
             la de hoy, que es la del indicador del perfil y la de la columna «Confianza». La prueba por criterio de la
             tabla centra el diferencial de cada encuestadora en cada elección por la media de esa elección y remuestrea
             encuestadoras con reemplazo, 2.000 réplicas, sobre 59 encuestadoras evaluadas y 775 pares de encuestadora y
-            elección; la Implantación y las generales previas se calculan a la fecha de cada elección. El tope de
+            elección; la Implantación y las generales previas se calculan a la fecha de cada elección. El máximo de
             {{ rubric.cap }} y los {{ rubric.per_point }} puntos de calidad por punto de rúbrica son una convención:
-            con 10 por punto, una encuestadora nueva perfecta pesaría más que las mejores con historial.
+            con 10 por punto, una encuestadora nueva perfecta habría valido 100, más que las mejores con historial.
+            Desde el 7 de noviembre de 2026, además, ninguna encuestadora sin elecciones pasa de la mediana de los
+            ratings, sea cual sea su calidad previa (la nota de la mezcla).
           </p>
         {% endcall %}
         {% call m.note_item('evidencia') %}<strong>Pesos, evidencia, σ y el peso del prior.</strong>
@@ -966,11 +970,18 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           </p>
           <div class="math-wrap"><math display="block" aria-label="R ajustado igual a 100 por Phi de menos d post entre tau; R igual a W por R ajustado más k por Q entre W más k, con k igual a sigma entre tau al cuadrado"><mrow><msub><mi>R</mi><mtext>aj</mtext></msub><mo>=</mo><mn>100</mn><mo>·</mo><mi>Φ</mi><mrow><mo>(</mo><mo>−</mo><mfrac><msub><mi>d</mi><mtext>post</mtext></msub><mi>τ</mi></mfrac><mo>)</mo></mrow><mo>,</mo><mspace width="1.5em"/><mi>R</mi><mo>=</mo><mfrac><mrow><mi>W</mi><msub><mi>R</mi><mtext>aj</mtext></msub><mo>+</mo><mi>k</mi><mi>Q</mi></mrow><mrow><mi>W</mi><mo>+</mo><mi>k</mi></mrow></mfrac><mo>,</mo><mspace width="1.5em"/><mi>k</mi><mo>=</mo><msup><mrow><mo>(</mo><mi>σ</mi><mo>/</mo><mi>τ</mi><mo>)</mo></mrow><mn>2</mn></msup></mrow></math></div>
           <p>
-            Una encuestadora sin sondeos evaluables tiene <var>W</var> = 0 y <var>R</var> = <var>Q</var>. Los
+            Antes de la mezcla, <var>Q</var> se sustituye por <var>Q</var><sub>ef</sub>, con <var>m</var> la mediana
+            de los ratings de la tabla calculados con <var>Q</var> (las encuestadoras excluidas no cuentan):
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="Q efectiva igual al mínimo de Q y m, más el máximo de Q menos m y cero, por W entre W más k"><mrow><msub><mi>Q</mi><mtext>ef</mtext></msub><mo>=</mo><mi>min</mi><mo>(</mo><mi>Q</mi><mo>,</mo><mi>m</mi><mo>)</mo><mo>+</mo><mi>max</mi><mo>(</mo><mi>Q</mi><mo>−</mo><mi>m</mi><mo>,</mo><mn>0</mn><mo>)</mo><mo>·</mo><mfrac><mi>W</mi><mrow><mi>W</mi><mo>+</mo><mi>k</mi></mrow></mfrac></mrow></math></div>
+          <p>
+            El tramo de la calidad previa por encima de la mediana sólo se acredita en la proporción de la evidencia;
+            el tramo por debajo entra entero, así que la mala calidad resta desde el primer sondeo. Una encuestadora
+            sin sondeos evaluables tiene <var>W</var> = 0 y <var>R</var> = min(<var>Q</var>, <var>m</var>). Los
             agregadores y los paneles en línea abiertos no reciben <var>R</var><sub>aj</sub> ni <var>R</var>, y quedan
             fuera de la media <var>R̄</var> del factor del promedio, ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100),
-            que se calcula sobre todas las encuestadoras calificadas, también las que no tienen sondeos y valen su
-            calidad previa. El logaritmo es creciente y cóncavo: preserva la ordenación y comprime las diferencias
+            que se calcula sobre todas las encuestadoras calificadas, también las que no tienen sondeos y valen
+            min(<var>Q</var>, <var>m</var>). El logaritmo es creciente y cóncavo: preserva la ordenación y comprime las diferencias
             respecto a la ponderación proporcional al rating. Para las encuestadoras sin fila de rating, el promedio
             sustituye <var>R</var> por <var>Q</var> y <var>R̄</var> por la calidad previa media. Φ es sólo una
             transformación a la escala de 0 a 100, no una probabilidad de nada: 84 no significa que la encuestadora
