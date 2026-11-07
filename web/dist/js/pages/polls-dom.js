@@ -10,7 +10,8 @@ export const FIXED_COLUMNS = [['pollster', 'Encuestadora'], ['rating', 'Rating (
 export const RATING_COLORS = ['#d62728', '#7f7f7f', '#2ca02c'];
 const RATING_TITLE = 'Rating de la encuestadora, de 0 a 100: cuanto más alto, más pesa su sondeo en el promedio. Rojo por debajo de 50, verde por encima.';
 const DATE_TITLE = 'Días del trabajo de campo del sondeo';
-/** Tooltip of the «Peso» header (`pages.WEIGHT_TITLE` of the server, the same text). */
+/** Tooltip of the «Peso» header (`pages.WEIGHT_TITLE` of the server, the same text); the detail of a past election
+ * renders its own (`CYCLE_WEIGHT_TITLE`), which `wirePollsTable` reads from the server's header. */
 export const WEIGHT_TITLE = 'Peso del sondeo en el promedio: muestra × dispersión × frecuencia × rating de la encuestadora, sin la cercanía al día estimado. La barra va de 0 al mayor peso del ciclo.';
 
 /**
@@ -60,8 +61,9 @@ function valueCells(values, parties, catalog, texts = null) {
  * @param {string[]} parties columns shown
  * @param {Catalog} catalog party catalogue
  * @param {{key: string, asc: boolean}} sort active sort, marked with `aria-sort`
+ * @param {string} [weightTitle=WEIGHT_TITLE] tooltip of the «Peso» header
  */
-export function renderHead(thead, parties, catalog, sort) {
+export function renderHead(thead, parties, catalog, sort, weightTitle = WEIGHT_TITLE) {
   const tr = el('tr');
   const add = (th, key) => {
     th.dataset.key = key;
@@ -80,7 +82,7 @@ export function renderHead(thead, parties, catalog, sort) {
     if (key === 'rating') {
       th.title = RATING_TITLE;
     } else if (key === 'weight') {
-      th.title = WEIGHT_TITLE;
+      th.title = weightTitle;
     } else if (key === 'date') {
       th.title = DATE_TITLE;
     }

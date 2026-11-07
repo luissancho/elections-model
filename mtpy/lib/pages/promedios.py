@@ -20,6 +20,9 @@ MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 # Tooltip of the «Peso» header of the polls table; `polls-dom.js` and the template write the same text
 WEIGHT_TITLE = ('Peso del sondeo en el promedio: muestra × dispersión × frecuencia × rating de la encuestadora, sin la '
                 'cercanía al día estimado. La barra va de 0 al mayor peso del ciclo.')
+# The same header on the detail of a past election, whose cycle weight has no rating in it (`export_event_cycle`)
+CYCLE_WEIGHT_TITLE = ('Peso del sondeo en el ciclo: muestra × frecuencia de la encuestadora; su rating va aparte, en su '
+                      'columna. La barra va de 0 al mayor peso del ciclo.')
 # The factors of the weight in the order of its tooltip: label and key of the polls part (`WEIGHT_FACTORS`)
 WEIGHT_FACTOR_LABELS = (('Muestra', 'weight_sample'), ('Dispersión', 'weight_disp'), ('Frecuencia', 'weight_over'),
                         ('Rating', 'weight_rating'))
@@ -835,6 +838,7 @@ def promedios_context(state: dict, region=None) -> dict:
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
     context['table'] = polls_table(poll_rows, context['table_parties'], colors)
+    context['weight_title'] = WEIGHT_TITLE
     context['fixed_rows'] = []  # only the detail of a past election pins the model and the result to the foot
     context['table_total'] = len(poll_rows)
     context['has_seats'] = any(poll.get('seats') for poll in poll_rows)  # the % de voto / Escaños switch

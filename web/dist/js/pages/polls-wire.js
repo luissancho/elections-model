@@ -3,7 +3,7 @@
 // computed in the browser from the polls of the page (`polls-table.js`) and drawn with `polls-dom.js`.
 import {PAGE_SIZE, filterPolls, fixedRows, maxWeight, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
 import {markSegments} from './common.js';
-import {renderBody, renderFoot, renderHead} from './polls-dom.js';
+import {WEIGHT_TITLE, renderBody, renderFoot, renderHead} from './polls-dom.js';
 
 /**
  * Wire the controls of a dropdown of checkboxes (`details.dd`): "Seleccionar todos" and "Quitar todos" (which
@@ -67,6 +67,9 @@ export function wirePollsTable(polls, catalog, {fixed = null} = {}) {
   const [prev, next] = pag.querySelectorAll('button');
   const pick = (checked, total) => (checked.length === total ? null : checked.map((box) => box.value));
   const wmax = maxWeight(polls);  // the full bar of the «Peso» column, over every poll of the cycle, whatever the filters
+  // The tooltip of the «Peso» header is the server's (the detail of a past election has its own), read before any repaint
+  const weightHead = table.tHead.querySelector('th[data-key="weight"]');
+  const weightTitle = (weightHead && weightHead.title) || WEIGHT_TITLE;
 
   const render = (focusKey = null) => {
     const parties = checkedParties().map((box) => box.value);
@@ -83,7 +86,7 @@ export function wirePollsTable(polls, catalog, {fixed = null} = {}) {
     const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
     state.page = Math.min(state.page, pages - 1);
     const shown = pageOf(rows, state.page);
-    renderHead(table.tHead, parties, catalog, state.sort);
+    renderHead(table.tHead, parties, catalog, state.sort, weightTitle);
     renderBody(table.tBodies[0], shown, parties, catalog, state.mode, wmax);
     renderFoot(table.tFoot, rows.length, meanOf(rows, parties, state.mode), parties, catalog, state.mode,
       fixed ? fixedRows(fixed.modelLast, fixed.result, fixed.seats, parties, state.mode) : []);

@@ -584,6 +584,16 @@ def test_polls_table_marks_the_leader_formats_the_values_and_averages_all_the_po
                                         {'value': '2026-10', 'label': 'Oct 2026'}]
 
 
+def test_fmt_num_rounds_ties_on_the_decimal_the_browser_sees():
+    import decimal
+    import numpy as np
+    assert pages.fmt_num(1.595, 2) == '1,60' and pages.fmt_num(73.05, 1) == '73,1' and pages.fmt_num(1.005, 2) == '1,01'
+    assert pages.fmt_num(-1.595, 2) == '−1,60'.replace('−', '-') and pages.fmt_num(2.5, 0) == '3'
+    assert pages.fmt_num(np.float64(1.595), 2) == '1,60' and pages.fmt_num(decimal.Decimal('1.595'), 2) == '1,60'
+    assert pages.fmt_num(1234567, 0) == '1.234.567' and pages.fmt_num(np.int64(12), 1) == '12,0'
+    assert pages.fmt_num(float('inf'), 1) == '–' and pages.fmt_num(True, 1) == '–'
+
+
 def test_weight_breakdown_lists_the_factors_the_poll_carries():
     full = {'weight_sample': 1.339, 'weight_disp': 0.95, 'weight_over': 1.0, 'weight_rating': 2.4}
     assert pages.weight_breakdown(full) == 'Muestra ×1,41\nDispersión ×0,95\nFrecuencia ×1,00\nRating ×2,40'
@@ -3206,7 +3216,7 @@ def test_metodo_rating_check_card_shows_the_live_figures(api, fresh_app):
     assert_public_wording(page, '/metodo/rating')
     # the figures of the fixture, as the card writes them
     assert '<div class="l">Correlación de rango</div><div class="v">−0,22<small></small></div><div class="s">IC 95%: −0,34 a −0,11</div>' in page
-    assert '<div class="l">Acierto relativo</div><div class="v">12,4%' in page and 'Skill del rating' not in page
+    assert '<div class="l">Acierto relativo</div><div class="v">12,5%' in page and 'Skill del rating' not in page  # 0,1245 × 100: el empate va como en el navegador
     assert '<tr><td class="f l">Todas</td><td>1,34</td><td>103</td><td>–</td><td>–</td></tr>' in page
     assert ('<tr><td class="f l">Todas</td><td>74</td><td>1,60</td><td>1,55</td><td>−0,051 '
             '<span class="muted">(IC 95%: −0,141 a +0,012)</span></td><td>44</td><td>30</td></tr>') in page
@@ -5486,6 +5496,7 @@ def test_eleccion_cycle_table_shows_the_rating_each_house_arrived_with_and_links
     assert 'title="Muestra ×1,10 Frecuencia ×1,12"' in tbody and '<span>1,24</span>' in tbody
     assert 'width: 100.0%' in tbody and 'width: 46.0%' in tbody  # GAD3 1,235 es el mayor; CIS 0,568
     assert data[0]['weight_over'] == 0.811 and 'el rating de entonces va aparte' in page
+    assert '<th scope="col" data-key="weight" title="{}">'.format(pages.CYCLE_WEIGHT_TITLE) in page and pages.WEIGHT_TITLE not in page
 
 
 def test_promedios_polls_table_without_weights_shows_a_dash_in_the_weight_cell(api):
