@@ -5,7 +5,8 @@ import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle}
 import {fmtNum} from '../format.js';
 
 // The colours of the past elections, used in turn in the order of the rows.
-export const PALETTE = ['#e07b39', '#2a9d8f', '#8e44ad', '#c0392b', '#7f8c3a', '#d4a017', '#5d6d7e'];
+export const PALETTE = ['#e07b39', '#2a9d8f', '#8e44ad', '#c0392b', '#7f8c3a', '#d4a017', '#5d6d7e', '#0e7490',
+                       '#b5179e'];
 const REFERENCE_LABEL = 'lo que cabría esperar sólo por el azar';
 // The two stretches of the counts below the chart: `[from, to, label, colour]` by bucket label. A `markArea` on a
 // category axis runs from the centre of one bucket to the centre of another (and has no width over a single bucket),
@@ -193,7 +194,8 @@ export function weeksOption({buckets = [], rows = [], mean = []} = {},
         backgroundColor: LABEL_BACKGROUND,
         padding: [1, 3],
         borderRadius: 3,
-        formatter: (params) => `${live.label} · ${fmtNum(params.value, 2)}`,
+        // the year only: the legend already says which election it is
+        formatter: (params) => `${String(live.rows[0].event_date).slice(0, 4)} · ${fmtNum(params.value, 2)}`,
       },
     });
   }
@@ -234,7 +236,8 @@ export function weeksOption({buckets = [], rows = [], mean = []} = {},
       nameTextStyle: {fontSize: 11, color: THEME.mutedColor},
       axisTick: {show: false},
       axisLine: {lineStyle: {color: THEME.axisColor}},
-      axisLabel: {...axisLabelStyle(), fontSize: 11},
+      // every bucket label, also over a phone (ECharts would hide every other one)
+      axisLabel: {...axisLabelStyle(), fontSize: 10, interval: 0},
       splitArea: {show: true, interval: 0, areaStyle: {color: stretchColors(labels)}},
     },
     yAxis: {

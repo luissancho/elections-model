@@ -567,7 +567,8 @@ republica la acción `studies` del publicador y, como último paso, `update`:
   `windows` (`{mid, final}`, el primer día de cada tramo) y `far_mid` y `mid_final` (una fila como las de
   `elections`, sin `kind` ni `comparison`, o `null`).
 
-Gemelo CSV: `elections`, con el nombre de la parte.
+Gemelos CSV: `elections` y `weeks`, con el nombre de la parte. `weeks` es largo: una fila por elección y tramo más
+las filas «Media» (`label` «Media», con `event_date`, `pairs` y `comparisons` vacíos).
 
 `meta`, `summary` y `current` no tienen gemelo.
 

@@ -104,9 +104,9 @@
         </p>
         {% if weeks_rows %}
         <p class="ctitle">Separación entre casas por semanas hasta la elección</p>
-        <p class="csub">Generales desde {{ weeks_since }}{% if has_run %} y {{ current.get('label') }}, que se completa cada día{% endif %} · pares de sondeos de casas distintas con {{ params.get('pair_days') or 7 }} días o menos de diferencia</p>
+        <p class="csub">Generales desde {{ weeks_since }}{% if has_run %} y las de {{ year }}, {% if held %}hasta el cierre de los sondeos{% elif after_veda %}congeladas en la veda{% else %}que se completa cada día{% endif %}{% endif %} · pares de sondeos de casas distintas con {{ params.get('pair_days') or 7 }} días o menos de diferencia</p>
         <div class="chart" id="weeks-chart" role="img" aria-label="{{ weeks_text or 'Separación entre casas por semanas hasta la elección' }}"></div>
-        <p class="tnote">Cada línea es una elección general; la discontinua, la media de las pasadas{% if has_run %}; la azul, {{ year or current.get('label') }}, que avanza con cada actualización{% endif %}. La línea en 1 es lo que cabría esperar sólo por el azar de las muestras. La curva usa todas las parejas de cada tramo; los recuentos de abajo comparan las mismas parejas. Un tramo con menos de dos parejas de sondeos no se dibuja.</p>
+        <p class="tnote">Cada línea es una elección general; la discontinua, la media de las pasadas{% if has_run %}; la azul, {{ year or current.get('label') }}, {% if held %}hasta el cierre de los sondeos{% elif after_veda %}congelada en la veda{% else %}que avanza con cada actualización{% endif %}{% endif %}. La línea en 1 es lo que cabría esperar sólo por el azar de las muestras. La curva usa todas las parejas de cada tramo; los recuentos de abajo comparan las mismas parejas. Un tramo con menos de dos parejas de sondeos no se dibuja.</p>
         {% endif %}
         <div class="grid2 herd-grid">
           {% if squares.far_mid.n %}{{ squares_block('Hasta tres semanas antes', squares.far_mid) }}{% endif %}

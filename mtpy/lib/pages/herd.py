@@ -408,6 +408,30 @@ def live_text(current: Optional[dict], flag: dict) -> Optional[str]:
         fmt_int(value), 'menos' if change < 0 else 'más')
 
 
+def _bucket_words(lo, hi) -> str:
+    """
+    A bucket of weeks before the election in words.
+
+    Parameters
+    ----------
+    lo, hi : int
+        First and last week of the bucket.
+
+    Returns
+    -------
+    str
+        «en las tres últimas semanas» for ``0-2``, «a más de 27 semanas» for ``27-52`` (open on the far side) and
+        «entre 3 y 4 semanas antes» for any other.
+    """
+    if lo == 0:
+        return 'en las tres últimas semanas'
+
+    if hi is not None and hi >= 52:
+        return 'a más de {} semanas'.format(lo)
+
+    return 'entre {} y {} semanas antes'.format(lo, hi)
+
+
 def weeks_text(weeks: Optional[dict]) -> Optional[str]:
     """
     The sentence of the chart of the separation by weeks (its ``aria-label``).
@@ -421,7 +445,7 @@ def weeks_text(weeks: Optional[dict]) -> Optional[str]:
     -------
     str or None
         «La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres últimas; Generales
-        2026 va en 1,06 a 3-4 semanas.»: the number of past elections with any ratio, the mean of the first and of the
+        2026 va en 1,06 entre 3 y 4 semanas antes.»: the number of past elections with any ratio, the mean of the first and of the
         last bucket that have one and, when the election in progress has a ratio, the one of its bucket nearest to the
         election; ``None`` without any mean.
     """
@@ -438,8 +462,8 @@ def weeks_text(weeks: Optional[dict]) -> Optional[str]:
 
     if current:
         nearest = min(current, key=lambda row: row.get('lo') or 0)
-        text += '; {} va en {} a {}-{} semanas'.format(nearest.get('label'), fmt_num(nearest['ratio'], 2),
-                                                       nearest.get('lo'), nearest.get('hi'))
+        text += '; {} va en {} {}'.format(nearest.get('label'), fmt_num(nearest['ratio'], 2),
+                                          _bucket_words(nearest.get('lo'), nearest.get('hi')))
 
     return text + '.'
 

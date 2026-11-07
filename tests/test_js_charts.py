@@ -902,6 +902,10 @@ def test_weeks_option_colours_each_election_and_marks_the_stretches():
     option = run_js('wk.weeksOption(%s, {palette: ["#111111"]})' % json.dumps(data))
     assert [s['lineStyle']['color'] for s in option['series'][:2]] == ['#111111', '#111111']
     assert option['yAxis']['max'] == 3.5
+    # all seven labels show on a phone, and the palette has eight colours before it wraps
+    assert option['xAxis']['axisLabel']['interval'] == 0 and option['xAxis']['axisLabel']['fontSize'] == 10
+    colours = run_js('wk.PALETTE')
+    assert len(colours) == 9 and colours[7:] == ['#0e7490', '#b5179e'] and len(set(colours)) == 9
 
 
 def test_weeks_tooltip_gives_each_line_its_value_and_pairs():
@@ -918,7 +922,7 @@ def test_weeks_tooltip_gives_each_line_its_value_and_pairs():
                                  'Media de las 2: 1,16 (1 general)', 'Generales 2026: 1,01 (14 parejas)']
     assert last.split('<br>') == ['0-2 semanas', 'Generales 2016: 0,70 (16 parejas)',
                                   'Generales 2023: 1,28 (37 parejas)', 'Media de las 2: 0,99']
-    assert end == 'Generales 2026 · 1,06'
+    assert end == '2026 · 1,06'
 
 
 def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():

@@ -5883,7 +5883,7 @@ def test_herd_weeks_text_with_and_without_a_current_election():
     weeks = fixture_data('rebano-weeks')
     assert pages.herd.weeks_text(weeks) == (
         'La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres últimas; '
-        'Generales 2026 va en 1,06 a 3-4 semanas.')
+        'Generales 2026 va en 1,06 entre 3 y 4 semanas antes.')
     past = dict(weeks, rows=[row for row in weeks['rows'] if not row['current']])
     assert pages.herd.weeks_text(past) == (
         'La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres últimas.')
@@ -5903,13 +5903,13 @@ def test_herd_page_draws_the_weeks_chart_before_the_squares(api, fresh_app, monk
     assert page.index('id="p2"') < chart < page.index('class="herd-squares"')
     assert 'Separación entre casas por semanas hasta la elección' in page
     sentence = ('La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres últimas; '
-                'Generales 2026 va en 1,06 a 3-4 semanas.')
+                'Generales 2026 va en 1,06 entre 3 y 4 semanas antes.')
     assert '<div class="chart" id="weeks-chart" role="img" aria-label="%s"></div>' % sentence in page
     data = initial(body)
     assert data['weeks']['buckets'][0]['label'] == '27-52' and 'state' in data
     assert len(data['weeks']['rows']) == 56 and data['weeks']['mean'][-1]['ratio'] == 1.07
     text = re.sub(r'\s+', ' ', visible_text(page))
-    assert ('Generales desde 2008 y Generales 2026, que se completa cada día · pares de sondeos de casas distintas '
+    assert ('Generales desde 2008 y las de 2026, que se completa cada día · pares de sondeos de casas distintas '
             'con 7 días o menos de diferencia') in text
     assert ('Cada línea es una elección general; la discontinua, la media de las pasadas; la azul, 2026, que avanza '
             'con cada actualización. La línea en 1 es lo que cabría esperar sólo por el azar de las muestras. '
@@ -5917,6 +5917,33 @@ def test_herd_page_draws_the_weeks_chart_before_the_squares(api, fresh_app, monk
             'Un tramo con menos de dos parejas de sondeos no se dibuja.') in text
     assert_public_wording(page, '/analisis/rebano')
     assert 'empresa' not in text.lower() and not re.search(r'\bcopi', text.lower())
+
+
+@pytest.mark.parametrize('day, csub, tnote', [
+    (date(2026, 11, 25), 'Generales desde 2008 y las de 2026, congeladas en la veda',
+     'la discontinua, la media de las pasadas; la azul, 2026, congelada en la veda.'),
+    (date(2026, 11, 30), 'Generales desde 2008 y las de 2026, hasta el cierre de los sondeos',
+     'la discontinua, la media de las pasadas; la azul, 2026, hasta el cierre de los sondeos.'),
+])
+def test_herd_page_weeks_texts_in_the_veda_and_after(api, fresh_app, monkeypatch, day, csub, tnote):
+    herd_today(monkeypatch, day)
+    publish_study(fresh_app.fs, study='rebano')
+    status, _, body = call(api, '/analisis/rebano')
+    text = re.sub(r'\s+', ' ', visible_text(html(body)))
+    assert status == 200 and csub + ' · pares de sondeos' in text and tnote in text
+    assert 'se completa cada día' not in text and 'avanza con cada actualización' not in text
+
+
+def test_herd_weeks_text_names_the_bucket_in_words():
+    weeks = {'mean': [{'lo': 0, 'hi': 2, 'ratio': 1.0}], 'rows': [
+        {'event_date': 'a', 'label': 'G', 'current': True, 'lo': lo, 'hi': hi, 'ratio': 1.5}
+        for lo, hi in ((0, 2), (27, 52), (5, 7))]}
+    sentences = []
+    for keep in (0, 1, 2):
+        part = dict(weeks, rows=[weeks['rows'][keep]])
+        sentences.append(pages.herd.weeks_text(part).split('; ')[1])
+    assert sentences == ['G va en 1,50 en las tres últimas semanas.', 'G va en 1,50 a más de 27 semanas.',
+                         'G va en 1,50 entre 5 y 7 semanas antes.']
 
 
 def test_herd_page_weeks_without_a_current_election(api, fresh_app, monkeypatch):
