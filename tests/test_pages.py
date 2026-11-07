@@ -5834,7 +5834,8 @@ def test_herd_context_assembles_the_parts(api, fresh_app, monkeypatch):
     publish_study(fresh_app.fs, study='rebano')
     context = pages.herd_context(pages.parse_state({}))
     assert context['verdicts']['q1']['label'] == 'SÍ, EN CONJUNTO' and len(context['kpis']) == 3
-    assert context['bars'][-1]['label'] == 'Cataluña 2021' and 'initial' not in context
+    assert context['bars'][-1]['label'] == 'Cataluña 2021' and context['initial']['weeks']['buckets'][0]['lo'] == 27
+    assert context['weeks_rows'] is True and context['weeks_since'] == '2008' and 'state' in context['initial']
     assert set(context['squares']) == {'far_mid', 'mid_final'} and context['has_run'] and context['year'] == '2026'
     assert context['live'].startswith('El tramo de las tres') and context['current']['label'] == 'Generales 2026'
 
@@ -5870,8 +5871,8 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     assert '19 de 23' in text and '23 de 29' in text and '9 de 17' in text and 'como una moneda' in text
     assert '1 entre 769' in text and 'sólo en 3 la bajada es clara por sí sola' in text
     assert 'El tramo de las tres últimas semanas empieza el 9 de noviembre.' in text
-    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 1
-    assert 'id="weeks-chart"' not in page and 'matrix' not in page and 'initial-data' not in page
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 2  # elections + weeks CSVs
+    assert 'id="weeks-chart"' in page and 'matrix' not in page and 'id="initial-data"' in page
     for slug in ('resumen', 'pregunta-1', 'pregunta-2', 'directo', 'como', 'datos'):
         assert 'rebano-%s.png' % slug in page, slug
     assert_public_wording(page, '/analisis/rebano')
@@ -5943,6 +5944,99 @@ def test_herd_page_without_far_mid_elections(api, fresh_app, monkeypatch):
     assert status == 200 and 'None' not in text
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page)[1] == 'SÍ, EN LAS TRES ÚLTIMAS SEMANAS'
     assert page.count('class="herd-squares"') == 1 and '<p class="ctitle">Hasta tres semanas antes' not in page
+
+
+def test_herd_weeks_text_with_and_without_a_current_election():
+    weeks = fixture_data('rebano-weeks')
+    assert pages.herd.weeks_text(weeks) == (
+        'La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres últimas; '
+        'Generales 2026 va en 1,06 entre 3 y 4 semanas antes.')
+    past = dict(weeks, rows=[row for row in weeks['rows'] if not row['current']])
+    assert pages.herd.weeks_text(past) == (
+        'La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres últimas.')
+    # the current election with no ratio in any bucket ends the sentence there as well
+    silent = dict(weeks, rows=[dict(row, ratio=None) if row['current'] else row for row in weeks['rows']])
+    assert pages.herd.weeks_text(silent).endswith('a 1,07 en las tres últimas.')
+    no_mean = dict(weeks, mean=[dict(row, ratio=None) for row in weeks['mean']])
+    assert [pages.herd.weeks_text(w) for w in (None, {}, {'rows': [], 'mean': []}, no_mean)] == [None] * 4
+
+
+def test_herd_page_draws_the_weeks_chart_before_the_squares(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano')
+    status, _, body = call(api, '/analisis/rebano'); page = html(body)
+    assert status == 200
+    chart = page.index('id="weeks-chart"')
+    assert page.index('id="p2"') < chart < page.index('class="herd-squares"')
+    assert 'Separación entre casas por semanas hasta la elección' in page
+    sentence = ('La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres últimas; '
+                'Generales 2026 va en 1,06 entre 3 y 4 semanas antes.')
+    assert '<div class="chart" id="weeks-chart" role="img" aria-label="%s"></div>' % sentence in page
+    data = initial(body)
+    assert data['weeks']['buckets'][0]['label'] == '27-52' and 'state' in data
+    assert len(data['weeks']['rows']) == 56 and data['weeks']['mean'][-1]['ratio'] == 1.07
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert ('Generales desde 2008 y las de 2026, que se completa cada día · pares de sondeos de casas distintas '
+            'con 7 días o menos de diferencia') in text
+    assert ('Cada línea es una elección general; la discontinua, la media de las pasadas; la azul, 2026, que avanza '
+            'con cada actualización. La línea en 1 es lo que cabría esperar sólo por el azar de las muestras. '
+            'La curva usa todas las parejas de cada tramo; los recuentos de abajo comparan las mismas parejas. '
+            'Un tramo con menos de dos parejas de sondeos no se dibuja.') in text
+    assert_public_wording(page, '/analisis/rebano')
+    assert 'empresa' not in text.lower() and not re.search(r'\bcopi', text.lower())
+
+
+@pytest.mark.parametrize('day, csub, tnote', [
+    (date(2026, 11, 25), 'Generales desde 2008 y las de 2026, congeladas en la veda',
+     'la discontinua, la media de las pasadas; la azul, 2026, congelada en la veda.'),
+    (date(2026, 11, 30), 'Generales desde 2008 y las de 2026, hasta el cierre de los sondeos',
+     'la discontinua, la media de las pasadas; la azul, 2026, hasta el cierre de los sondeos.'),
+])
+def test_herd_page_weeks_texts_in_the_veda_and_after(api, fresh_app, monkeypatch, day, csub, tnote):
+    herd_today(monkeypatch, day)
+    publish_study(fresh_app.fs, study='rebano')
+    status, _, body = call(api, '/analisis/rebano')
+    text = re.sub(r'\s+', ' ', visible_text(html(body)))
+    assert status == 200 and csub + ' · pares de sondeos' in text and tnote in text
+    assert 'se completa cada día' not in text and 'avanza con cada actualización' not in text
+
+
+def test_herd_weeks_text_names_the_bucket_in_words():
+    weeks = {'mean': [{'lo': 0, 'hi': 2, 'ratio': 1.0}], 'rows': [
+        {'event_date': 'a', 'label': 'G', 'current': True, 'lo': lo, 'hi': hi, 'ratio': 1.5}
+        for lo, hi in ((0, 2), (27, 52), (5, 7))]}
+    sentences = []
+    for keep in (0, 1, 2):
+        part = dict(weeks, rows=[weeks['rows'][keep]])
+        sentences.append(pages.herd.weeks_text(part).split('; ')[1])
+    assert sentences == ['G va en 1,50 en las tres últimas semanas.', 'G va en 1,50 a más de 27 semanas.',
+                         'G va en 1,50 entre 5 y 7 semanas antes.']
+
+
+def test_herd_page_weeks_without_a_current_election(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    weeks = fixture_data('rebano-weeks')
+    weeks['rows'] = [row for row in weeks['rows'] if not row['current']]
+    publish_study(fresh_app.fs, study='rebano', meta={'election': None},
+                  parts={'current': {'current': None}, 'weeks': weeks})
+    status, _, body = call(api, '/analisis/rebano'); page = html(body)
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert status == 200 and 'id="weeks-chart"' in page
+    assert 'Generales desde 2008 · pares de sondeos de casas distintas con 7 días o menos de diferencia' in text
+    assert 'Cada línea es una elección general; la discontinua, la media de las pasadas. La línea en 1' in text
+    assert 'se completa cada día' not in text and 'la azul' not in text
+    assert ('aria-label="La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres '
+            'últimas."') in page
+
+
+def test_herd_page_without_weeks_rows_has_no_chart(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano', parts={'weeks': {'buckets': [], 'rows': [], 'mean': []}})
+    status, _, body = call(api, '/analisis/rebano'); page = html(body)
+    assert status == 200 and 'weeks-chart' not in page and 'se completa cada día' not in page
+    assert 'Separación entre casas por semanas' not in page and initial(body)['weeks']['rows'] == []
+    context = pages.herd_context(pages.parse_state({}))
+    assert context['weeks_rows'] is False and context['weeks_text'] is None and context['weeks_since'] is None
 
 
 def test_analisis_index_lists_rebano_when_published(api, fresh_app):

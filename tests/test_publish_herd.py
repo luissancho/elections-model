@@ -7,7 +7,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from mtpy.lib.publish.herd import _subtitle
+from mtpy.lib.publish.herd import WEEK_COLUMNS, _subtitle
 from mtpy.lib.studies.herd.study import compute_herd
 from tests.fakes import write_herd_bundle
 from tests.test_publish_unit import fake_prov, make_writer
@@ -112,7 +112,7 @@ def test_export_herd_current_is_none_without_an_election_in_progress(study):
     assert meta['election'] is None and valid('rebano-meta', meta)
 
 
-def test_publish_study_rebano_writes_the_four_parts(tmp_path):
+def test_publish_study_rebano_writes_every_part(tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
     out = publish.publish_study('rebano', make_writer(tmp_path, fs), prov=fake_prov)
@@ -131,3 +131,36 @@ def test_publish_study_rebano_writes_the_four_parts(tmp_path):
 def test_study_runners_know_which_studies_are_live():
     assert {s: r['live'] for s, r in publish.STUDY_RUNNERS.items()} == {
         'voto-cera': False, 'sesgo-cis': True, 'rebano': True, 'voto-oculto': True, 'andorra': True}
+
+
+def test_export_herd_weeks_validates_and_flattens(study):
+    data, frames = publish.STUDY_EXPORTERS['rebano']['weeks'](study)
+    valid('rebano-weeks', data)
+    frame = frames['weeks']
+    assert list(frame.columns) == WEEK_COLUMNS and len(frame) == len(data['rows']) + len(data['mean'])
+    mean = frame[frame.label == 'Media']
+    assert len(mean) == len(data['mean']) and mean.event_date.isna().all() and not mean.current.any()
+    assert mean.pairs.isna().all() and mean.comparisons.isna().all()
+    assert frame.label.iloc[0] != 'Media'
+    ratios = mean.ratio.astype(object).where(mean.ratio.notna(), None).tolist()
+    assert ratios == [m['ratio'] for m in data['mean']]
+
+
+def test_export_herd_weeks_csv_counts_are_integers(study):
+    frame = publish.STUDY_EXPORTERS['rebano']['weeks'](study)[1]['weeks']
+    lines = frame.to_csv(index=False).splitlines()
+    first = frame.iloc[0]
+    cells = lines[1].split(',')
+    assert cells[5] == str(int(first.pairs)) and cells[6] == str(int(first.comparisons))
+    media = [line.split(',') for line in lines if ',Media,' in line]
+    assert media and all(row[5] == '' and row[6] == '' for row in media)
+
+
+def test_publish_study_rebano_writes_weeks(tmp_path):
+    fs = FileSystem(str(tmp_path))
+    write_herd_bundle(fs)
+    publish.publish_study('rebano', make_writer(tmp_path, fs), prov=fake_prov)
+    reader = bundle.BundleReader(fs)
+    assert bundle.STUDY_PARTS['rebano'][-1] == 'weeks'
+    assert reader.read_json(bundle.path_study('rebano', 'weeks'))['data']['buckets']
+    assert fs.exists(f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'weeks')}")

@@ -63,6 +63,7 @@ CSV_LABELS = {
     },
     'rebano': {
         'elections': 'Comparaciones por elección: las mismas parejas de casas en cada tramo',
+        'weeks': 'Separación entre casas por elección y tramo de semanas (generales desde 2008 y la elección en curso)',
     },
     'voto-oculto': {
         'elections': 'Error de los sondeos finales por elección, bloque y partido',
@@ -683,7 +684,10 @@ def herd_context(state: dict) -> dict:
     -------
     dict
         ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``current`` (the
-        block of the election in progress, ``None`` without it), ``verdicts`` (``herd.verdicts``), ``kpis``,
+        block of the election in progress, ``None`` without it), ``weeks_text`` (``herd.weeks_text``), ``weeks_rows``
+        (whether past elections have a ratio by weeks: the chart is drawn), ``weeks_since`` (``herd.weeks_since``),
+        ``initial`` (the island of the page script: the ``weeks`` part, ``{}`` without it, and the common
+        ``state``), ``verdicts`` (``herd.verdicts``), ``kpis``,
         ``bars`` (``herd.bars`` of the ``elections`` rows), ``squares`` (``far_mid`` and ``mid_final``), ``live``
         (``herd.live_text``), ``live_rows`` (``herd.live_rows``), ``chance`` (per comparison: the probability of its
         sign test in words), ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags``
@@ -700,11 +704,15 @@ def herd_context(state: dict) -> dict:
     meta, summary = parts['meta'], parts['summary']
     current = _get(parts['current'], 'current') or None
     flag = herd.flags(meta, current)
+    since = herd.weeks_since(parts['weeks'])
     context.update(flag)
     context.update(
         study_meta=meta,
         summary=summary,
         current=current,
+        weeks_text=herd.weeks_text(parts['weeks']),
+        weeks_rows=since is not None,
+        weeks_since=since,
         verdicts=herd.verdicts(summary),
         kpis=herd.kpis(summary, current, flag),
         bars=herd.bars(_get(parts['elections'], 'rows') or []),
@@ -715,6 +723,7 @@ def herd_context(state: dict) -> dict:
         csv_links=_csv_links(herd.HERD),
         sources=meta.get('sources') or [],
         published_at=_published_at(herd.HERD),
+        initial={'weeks': parts['weeks'], 'state': context['state']},
     )
 
     return context

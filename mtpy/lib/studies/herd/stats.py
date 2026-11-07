@@ -62,6 +62,29 @@ def period_of(days: float, periods: dict) -> Optional[str]:
     return None
 
 
+def bucket_of(days: float, buckets: list) -> Optional[tuple[int, int]]:
+    """
+    Bucket of weeks a number of days before the election falls in.
+
+    Parameters
+    ----------
+    days : float
+        Days to the election.
+    buckets : list
+        ``[lo, hi]`` pairs in weeks; a bucket covers the days ``lo · 7 <= days < (hi + 1) · 7``.
+
+    Returns
+    -------
+    tuple of int or None
+        The ``(lo, hi)`` of the bucket containing ``days``; ``None`` outside all of them.
+    """
+    for lo, hi in buckets:
+        if lo * 7 <= days < (hi + 1) * 7:
+            return lo, hi
+
+    return None
+
+
 def comparisons(polls: pd.DataFrame, names: list[str], params: dict) -> pd.DataFrame:
     """
     Comparisons between the polls of different houses fielded close in time, one row per pair of polls and series.
@@ -131,6 +154,37 @@ def dispersion(rows: pd.DataFrame) -> Optional[float]:
         return None
 
     return math.sqrt(float(rows['d2'].sum()) / float(rows['v'].sum()))
+
+
+def by_buckets(rows: pd.DataFrame, buckets: list, min_pairs: int) -> list[dict]:
+    """
+    Dispersion of the comparisons in each bucket of weeks to the election.
+
+    Parameters
+    ----------
+    rows : pandas.DataFrame
+        Rows of ``comparisons`` (``poll_i``, ``poll_j``, ``days``, ``d2`` and ``v`` columns).
+    buckets : list
+        ``[lo, hi]`` pairs in weeks (see ``bucket_of``).
+    min_pairs : int
+        Minimum number of distinct pairs of polls for a bucket to have a ratio.
+
+    Returns
+    -------
+    list of dict
+        One entry per bucket, in the order of ``buckets``: ``lo``, ``hi``, ``pairs`` (distinct pairs of polls),
+        ``comparisons`` (rows) and ``ratio`` (``dispersion``, unrounded; ``None`` below ``min_pairs``).
+    """
+    keys = [bucket_of(days, buckets) for days in rows['days']]
+    out = []
+
+    for lo, hi in buckets:
+        inside = rows[np.array([key == (lo, hi) for key in keys], dtype=bool)]
+        pairs = len(inside[['poll_i', 'poll_j']].drop_duplicates())
+        out.append({'lo': lo, 'hi': hi, 'pairs': pairs, 'comparisons': len(inside),
+                    'ratio': dispersion(inside) if pairs >= min_pairs else None})
+
+    return out
 
 
 def _shared_pairs(rows: pd.DataFrame, a: str, b: str, min_rows: int) -> pd.DataFrame:
