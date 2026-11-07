@@ -1,13 +1,16 @@
 // Pure logic of the "Todas las encuestas" table of Promedios and of the detail of a past election: months,
 // filtering, sorting, pagination, simple means, leaders and the rows pinned to the foot. The page script only reads
 // the controls, calls these functions and writes the DOM.
-import {fmtDate, fmtInt} from './format.js';
+import {fmtDate, fmtInt, fmtNum} from './format.js';
 
 /** Rows per page. */
 export const PAGE_SIZE = 15;
 
 const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DASH = '–';
+/** The factors of the weight in the order of its tooltip: label and key of the polls part (`WEIGHT_FACTOR_LABELS`). */
+const WEIGHT_FACTOR_LABELS = [['Muestra', 'weight_sample'], ['Dispersión', 'weight_disp'], ['Frecuencia', 'weight_over'],
+  ['Rating', 'weight_rating']];
 
 /**
  * Count of polls with its noun.
@@ -83,6 +86,45 @@ export function fieldworkLabel(start, end, date = null) {
     return `${first.day}–${last.day} ${MONTHS[first.month - 1]}`;
   }
   return labels.join('–');
+}
+
+/**
+ * A finite number, or null for anything else (`_factor` of the server: missing values and booleans included).
+ *
+ * @param {*} value a value of a poll
+ * @returns {(number|null)} the number
+ */
+function factorOf(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Largest weight of the polls of the cycle, the full bar of the «Peso» column.
+ *
+ * @param {Array} polls polls of the cycle
+ * @returns {(number|null)} the largest positive `weight`; null without one
+ */
+export function maxWeight(polls) {
+  const weights = polls.map((poll) => factorOf(poll && poll.weight)).filter((weight) => weight !== null && weight > 0);
+  return weights.length ? Math.max(...weights) : null;
+}
+
+/**
+ * Tooltip of the weight of a poll (`weight_breakdown` of the server): one line per factor it carries, «Muestra»
+ * (`weight_sample / weight_disp` when the dispersion factor is a positive number, `weight_sample` otherwise),
+ * «Dispersión», «Frecuencia» and «Rating», at two decimals.
+ *
+ * @param {object} poll a poll of the cycle
+ * @returns {(string|null)} the lines joined by `\n`; null without any factor
+ */
+export function weightBreakdown(poll) {
+  const values = Object.fromEntries(WEIGHT_FACTOR_LABELS.map(([, key]) => [key, factorOf(poll ? poll[key] : null)]));
+  if (values.weight_sample !== null && values.weight_disp !== null && values.weight_disp > 0) {
+    values.weight_sample /= values.weight_disp;
+  }
+  const lines = WEIGHT_FACTOR_LABELS.filter(([, key]) => values[key] !== null)
+    .map(([label, key]) => `${label} ×${fmtNum(values[key], 2)}`);
+  return lines.length ? lines.join('\n') : null;
 }
 
 /**
@@ -170,7 +212,7 @@ export function filterPolls(polls, {pollsters, from, to, mode = 'pct'}) {
  * Sort polls by a column.
  *
  * @param {Array} polls polls to sort, in publication order (not modified)
- * @param {string} key `date`, `pollster`, `rating`, `sample_size` or a party name
+ * @param {string} key `date`, `pollster`, `rating`, `weight`, `sample_size` or a party name
  * @param {boolean} asc ascending order
  * @param {string} [mode='pct'] view of the party columns (see `pollValue`)
  * @returns {Array} a sorted copy: missing values last in both directions; ties by date descending and then by
@@ -182,7 +224,7 @@ export function sortPolls(polls, key, asc, mode = 'pct') {
   const byDate = (a, b) => (b.poll.date || '').localeCompare(a.poll.date || '') || b.index - a.index;
   const indexed = polls.map((poll, index) => ({poll, index}));
   const missing = (value) => value === null || value === undefined || value === '';
-  const fixed = ['date', 'pollster', 'rating', 'sample_size'].includes(key);
+  const fixed = ['date', 'pollster', 'rating', 'weight', 'sample_size'].includes(key);
   indexed.sort((a, b) => {
     const x = fixed ? a.poll[key] : pollValue(a.poll, key, mode);
     const y = fixed ? b.poll[key] : pollValue(b.poll, key, mode);

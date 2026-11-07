@@ -1,15 +1,17 @@
 // DOM builders of the "Todas las encuestas" table (Promedios and the detail of a past election): header, body and footer, built with
 // `createElement`/`textContent` (never HTML with data).
-import {fmtDate, fmtInt, fmtNum, gradient} from '../format.js';
-import {fieldworkLabel, leaderOf, pollsCount, seatsText, valuesOf} from '../polls-table.js';
+import {barWidth, fmtDate, fmtInt, fmtNum, gradient} from '../format.js';
+import {fieldworkLabel, leaderOf, pollsCount, seatsText, valuesOf, weightBreakdown} from '../polls-table.js';
 
 /** Fixed columns, in order (key and label); any other column is a party. The server renders the same ones. */
-export const FIXED_COLUMNS = [['pollster', 'Encuestadora'], ['rating', 'Rating (0-100)'], ['date', 'Fecha'],
+export const FIXED_COLUMNS = [['pollster', 'Encuestadora'], ['rating', 'Rating (0-100)'], ['weight', 'Peso'], ['date', 'Fecha'],
   ['sample_size', 'Muestra']];
 /** Stops of the rating badge, from 0 to 100: red, grey at 50 and green (`pages.RATING_COLORS` of the server). */
 export const RATING_COLORS = ['#d62728', '#7f7f7f', '#2ca02c'];
 const RATING_TITLE = 'Rating de la encuestadora, de 0 a 100: cuanto más alto, más pesa su sondeo en el promedio. Rojo por debajo de 50, verde por encima.';
 const DATE_TITLE = 'Días del trabajo de campo del sondeo';
+/** Tooltip of the «Peso» header (`pages.WEIGHT_TITLE` of the server, the same text). */
+export const WEIGHT_TITLE = 'Peso del sondeo en el promedio: muestra × dispersión × frecuencia × rating de la encuestadora, sin la cercanía al día estimado. La barra va de 0 al mayor peso del ciclo.';
 
 /**
  * Create an element.
@@ -77,6 +79,8 @@ export function renderHead(thead, parties, catalog, sort) {
     const th = el('th', label, index === 0 ? 'f l' : '');
     if (key === 'rating') {
       th.title = RATING_TITLE;
+    } else if (key === 'weight') {
+      th.title = WEIGHT_TITLE;
     } else if (key === 'date') {
       th.title = DATE_TITLE;
     }
@@ -134,6 +138,31 @@ function ratingCell(poll) {
 }
 
 /**
+ * Weight cell of a poll: the bar from 0 to `wmax` (the largest weight of the cycle) with the figure at two decimals
+ * and the factors in the tooltip (`weightBreakdown`); greyed when the poll weighs nothing, a dash without weight.
+ *
+ * @param {object} poll a poll of the cycle
+ * @param {(number|null)} wmax the full bar; null draws every bar empty
+ * @returns {HTMLElement} the `td` cell
+ */
+function weightCell(poll, wmax) {
+  const weight = typeof poll.weight === 'number' && Number.isFinite(poll.weight) ? poll.weight : null;
+  if (weight === null) {
+    return el('td', '—', 'na');
+  }
+  const td = el('td', '', weight === 0 ? 'cell-bar na' : 'cell-bar');
+  const title = weightBreakdown(poll);
+  if (title) {
+    td.title = title;
+  }
+  const fill = el('i', '', 'fill w');
+  fill.style.left = '0';
+  fill.style.width = `${wmax ? barWidth(weight, 0, wmax) : 0}%`;
+  td.append(fill, el('span', fmtNum(weight, 2)));
+  return td;
+}
+
+/**
  * Rebuild the body with one page of polls.
  *
  * @param {HTMLTableSectionElement} tbody body section
@@ -141,8 +170,9 @@ function ratingCell(poll) {
  * @param {string[]} parties columns shown
  * @param {Catalog} catalog party catalogue
  * @param {string} [mode='pct'] view: shares, or `esc` for the seat projections (`mín–máx` for a range)
+ * @param {(number|null)} [wmax=null] the largest weight of the cycle (`maxWeight`), the full bar of the «Peso» column
  */
-export function renderBody(tbody, polls, parties, catalog, mode = 'pct') {
+export function renderBody(tbody, polls, parties, catalog, mode = 'pct', wmax = null) {
   if (!polls.length) {
     const td = el('td', 'Ningún sondeo con estos filtros.', 'empty');
     td.colSpan = FIXED_COLUMNS.length + parties.length;
@@ -158,7 +188,7 @@ export function renderBody(tbody, polls, parties, catalog, mode = 'pct') {
     }
     const tr = el('tr');
     const texts = mode === 'esc' ? Object.fromEntries(parties.map((name) => [name, seatsText(poll, name)])) : null;
-    tr.append(houseCell(poll), ratingCell(poll), date, el('td', fmtInt(poll.sample_size)),
+    tr.append(houseCell(poll), ratingCell(poll), weightCell(poll, wmax), date, el('td', fmtInt(poll.sample_size)),
       ...valueCells(valuesOf(poll, parties, mode), parties, catalog, texts));
     return tr;
   }));
@@ -182,7 +212,7 @@ export function renderFoot(tfoot, count, means, parties, catalog, mode = 'pct', 
   first.append(el('b', 'Media simple'), el('small', pollsCount(count) + (mode === 'esc' ? ' con escaños' : '')));
   const tr = el('tr');
   const texts = mode === 'esc' ? Object.fromEntries(parties.map((name) => [name, fmtInt(means[name])])) : null;
-  tr.append(first, el('td'), el('td'), el('td'), ...valueCells(means, parties, catalog, texts));
+  tr.append(first, el('td'), el('td'), el('td'), el('td'), ...valueCells(means, parties, catalog, texts));
   const pinned = fixed.map((row) => {
     const head = el('td', '', 'f l');
     head.append(el('b', row.label), el('small', row.small));
@@ -190,7 +220,7 @@ export function renderFoot(tfoot, count, means, parties, catalog, mode = 'pct', 
       head.title = row.title;
     }
     const line = el('tr', '', 'fixed');
-    line.append(head, el('td'), el('td'), el('td'), ...valueCells(row.values, parties, catalog, row.texts));
+    line.append(head, el('td'), el('td'), el('td'), el('td'), ...valueCells(row.values, parties, catalog, row.texts));
     return line;
   });
   tfoot.replaceChildren(tr, ...pinned);
