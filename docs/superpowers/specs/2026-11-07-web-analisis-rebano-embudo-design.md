@@ -111,3 +111,56 @@ debe llevar este código antes del siguiente `update` diario, o republicará sin
 
 Nombres internos, el formato exacto del tooltip, la altura del gráfico (en torno a 320 px) y el estilo de las
 `markArea` dentro del sistema del sitio.
+
+## Cierre
+
+Ejecutado el 2026-11-07 en la rama `rebano-embudo` (de `dev` 55d47ca, cabeza 6b9c7d8 antes de este cierre).
+
+### Qué existe
+
+- `mtpy/lib/studies/herd/stats.py` (`bucket_of`, `by_buckets`) y `HerdStudy.weeks` en `study.py`: la dispersión por
+  tramos de semanas, con una pasada por elección general desde 2008 más la elección en curso.
+- Parte publicada `weeks` del estudio `rebano` (exportador `export_herd_weeks`) y su CSV largo (`pairs` y
+  `comparisons` enteros, filas de la media incluidas), con el segundo botón CSV en la página.
+- Gráfico `web/dist/js/charts/weeks.js` (`weeksOption`/`renderWeeks`), cableado en
+  `web/dist/js/pages/analisis-rebano.js` con descarga por `card-image.js`, y la tarjeta 2 de `/analisis/rebano`
+  con `#weeks-chart`, su `aria-label`, la nota y el texto `weeks_text`.
+- Pruebas en `test_herd_stats`, `test_herd_study`, `test_publish_herd`, `test_js_charts` y `test_pages`, y el
+  fixture `tests/fixtures/bundle/rebano-weeks.json`.
+
+### Cifras reales (bundle del día, sólo lectura)
+
+- Cálculo completo del estudio (`compute_herd`): 29,4 s (límite 60 s); 7 pasadas.
+- Media por tramo (27-52 → 0-2): 1,65 (k 5) / 1,31 / 1,42 / 1,42 / 1,35 / 1,19 / 1,07 (k 7), idénticas a las
+  esperadas.
+- Generales 2026: 0,99 / 1,01 / 1,33 / 0,92 / 1,05 / 1,24 a 3-4 semanas; 0-2 sin cociente (`None`).
+- Tarjeta 2: «22 de 29 (1 entre 246)» en las tres últimas semanas y «9 de 17, como una moneda» hasta tres semanas
+  antes; `aria-label`: «La media de las 7 generales pasadas pasa de 1,65 a más de 27 semanas a 1,07 en las tres
+  últimas; Generales 2026 va en 1,24 a 3-4 semanas.»
+- Renderizado con las partes reales (test temporal ya borrado) y capturado a 1300 px; sin errores de consola.
+
+### Decisiones durante la ejecución
+
+- Las zonas «3-8 semanas» y «tres últimas» usan `xAxis.splitArea`: una `markArea` sobre un eje de categorías no
+  tiene anchura para un tramo único.
+- `by_buckets` con comparaciones vacías: máscara booleana explícita (antes fallaba con un `KeyError`).
+- `pairs` y `comparisons` se publican como `Int64` (las filas de la media llevan `None` y salían como `3.0` en el
+  CSV).
+- «N generales pasadas» en `weeks_text` cuenta las elecciones con algún cociente, no la k de un tramo; si la
+  elección en curso no tiene cociente en ningún tramo, el texto termina en «en las tres últimas.».
+- El tooltip de la media muestra k; la etiqueta final de 2026 va sobre el último punto; el icono de leyenda de 2026
+  es plano.
+
+### Lo que no está verificado
+
+- Móvil (390 px) y modo oscuro del gráfico nuevo; sólo se vio a 1300 px y la descarga PNG de la tarjeta.
+- Menores aplazados: la leyenda «Media de las N» cuenta elecciones con filas y `weeks_text` las que tienen cociente;
+  las cláusulas de 2026 dependen de `has_run` aunque ninguna fila actual tenga cociente; el rótulo de la línea de
+  referencia en 1 se pisa con las líneas en el borde izquierdo (se ve en la captura); `dispersion` sobre un marco
+  vacío si `min_pairs` fuese 0 (el defecto es 2).
+- La línea de 2015 (hasta 3,0) estira el eje y comprime el resto; no se ha decidido nada.
+
+### Pasos tras la fusión
+
+`publish '{"what":["study"],"study":"rebano"}'` (lo hace quien integre, con el OK de Luis). La imagen desplegada
+debe llevar este código antes del siguiente `update` diario, o republicará sin la parte `weeks`.
