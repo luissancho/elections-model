@@ -56,7 +56,21 @@ Las casas con calidad por debajo del listón no cambian de rating; su peso sube 
 
 Cómo crece Opina 360 con cada elección, si midiera como una casa media (desviación 50), peso con la regla de antes → con el tope: 0 elecciones 1,63 → 0,81; 1 elección 1,65 → 1,40; 2 elecciones 1,66 → 1,60; 3 elecciones 1,67 → 1,68; 10 elecciones 1,68 → 1,81.
 
-**Backtest emparejado de `es`:** pendiente (Tarea 4 del plan).
+**Backtest emparejado de `es`** (2026-11-07, `backtest/run_backtest.py --scope es --recompute-ratings`, semilla 42, 1.000
+simulaciones, 28 casos de 5 generales y 6 horizontes; A desde el commit 08daba4, sin tope; B desde 6af98c1, con tope;
+misma base; `backtest/compare_results.py`). Plano, como se esperaba de una regla que mueve el 2,9 % del peso del ciclo:
+
+| Métrica | Casos | Sin tope | Con tope | Diferencia | Mejor / peor (empates) |
+|---|---:|---:|---:|---:|---:|
+| MAE de voto (puntos) | 28 | 2,3727 | 2,3828 | +0,0101 (+0,4 %) | 12 / 16 (0) |
+| CRPS de escaños | 22 | 7,2333 | 7,2476 | +0,0143 (+0,2 %) | 10 / 12 (0) |
+| Brier de mayorías | 22 | 0,0777 | 0,0780 | +0,0003 (+0,3 %) | 7 / 13 (2) |
+| Cobertura del 95 % | 28 | 0,8560 | 0,8560 | 0 | 0 / 0 (28) |
+
+Las tres métricas de error empeoran entre el 0,2 y el 0,4 %, con algo más de casos peores que mejores, todo dentro
+del ±2 % del criterio 17: el tope no cambia lo que el modelo acierta. Es una decisión de robustez frente al juego, no
+de ajuste, y el backtest sólo confirma que no cuesta nada medible. Las dos salidas quedaron en el scratchpad de la
+sesión, fuera del repositorio.
 
 ## Fuera de alcance
 
