@@ -137,24 +137,6 @@ export function fmtDateTime(iso) {
   return `${dayMonth(date)} ${date.getFullYear()}, ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/**
- * Width of the bar of a table cell as a percentage, the mirror of `bar_width` of `pages/filters.py`: the position of
- * `x` between `vmin` (empty) and `vmax` (full), clipped to [0, 100] at one decimal; 0 when `x` is missing or
- * `vmin === vmax`.
- *
- * @param {(number|null)} x value of the cell
- * @param {number} [vmin=0] value of an empty bar
- * @param {number} [vmax=100] value of a full bar
- * @returns {number} the percentage
- */
-export function barWidth(x, vmin = 0, vmax = 100) {
-  if (isMissing(x) || !Number.isFinite(x) || !Number.isFinite(vmin) || !Number.isFinite(vmax) || vmin === vmax) {
-    return 0;
-  }
-  const fraction = Math.min(1, Math.max(0, (x - vmin) / (vmax - vmin)));
-  return Math.round(1000 * fraction) / 10;
-}
-
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 
 /**

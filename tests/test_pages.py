@@ -533,8 +533,7 @@ def test_promedios_initial_polls_carry_the_chart_and_table_columns(api):
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
         assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | parties <= set(poll)
-        extra = {'sponsor', 'start_date', 'end_date', 'seats', 'rating', 'weight', 'weight_sample', 'weight_disp',
-                 'weight_over', 'weight_rating'}
+        extra = {'sponsor', 'start_date', 'end_date', 'seats', 'rating'}
         assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | extra | parties
         assert poll['href'] == pages.pollster_href(poll['pollster'], poll['pollster_id'])
 
@@ -551,12 +550,9 @@ def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, t
 def test_polls_table_marks_the_leader_formats_the_values_and_averages_all_the_polls():
     polls = [
         {'date': '2026-10-01', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': 1010,
-         'start_date': '2026-09-28', 'end_date': '2026-09-30', 'PP': 31.1, 'PSOE': 26.1, 'weight': 2.0,
-         'weight_sample': 1.339, 'weight_disp': 0.95, 'weight_over': 1.0, 'weight_rating': 2.4},
-        {'date': '2026-09-04', 'pollster': 'CIS', 'sponsor': None, 'sample_size': None, 'PP': 25.5, 'PSOE': 31.0,
-         'weight': 0.5},
-        {'date': '2026-09-02', 'pollster': '40dB', 'sponsor': 'Prisa', 'sample_size': 2000, 'PP': None, 'PSOE': None,
-         'weight': 4.0},
+         'start_date': '2026-09-28', 'end_date': '2026-09-30', 'PP': 31.1, 'PSOE': 26.1},
+        {'date': '2026-09-04', 'pollster': 'CIS', 'sponsor': None, 'sample_size': None, 'PP': 25.5, 'PSOE': 31.0},
+        {'date': '2026-09-02', 'pollster': '40dB', 'sponsor': 'Prisa', 'sample_size': 2000, 'PP': None, 'PSOE': None},
     ]
     colors = {'PP': '#1d84ce', 'PSOE': '#ef1c27'}
     table = pages.polls_table(polls, ['PP', 'PSOE'], colors, n=2)
@@ -568,18 +564,12 @@ def test_polls_table_marks_the_leader_formats_the_values_and_averages_all_the_po
                               {'value': '26,1', 'leader': False, 'color': '#ef1c27'}]
     second = table['rows'][1]
     assert second['sample'] == '–' and second['fieldwork'] is None and second['cells'][1]['leader']
-    assert first['weight'] == '2,00' and first['weight_bar'] == 50.0 and first['weight_zero'] is False  # la barra sobre todos los sondeos
-    assert first['weight_title'] == 'Muestra ×1,41\nDispersión ×0,95\nFrecuencia ×1,00\nRating ×2,40'
-    assert second['weight'] == '0,50' and second['weight_bar'] == 12.5 and second['weight_title'] is None
     # the mean covers every poll, not only the rows rendered
     assert table['mean'] == {'n': 3, 'cells': [{'value': '28,3', 'leader': False, 'color': '#1d84ce'},
                                                {'value': '28,6', 'leader': True, 'color': '#ef1c27'}]}
     empty = pages.polls_table(polls[2:], ['PP', 'PSOE'], {'PP': '#1', 'PSOE': '#2'})
     assert empty['rows'][0]['cells'][0] == {'value': '–', 'leader': False, 'color': '#1'}
     assert empty['mean']['cells'][0]['value'] == '–'
-    assert empty['rows'][0]['weight'] == '4,00' and empty['rows'][0]['weight_bar'] == 100.0
-    zero = pages.polls_table([{'date': '2026-10-01', 'weight': 0, 'PP': 1.0}, {'date': '2026-10-02', 'PP': 2.0}], ['PP'], {})
-    assert [(r['weight'], r['weight_bar'], r['weight_zero']) for r in zero['rows']] == [('–', 0.0, False), ('0,00', 0.0, True)]
     assert pages.poll_months(polls) == [{'value': '2026-09', 'label': 'Sep 2026'},
                                         {'value': '2026-10', 'label': 'Oct 2026'}]
 
@@ -592,17 +582,6 @@ def test_fmt_num_rounds_ties_on_the_decimal_the_browser_sees():
     assert pages.fmt_num(np.float64(1.595), 2) == '1,60' and pages.fmt_num(decimal.Decimal('1.595'), 2) == '1,60'
     assert pages.fmt_num(1234567, 0) == '1.234.567' and pages.fmt_num(np.int64(12), 1) == '12,0'
     assert pages.fmt_num(float('inf'), 1) == '–' and pages.fmt_num(True, 1) == '–'
-
-
-def test_weight_breakdown_lists_the_factors_the_poll_carries():
-    full = {'weight_sample': 1.339, 'weight_disp': 0.95, 'weight_over': 1.0, 'weight_rating': 2.4}
-    assert pages.weight_breakdown(full) == 'Muestra ×1,41\nDispersión ×0,95\nFrecuencia ×1,00\nRating ×2,40'
-    cycle = {'weight_sample': 0.7, 'weight_disp': None, 'weight_over': 0.811, 'weight_rating': None}
-    assert pages.weight_breakdown(cycle) == 'Muestra ×0,70\nFrecuencia ×0,81'
-    assert pages.weight_breakdown({'weight_sample': 1.2, 'weight_over': 0.0, 'weight_rating': 1.5}) == 'Muestra ×1,20\nFrecuencia ×0,00\nRating ×1,50'
-    assert pages.weight_breakdown({'weight_sample': 0.5, 'weight_disp': 0}) == 'Muestra ×0,50\nDispersión ×0,00'
-    assert pages.weight_breakdown({}) is None and pages.weight_breakdown({'weight': 1.7}) is None
-    assert pages.weight_breakdown({'weight_sample': 'x', 'weight_disp': True}) is None
 
 
 def test_fieldwork_label_writes_the_days_of_the_fieldwork_without_the_year():
@@ -5449,11 +5428,9 @@ def test_chart_polls_keep_the_rating_and_add_the_profile_link():
 def test_promedios_polls_table_shows_the_rating_badge_between_the_house_and_the_date_and_links_the_profile(api, fresh_app):
     polls = fixture_data('polls')
     base = polls['polls'][0]
-    polls['polls'] = [base | {'date': '2026-10-01', 'rating': 73.08, 'weight': 3.384, 'weight_sample': 1.339,
-                              'weight_disp': 0.95, 'weight_over': 1.0, 'weight_rating': 2.4},
-                      base | {'date': '2026-09-01', 'pollster': 'Ateneo del Dato', 'pollster_id': 9, 'rating': 5.0,
-                              'weight': 0.31, 'weight_sample': 0.31, 'weight_disp': 1.0, 'weight_over': 1.0, 'weight_rating': 1.0},
-                      base | {'date': '2026-08-01', 'pollster': 'Sin casa', 'pollster_id': None, 'weight': 0}]
+    polls['polls'] = [base | {'date': '2026-10-01', 'rating': 73.08},
+                      base | {'date': '2026-09-01', 'pollster': 'Ateneo del Dato', 'pollster_id': 9, 'rating': 5.0},
+                      base | {'date': '2026-08-01', 'pollster': 'Sin casa', 'pollster_id': None}]
     writer = bundle.BundleWriter(fresh_app.fs)
     writer.write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
     webapi.site().files.clear()
@@ -5461,8 +5438,7 @@ def test_promedios_polls_table_shows_the_rating_badge_between_the_house_and_the_
     page = html(body).replace('\n', ' ')
     start = page.index('id="polls-table"')
     head = page[start:page.index('<tbody>', start)]
-    assert '<col class="c-f"><col class="c-r"><col class="c-w"><col class="c-d"><col class="c-s">' in head
-    assert '<th scope="col" data-key="weight" title="{}"><button type="button" class="sort">Peso</button></th>'.format(pages.WEIGHT_TITLE) in head
+    assert '<col class="c-f"><col class="c-r"><col class="c-d"><col class="c-s">' in head
     assert head.index('data-key="pollster"') < head.index('data-key="rating"') < head.index('data-key="date"')
     assert re.search(r'<th scope="col" data-key="rating" title="[^"]+"><button type="button" class="sort">Rating \(0-100\)</button></th>', head)
     rows = re.findall(r'<tr>(.*?)</tr>', polls_tbody(page))
@@ -5470,17 +5446,10 @@ def test_promedios_polls_table_shows_the_rating_badge_between_the_house_and_the_
     assert '<a href="/casas/sigma-dos"><b>Sigma Dos</b></a>' in rows[0]
     assert '<td><span class="rt" style="background: {}">73,1</span></td>'.format(pages.gradient(73.08, 0, 100, pages.RATING_COLORS)) in rows[0]
     assert rows[0].index('</a>') < rows[0].index('class="rt"') < rows[0].index('1 Oct')
-    assert ('<td class="cell-bar" title="Muestra ×1,41 Dispersión ×0,95 Frecuencia ×1,00 Rating ×2,40">'
-            '<i class="fill w" style="left: 0; width: 100.0%"></i><span>3,38</span></td>') in rows[0]  # el \n del title es un espacio en `page`
-    assert rows[0].index('class="rt"') < rows[0].index('cell-bar') < rows[0].index('1 Oct')
-    assert '<i class="fill w" style="left: 0; width: 9.2%"></i><span>0,31</span>' in rows[1]
-    assert '<td class="cell-bar na"><i class="fill w" style="left: 0; width: 0.0%"></i><span>0,00</span></td>' in rows[2]
-    assert initial(body)['polls']['polls'][0]['weight_disp'] == 0.95
-    assert 'mayor peso del ciclo' in page and 'los días del trabajo de campo' in page
     assert '<td><span class="rt" style="background: #cd3031">5,0</span></td>' in rows[1]
     assert '<b>Sin casa</b>' in rows[2] and '<a href' not in rows[2] and '<td class="na">—</td>' in rows[2]
     foot = page[page.index('<tfoot>', start):page.index('</tfoot>', start)]
-    assert foot.count('<td></td>') == 4  # rating, peso, fecha y muestra vacías bajo la media simple
+    assert foot.count('<td></td>') == 3  # rating, fecha y muestra vacías bajo la media simple
     assert 'El rating (0-100)' in page and 'rojo (0)' in page and 'su perfil' in page
 
 
@@ -5493,19 +5462,6 @@ def test_eleccion_cycle_table_shows_the_rating_each_house_arrived_with_and_links
     assert '<span class="rt" style="background: {}">0,9</span>'.format(pages.gradient(0.9, 0, 100, pages.RATING_COLORS)) in tbody
     data = initial(body)['polls']['polls']
     assert data[0]['rating'] == 0.8 and data[0]['href'] == '/casas/cis'
-    assert 'title="Muestra ×1,10 Frecuencia ×1,12"' in tbody and '<span>1,24</span>' in tbody
-    assert 'width: 100.0%' in tbody and 'width: 46.0%' in tbody  # GAD3 1,235 es el mayor; CIS 0,568
-    assert data[0]['weight_over'] == 0.811 and 'el rating de entonces va aparte' in page
-    assert '<th scope="col" data-key="weight" title="{}">'.format(pages.CYCLE_WEIGHT_TITLE) in page and pages.WEIGHT_TITLE not in page
-
-
-def test_promedios_polls_table_without_weights_shows_a_dash_in_the_weight_cell(api):
-    page = html(call(api, '/es')[2]).replace('\n', ' ')
-    row = re.findall(r'<tr>(.*?)</tr>', polls_tbody(page))[0]
-    assert row.count('<td class="na">—</td>') == 2 and 'cell-bar' not in row  # rating y peso
-    assert row.rindex('<td class="na">—</td>') < row.index('5 Oct')
-    foot = page[page.index('<tfoot>'):page.index('</tfoot>')]
-    assert foot.count('<td></td>') == 4
 
 
 # --- Análisis ------------------------------------------------------------------------------------------------------

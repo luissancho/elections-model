@@ -4,28 +4,18 @@ hemicycle and the results by party and by block, the coalition calculator, the e
 against the average, the districts and the polls of the cycle, in the sections of ``EVENT_SECTIONS``. The seats come
 from ``escanos.seats_context``.
 """
-import math
 from collections import Counter
 from typing import Optional
 
 from .. import bundle
 from ..webapi import site
 from .common import OTHERS_COLOR, REST_BLOCK, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
-from .filters import (DASH, _is_missing, _parse_datetime, bar_width, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num,
-                      fmt_pct, fmt_prob, fmt_range, gradient)
+from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
+                      fmt_prob, fmt_range, gradient)
 from .slugs import pollster_href
 
 PAGE_SIZE = 15
 MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
-# Tooltip of the «Peso» header of the polls table; `polls-dom.js` and the template write the same text
-WEIGHT_TITLE = ('Peso del sondeo en el promedio: muestra × dispersión × frecuencia × rating de la encuestadora, sin la '
-                'cercanía al día estimado. La barra va de 0 al mayor peso del ciclo.')
-# The same header on the detail of a past election, whose cycle weight has no rating in it (`export_event_cycle`)
-CYCLE_WEIGHT_TITLE = ('Peso del sondeo en el ciclo: muestra × frecuencia de la encuestadora; su rating va aparte, en su '
-                      'columna. La barra va de 0 al mayor peso del ciclo.')
-# The factors of the weight in the order of its tooltip: label and key of the polls part (`WEIGHT_FACTORS`)
-WEIGHT_FACTOR_LABELS = (('Muestra', 'weight_sample'), ('Dispersión', 'weight_disp'), ('Frecuencia', 'weight_over'),
-                        ('Rating', 'weight_rating'))
 BLOCK_ORDER = ('Izquierda', 'Derecha', REST_BLOCK)
 
 
@@ -334,14 +324,12 @@ def chart_polls(polls: dict) -> dict:
     dict
         ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``, ``seats``
         (the pollster's projections, when it has them), ``rating`` (the pollster's rating the run used),
-        ``pollster``, ``sponsor``, ``start_date``, ``end_date``, ``weight`` and its factors (``weight_sample``,
-        ``weight_disp``, ``weight_over``, ``weight_rating``) and one value per party (the keys it has),
+        ``pollster``, ``sponsor``, ``start_date``, ``end_date`` and one value per party (the keys it has),
         plus ``name`` (``poll_name``), ``sample_size`` (``None`` when missing) and ``href`` (``poll_href``): the
         box of each poll of the charts and the table of all the polls are drawn from them.
     """
     parties = list(polls.get('parties') or [])
-    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats', 'rating', 'weight',
-            'weight_sample', 'weight_disp', 'weight_over', 'weight_rating'] + parties
+    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats', 'rating'] + parties
 
     return {
         'parties': parties,
@@ -351,49 +339,6 @@ def chart_polls(polls: dict) -> dict:
             for poll in polls.get('polls') or []
         ],
     }
-
-
-def _factor(value) -> Optional[float]:
-    """A finite number as a float, or ``None`` for anything else (missing values and booleans included)."""
-    if isinstance(value, bool) or _is_missing(value):
-        return None
-
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return None
-
-    return value if math.isfinite(value) else None
-
-
-def weight_breakdown(poll: dict) -> Optional[str]:
-    """
-    Tooltip of the weight of a poll: one line per factor it carries, «Muestra ×1,41», «Dispersión ×0,95»,
-    «Frecuencia ×1,00» and «Rating ×2,40», the formula of the method, separated by ``'\\n'``.
-
-    Parameters
-    ----------
-    poll : dict
-        Poll record with the ``WEIGHT_FACTORS`` of the polls part (``weight_sample``, with the dispersion of the
-        house inside, ``weight_disp``, ``weight_over`` and ``weight_rating``); a factor that is missing, null or
-        not a finite number is left out.
-
-    Returns
-    -------
-    str or None
-        The lines at two decimals, with «Muestra» as ``weight_sample / weight_disp`` when the dispersion factor is
-        a positive number (``weight_sample`` otherwise); ``None`` without any factor.
-    """
-    values = {key: _factor(poll.get(key)) for _, key in WEIGHT_FACTOR_LABELS}
-    sample, disp = values['weight_sample'], values['weight_disp']
-
-    if sample is not None and disp is not None and disp > 0:
-        values['weight_sample'] = sample / disp
-
-    lines = ['{} ×{}'.format(label, fmt_num(values[key], 2)) for label, key in WEIGHT_FACTOR_LABELS
-             if values[key] is not None]
-
-    return '\n'.join(lines) if lines else None
 
 
 def fieldwork_label(start, end, date=None) -> str:
@@ -506,17 +451,13 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
         (ties keep the later published first) is ``{'pollster', 'href' (``poll_href``), 'rating' (at one decimal,
         or the dash), 'rating_color' (``gradient`` over ``RATING_COLORS``, ``None`` without rating), 'sponsor',
         'date' (the days of the fieldwork, ``fieldwork_label``), 'fieldwork' (the tooltip with the full dates,
-        ``None`` without fieldwork dates), 'weight' (two decimals, or the dash), 'weight_bar' (``bar_width`` from 0
-        to the largest weight of all the polls, 0 without one), 'weight_title' (``weight_breakdown``, ``None``
-        without factors), 'weight_zero' (a poll that weighs nothing), 'sample', 'cells'}`` with a
+        ``None`` without fieldwork dates), 'sample', 'cells'}`` with a
         ``{'value', 'leader', 'color'}`` cell per party (``leader``: the highest of the row, every tied one);
         ``mean`` is ``{'n', 'cells'}``, the
         unweighted mean of all the polls (``n`` is ``total``) at one decimal in the same cells, the figure the
         browser shows before any filter.
     """
     latest = sorted(reversed(polls), key=lambda poll: poll.get('date') or '', reverse=True)[:n]
-    weights = [_factor(poll.get('weight')) for poll in polls]
-    wmax = max((weight for weight in weights if weight is not None and weight > 0), default=None)
     rows = []
 
     for poll in latest:
@@ -528,7 +469,6 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
 
         values = [poll.get(name) for name in parties]
         color = gradient(poll.get('rating'), 0, 100, RATING_COLORS)
-        weight = _factor(poll.get('weight'))
         rows.append({
             'pollster': poll.get('pollster') or DASH,
             'href': poll_href(poll),
@@ -537,10 +477,6 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
             'sponsor': poll.get('sponsor') or None,
             'date': fieldwork_label(start, end, poll.get('date')),
             'fieldwork': fieldwork,
-            'weight': fmt_num(weight, 2),
-            'weight_bar': bar_width(weight, 0, wmax) if wmax else 0.0,
-            'weight_title': weight_breakdown(poll),
-            'weight_zero': weight == 0,
             'sample': fmt_int(poll.get('sample_size')),
             'cells': [
                 {'value': fmt_num(value, 1), 'leader': leader, 'color': colors.get(name, OTHERS_COLOR)}
@@ -838,7 +774,6 @@ def promedios_context(state: dict, region=None) -> dict:
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
     context['table'] = polls_table(poll_rows, context['table_parties'], colors)
-    context['weight_title'] = WEIGHT_TITLE
     context['fixed_rows'] = []  # only the detail of a past election pins the model and the result to the foot
     context['table_total'] = len(poll_rows)
     context['has_seats'] = any(poll.get('seats') for poll in poll_rows)  # the % de voto / Escaños switch

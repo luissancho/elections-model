@@ -91,9 +91,7 @@ def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optiona
     tuple of (dict, pandas.DataFrame)
         Data for the ``event-cycle`` schema (``parties``, ``columns`` and ``polls``, the same shape as the
         ``polls`` part of a run so the pages draw both alike) and its CSV twin: ascending by date and pollster,
-        an unknown ``sample_size`` (zero) null and ``weight`` the product of the overall and sample weights, which
-        are exported apart (``weight_over``, ``weight_sample``); ``weight_disp`` and ``weight_rating`` are always
-        null, even when the frame carries a rating weight, because ``weight`` does not include them.
+        an unknown ``sample_size`` (zero) null and ``weight`` the product of the overall and sample weights.
     """
     table = frame.reset_index()
     names = [name for name in names if name in table.columns]
@@ -104,8 +102,6 @@ def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optiona
         table['sample_size'] = table['sample_size'].where(table['sample_size'] > 0).astype('Int64')
     if 'weight' not in table.columns and {'weight_over', 'weight_sample'} <= set(table.columns):
         table['weight'] = table['weight_over'].astype(float) * table['weight_sample'].astype(float)
-    table['weight_disp'] = None
-    table['weight_rating'] = None
     table = table.sort_values(list(order), kind='stable', ignore_index=True)
     records, polls = export_poll_rows(table, names, seats)
 

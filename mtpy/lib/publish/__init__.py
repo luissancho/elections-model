@@ -51,7 +51,7 @@ from .forecast import (
     export_polls, poll_seats,
     export_projection, export_scenario, export_series, export_summary, export_vote, HE_COLUMNS, headline_mode,
     MODE_EXPORTERS, n_polls, PCT_COLS, POLL_COLUMNS, PROB_COLS, publish_forecast, publish_mode, SEATS_COLS,
-    SUMMARY_COLS, WEIGHT_FACTORS
+    SUMMARY_COLS
 )
 from .parties import export_parties, PARTIES_COLUMNS, publish_parties
 from .pointers import point, read_manifest, rebuild_history, unpublish, update_manifest

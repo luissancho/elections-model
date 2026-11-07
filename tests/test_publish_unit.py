@@ -206,21 +206,6 @@ def test_export_polls_keeps_the_published_figures_and_the_previous_result():
     seat_columns = [c + n for n in NAMES for c in ('seats_min_', 'seats_max_')]
     assert sorted(frame.columns) == sorted(publish.POLL_COLUMNS + NAMES + seat_columns)
     assert all('seats' not in poll for poll in data['polls']) and frame['seats_min_PP'].isna().all()
-    assert publish.POLL_COLUMNS[-4:] == ['weight_sample', 'weight_disp', 'weight_over', 'weight_rating']
-    assert [p['weight_disp'] for p in data['polls']] == [0.95, 1.0, 0.95, 1.0, 1.0, 0.95]  # `dispersion.factor` por casa
-    assert first['weight_sample'] is None and first['weight_over'] is None and first['weight_rating'] is None
-
-
-def test_export_polls_publishes_the_weight_factors_of_the_series_and_one_without_dispersion():
-    sim = synthetic_simulator()
-    raw = sim.model.fc_series_raw
-    sim.model.fc_series_raw = raw.assign(weight_over=1.0, weight_sample=raw['weight'] * 1.23456, weight_rating=0.5)
-    data = valid('polls', publish.export_polls(sim.model, NAMES)[0], mode=None)
-    first = data['polls'][0]
-    assert (first['weight_sample'], first['weight_disp'], first['weight_over'], first['weight_rating']) == (1.481, 0.95, 1.0, 0.5)
-    sim.model.dispersion = None
-    data = valid('polls', publish.export_polls(sim.model, NAMES)[0], mode=None)
-    assert {p['weight_disp'] for p in data['polls']} == {1.0}
 
 
 def test_export_polls_carries_the_pollsters_seat_projections():
@@ -1606,11 +1591,6 @@ def test_export_event_cycle_keeps_the_shape_of_the_run_polls_and_skips_unknown_p
     assert data['polls'][0]['seats'] == {'PP': [130, 130]} and all('seats' not in row for row in data['polls'][1:])
     assert [row['pollster_id'] for row in data['polls']] == [1, 3, 2] and data['polls'][0]['sponsor'] is None
     assert 'PSOE' not in data['polls'][0] and table['seats_min_PP'].tolist()[0] == 130 and 'seats_min_PSOE' not in table.columns
-    cis = bundle.jsonable(data)['polls'][0]  # como lo escribe el paquete: los NaN de las columnas ausentes, nulos
-    assert (cis['weight'], cis['weight_sample'], cis['weight_over']) == (0.568, 0.7, 0.811)
-    assert cis['weight_disp'] is None and cis['weight_rating'] is None
-    rated = bundle.jsonable(publish.export_event_cycle(synthetic_cycle().assign(weight_rating=2.0), ['PP'])[0])
-    assert rated['polls'][0]['weight_rating'] is None and rated['polls'][0]['weight'] == 0.568
     empty, _ = publish.export_event_cycle(synthetic_cycle().iloc[:0], ['PP'])
     assert empty == {'parties': ['PP'], 'columns': publish.POLL_COLUMNS, 'polls': []}
 

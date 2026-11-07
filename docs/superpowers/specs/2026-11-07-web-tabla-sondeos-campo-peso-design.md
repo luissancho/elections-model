@@ -1,5 +1,7 @@
 # Web, «Todas las encuestas»: fechas de campo, columna «Peso» y desglose del peso
 
+> **Revertido en parte el 2026-11-07.** Luis retiró la columna «Peso» y su tooltip el mismo día («prefiero no incluirlo»), y con ellos la enmienda de `polls`/`event-cycle` que sólo les servía (D2, D3 y D4). En `dev` quedan la celda «Fecha» con los días de campo (D1, commit 0e4148c) y el redondeo de `fmt_num` de la revisión final; el resto lo deshace el commit de reversión que sigue a d1f0e1e.
+
 Cambio pequeño en la tarjeta «Todas las encuestas», compartida por Promedios (`/{scope}`) y el detalle de una
 elección pasada (`/elecciones/...`). Aprobado por Luis el 2026-11-07 («Aprobado»), en tres mensajes: las fechas de
 campo, la columna «Peso» y el tooltip con el desglose.

@@ -70,9 +70,8 @@ def test_mean_tooltip_line_shows_the_average_its_interval_and_the_date():
 
 
 TABLE_POLLS = [
-    {'date': '2026-10-01', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': 1010, 'PP': 31.1, 'PSOE': 26.1,
-     'weight': 2.0, 'weight_sample': 1.339, 'weight_disp': 0.95, 'weight_over': 1.0, 'weight_rating': 2.4},
-    {'date': '2026-09-04', 'pollster': 'CIS', 'sponsor': None, 'sample_size': None, 'PP': 25.5, 'PSOE': 31.0, 'weight': 0.5},
+    {'date': '2026-10-01', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': 1010, 'PP': 31.1, 'PSOE': 26.1},
+    {'date': '2026-09-04', 'pollster': 'CIS', 'sponsor': None, 'sample_size': None, 'PP': 25.5, 'PSOE': 31.0},
     {'date': '2026-09-02', 'pollster': '40dB', 'sponsor': 'Prisa', 'sample_size': 2000, 'PP': None, 'PSOE': None},
 ]
 
@@ -196,29 +195,11 @@ def test_sort_polls_by_rating_puts_the_unrated_last_in_both_directions():
     assert run_js(expr.format(json.dumps(polls))) == ['C', 'A', 'B']
 
 
-def test_weight_helpers_of_the_polls_table_match_the_server():
-    assert table_js('p.maxWeight(POLLS)') == 2.0 and run_js('p.maxWeight([{weight: 0}, {weight: null}, {}])') is None
-    assert table_js('p.weightBreakdown(POLLS[0])') == 'Muestra ×1,41\nDispersión ×0,95\nFrecuencia ×1,00\nRating ×2,40'
-    assert run_js('p.weightBreakdown({weight_sample: 0.7, weight_disp: null, weight_over: 0.811, weight_rating: null})') == 'Muestra ×0,70\nFrecuencia ×0,81'
-    assert run_js('p.weightBreakdown({weight_sample: 0.5, weight_disp: 0})') == 'Muestra ×0,50\nDispersión ×0,00'
-    assert run_js('p.weightBreakdown({weight: 1.7})') is None and run_js('p.weightBreakdown({weight_sample: "x"})') is None
-    assert table_js('p.sortPolls(POLLS, "weight", false).map(x => x.pollster)') == ['GAD3', 'CIS', '40dB']
-    assert table_js('p.sortPolls(POLLS, "weight", true).map(x => x.pollster)') == ['CIS', 'GAD3', '40dB']
-    zeros = [{'pollster': 'a', 'date': '2026-01-01', 'weight': 0}, {'pollster': 'b', 'date': '2026-01-02', 'weight': 1}, {'pollster': 'c', 'date': '2026-01-03'}]
-    assert run_js('p.sortPolls({}, "weight", true).map(x => x.pollster)'.format(json.dumps(zeros))) == ['a', 'b', 'c']
-
-
-def test_bar_width_mirrors_the_server():
-    script = 'import * as f from "{}"; console.log(JSON.stringify([f.barWidth(0.31, 0, 3.384), f.barWidth(5, 0, 3), f.barWidth(null, 0, 1), f.barWidth(1, 2, 2)]));'
-    out = subprocess.run(['node', '--input-type=module', '-e', script.format(pathlib.Path(ROOT, 'web', 'dist', 'js', 'format.js').as_uri())], capture_output=True, text=True, check=True)
-    assert json.loads(out.stdout) == [9.2, 100, 0, 0]
-
-
 def test_polls_dom_fixed_columns_and_rating_colours_follow_the_server():
     """La tabla que redibuja el navegador lleva la columna del rating entre la encuestadora y la fecha, con los
     colores del degradado del servidor (`pages.RATING_COLORS`)."""
-    script = 'import * as d from "{}"; console.log(JSON.stringify([d.FIXED_COLUMNS, d.RATING_COLORS, d.WEIGHT_TITLE]));'.format(DOM_JS)
+    script = 'import * as d from "{}"; console.log(JSON.stringify([d.FIXED_COLUMNS, d.RATING_COLORS]));'.format(DOM_JS)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
-    fixed, colors, title = json.loads(out.stdout)
-    assert fixed == [['pollster', 'Encuestadora'], ['rating', 'Rating (0-100)'], ['weight', 'Peso'], ['date', 'Fecha'], ['sample_size', 'Muestra']]
-    assert colors == list(pages.RATING_COLORS) and title == pages.WEIGHT_TITLE
+    fixed, colors = json.loads(out.stdout)
+    assert fixed == [['pollster', 'Encuestadora'], ['rating', 'Rating (0-100)'], ['date', 'Fecha'], ['sample_size', 'Muestra']]
+    assert colors == list(pages.RATING_COLORS)

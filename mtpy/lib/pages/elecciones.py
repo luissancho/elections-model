@@ -10,7 +10,7 @@ from ..webapi import check_date, event_params, site
 from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color,
                      bundle_part, common_context, ink_color)
 from .filters import _madrid_tz, fmt_date, fmt_num
-from .promedios import (BLOCK_ORDER, CYCLE_WEIGHT_TITLE, _leaders, chart_polls, poll_months, polls_table,
+from .promedios import (BLOCK_ORDER, _leaders, chart_polls, poll_months, polls_table,
                         pollster_options, round_series)
 from .slugs import event_href
 
@@ -1212,7 +1212,6 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['has_cycle'] = cycle is not None
     context['table_parties'] = table_parties
     context['table'] = polls_table(cycle_polls, table_parties, colors)
-    context['weight_title'] = CYCLE_WEIGHT_TITLE  # the cycle weight carries no rating
     context['table_total'] = len(cycle_polls)
     context['has_seats'] = any(poll.get('seats') for poll in cycle_polls)
     context['months'] = poll_months(cycle_polls)

@@ -45,8 +45,7 @@ from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, met
                      national_figures, quality_rubric, subpages, thresholds_rows)
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, pollster_href, pollster_slugs, resolve_event_path,
                     resolve_pollster, scope_paths, scope_slug, slugify)
-from .promedios import (BLOCK_ORDER, CYCLE_WEIGHT_TITLE, PAGE_SIZE, RATING_COLORS, WEIGHT_TITLE, block_result_rows,
-                        chart_polls, fieldwork_label, inherited_results,
+from .promedios import (BLOCK_ORDER, PAGE_SIZE, RATING_COLORS, block_result_rows, chart_polls, fieldwork_label, inherited_results,
                         lineage_blocks, party_cards,
                         poll_href, poll_months, poll_name, polls_table, pollster_options, promedios_context, result_rows,
-                        round_series, seat_deltas, weight_breakdown)
+                        round_series, seat_deltas)

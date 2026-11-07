@@ -1,5 +1,7 @@
 # Tabla «Todas las encuestas»: fechas de campo, columna «Peso» y desglose — plan de implementación
 
+> **Revertido en parte el 2026-11-07.** Luis retiró la columna «Peso» y su tooltip el mismo día («prefiero no incluirlo»), y con ellos la enmienda de `polls`/`event-cycle` que sólo les servía (D2, D3 y D4). En `dev` quedan la celda «Fecha» con los días de campo (D1, commit 0e4148c) y el redondeo de `fmt_num` de la revisión final; el resto lo deshace el commit de reversión que sigue a d1f0e1e.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** La celda «Fecha» de la tabla de sondeos enseña los días del trabajo de campo, una columna «Peso» con barra y cifra sigue al rating, y al pasar por la cifra un tooltip desglosa el peso por factores; las partes `polls` y `event-cycle` publican los factores.

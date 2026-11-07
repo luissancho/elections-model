@@ -1,9 +1,9 @@
 // Wiring of the "Todas las encuestas" table (Promedios and the detail of a past election): party and pollster
 // dropdowns, month range, the % Voto / Escaños switch, sortable headers and pages of `PAGE_SIZE` rows, all
 // computed in the browser from the polls of the page (`polls-table.js`) and drawn with `polls-dom.js`.
-import {PAGE_SIZE, filterPolls, fixedRows, maxWeight, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
+import {PAGE_SIZE, filterPolls, fixedRows, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
 import {markSegments} from './common.js';
-import {WEIGHT_TITLE, renderBody, renderFoot, renderHead} from './polls-dom.js';
+import {renderBody, renderFoot, renderHead} from './polls-dom.js';
 
 /**
  * Wire the controls of a dropdown of checkboxes (`details.dd`): "Seleccionar todos" and "Quitar todos" (which
@@ -41,7 +41,7 @@ export function wireDropdown(dd, onChange) {
 }
 
 /** Sort keys of the fixed columns of the polls table; any other key is a party. */
-const FIXED_KEYS = ['pollster', 'rating', 'weight', 'date', 'sample_size'];
+const FIXED_KEYS = ['pollster', 'rating', 'date', 'sample_size'];
 
 /**
  * Wire the "Todas las encuestas" table: party and pollster dropdowns, month range, sortable headers and pages of
@@ -66,10 +66,6 @@ export function wirePollsTable(polls, catalog, {fixed = null} = {}) {
   const modeSwitch = document.getElementById('polls-mode');
   const [prev, next] = pag.querySelectorAll('button');
   const pick = (checked, total) => (checked.length === total ? null : checked.map((box) => box.value));
-  const wmax = maxWeight(polls);  // the full bar of the «Peso» column, over every poll of the cycle, whatever the filters
-  // The tooltip of the «Peso» header is the server's (the detail of a past election has its own), read before any repaint
-  const weightHead = table.tHead.querySelector('th[data-key="weight"]');
-  const weightTitle = (weightHead && weightHead.title) || WEIGHT_TITLE;
 
   const render = (focusKey = null) => {
     const parties = checkedParties().map((box) => box.value);
@@ -86,8 +82,8 @@ export function wirePollsTable(polls, catalog, {fixed = null} = {}) {
     const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
     state.page = Math.min(state.page, pages - 1);
     const shown = pageOf(rows, state.page);
-    renderHead(table.tHead, parties, catalog, state.sort, weightTitle);
-    renderBody(table.tBodies[0], shown, parties, catalog, state.mode, wmax);
+    renderHead(table.tHead, parties, catalog, state.sort);
+    renderBody(table.tBodies[0], shown, parties, catalog, state.mode);
     renderFoot(table.tFoot, rows.length, meanOf(rows, parties, state.mode), parties, catalog, state.mode,
       fixed ? fixedRows(fixed.modelLast, fixed.result, fixed.seats, parties, state.mode) : []);
     document.getElementById('polls-count').textContent = pollsCount(rows.length) + (state.mode === 'esc' ? ' con escaños' : '');
