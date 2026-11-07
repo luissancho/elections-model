@@ -51,6 +51,12 @@ def test_compute_herd_weeks_skips_a_current_election_of_another_scope(fresh_app,
     assert [r['label'] for r in weeks['rows']] == ['Madrid 2021'] and not any(r['current'] for r in weeks['rows'])
 
 
+def test_compute_herd_weeks_without_comparisons(fresh_app, tmp_path):
+    weeks = compute(tmp_path, params={'pair_days': 0}).weeks
+    assert len(weeks['rows']) == 3 * 7 and all(r['ratio'] is None and r['pairs'] == 0 for r in weeks['rows'])
+    assert all(m['k'] == 0 and m['ratio'] is None for m in weeks['mean'])
+
+
 def test_comparisons_constant():
     assert COMPARISONS == {'far_final': ('far', 'final'), 'far_mid': ('far', 'mid'), 'mid_final': ('mid', 'final')}
 

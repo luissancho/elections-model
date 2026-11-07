@@ -179,7 +179,7 @@ def by_buckets(rows: pd.DataFrame, buckets: list, min_pairs: int) -> list[dict]:
     out = []
 
     for lo, hi in buckets:
-        inside = rows[[key == (lo, hi) for key in keys]]
+        inside = rows[np.array([key == (lo, hi) for key in keys], dtype=bool)]
         pairs = len(inside[['poll_i', 'poll_j']].drop_duplicates())
         out.append({'lo': lo, 'hi': hi, 'pairs': pairs, 'comparisons': len(inside),
                     'ratio': dispersion(inside) if pairs >= min_pairs else None})

@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mtpy.lib.studies.herd.stats import (bucket_of, by_buckets, compare, comparisons, count, dispersion, period_of,
-                                         permutation_p)
+from mtpy.lib.studies.herd.stats import (COMPARISON_COLUMNS, bucket_of, by_buckets, compare, comparisons, count,
+                                         dispersion, period_of, permutation_p)
 
 PARAMS = {'pair_days': 7, 'periods': {'final': [0, 21], 'mid': [21, 56], 'far': [56, 365]}}
 
@@ -146,3 +146,9 @@ def test_by_buckets_counts_distinct_poll_pairs():
     assert [(b['lo'], b['hi'], b['pairs'], b['comparisons']) for b in out[:3]] == [
         (0, 2, 2, 4), (3, 4, 1, 1), (5, 7, 0, 0)]
     assert out[0]['ratio'] == pytest.approx(1.0) and out[1]['ratio'] is None and out[2]['ratio'] is None
+
+
+def test_by_buckets_without_rows():
+    empty = pd.DataFrame(columns=COMPARISON_COLUMNS)
+    out = by_buckets(empty, BUCKETS, 2)
+    assert len(out) == 7 and all((b['pairs'], b['comparisons'], b['ratio']) == (0, 0, None) for b in out)
