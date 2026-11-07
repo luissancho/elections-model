@@ -12,6 +12,9 @@ Two periods are compared pair of houses by pair of houses: each pair ``g`` has i
 each period, and the pairs are combined with one weight per pair, the same in both periods,
 ``w_g = 1 / (1/Σ v_a,g + 1/Σ v_b,g)``. Pooling all the rows instead would weigh each pair by its rows, which differ
 between the periods: a change in the mix of pairs would read as a change in the dispersion.
+
+The rows of one pair of polls (one per series) are not independent, so the permutation tests shuffle the period labels
+of whole pairs of polls (blocks), never of single rows.
 """
 import math
 from typing import Optional
@@ -258,14 +261,91 @@ def compare(rows: pd.DataFrame, a: str, b: str, min_rows: int) -> Optional[dict]
             'falls': bool(r_b < r_a)}
 
 
+def _blocks(group: pd.DataFrame, a: str) -> tuple:
+    """
+    The pairs of polls (blocks) of one pair of houses, with their series added up.
+
+    Parameters
+    ----------
+    group : pandas.DataFrame
+        Rows of ``comparisons`` of one pair of houses (``poll_i``, ``poll_j``, ``period``, ``d2`` and ``v``); all the
+        rows of a pair of polls share their period.
+    a : str
+        The reference period.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        ``(d2, v, is_a)``: ``Σ d2`` and ``Σ v`` of each pair of polls (in order of appearance) and whether its period
+        is ``a``.
+    """
+    blocks = group.groupby(['poll_i', 'poll_j'], sort=False).agg(d2=('d2', 'sum'), v=('v', 'sum'),
+                                                                  period=('period', 'first'))
+
+    return blocks['d2'].to_numpy(float), blocks['v'].to_numpy(float), (blocks['period'] == a).to_numpy()
+
+
+def _permuted_terms(shared: pd.DataFrame, a: str, permutations: int, generator: np.random.Generator) -> tuple:
+    """
+    Σ w · r² of each period, permuted and observed, over the pairs of houses of ``shared``.
+
+    Within each pair of houses the period labels of its blocks (pairs of polls) are shuffled; each pair keeps its
+    number of blocks in ``a``.
+
+    Parameters
+    ----------
+    shared : pandas.DataFrame
+        Rows of ``_shared_pairs``.
+    a : str
+        The reference period.
+    permutations : int
+        Number of shuffles.
+    generator : numpy.random.Generator
+        Source of the shuffles (advanced).
+
+    Returns
+    -------
+    tuple
+        ``(perm_a, perm_b, obs_a, obs_b)``: ``Σ w · r²_a`` and ``Σ w · r²_b`` per permutation (arrays) and observed
+        (floats); ``Σ w`` cancels out in the ratio.
+    """
+    perm_a, perm_b = np.zeros(permutations), np.zeros(permutations)
+    obs_a = obs_b = 0.0
+
+    for _, group in shared.groupby('pair'):
+        d2, v, is_a = _blocks(group, a)
+        size = len(d2)
+        # A random arrangement per permutation: the blocks with the smallest keys take the label a
+        order = np.argsort(generator.random((permutations, size)), axis=1)
+        label_a = np.zeros((permutations, size), dtype=bool)
+        np.put_along_axis(label_a, order[:, :int(is_a.sum())], True, axis=1)
+        d2_a, v_a = label_a @ d2, label_a @ v
+        _, term_a, term_b = _weighted_sums(d2_a, v_a, d2.sum() - d2_a, v.sum() - v_a)
+        perm_a += term_a
+        perm_b += term_b
+        _, term_a, term_b = _weighted_sums(d2[is_a].sum(), v[is_a].sum(), d2[~is_a].sum(), v[~is_a].sum())
+        obs_a += term_a
+        obs_b += term_b
+
+    return perm_a, perm_b, obs_a, obs_b
+
+
+def _share_not_above(perm_a: np.ndarray, perm_b: np.ndarray, obs_a: float, obs_b: float) -> float:
+    """Share of the permuted ``r_b² / r_a²`` not above the observed one (with ``PERMUTATION_TOLERANCE``)."""
+    with np.errstate(divide='ignore', invalid='ignore'):
+        permuted = perm_b / perm_a
+
+    return float(np.mean(permuted <= obs_b / obs_a * (1 + PERMUTATION_TOLERANCE)))
+
+
 def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutations: int,
                   seed: int) -> Optional[float]:
     """
     Permutation test of the fall in dispersion between two periods.
 
-    Within each pair of houses counted by ``compare``, the labels ``a``/``b`` of its rows are shuffled (each pair keeps
-    its number of rows in each period); the statistic is the one of ``compare``, ``r_b² / r_a²``, recomputed for each
-    permutation with the weights of that permutation.
+    Within each pair of houses counted by ``compare``, the period labels of its pairs of polls are shuffled, each with
+    its series together (each pair of houses keeps its number of pairs of polls in each period); the statistic is the
+    one of ``compare``, ``r_b² / r_a²``, recomputed for each permutation with the weights of that permutation.
 
     Parameters
     ----------
@@ -290,33 +370,141 @@ def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutation
         return None
 
     shared = _shared_pairs(rows, a, b, min_rows)
+    terms = _permuted_terms(shared, a, permutations, np.random.default_rng(seed))
+
+    return _share_not_above(*terms)
+
+
+def pooled(rows_by_election: list, a: str, b: str, min_rows: int) -> Optional[dict]:
+    """
+    Dispersion of the same pairs of houses in two periods over several elections, each pair with one weight.
+
+    Like ``compare`` but the pairs of houses of every election are accumulated (``Σ w``, ``Σ w · r²_a`` and
+    ``Σ w · r²_b`` over all of them).
+
+    Parameters
+    ----------
+    rows_by_election : list of pandas.DataFrame
+        Rows of ``comparisons`` of each election.
+    a, b : str
+        The periods compared.
+    min_rows : int
+        As in ``compare``.
+
+    Returns
+    -------
+    dict or None
+        ``elections`` (those with pairs counted), ``pairs`` (pairs of houses, summed), ``rows_a``, ``rows_b``,
+        ``r_a``, ``r_b``, ``change`` and ``falls`` (as in ``compare``), unrounded; ``None`` without pairs or when
+        ``r_a`` is 0.
+    """
+    total_w = total_a = total_b = 0.0
+    elections = pairs = rows_a = rows_b = 0
+
+    for rows in rows_by_election:
+        shared = _shared_pairs(rows, a, b, min_rows)
+
+        if len(shared) == 0:
+            continue
+
+        sums = shared.groupby(['pair', 'period'])[['d2', 'v']].sum().unstack('period')
+        weight, term_a, term_b = _weighted_sums(sums[('d2', a)].to_numpy(float), sums[('v', a)].to_numpy(float),
+                                                sums[('d2', b)].to_numpy(float), sums[('v', b)].to_numpy(float))
+        total_w += weight.sum()
+        total_a += term_a.sum()
+        total_b += term_b.sum()
+        elections += 1
+        pairs += len(sums)
+        rows_a += int((shared['period'] == a).sum())
+        rows_b += int((shared['period'] == b).sum())
+
+    if elections == 0:
+        return None
+
+    r_a, r_b = math.sqrt(total_a / total_w), math.sqrt(total_b / total_w)
+
+    if r_a == 0:
+        return None
+
+    return {'elections': elections, 'pairs': pairs, 'rows_a': rows_a, 'rows_b': rows_b, 'r_a': r_a, 'r_b': r_b,
+            'change': r_b / r_a - 1, 'falls': bool(r_b < r_a)}
+
+
+def pooled_p(rows_by_election: list, a: str, b: str, min_rows: int, permutations: int,
+             seed: int) -> Optional[float]:
+    """
+    Permutation test of the fall in the pooled dispersion over several elections.
+
+    The labels of the pairs of polls are shuffled within each pair of houses of each election (as in
+    ``permutation_p``) and the statistic ``R_b² / R_a²`` of ``pooled`` is recomputed for each permutation.
+
+    Parameters
+    ----------
+    rows_by_election : list of pandas.DataFrame
+        Rows of ``comparisons`` of each election.
+    a, b : str
+        The periods compared.
+    min_rows : int
+        As in ``compare``.
+    permutations : int
+        Number of shuffles.
+    seed : int
+        Seed of the generator.
+
+    Returns
+    -------
+    float or None
+        Share of the permuted statistics not above the observed one; ``None`` when ``pooled`` is ``None``.
+    """
+    if pooled(rows_by_election, a, b, min_rows) is None:
+        return None
+
     generator = np.random.default_rng(seed)
-    # Σ w · r² of each period, per permutation, and the same sums observed (Σ w cancels out in the ratio)
     perm_a, perm_b = np.zeros(permutations), np.zeros(permutations)
     obs_a = obs_b = 0.0
 
-    for _, group in shared.groupby('pair'):
-        d2, v = group['d2'].to_numpy(float), group['v'].to_numpy(float)
-        is_a = (group['period'] == a).to_numpy()
-        size = len(group)
-        # A random arrangement per permutation: the rows with the smallest keys take the label a
-        order = np.argsort(generator.random((permutations, size)), axis=1)
-        label_a = np.zeros((permutations, size), dtype=bool)
-        np.put_along_axis(label_a, order[:, :int(is_a.sum())], True, axis=1)
-        d2_a, v_a = label_a @ d2, label_a @ v
-        _, term_a, term_b = _weighted_sums(d2_a, v_a, d2.sum() - d2_a, v.sum() - v_a)
-        perm_a += term_a
-        perm_b += term_b
-        _, term_a, term_b = _weighted_sums(d2[is_a].sum(), v[is_a].sum(), d2[~is_a].sum(), v[~is_a].sum())
-        obs_a += term_a
-        obs_b += term_b
+    for rows in rows_by_election:
+        shared = _shared_pairs(rows, a, b, min_rows)
 
-    observed = obs_b / obs_a
+        if len(shared) == 0:
+            continue
 
-    with np.errstate(divide='ignore', invalid='ignore'):
-        permuted = perm_b / perm_a
+        terms = _permuted_terms(shared, a, permutations, generator)
+        perm_a += terms[0]
+        perm_b += terms[1]
+        obs_a += terms[2]
+        obs_b += terms[3]
 
-    return float(np.mean(permuted <= observed * (1 + PERMUTATION_TOLERANCE)))
+    return _share_not_above(perm_a, perm_b, obs_a, obs_b)
+
+
+def bootstrap_median(changes: list, resamples: int, seed: int) -> Optional[dict]:
+    """
+    Percentile bootstrap interval (95 %) of the median of a set of changes.
+
+    Parameters
+    ----------
+    changes : list of float
+        The changes (one per election).
+    resamples : int
+        Number of resamples with replacement.
+    seed : int
+        Seed of the generator.
+
+    Returns
+    -------
+    dict or None
+        ``lo`` and ``hi`` (percentiles 2.5 and 97.5 of the resampled medians), unrounded; ``None`` with fewer than
+        3 changes.
+    """
+    if len(changes) < 3:
+        return None
+
+    values = np.asarray(changes, dtype=float)
+    generator = np.random.default_rng(seed)
+    medians = np.median(values[generator.integers(0, len(values), size=(resamples, len(values)))], axis=1)
+
+    return {'lo': float(np.percentile(medians, 2.5)), 'hi': float(np.percentile(medians, 97.5))}
 
 
 def sign_test(n: int, k: int) -> Optional[dict]:

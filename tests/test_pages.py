@@ -1,5 +1,6 @@
 """Tests de las páginas servidas por los controladores (`Page`, `Index`, `Promedios`, `Redirect`, `Casas`...) con el
 arnés ASGI."""
+import copy
 import json
 import os
 import re
@@ -5702,6 +5703,83 @@ def test_herd_chance_text():
         None, 'menos de 1 entre 1.000', '1 entre 769', '1 entre 20', 'como una moneda']
 
 
+def test_herd_ci_and_pooled_texts():
+    ci, pooled, both = pages.herd.ci_text, pages.herd.pooled_text, pages.herd.pooled_both_text
+    assert ci({'ci': {'lo': -0.348, 'hi': -0.032}}) == 'entre el 3 y el 35 %'
+    assert ci({'ci': {'lo': -0.281, 'hi': 0.186}}) == 'entre una subida del 19 % y una bajada del 28 %'
+    assert ci({'ci': {'lo': 0.05, 'hi': 0.12}}) == 'entre el 5 y el 12 % de subida'
+    assert ci({'ci': {'lo': -0.152, 'hi': -0.148}}) == 'en torno al 15 %' and ci({}) is None
+    assert ci({'ci': {'lo': 0.101, 'hi': 0.104}}) == 'en torno al 10 % de subida'
+    ff = {'pooled': {'change': -0.274, 'p': 0.0}}
+    assert pooled(ff, 'al final', 'lejos de la votación') == (
+        'Con todas las parejas de todas las elecciones juntas, la separación al final es un 27 % menor que lejos de '
+        'la votación: por azar, menos de 1 entre 1.000.')
+    assert pooled({'pooled': {'change': 0.004, 'p': 0.5}}, 'al final', 'lejos') == (
+        'Con todas las parejas de todas las elecciones juntas, la separación al final es igual que lejos: como una '
+        'moneda.')
+    assert pooled({}, 'al final', 'lejos') is None
+    text = both({'pooled': {'change': -0.232, 'p': 0.0}}, {'pooled': {'change': -0.062, 'p': 0.0575}})
+    assert text == ('Con todas las parejas juntas: un 23 % menos en las tres últimas semanas que entre 3 y 8 semanas '
+                    'antes (por azar, menos de 1 entre 1.000), y un 6 % menos hasta tres semanas antes que lejos '
+                    '(por azar, 1 entre 17).')
+    assert both({'pooled': {'change': 0.08, 'p': 0.9}}, {}) == (
+        'Con todas las parejas juntas: un 8 % más en las tres últimas semanas que entre 3 y 8 semanas antes (como una '
+        'moneda).')
+    assert both({}, {}) is None
+
+
+def test_herd_robustness_text_and_rows():
+    summary = fixture_data('rebano-summary')
+    assert pages.herd.robustness_text(summary) == (
+        'Con 3, 5, 7 o 10 días entre los dos sondeos, la bajada conjunta al final queda entre el 23 y el 27 %, y en '
+        'las tres últimas semanas entre el 21 y el 23 %; el recuento de elecciones que se acercan al final va de 11 '
+        'de 18 con 3 días a 19 de 23 con 7. Con un mínimo de 6 comparaciones por pareja de casas (dos parejas de '
+        'sondeos) quedan pocas elecciones: la tabla las enseña.')
+    rows = pages.herd.robustness_rows(summary)
+    assert len(rows) == 8 and rows[0]['default'] is True and (rows[0]['pair_days'], rows[0]['min_rows']) == (7, 3)
+    assert rows[0]['far_final'] == {'count': '19 de 23', 'change': '−27 %', 'chance': 'menos de 1 entre 1.000'}
+    assert rows[1]['far_final'] == {'count': '11 de 18', 'change': '−23 %', 'chance': 'menos de 1 entre 1.000'}
+    assert rows[2]['far_final'] == {'count': '2 de 3', 'change': '−6 %', 'chance': 'como una moneda'}
+    assert [(r['pair_days'], r['min_rows']) for r in rows] == [
+        (7, 3), (3, 3), (3, 6), (5, 3), (5, 6), (7, 6), (10, 3), (10, 6)]
+    assert pages.herd.robustness_text({}) is None and pages.herd.robustness_rows({}) == []
+    # a cell without elections: dashes
+    empty = dict(summary, robustness={'pair_days': [3], 'min_rows': [6], 'rows': [
+        {'pair_days': 3, 'min_rows': 6, 'default': False, 'comparison': 'far_final', 'n': 0, 'k': 0,
+         'median_change': None, 'change': None, 'p': None}]})
+    assert pages.herd.robustness_rows(empty)[0]['far_final'] == {'count': '–', 'change': '–', 'chance': '–'}
+    assert pages.herd.robustness_text(empty) is None
+
+
+def test_herd_robustness_text_guards():
+    summary = fixture_data('rebano-summary')
+    rows = summary['robustness']['rows']
+
+    # a rise in any cell of the sentence: the table speaks for itself
+    rising = copy.deepcopy(summary)
+    cell = next(r for r in rising['robustness']['rows']
+                if (r['pair_days'], r['min_rows'], r['comparison']) == (3, 3, 'far_final'))
+    cell['change'] = 0.12
+    assert pages.herd.robustness_text(rising) is None
+
+    # a malformed row (n without k) does not raise: its count is skipped
+    broken = copy.deepcopy(summary)
+    cell = next(r for r in broken['robustness']['rows']
+                if (r['pair_days'], r['min_rows'], r['comparison']) == (3, 3, 'far_final'))
+    cell.update(n=10, k=None)
+    text = pages.herd.robustness_text(broken)
+    assert 'va de 14 de 20 con 5 días a 19 de 23 con 7' in text and 'None' not in text
+
+    # the warning is only for a larger minimum, in parentheses only for 6
+    clause = 'Con un mínimo de'
+    for min_rows, expected in (([1, 3], None), ([3, 8], 'Con un mínimo de 8 comparaciones por pareja de casas '
+                                                        'quedan pocas elecciones: la tabla las enseña.')):
+        other = copy.deepcopy(summary)
+        other['robustness']['min_rows'] = min_rows
+        text = pages.herd.robustness_text(other)
+        assert (clause not in text) if expected is None else text.endswith(expected)
+
+
 def test_herd_verdicts_branches():
     v = pages.herd.verdicts
     sig = {'n': 23, 'k': 19, 'sign_p': 0.0013}
@@ -5837,7 +5915,7 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     assert '19 de 23' in text and '23 de 29' in text and '9 de 17' in text and 'como una moneda' in text
     assert '1 entre 769' in text and 'sólo en 3 la bajada es clara por sí sola' in text
     assert 'El tramo de las tres últimas semanas empieza el 9 de noviembre.' in text
-    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 2  # elections + weeks CSVs
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 3  # elections + weeks + robustness CSVs
     assert 'id="weeks-chart"' in page and 'matrix' not in page and 'id="initial-data"' in page
     for slug in ('resumen', 'pregunta-1', 'pregunta-2', 'directo', 'como', 'datos'):
         assert 'rebano-%s.png' % slug in page, slug
@@ -5856,9 +5934,36 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     assert 'más de lo que cabría esperar sólo por el azar' in text and 'el azar permite' not in text
     assert 'difieren lo que cabría esperar de sus muestras' in text and 'promedio' not in low
     assert 'al menos 3 comparaciones (pareja de sondeos y partido) por pareja de casas en cada tramo' in text
-    assert 'baraja 2.000 veces el tramo de cada comparación, dentro de cada pareja de casas' in text
+    assert ('baraja 2.000 veces el tramo de cada pareja de sondeos, con sus partidos juntos, '
+            'dentro de cada pareja de casas') in text
+    assert 'prueba conjunta' in text and 'remuestrear las elecciones 2.000 veces' in text
+    assert 'intervalo (95 %) de la bajada mediana' in text
+    assert 'con 3, 5, 7 y 10 días entre sondeos' in text
+    assert 'bajada mediana del 15 % (entre el 3 y el 35 %)' in text
+    assert 'un 27 % menor que lejos de la votación: por azar, menos de 1 entre 1.000' in text
+    assert 'Con todas las parejas juntas: un 23 % menos en las tres últimas semanas' in text
+    assert '(entre el 2 y el 27 %)' in text and 'id="robustness-table"' in page
+    assert 'Con otros días entre sondeos y otro mínimo de comparaciones' in text
+    assert page.count('<tr class="is-default">') == 1
+    assert 'en los recuentos, una elección con muchos sondeos no pesa más' in text
     assert 'Las generales entran más a menudo' in text and 'a veces una sola pareja de sondeos' in text
     assert 'class="stack herd-page"' in page
+
+
+def test_herd_page_without_pooled_ci_or_robustness(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    summary = fixture_data('rebano-summary')
+    comparisons = {key: {name: value for name, value in comparison.items() if name not in ('pooled', 'ci')}
+                   for key, comparison in summary['comparisons'].items()}
+    publish_study(fresh_app.fs, study='rebano', parts={'summary': {'comparisons': comparisons, 'robustness': {}}})
+    status, page, text = herd_page(api)
+    assert status == 200 and 'bajada mediana del 15 %' in text and '1 entre 769' in text
+    assert 'Con todas las parejas' not in text and 'entre el 3 y el 35 %' not in text
+    assert 'robustness-table' not in page and 'Con otros días' not in text
+    for absent in ('prueba conjunta', 'intervalo (95 %)', 'La robustez repite', 'en la prueba conjunta sí pesa más'):
+        assert absent not in text
+    assert 'así una elección con muchos sondeos no pesa más que otra con pocos.' in text
+    assert_public_wording(page, '/analisis/rebano')
 
 
 def test_herd_page_bars_and_squares(api, fresh_app, monkeypatch):

@@ -552,25 +552,35 @@ republica la acción `studies` del publicador y, como último paso, `update`:
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
 | `meta` | `rebano-meta@1` | `study`, `title`, `subtitle`, `scope`, `election` (dict o `null`), `params` (dict), `inputs` (dict), `sources` (lista de `{label, url}`), `commit` (texto o `null`), `dirty`, `versions` (dict), `seconds` (dict) |
-| `summary` | `rebano-summary@1` | `n_elections`, `n_scopes`, `since_year` (texto o `null`: el primer año de las elecciones que entran en alguna comparación), `comparisons` (dict), `kinds` (dict) |
+| `summary` | `rebano-summary@1` | `n_elections`, `n_scopes`, `since_year` (texto o `null`: el primer año de las elecciones que entran en alguna comparación), `comparisons` (dict), `kinds` (dict), `robustness` (dict: `pair_days`, `min_rows`, `rows`) |
 | `elections` | `rebano-elections@1` | `rows` (lista) |
 | `current` | `rebano-current@1` | `current` (dict o `null`) |
 | `weeks` | `rebano-weeks@1` | `buckets` (lista de `{lo, hi, label}`, del más lejano al más cercano), `rows` (una por elección y tramo: `{event_date, label, current, lo, hi, pairs, comparisons, ratio}`, `ratio` o `null`), `mean` (lista de `{lo, hi, k, ratio}`) |
 
 - `summary.comparisons` tiene `far_final`, `far_mid` y `mid_final`, cada una `{n, k, sign_p, clear, median_change,
-  since_year}`: elecciones con resultado, las que bajan, la prueba del signo, las que bajan con permutación por debajo
-  de 0,05, la mediana del cambio y el primer año de las elecciones de esa comparación (texto o `null`).
+  since_year, pooled, ci}`: elecciones con resultado, las que bajan, la prueba del signo, las que bajan con permutación por debajo
+  de 0,05, la mediana del cambio y el primer año de las elecciones de esa comparación (texto o `null`). `pooled` es el
+  cambio conjunto (dict o `null`: `elections`, `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b`, `change`, `p`; `p` es la proporción de las
+  `permutations` barajas con una bajada igual o mayor que la observada: 0.0 = ninguna de 2.000) y `ci` el intervalo del
+  95 % (percentiles 2,5 y 97,5) de la mediana del cambio, por bootstrap de las elecciones (`{lo, hi}` o `null`).
+  `summary.robustness` repite el análisis con otros días entre sondeos y otro mínimo de comparaciones: `pair_days` y
+  `min_rows` son los valores probados y `rows` una fila por combinación y comparación `{pair_days, min_rows, default,
+  comparison, n, k, median_change, change, p}` (`default` marca la combinación publicada; `p` es la del cambio
+  conjunto, la proporción de las `permutations` barajas con una bajada igual o mayor que la observada; una celda vacía
+  tiene `n` y `k` en 0 y el resto `null`).
   `summary.kinds` tiene `generales` y `autonómicas`: el mismo recuento de `far_final` (sin `since_year`).
 - Cada fila de `elections` es una elección y una comparación: `scope`, `event_date`, `label`, `kind`, `comparison`,
-  `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b` (dos decimales), `change` (tres decimales), `falls`, `p`.
+  `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b` (dos decimales), `change` (tres decimales), `falls`, `p` (permutación
+  de las parejas de sondeos dentro de cada pareja de casas).
 - `current.current` es la elección en curso (`null` sin ella): `scope`, `event_date`, `label`, `days_left`, `as_of`,
   `windows` (`{mid, final}`, el primer día de cada tramo) y `far_mid` y `mid_final` (una fila como las de
   `elections`, sin `kind` ni `comparison`, o `null`).
 
-Gemelos CSV: `elections` y `weeks`, con el nombre de la parte. `weeks` es largo: una fila por elección y tramo más
+Gemelos CSV: `elections` y `weeks`, con el nombre de la parte, y `robustness` (de `summary`: una fila por
+combinación y comparación, con `n` y `k` enteros). `weeks` es largo: una fila por elección y tramo más
 las filas «Media» (`label` «Media», con `event_date`, `pairs` y `comparisons` vacíos).
 
-`meta`, `summary` y `current` no tienen gemelo.
+`meta` y `current` no tienen gemelo; `summary` sólo el de `robustness`.
 
 ### `voto-oculto`
 
@@ -887,9 +897,9 @@ sobrescriben en cada publicación.
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
-| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`, `voto-oculto`, `andorra`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `elections`, `current`, `weeks`; `voto-oculto`: `meta`, `summary`, `elections`, `groups`; `andorra`: `meta`, `summary`, `pairs`, `elections`, `cells`, `houses`, `latest`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `elections`, `weeks`; de `voto-oculto`: `elections`, `groups`; de `andorra`: `pairs`, `elections`, `cells`, `houses`, `latest-polls` (`latest`) |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`, `voto-oculto`, `andorra`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `elections`, `current`, `weeks`; `voto-oculto`: `meta`, `summary`, `elections`, `groups`; `andorra`: `meta`, `summary`, `pairs`, `elections`, `cells`, `houses`, `latest`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `elections`, `weeks`, `robustness` (`summary`); de `voto-oculto`: `elections`, `groups`; de `andorra`: `pairs`, `elections`, `cells`, `houses`, `latest-polls` (`latest`) |
 
-- `meta`, `placement` y `summary` no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
+- `meta`, `placement` y `summary` (salvo el de `rebano`, que tiene `robustness`) no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
   no pertenece a la parte.
 - Un estudio está publicado cuando tiene `meta.json`; `studies` lista solo los publicados.
 

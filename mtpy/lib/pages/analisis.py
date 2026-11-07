@@ -64,6 +64,8 @@ CSV_LABELS = {
     'rebano': {
         'elections': 'Comparaciones por elección: las mismas parejas de casas en cada tramo',
         'weeks': 'Separación entre casas por elección y tramo de semanas (generales desde 2008 y la elección en curso)',
+        'robustness': ('Robustez: recuentos y cambio conjunto con otros días entre sondeos y otro mínimo de '
+                       'comparaciones'),
     },
     'voto-oculto': {
         'elections': 'Error de los sondeos finales por elección, bloque y partido',
@@ -690,8 +692,10 @@ def herd_context(state: dict) -> dict:
         ``state``), ``verdicts`` (``herd.verdicts``), ``kpis``,
         ``bars`` (``herd.bars`` of the ``elections`` rows), ``squares`` (``far_mid`` and ``mid_final``), ``live``
         (``herd.live_text``), ``live_rows`` (``herd.live_rows``), ``chance`` (per comparison: the probability of its
-        sign test in words), ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags``
-        (``has_run``, ``held``, ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``,
+        sign test in words), ``ci`` (the interval of the median change of ``far_final`` and ``mid_final``),
+        ``pooled`` (the sentences of the joint test: ``far_final`` and ``both``), ``robustness_text`` and
+        ``robustness_rows`` (the note of robustness), ``csv_links``, ``sources``, ``published_at`` and the flags of
+        ``herd.flags`` (``has_run``, ``held``, ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``,
         ``final_start``, ``final_started``).
 
     Raises
@@ -720,6 +724,13 @@ def herd_context(state: dict) -> dict:
         live=herd.live_text(current, flag),
         live_rows=herd.live_rows(current),
         chance={key: herd.chance_text(_get(summary, 'comparisons', key, 'sign_p')) for key in HERD_COMPARISONS},
+        ci={key: herd.ci_text(_get(summary, 'comparisons', key)) for key in ('far_final', 'mid_final')},
+        pooled={'far_final': herd.pooled_text(_get(summary, 'comparisons', 'far_final'), 'al final',
+                                              'lejos de la votación'),
+                'both': herd.pooled_both_text(_get(summary, 'comparisons', 'mid_final'),
+                                              _get(summary, 'comparisons', 'far_mid'))},
+        robustness_text=herd.robustness_text(summary),
+        robustness_rows=herd.robustness_rows(summary),
         csv_links=_csv_links(herd.HERD),
         sources=meta.get('sources') or [],
         published_at=_published_at(herd.HERD),

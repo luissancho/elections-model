@@ -68,11 +68,12 @@ def test_compute_herd_rows(fresh_app, tmp_path):
     g19 = rows[('Generales 2019', 'far_final')]
     assert (g19['pairs'], g19['rows_a'], g19['rows_b'], g19['r_a'], g19['r_b'], g19['change'], g19['falls']) == (
         1, 4, 4, 1.41, 0.35, -0.749, True)
-    assert abs(g19['p'] - 0.214) < 0.03           # exact 15/70
+    assert abs(g19['p'] - 1 / 6) < 0.03           # exact 1/6: 4 blocks (2 pairs of polls per period)
     assert rows[('Generales 2019', 'far_mid')]['change'] == -0.248
     assert rows[('Generales 2019', 'mid_final')]['change'] == -0.667
     g23 = rows[('Generales 2023', 'far_final')]
     assert (g23['r_a'], g23['r_b'], g23['change'], g23['falls'], g23['kind']) == (0.35, 1.06, 1.986, False, 'generales')
+    assert abs(g23['p'] - 1.0) < 1e-9              # the observed rise is the largest of the 10 arrangements
     assert set(g19) == {'scope', 'event_date', 'label', 'kind', 'comparison', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
                         'change', 'falls', 'p'}
 
@@ -80,15 +81,48 @@ def test_compute_herd_rows(fresh_app, tmp_path):
 def test_compute_herd_summary(fresh_app, tmp_path):
     s = compute(tmp_path).summary
     assert (s['n_elections'], s['n_scopes'], s['since_year']) == (2, 1, '2019')
-    assert s['comparisons']['far_final'] == {'n': 2, 'k': 1, 'sign_p': 0.75, 'clear': 0, 'median_change': 0.62,
-                                             'since_year': '2019'}
-    assert s['comparisons']['far_mid'] == {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25,
-                                           'since_year': '2019'}
-    assert s['comparisons']['mid_final'] == {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67,
-                                             'since_year': '2019'}
-    # exact permutation p: far_mid 23/70, mid_final 15/70: neither is clear
+    tally = ('n', 'k', 'sign_p', 'clear', 'median_change', 'since_year')
+    assert {k: s['comparisons']['far_final'][k] for k in tally} == {
+        'n': 2, 'k': 1, 'sign_p': 0.75, 'clear': 0, 'median_change': 0.62, 'since_year': '2019'}
+    assert {k: s['comparisons']['far_mid'][k] for k in tally} == {
+        'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25, 'since_year': '2019'}
+    assert {k: s['comparisons']['mid_final'][k] for k in tally} == {
+        'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67, 'since_year': '2019'}
+    ff = s['comparisons']['far_final']
+    pooled = ff['pooled']
+    assert {k: pooled[k] for k in ('elections', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b', 'change')} == {
+        'elections': 2, 'pairs': 2, 'rows_a': 8, 'rows_b': 10, 'r_a': 0.98, 'r_b': 0.81, 'change': -0.173}
+    assert abs(pooled['p'] - 22 / 60) < 0.03 and ff['ci'] is None       # 2 elections: no interval
+    fm = s['comparisons']['far_mid']
+    assert fm['pooled']['change'] == -0.248 and abs(fm['pooled']['p'] - 1 / 6) < 0.03 and fm['ci'] is None
+    assert s['comparisons']['mid_final']['pooled']['change'] == -0.667
     assert s['kinds']['autonómicas'] == {'n': 0, 'k': 0, 'sign_p': None, 'clear': 0, 'median_change': None}
     assert s['kinds']['generales']['n'] == 2
+
+
+def test_compute_herd_robustness(fresh_app, tmp_path):
+    study = compute(tmp_path)
+    r = study.summary['robustness']
+    assert r['pair_days'] == [3, 5, 7, 10] and r['min_rows'] == [3, 6] and len(r['rows']) == 24
+    assert [(row['pair_days'], row['min_rows'], row['comparison']) for row in r['rows'][:4]] == [
+        (3, 3, 'far_final'), (3, 3, 'far_mid'), (3, 3, 'mid_final'), (3, 6, 'far_final')]
+    default = {row['comparison']: row for row in r['rows'] if row['default']}
+    s = study.summary['comparisons']
+    assert set(default) == set(COMPARISONS)
+    assert all(row['pair_days'] == 7 and row['min_rows'] == 3 for row in default.values())
+    for key, row in default.items():
+        # the summary publishes the median at two decimals, the grid at three
+        assert (row['n'], row['k'], round(row['median_change'], 2), row['change'], row['p']) == (
+            s[key]['n'], s[key]['k'], s[key]['median_change'], s[key]['pooled']['change'], s[key]['pooled']['p'])
+    d3 = next(row for row in r['rows'] if (row['pair_days'], row['min_rows'], row['comparison']) == (3, 3, 'far_final'))
+    assert (d3['n'], d3['k'], d3['median_change'], d3['change']) == (2, 1, 0.618, -0.234)
+    empty = next(row for row in r['rows']
+                 if (row['pair_days'], row['min_rows'], row['comparison']) == (3, 6, 'far_final'))
+    assert empty == {'pair_days': 3, 'min_rows': 6, 'default': False, 'comparison': 'far_final', 'n': 0, 'k': 0,
+                     'median_change': None, 'change': None, 'p': None}
+    ten = next(row for row in r['rows']
+               if (row['pair_days'], row['min_rows'], row['comparison']) == (10, 6, 'mid_final'))
+    assert (ten['n'], ten['k'], ten['change']) == (1, 1, -0.667)
 
 
 def test_compute_herd_current(fresh_app, tmp_path):

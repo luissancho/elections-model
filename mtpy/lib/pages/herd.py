@@ -53,9 +53,9 @@ def short_day(iso: Optional[str]) -> Optional[str]:
     return '{}-{}'.format(day.day, MONTHS_LONG[day.month - 1][0].upper()) if day else None
 
 
-def names(items: list) -> str:
-    """A list in prose: «A, B y C» (``''`` when empty)."""
-    return ', '.join(items[:-1]) + ' y ' + items[-1] if len(items) > 1 else ''.join(items)
+def names(items: list, conjunction: str = 'y') -> str:
+    """A list in prose: «A, B y C» (``''`` when empty); ``conjunction`` is «y» or «o»."""
+    return ', '.join(items[:-1]) + ' ' + conjunction + ' ' + items[-1] if len(items) > 1 else ''.join(items)
 
 
 def today() -> date:
@@ -487,3 +487,251 @@ def weeks_since(weeks: Optional[dict]) -> Optional[str]:
              if not row.get('current') and _is_num(row.get('ratio'))]
 
     return min(dates)[:4] if dates else None
+
+
+def _whole(x) -> int:
+    """A fraction as the whole percentage the page writes (``round(abs(x) * 100)``)."""
+    return round(abs(x) * 100)
+
+
+def ci_text(comparison: Optional[dict]) -> Optional[str]:
+    """
+    The interval of the median change of a comparison in words.
+
+    Parameters
+    ----------
+    comparison : dict or None
+        A comparison of the ``summary`` part, with its ``ci`` (``{'lo', 'hi'}`` as fractions).
+
+    Returns
+    -------
+    str or None
+        «entre el 3 y el 35 %» for an interval of falls, «entre una subida del 19 % y una bajada del 28 %» when it
+        crosses zero, «entre el 5 y el 12 % de subida» for rises, «en torno al 15 %» when both bounds round to the same
+        figure; ``None`` without a valid ``ci``.
+    """
+    lo, hi = _get(comparison, 'ci', 'lo'), _get(comparison, 'ci', 'hi')
+
+    if not (_is_num(lo) and _is_num(hi)):
+        return None
+
+    rise = lo >= 0 and hi > 0
+    first, second = sorted((_whole(lo), _whole(hi)))
+    suffix = ' de subida' if rise else ''
+
+    if lo < 0 < hi:
+        return 'entre una subida del {} % y una bajada del {} %'.format(fmt_int(_whole(hi)), fmt_int(_whole(lo)))
+
+    if first == second:
+        return 'en torno al {} %{}'.format(fmt_int(first), suffix)
+
+    return 'entre el {} y el {} %{}'.format(fmt_int(first), fmt_int(second), suffix)
+
+
+def pooled_text(comparison: Optional[dict], later: str, earlier: str) -> Optional[str]:
+    """
+    The sentence of the joint test of a comparison.
+
+    Parameters
+    ----------
+    comparison : dict or None
+        A comparison of the ``summary`` part, with its ``pooled`` block.
+    later, earlier : str
+        The two periods in words («al final», «lejos de la votación»).
+
+    Returns
+    -------
+    str or None
+        «Con todas las parejas de todas las elecciones juntas, la separación al final es un 27 % menor que lejos de la
+        votación: por azar, menos de 1 entre 1.000.»; ``None`` without ``pooled``.
+    """
+    change, p = _get(comparison, 'pooled', 'change'), _get(comparison, 'pooled', 'p')
+
+    if not _is_num(change):
+        return None
+
+    value = _whole(change)
+    odds = _odds(p)
+    tail = ': {}'.format(odds) if odds else ''
+    head = 'Con todas las parejas de todas las elecciones juntas, la separación {} '.format(later)
+
+    if not value:
+        return '{}es igual que {}{}.'.format(head, earlier, tail)
+
+    return '{}es un {} % {} que {}{}.'.format(head, fmt_int(value), 'menor' if change < 0 else 'mayor', earlier, tail)
+
+
+def _pooled_clause(comparison: Optional[dict], span: str) -> Optional[str]:
+    """One clause of ``pooled_both_text`` («un 23 % menos en las tres últimas semanas que … (odds)»), or ``None``."""
+    change = _get(comparison, 'pooled', 'change')
+
+    if not _is_num(change):
+        return None
+
+    value = _whole(change)
+    odds = _odds(_get(comparison, 'pooled', 'p'))
+    text = 'lo mismo ' + span
+
+    if value:
+        text = 'un {} % {} {}'.format(fmt_int(value), 'menos' if change < 0 else 'más', span)
+
+    return text + (' ({})'.format(odds) if odds else '')
+
+
+def pooled_both_text(mid_final: Optional[dict], far_mid: Optional[dict]) -> Optional[str]:
+    """
+    The joint test of question 2 in one sentence.
+
+    Parameters
+    ----------
+    mid_final, far_mid : dict or None
+        The comparisons of the last weeks against 3 to 8 weeks before and of 3 to 8 weeks against farther.
+
+    Returns
+    -------
+    str or None
+        «Con todas las parejas juntas: un 23 % menos en las tres últimas semanas que entre 3 y 8 semanas antes (...), y
+        un 6 % menos hasta tres semanas antes que lejos (...).» with the clauses that have ``pooled``; ``None`` without
+        any.
+    """
+    clauses = [_pooled_clause(mid_final, 'en las tres últimas semanas que entre 3 y 8 semanas antes'),
+               _pooled_clause(far_mid, 'hasta tres semanas antes que lejos')]
+    clauses = [clause for clause in clauses if clause]
+
+    if not clauses:
+        return None
+
+    return 'Con todas las parejas juntas: {}.'.format(', y '.join(clauses))
+
+
+def _robustness(summary: Optional[dict]) -> dict:
+    """The ``robustness`` block of the ``summary`` part (``{}`` when missing)."""
+    return _get(summary, 'robustness') or {}
+
+
+def _default_min_rows(summary: Optional[dict]):
+    """The ``min_rows`` of the default cell of the robustness grid (the first of the list without a default row)."""
+    block = _robustness(summary)
+
+    for row in block.get('rows') or []:
+        if row.get('default'):
+            return row.get('min_rows')
+
+    return (block.get('min_rows') or [None])[0]
+
+
+def _joined_ranges(rows: list, key: str) -> Optional[str]:
+    """«entre el 23 y el 27 %» over the ``change`` of the rows of a comparison, ``None`` without any."""
+    values = [_whole(row['change']) for row in rows if row.get('comparison') == key and _is_num(row.get('change'))]
+
+    if not values:
+        return None
+
+    low, high = min(values), max(values)
+
+    return 'en torno al {} %'.format(fmt_int(low)) if low == high else 'entre el {} y el {} %'.format(
+        fmt_int(low), fmt_int(high))
+
+
+def robustness_text(summary: Optional[dict]) -> Optional[str]:
+    """
+    The sentence that opens the robustness note.
+
+    Parameters
+    ----------
+    summary : dict or None
+        The ``summary`` part, with its ``robustness`` block.
+
+    Returns
+    -------
+    str or None
+        The range of the joint fall at the end and in the last three weeks over the grid of days between polls (at the
+        default minimum of comparisons per pair of houses), the lowest and highest count of elections that get closer
+        (by the fraction k/n, ties to the fewer days) and the warning about the larger minimum; ``None`` without any
+        joint change.
+    """
+    block = _robustness(summary)
+    minimum = _default_min_rows(summary)
+    rows = [row for row in block.get('rows') or [] if row.get('min_rows') == minimum]
+    changes = [row['change'] for row in rows if row.get('comparison') in ('far_final', 'mid_final')
+               and _is_num(row.get('change'))]
+    far = _joined_ranges(rows, 'far_final')
+    mid = _joined_ranges(rows, 'mid_final')
+
+    if far is None or mid is None or any(change >= 0 for change in changes):
+        return None  # a rise in any cell: the table speaks for itself
+
+    days = [fmt_int(day) for day in block.get('pair_days') or []]
+    counts = [row for row in rows if row.get('comparison') == 'far_final' and _is_num(row.get('k'))
+              and _is_num(row.get('n')) and row['n'] > 0]
+    listed = names(days, 'o')
+    text = ('Con {} días entre los dos sondeos, la bajada conjunta al final queda {}, y en las tres últimas '
+            'semanas {}').format(listed, far, mid)
+
+    if counts:
+        low = min(counts, key=lambda row: (row['k'] / row['n'], row['pair_days']))
+        high = min(counts, key=lambda row: (-row['k'] / row['n'], row['pair_days']))
+        cell = '{} de {} con {}'
+
+        if low is high:
+            text += '; el recuento de elecciones que se acercan al final es de ' + cell.format(
+                fmt_int(low['k']), fmt_int(low['n']), '{} días'.format(fmt_int(low['pair_days'])))
+        else:
+            text += '; el recuento de elecciones que se acercan al final va de {} días a {}'.format(
+                cell.format(fmt_int(low['k']), fmt_int(low['n']), fmt_int(low['pair_days'])),
+                cell.format(fmt_int(high['k']), fmt_int(high['n']), fmt_int(high['pair_days'])))
+
+    text += '.'
+    larger = [value for value in block.get('min_rows') or [] if _is_num(value) and _is_num(minimum) and value > minimum]
+
+    if larger:
+        top = max(larger)
+        text += (' Con un mínimo de {} comparaciones por pareja de casas{} quedan pocas elecciones: la tabla las '
+                 'enseña.').format(fmt_int(top), ' (dos parejas de sondeos)' if top == 6 else '')
+
+    return text
+
+
+def _robustness_cell(row: Optional[dict]) -> dict:
+    """The three figures of a robustness cell of one comparison: dashes without elections."""
+    if not row or not row.get('n'):
+        return {'count': DASH, 'change': DASH, 'chance': DASH}
+
+    return {'count': '{} de {}'.format(fmt_int(row.get('k')), fmt_int(row.get('n'))),
+            'change': percent(row.get('change')), 'chance': chance_text(row.get('p')) or DASH}
+
+
+def robustness_rows(summary: Optional[dict]) -> list:
+    """
+    The rows of the robustness table: one per cell of the grid of days between polls and minimum of comparisons.
+
+    Parameters
+    ----------
+    summary : dict or None
+        The ``summary`` part, with its ``robustness`` block.
+
+    Returns
+    -------
+    list of dict
+        ``{'pair_days', 'min_rows', 'default', 'far_final': {'count', 'change', 'chance'}, 'mid_final': {...}}``, the
+        default cell first and not repeated in the grid, then by days and minimum; ``[]`` without rows.
+    """
+    block = _robustness(summary)
+    rows = block.get('rows') or []
+
+    if not rows:
+        return []
+
+    cells = {}
+
+    for row in rows:
+        cells.setdefault((row.get('pair_days'), row.get('min_rows')), {})[row.get('comparison')] = row
+
+    keys = [(days, minimum) for days in block.get('pair_days') or [] for minimum in block.get('min_rows') or []]
+    keys += [key for key in cells if key not in keys]
+    default = [key for key in cells if any(row.get('default') for row in cells[key].values())][:1]
+    ordered = default + [key for key in keys if key in cells and key not in default]
+
+    return [{'pair_days': days, 'min_rows': minimum, 'default': (days, minimum) in default,
+             'far_final': _robustness_cell(cells[(days, minimum)].get('far_final')),
+             'mid_final': _robustness_cell(cells[(days, minimum)].get('mid_final'))} for days, minimum in ordered]

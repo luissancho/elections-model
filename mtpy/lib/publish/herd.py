@@ -24,6 +24,8 @@ RARE = 0.001
 ELECTION_COLUMNS = ['scope', 'event_date', 'label', 'kind', 'comparison', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
                     'change', 'falls', 'p']
 
+ROBUSTNESS_COLUMNS = ['pair_days', 'min_rows', 'default', 'comparison', 'n', 'k', 'median_change', 'change', 'p']
+
 WEEK_COLUMNS = ['event_date', 'label', 'current', 'lo', 'hi', 'pairs', 'comparisons', 'ratio']
 
 
@@ -59,9 +61,14 @@ def export_herd_summary(study) -> tuple:
     Returns
     -------
     tuple
-        ``(data, {})``: ``data`` for ``rebano-summary``.
+        ``(data, {'robustness': frame})``: ``data`` for ``rebano-summary``; the frame has the rows of the robustness
+        grid, with ``n`` and ``k`` as integers (0 in the empty cells) and ``None`` as NaN.
     """
-    return _clean(study.summary), {}
+    data = _clean(study.summary)
+    frame = pd.DataFrame(data['robustness']['rows'], columns=ROBUSTNESS_COLUMNS)
+    frame[['n', 'k']] = frame[['n', 'k']].astype('int64')
+
+    return data, {'robustness': frame}
 
 
 def export_herd_elections(study) -> tuple:

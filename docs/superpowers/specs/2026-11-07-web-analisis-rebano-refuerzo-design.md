@@ -227,3 +227,29 @@ spec para ese caso; se puede añadir después (D1 y D4 opcionales quedan escrito
 Nombres internos, el formato exacto de la tabla de robustez dentro del sistema del sitio, el orden de las filas (por
 defecto primero, luego la rejilla), la redacción de un intervalo o un rango con subida en los dos extremos, y si las
 comparaciones de la rejilla se calculan una vez con 10 días y se filtran por `pair_days`, siempre que den lo mismo.
+
+## Cierre (2026-11-08)
+
+Construido con subagentes en la rama `rebano-refuerzo` (desde dev d894e20): 29016d6 (bloques, `pooled`, `pooled_p`,
+`bootstrap_median`, parámetros), 9c039ad (resumen del estudio con `pooled`, `ci` y `robustness`), 0af5982 (esquema,
+CSV `robustness`, contrato, fixture), 165f1e6 (página) y 14693c7 (ola de correcciones tras la revisión final). Batería
+2333 passed / 81 skipped. Con datos reales (2026-11-07): conjunta lejos → final −27 % (p < 0,0005), 3-8 → final −23 %
+(p < 0,0005), lejos → 3-8 −6 % (p 0,058); intervalos [−35 %, −3 %], [−27 %, −2 %], [−28 %, +19 %]; claras 3 / 2 / 4;
+cálculo completo 41 s (antes 30).
+
+Decisiones tomadas en la ejecución: `sign_flip_p` fuera; extremos del recuento en la frase de robustez por la fracción
+k/n (empate, menos días); una celda sin elecciones es una fila con `n` 0 y nulos; el `median_change` del resumen sigue
+a 2 decimales y la rejilla a 3 (el test compara a 2); el mapa de CSV es parte → nombres (`STUDY_CSV_OF['rebano']
+['summary'] = ('robustness',)`); el intervalo se rotula «(95 %)» en el método y el contrato; la frase de robustez calla
+si alguna celda que resume sube; los textos del método se condicionan a los datos (la página queda como antes sin
+`pooled`/`ci`/`robustness`); la nota de expertos va al final de «Cómo lo medimos»; una sola fila en la tabla con
+`.is-default`; «(dos parejas de sondeos)» sólo cuando el mínimo mayor es 6 y `larger` usa `>`; `herd.names` gana
+`conjunction`. Aparcado (menores, sin segunda ola): sumas por pareja duplicadas entre `compare` y `pooled`; `_blocks`
+no asegura un periodo por bloque (se cumple por construcción); `pooled_p` desempaqueta por índice y repite
+`_shared_pairs`; la rejilla recalcula las comparaciones del `pair_days` por defecto y `pooled` dos veces por celda
+(margen de 4 s sobre los 45 del objetivo: medir de nuevo cuando entre 2026); `ci` no nulo sin test en el estudio;
+«bajada del 0 %» en `ci_text` cuando un extremo redondea a 0; sin fila `default` si los parámetros sacan la celda de
+la rejilla; docstring de `robustness_text` sin el `None` por subida; la cláusula de la mediana de la tarjeta 2 sale
+aunque no haya `ci`. Recomendación del revisor final para más adelante: p de Phipson–Smyth `(k+1)/(B+1)` en las dos
+permutaciones (nunca 0,0; cambia las «claras» cercanas a 0,05) y una cláusula en la nota de expertos sobre el peso de
+las generales grandes en la prueba conjunta.
