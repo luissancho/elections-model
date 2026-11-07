@@ -7,7 +7,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from mtpy.lib.publish.herd import WEEK_COLUMNS, _subtitle
+from mtpy.lib.publish.herd import ROBUSTNESS_COLUMNS, WEEK_COLUMNS, _subtitle
 from mtpy.lib.studies.herd.study import compute_herd
 from tests.fakes import write_herd_bundle
 from tests.test_publish_unit import fake_prov, make_writer
@@ -86,7 +86,7 @@ def test_subtitle_without_elections():
 
 def test_export_herd_parts_validate(study):
     summary, frames = publish.export_herd_summary(study)
-    assert valid('rebano-summary', summary) and frames == {}
+    assert valid('rebano-summary', summary) and set(frames) == {'robustness'}
     elections, frames = publish.export_herd_elections(study)
     valid('rebano-elections', elections)
     frame = frames['elections']
@@ -164,3 +164,23 @@ def test_publish_study_rebano_writes_weeks(tmp_path):
     assert bundle.STUDY_PARTS['rebano'][-1] == 'weeks'
     assert reader.read_json(bundle.path_study('rebano', 'weeks'))['data']['buckets']
     assert fs.exists(f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'weeks')}")
+
+
+def test_export_herd_summary_validates_and_flattens_the_robustness_grid(study):
+    summary, frames = publish.export_herd_summary(study)
+    assert valid('rebano-summary', summary)
+    frame = frames['robustness']
+    assert list(frame.columns) == ROBUSTNESS_COLUMNS and len(frame) == 24
+    assert str(frame['n'].dtype) == 'int64' and str(frame['k'].dtype) == 'int64' and frame['default'].sum() == 3
+    assert frame.loc[(frame.pair_days == 3) & (frame.min_rows == 6), 'change'].isna().all()
+
+
+def test_publish_study_rebano_writes_the_robustness_csv(tmp_path):
+    fs = FileSystem(str(tmp_path))
+    write_herd_bundle(fs)
+    publish.publish_study('rebano', make_writer(tmp_path, fs), prov=fake_prov)
+    path = f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'robustness')}"
+    assert fs.exists(path)
+    with open(os.path.join(str(tmp_path), path)) as f:
+        text = f.read()
+    assert text.splitlines()[0] == ','.join(ROBUSTNESS_COLUMNS) and ',3.0,' not in text  # counts as integers

@@ -64,6 +64,7 @@ CSV_LABELS = {
     'rebano': {
         'elections': 'Comparaciones por elección: las mismas parejas de casas en cada tramo',
         'weeks': 'Separación entre casas por elección y tramo de semanas (generales desde 2008 y la elección en curso)',
+        'robustness': 'Robustez: recuentos y cambio conjunto con otros días entre sondeos y otro mínimo de comparaciones',
     },
     'voto-oculto': {
         'elections': 'Error de los sondeos finales por elección, bloque y partido',
