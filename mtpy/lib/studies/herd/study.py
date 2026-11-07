@@ -13,7 +13,8 @@ import pandas as pd
 from ...bundle import BundleReader
 from ....core.io import FileSystem
 from .data import Election, MissingInput, load_params, read_current, read_elections
-from .stats import _sig3, by_buckets, comparisons, compare, count, permutation_p
+from .stats import (_sig3, bootstrap_median, by_buckets, comparisons, compare, count, permutation_p, pooled,
+                    pooled_p)
 
 # Each comparison: the period taken as reference and the one expected to be closer
 COMPARISONS = {'far_final': ('far', 'final'), 'far_mid': ('far', 'mid'), 'mid_final': ('mid', 'final')}
@@ -33,8 +34,13 @@ class HerdStudy:
         ``{scope, date, days_left, as_of}`` of the election in progress; ``None`` without one.
     summary : dict
         ``n_elections``, ``n_scopes``, ``since_year`` (the first year of the elections that enter any comparison),
-        ``comparisons`` (the ``count`` of each comparison with its own ``since_year``) and ``kinds`` (the ``count`` of
-        ``far_final`` by kind of election).
+        ``comparisons`` (the ``count`` of each comparison with its own ``since_year``, its ``pooled`` result over all
+        the elections, ``{elections, pairs, rows_a, rows_b, r_a, r_b, change, p}``, and the bootstrap interval ``ci``
+        ``{lo, hi}`` of the median change, ``None`` with fewer than 3 elections), ``kinds`` (the ``count`` of
+        ``far_final`` by kind of election) and ``robustness`` (``pair_days`` and ``min_rows``, the values tried, and
+        ``rows``: one per ``pair_days``, ``min_rows`` and comparison, in that order, with ``default``, ``n``, ``k``,
+        ``median_change``, ``change`` and ``p``; a cell without elections has ``n`` and ``k`` 0 and ``None`` in the
+        rest).
     elections : list of dict
         One row per past election and comparison with a result (see ``_row``), in the order of the elections.
     weeks : dict
@@ -112,6 +118,84 @@ def _count(results: list) -> dict:
     return tally
 
 
+def _pooled_block(rows_by_election: list, key: str, params: dict, changes: list) -> dict:
+    """
+    The pooled result and the interval of the median change of a comparison.
+
+    Parameters
+    ----------
+    rows_by_election : list of pandas.DataFrame
+        The ``comparisons`` of the elections with a result in the comparison ``key``.
+    key : str
+        Key of ``COMPARISONS``.
+    params : dict
+        Parameters of the study; uses ``min_rows``, ``permutations``, ``resamples`` and ``seed``.
+    changes : list of float
+        The unrounded change of each of those elections.
+
+    Returns
+    -------
+    dict
+        ``pooled`` (ratios at two decimals, change at three, ``p`` at three significant figures; ``None`` without
+        pairs) and ``ci`` (``{lo, hi}`` at three decimals; ``None`` with fewer than 3 changes).
+    """
+    a, b = COMPARISONS[key]
+    result = pooled(rows_by_election, a, b, params['min_rows'])
+    interval = bootstrap_median(changes, params['resamples'], params['seed'])
+
+    if result is not None:
+        p = pooled_p(rows_by_election, a, b, params['min_rows'], params['permutations'], params['seed'])
+        result = {'elections': result['elections'], 'pairs': result['pairs'], 'rows_a': result['rows_a'],
+                  'rows_b': result['rows_b'], 'r_a': round(result['r_a'], 2), 'r_b': round(result['r_b'], 2),
+                  'change': round(result['change'], 3), 'p': _sig3(p)}
+
+    return {'pooled': result, 'ci': None if interval is None else {k: round(v, 3) for k, v in interval.items()}}
+
+
+def _robustness(elections: list, params: dict) -> dict:
+    """
+    The main results over a grid of ``pair_days`` and ``min_rows``.
+
+    Parameters
+    ----------
+    elections : list of Election
+        The past elections.
+    params : dict
+        Parameters of the study; ``robustness`` holds the ``pair_days`` and ``min_rows`` values of the grid.
+
+    Returns
+    -------
+    dict
+        ``pair_days`` and ``min_rows`` (the grid values) and ``rows``: for each ``pair_days`` (outer), ``min_rows``
+        (inner) and comparison, ``{pair_days, min_rows, default, comparison, n, k, median_change, change, p}`` with
+        the median change and the pooled change at three decimals and ``p`` the pooled one (three significant
+        figures); a cell without elections has ``n`` and ``k`` 0 and ``None`` in the rest.
+    """
+    grid = params['robustness']
+    rows = []
+
+    for pair_days in grid['pair_days']:
+        cell_rows = [comparisons(election.polls, election.names, params | {'pair_days': pair_days})
+                     for election in elections]
+
+        for min_rows in grid['min_rows']:
+            for key, (a, b) in COMPARISONS.items():
+                compared = [(r, compare(r, a, b, min_rows)) for r in cell_rows]
+                used = [r for r, result in compared if result is not None]
+                tally = count([result | {'p': 1.0} for _, result in compared if result is not None])
+                result = pooled(used, a, b, min_rows)
+                p = None if result is None else _sig3(
+                    pooled_p(used, a, b, min_rows, params['permutations'], params['seed']))
+                median = tally['median_change']
+                rows.append({'pair_days': pair_days, 'min_rows': min_rows,
+                             'default': pair_days == params['pair_days'] and min_rows == params['min_rows'],
+                             'comparison': key, 'n': tally['n'], 'k': tally['k'],
+                             'median_change': None if median is None else round(median, 3),
+                             'change': None if result is None else round(result['change'], 3), 'p': p})
+
+    return {'pair_days': list(grid['pair_days']), 'min_rows': list(grid['min_rows']), 'rows': rows}
+
+
 def _since_year(dates: list) -> Optional[str]:
     """The year of the first of ``dates`` (ISO), ``None`` without dates."""
     return min(dates)[:4] if dates else None
@@ -155,6 +239,7 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
     raw_kinds = {kind: [] for kind in KINDS}
     counted = []
     all_rows = {}
+    pooled_rows = {key: [] for key in COMPARISONS}
 
     for election in elections:
         all_rows[election.event_date, election.scope] = comparisons(election.polls, election.names, params)
@@ -167,6 +252,7 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
             rows.append(_row(election, result) | {'kind': election.kind, 'comparison': key})
             raw[key].append(result)
             dates[key].append(election.event_date)
+            pooled_rows[key].append(all_rows[election.event_date, election.scope])
 
             if key == 'far_final':
                 raw_kinds[election.kind].append(result)
@@ -174,8 +260,10 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
     summary = {'n_elections': len(counted), 'n_scopes': len({election.scope for election in counted}),
                'since_year': _since_year([election.event_date for election in counted]),
                'comparisons': {key: _count(results) | {'since_year': _since_year(dates[key])}
+                               | _pooled_block(pooled_rows[key], key, params, [r['change'] for r in results])
                                for key, results in raw.items()},
-               'kinds': {kind: _count(results) for kind, results in raw_kinds.items()}}
+               'kinds': {kind: _count(results) for kind, results in raw_kinds.items()},
+               'robustness': _robustness(elections, params)}
 
     current_rows = None if current is None else comparisons(current.polls, current.names, params)
     weeks = _weeks(elections, all_rows, current, current_rows, params)
