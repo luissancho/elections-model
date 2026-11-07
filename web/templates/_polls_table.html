@@ -1,6 +1,7 @@
 {#- "Todas las encuestas": the controls (hidden until the browser wires them), the table the server renders with
     the `PAGE_SIZE` most recent polls (the house linked to its profile, its rating as a badge from red at 0 through
-    grey at 50 to green at 100), the scroll hint and the pagination. Shared by Promedios and the detail of a past
+    grey at 50 to green at 100, its weight as a bar from 0 to the largest of the cycle with the factors in the
+    tooltip, the days of the fieldwork), the scroll hint and the pagination. Shared by Promedios and the detail of a past
     election; needs `has_seats`, `table_parties`, `catalog`, `pollsters`, `months`, `table_total`, `csv_href`,
     `table` (`polls_table`) and `fixed_rows` (the rows pinned under the mean: the model and the result in the detail
     of a past election, `fixed_rows`; empty in Promedios) in the context, and `wirePollsTable` of
@@ -53,13 +54,14 @@
         <div class="et-wrap">
           <table class="et" id="polls-table">
             <colgroup>
-              <col class="c-f"><col class="c-r"><col class="c-d"><col class="c-s">
+              <col class="c-f"><col class="c-r"><col class="c-w"><col class="c-d"><col class="c-s">
               {% for name in table_parties %}<col class="c-p">{% endfor %}
             </colgroup>
             <thead>
               <tr>
                 <th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>
                 <th scope="col" data-key="rating" title="Rating de la encuestadora, de 0 a 100: cuanto más alto, más pesa su sondeo en el promedio. Rojo por debajo de 50, verde por encima."><button type="button" class="sort">Rating (0-100)</button></th>
+                <th scope="col" data-key="weight" title="Peso del sondeo en el promedio: muestra × dispersión × frecuencia × rating de la encuestadora, sin la cercanía al día estimado. La barra va de 0 al mayor peso del ciclo."><button type="button" class="sort">Peso</button></th>
                 <th scope="col" data-key="date" aria-sort="descending" title="Días del trabajo de campo del sondeo"><button type="button" class="sort">Fecha</button></th>
                 <th scope="col" data-key="sample_size"><button type="button" class="sort">Muestra</button></th>
                 {% for name in table_parties %}
@@ -72,6 +74,7 @@
               <tr>
                 <td class="f l">{% if row.href %}<a href="{{ row.href }}"><b>{{ row.pollster }}</b></a>{% else %}<b>{{ row.pollster }}</b>{% endif %}<small>{{ row.sponsor or '—' }}</small></td>
                 {% if row.rating_color %}<td><span class="rt" style="background: {{ row.rating_color }}">{{ row.rating }}</span></td>{% else %}<td class="na">—</td>{% endif %}
+                {% if row.weight == '–' %}<td class="na">—</td>{% else %}<td class="cell-bar{% if row.weight_zero %} na{% endif %}"{% if row.weight_title %} title="{{ row.weight_title }}"{% endif %}><i class="fill w" style="left: 0; width: {{ row.weight_bar }}%"></i><span>{{ row.weight }}</span></td>{% endif %}
                 <td{% if row.fieldwork %} title="{{ row.fieldwork }}"{% endif %}>{{ row.date }}</td>
                 <td>{{ row.sample }}</td>
                 {% for cell in row.cells %}
@@ -88,6 +91,7 @@
                 <td></td>
                 <td></td>
                 <td></td>
+                <td></td>
                 {% for cell in table.mean.cells %}
                 {% if cell.leader %}<td class="p mx" style="background: {{ cell.color }}24">{{ cell.value }}</td>
                 {% elif cell.value == '–' %}<td class="p na">—</td>
@@ -97,6 +101,7 @@
               {% for row in fixed_rows %}
               <tr class="fixed">
                 <td class="f l"{% if row.title %} title="{{ row.title }}"{% endif %}><b>{{ row.label }}</b><small>{{ row.small }}</small></td>
+                <td></td>
                 <td></td>
                 <td></td>
                 <td></td>
