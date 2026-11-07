@@ -64,7 +64,8 @@ CSV_LABELS = {
     'rebano': {
         'elections': 'Comparaciones por elección: las mismas parejas de casas en cada tramo',
         'weeks': 'Separación entre casas por elección y tramo de semanas (generales desde 2008 y la elección en curso)',
-        'robustness': 'Robustez: recuentos y cambio conjunto con otros días entre sondeos y otro mínimo de comparaciones',
+        'robustness': ('Robustez: recuentos y cambio conjunto con otros días entre sondeos y otro mínimo de '
+                       'comparaciones'),
     },
     'voto-oculto': {
         'elections': 'Error de los sondeos finales por elección, bloque y partido',
@@ -693,8 +694,8 @@ def herd_context(state: dict) -> dict:
         (``herd.live_text``), ``live_rows`` (``herd.live_rows``), ``chance`` (per comparison: the probability of its
         sign test in words), ``ci`` (the interval of the median change of ``far_final`` and ``mid_final``),
         ``pooled`` (the sentences of the joint test: ``far_final`` and ``both``), ``robustness_text`` and
-        ``robustness_rows`` (the note of robustness), ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags``
-        (``has_run``, ``held``, ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``,
+        ``robustness_rows`` (the note of robustness), ``csv_links``, ``sources``, ``published_at`` and the flags of
+        ``herd.flags`` (``has_run``, ``held``, ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``,
         ``final_start``, ``final_started``).
 
     Raises

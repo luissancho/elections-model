@@ -560,12 +560,14 @@ republica la acción `studies` del publicador y, como último paso, `update`:
 - `summary.comparisons` tiene `far_final`, `far_mid` y `mid_final`, cada una `{n, k, sign_p, clear, median_change,
   since_year, pooled, ci}`: elecciones con resultado, las que bajan, la prueba del signo, las que bajan con permutación por debajo
   de 0,05, la mediana del cambio y el primer año de las elecciones de esa comparación (texto o `null`). `pooled` es el
-  cambio conjunto (dict o `null`: `elections`, `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b`, `change`, `p`) y `ci` el
-  intervalo de la mediana por bootstrap (`{lo, hi}` o `null`).
+  cambio conjunto (dict o `null`: `elections`, `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b`, `change`, `p`; `p` es la proporción de las
+  `permutations` barajas con una bajada igual o mayor que la observada: 0.0 = ninguna de 2.000) y `ci` el intervalo del
+  95 % (percentiles 2,5 y 97,5) de la mediana del cambio, por bootstrap de las elecciones (`{lo, hi}` o `null`).
   `summary.robustness` repite el análisis con otros días entre sondeos y otro mínimo de comparaciones: `pair_days` y
   `min_rows` son los valores probados y `rows` una fila por combinación y comparación `{pair_days, min_rows, default,
-  comparison, n, k, median_change, change, p}` (`default` marca la combinación publicada; una celda vacía tiene `n` y
-  `k` en 0 y el resto `null`).
+  comparison, n, k, median_change, change, p}` (`default` marca la combinación publicada; `p` es la del cambio
+  conjunto, la proporción de las `permutations` barajas con una bajada igual o mayor que la observada; una celda vacía
+  tiene `n` y `k` en 0 y el resto `null`).
   `summary.kinds` tiene `generales` y `autonómicas`: el mismo recuento de `far_final` (sin `since_year`).
 - Cada fila de `elections` es una elección y una comparación: `scope`, `event_date`, `label`, `kind`, `comparison`,
   `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b` (dos decimales), `change` (tres decimales), `falls`, `p` (permutación

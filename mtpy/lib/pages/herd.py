@@ -53,9 +53,9 @@ def short_day(iso: Optional[str]) -> Optional[str]:
     return '{}-{}'.format(day.day, MONTHS_LONG[day.month - 1][0].upper()) if day else None
 
 
-def names(items: list) -> str:
-    """A list in prose: «A, B y C» (``''`` when empty)."""
-    return ', '.join(items[:-1]) + ' y ' + items[-1] if len(items) > 1 else ''.join(items)
+def names(items: list, conjunction: str = 'y') -> str:
+    """A list in prose: «A, B y C» (``''`` when empty); ``conjunction`` is «y» or «o»."""
+    return ', '.join(items[:-1]) + ' ' + conjunction + ' ' + items[-1] if len(items) > 1 else ''.join(items)
 
 
 def today() -> date:
@@ -653,15 +653,18 @@ def robustness_text(summary: Optional[dict]) -> Optional[str]:
     block = _robustness(summary)
     minimum = _default_min_rows(summary)
     rows = [row for row in block.get('rows') or [] if row.get('min_rows') == minimum]
+    changes = [row['change'] for row in rows if row.get('comparison') in ('far_final', 'mid_final')
+               and _is_num(row.get('change'))]
     far = _joined_ranges(rows, 'far_final')
     mid = _joined_ranges(rows, 'mid_final')
 
-    if far is None or mid is None:
-        return None
+    if far is None or mid is None or any(change >= 0 for change in changes):
+        return None  # a rise in any cell: the table speaks for itself
 
     days = [fmt_int(day) for day in block.get('pair_days') or []]
-    counts = [row for row in rows if row.get('comparison') == 'far_final' and row.get('n')]
-    listed = ', '.join(days[:-1]) + ' o ' + days[-1] if len(days) > 1 else ''.join(days)
+    counts = [row for row in rows if row.get('comparison') == 'far_final' and _is_num(row.get('k'))
+              and _is_num(row.get('n')) and row['n'] > 0]
+    listed = names(days, 'o')
     text = ('Con {} días entre los dos sondeos, la bajada conjunta al final queda {}, y en las tres últimas '
             'semanas {}').format(listed, far, mid)
 
@@ -679,11 +682,12 @@ def robustness_text(summary: Optional[dict]) -> Optional[str]:
                 cell.format(fmt_int(high['k']), fmt_int(high['n']), fmt_int(high['pair_days'])))
 
     text += '.'
-    larger = [value for value in block.get('min_rows') or [] if _is_num(value) and value != minimum]
+    larger = [value for value in block.get('min_rows') or [] if _is_num(value) and _is_num(minimum) and value > minimum]
 
     if larger:
-        text += (' Con un mínimo de {} comparaciones por pareja de casas (dos parejas de sondeos) quedan pocas '
-                 'elecciones: la tabla las enseña.').format(fmt_int(max(larger)))
+        top = max(larger)
+        text += (' Con un mínimo de {} comparaciones por pareja de casas{} quedan pocas elecciones: la tabla las '
+                 'enseña.').format(fmt_int(top), ' (dos parejas de sondeos)' if top == 6 else '')
 
     return text
 

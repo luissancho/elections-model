@@ -37,7 +37,7 @@
 {% set robustness = summary.get('robustness') or {} %}
 {% set grid_days = robustness.get('pair_days') or [3, 5, 7, 10] %}
 {% set grid_min_rows = (robustness.get('min_rows') or [6])|max %}
-{% set grid_days_text =(grid_days[:-1]|join(', ') ~ ' y ' ~ grid_days[-1]) if grid_days|length > 1 else grid_days|join('') %}
+{% set grid_days_text = (grid_days[:-1]|join(', ') ~ ' y ' ~ grid_days[-1]) if grid_days|length > 1 else grid_days|join('') %}
 {% set clear_text %}{% if not ff.get('clear') %}en ninguna la bajada es clara por sí sola{% else %}sólo en {{ ff.get('clear')|int }} la bajada es clara por sí sola{% endif %}{% endset %}
     <div id="content" class="stack herd-page">
       <header id="study-head">
@@ -118,7 +118,7 @@
         </div>
         {% if mf.get('n') %}
         <div class="sum">
-          <b>En las tres últimas semanas, {{ count(mf) }} elecciones se acercan{% if chance.mid_final %} ({{ chance.mid_final }}){% endif %}{% set medm = mf.get('median_change') %}{% if medm is number and medm != 0 %}, con {{ 'una bajada mediana' if medm < 0 else 'una subida mediana' }} del {{ (medm|abs * 100)|round|int }} %{% if ci.mid_final %} ({{ ci.mid_final }}){% endif %}{% endif %}</b>.
+          <b>En las tres últimas semanas, {{ count(mf) }} elecciones se acercan{% if chance.mid_final %} ({{ chance.mid_final }}){% endif %}</b>{% set medm = mf.get('median_change') %}{% if medm is number and medm != 0 %}, con {{ 'una bajada mediana' if medm < 0 else 'una subida mediana' }} del {{ (medm|abs * 100)|round|int }} %{% if ci.mid_final %} ({{ ci.mid_final }}){% endif %}{% endif %}.
           {%- if fm.get('n') %} Hasta tres semanas antes, {{ count(fm) }}{% if chance.far_mid %}: {{ chance.far_mid }}{% endif %}.{% endif %}
           {%- if pooled.both %} {{ pooled.both }}{% endif %}
           {%- if mf.get('clear') %} Sólo en {{ mf.get('clear')|int }} de las {{ mf.n|int }} la bajada es clara por sí sola.{% endif %}
@@ -155,7 +155,10 @@
           Lo comparamos con lo que se separarían sólo por el azar de sus muestras: 1 significa que difieren lo que cabría esperar de sus muestras; menos de 1, que se parecen más de lo que cabría esperar sólo por el azar.
         </p>
         <p>
-          Para que el método de cada casa no cuente, usamos las mismas parejas en los dos tramos que se comparan, cada una con el mismo peso en los dos, y contamos por elección, sin mezclar sondeos de elecciones distintas: así, en los recuentos, una elección con muchos sondeos no pesa más que otra con pocos; en la prueba conjunta sí pesa más, y por eso damos las dos.
+          Para que el método de cada casa no cuente, usamos las mismas parejas en los dos tramos que se comparan, cada una con el mismo peso en los dos, y contamos por elección, sin mezclar sondeos de elecciones distintas: así{% if pooled.far_final %}, en los recuentos,{% endif %} una elección con muchos sondeos no pesa más que otra con pocos{% if pooled.far_final %}; en la prueba conjunta sí pesa más, y por eso damos las dos{% endif %}.
+        </p>
+        <p>
+          Hay límites. Las generales entran más a menudo, porque tienen más sondeos tempranos; muchas autonómicas sólo tienen una pareja de casas, a veces una sola pareja de sondeos, comparable. Quedan fuera el CIS, los agregadores y los paneles abiertos. Medimos cuánto se acercan, no por qué.
         </p>
         {% if robustness_rows %}
         <details class="how"><summary>Con otros días entre sondeos y otro mínimo de comparaciones</summary><div class="how-body">
@@ -168,17 +171,13 @@
               </thead>
               <tbody>
                 {% for row in robustness_rows %}
-                {% if row.default %}<tr class="is-default"><td><b>{{ row.pair_days }}</b></td><td><b>{{ row.min_rows }}</b></td><td><b>{{ row.far_final.count }}</b></td><td><b>{{ row.far_final.change }}</b></td><td><b>{{ row.far_final.chance }}</b></td><td><b>{{ row.mid_final.count }}</b></td><td><b>{{ row.mid_final.change }}</b></td><td><b>{{ row.mid_final.chance }}</b></td></tr>
-                {% else %}<tr><td>{{ row.pair_days }}</td><td>{{ row.min_rows }}</td><td>{{ row.far_final.count }}</td><td>{{ row.far_final.change }}</td><td>{{ row.far_final.chance }}</td><td>{{ row.mid_final.count }}</td><td>{{ row.mid_final.change }}</td><td>{{ row.mid_final.chance }}</td></tr>{% endif %}
+                <tr{% if row.default %} class="is-default"{% endif %}><td>{{ row.pair_days }}</td><td>{{ row.min_rows }}</td><td>{{ row.far_final.count }}</td><td>{{ row.far_final.change }}</td><td>{{ row.far_final.chance }}</td><td>{{ row.mid_final.count }}</td><td>{{ row.mid_final.change }}</td><td>{{ row.mid_final.chance }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
         </div></details>
         {% endif %}
-        <p>
-          Hay límites. Las generales entran más a menudo, porque tienen más sondeos tempranos; muchas autonómicas sólo tienen una pareja de casas, a veces una sola pareja de sondeos, comparable. Quedan fuera el CIS, los agregadores y los paneles abiertos. Medimos cuánto se acercan, no por qué.
-        </p>
       {{ m.card_end() }}
       {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos publicados en Demoscopio y se puede descargar.', classes='shot') }}
         {{ shot('datos') }}
@@ -198,9 +197,9 @@
               Los tramos cuentan desde el fin de campo hasta la elección: {{ (periods.get('final') or [0, 21])[0] }} a {{ (periods.get('final') or [0, 21])[1] }} días, {{ (periods.get('mid') or [21, 56])[0] }} a {{ (periods.get('mid') or [21, 56])[1] }} y {{ (periods.get('far') or [56, 365])[0] }} a {{ (periods.get('far') or [56, 365])[1] }}.
               La <b>permutación</b> baraja {{ (params.get('permutations') or 2000)|int }} veces el tramo de cada pareja de sondeos, con sus partidos juntos, dentro de cada pareja de casas, y dice cuántas veces saldría una bajada tan grande sólo por azar: es lo que llamamos clara por sí sola.
               La <b>prueba del signo</b> cuenta en cuántas elecciones baja la separación y qué probabilidad tendría ese recuento con una moneda.
-              La <b>prueba conjunta</b> baraja a la vez las parejas de sondeos de todas las parejas de casas de todas las elecciones y mide cuánto baja la separación juntándolas: cada pareja de casas pesa según sus comparaciones, así que las elecciones con muchos sondeos pesan más que en la prueba del signo. Un sondeo que entra en varias parejas cuenta en todas.
-              El <b>intervalo</b> de la bajada mediana sale de remuestrear las elecciones {{ (params.get('resamples') or 2000)|int }} veces.
-              La <b>robustez</b> repite los recuentos y la prueba conjunta con {{ grid_days_text }} días entre sondeos y con un mínimo de {{ grid_min_rows }} comparaciones por pareja.
+              {% if pooled.far_final %}La <b>prueba conjunta</b> baraja a la vez las parejas de sondeos de todas las parejas de casas de todas las elecciones y mide cuánto baja la separación juntándolas: cada pareja de casas pesa según sus comparaciones, así que las elecciones con muchos sondeos pesan más que en la prueba del signo. Un sondeo que entra en varias parejas cuenta en todas.{% endif %}
+              {% if ci.far_final or ci.mid_final %}El <b>intervalo</b> (95 %) de la bajada mediana sale de remuestrear las elecciones {{ (params.get('resamples') or 2000)|int }} veces.{% endif %}
+              {% if robustness_rows %}La <b>robustez</b> repite los recuentos y la prueba conjunta con {{ grid_days_text }} días entre sondeos y con un mínimo de {{ grid_min_rows }} comparaciones por pareja.{% endif %}
             </div>
           </div>
         </div>

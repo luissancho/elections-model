@@ -182,6 +182,7 @@ def _robustness(elections: list, params: dict) -> dict:
             for key, (a, b) in COMPARISONS.items():
                 compared = [(r, compare(r, a, b, min_rows)) for r in cell_rows]
                 used = [r for r, result in compared if result is not None]
+                # ``count`` gets ``p`` 1.0 so that ``clear`` is 0: the grid does not run per-election permutations
                 tally = count([result | {'p': 1.0} for _, result in compared if result is not None])
                 result = pooled(used, a, b, min_rows)
                 p = None if result is None else _sig3(

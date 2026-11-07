@@ -112,8 +112,8 @@ def test_compute_herd_robustness(fresh_app, tmp_path):
     assert all(row['pair_days'] == 7 and row['min_rows'] == 3 for row in default.values())
     for key, row in default.items():
         # the summary publishes the median at two decimals, the grid at three
-        assert (row['n'], row['k'], round(row['median_change'], 2), row['change']) == (
-            s[key]['n'], s[key]['k'], s[key]['median_change'], s[key]['pooled']['change'])
+        assert (row['n'], row['k'], round(row['median_change'], 2), row['change'], row['p']) == (
+            s[key]['n'], s[key]['k'], s[key]['median_change'], s[key]['pooled']['change'], s[key]['pooled']['p'])
     d3 = next(row for row in r['rows'] if (row['pair_days'], row['min_rows'], row['comparison']) == (3, 3, 'far_final'))
     assert (d3['n'], d3['k'], d3['median_change'], d3['change']) == (2, 1, 0.618, -0.234)
     empty = next(row for row in r['rows']
