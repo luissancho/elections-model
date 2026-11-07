@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mtpy.lib.studies.herd.stats import compare, comparisons, count, dispersion, period_of, permutation_p
+from mtpy.lib.studies.herd.stats import (bucket_of, by_buckets, compare, comparisons, count, dispersion, period_of,
+                                         permutation_p)
 
 PARAMS = {'pair_days': 7, 'periods': {'final': [0, 21], 'mid': [21, 56], 'far': [56, 365]}}
 
@@ -126,3 +127,22 @@ def test_count_and_sign():
                {'falls': True, 'p': 0.2, 'change': -0.2}, {'falls': False, 'p': 0.9, 'change': 0.4}]
     assert count(results) == {'n': 4, 'k': 3, 'sign_p': 0.312, 'clear': 1, 'median_change': pytest.approx(-0.15)}
     assert count([]) == {'n': 0, 'k': 0, 'sign_p': None, 'clear': 0, 'median_change': None}
+
+
+BUCKETS = [[0, 2], [3, 4], [5, 7], [8, 11], [12, 17], [18, 26], [27, 52]]
+
+
+def test_bucket_of_edges():
+    days = (0, 20, 20.5, 21, 34.5, 35, 55, 56, 83, 84, 125, 126, 188, 189, 365, 400)
+    assert [bucket_of(d, BUCKETS) for d in days] == [
+        (0, 2), (0, 2), (0, 2), (3, 4), (3, 4), (5, 7), (5, 7), (8, 11), (8, 11), (12, 17), (12, 17), (18, 26),
+        (18, 26), (27, 52), (27, 52), None]
+
+
+def test_by_buckets_counts_distinct_poll_pairs():
+    rows = pd.DataFrame({'poll_i': ['a', 'a', 'a', 'a', 'c'], 'poll_j': ['b', 'b', 'c', 'c', 'd'],
+                         'days': [10.0, 10.0, 12.0, 12.0, 30.0], 'd2': [4.0, 0.0, 4.0, 0.0, 9.0], 'v': [2.0] * 5})
+    out = by_buckets(rows, BUCKETS, 2)
+    assert [(b['lo'], b['hi'], b['pairs'], b['comparisons']) for b in out[:3]] == [
+        (0, 2, 2, 4), (3, 4, 1, 1), (5, 7, 0, 0)]
+    assert out[0]['ratio'] == pytest.approx(1.0) and out[1]['ratio'] is None and out[2]['ratio'] is None

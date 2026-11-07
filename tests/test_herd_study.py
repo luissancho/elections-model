@@ -13,13 +13,42 @@ from tests.fakes import write_herd_bundle
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 
-def compute(tmp_path, build=write_herd_bundle):
+def compute(tmp_path, build=write_herd_bundle, params=None):
     """Study over a synthetic bundle in ``tmp_path`` (``build`` writes it), with the repository ``data/``."""
     fs = FileSystem(str(tmp_path))
     build(fs)
     data = FileSystem(os.path.join(ROOT, 'data'))
 
-    return compute_herd(bundle.BundleReader(fs), data)
+    return compute_herd(bundle.BundleReader(fs), data, params)
+
+
+def test_compute_herd_weeks(fresh_app, tmp_path):
+    weeks = compute(tmp_path).weeks
+    assert [b['label'] for b in weeks['buckets']] == ['27-52', '18-26', '12-17', '8-11', '5-7', '3-4', '0-2']
+    rows = {(r['label'], r['lo']): r for r in weeks['rows']}
+    assert {r['label'] for r in weeks['rows']} == {'Generales 2019', 'Generales 2023', 'Generales 2026'}
+    assert (rows[('Generales 2019', 5)]['pairs'], rows[('Generales 2019', 5)]['ratio']) == (2, 1.06)
+    assert rows[('Generales 2019', 0)]['ratio'] == 0.35
+    assert rows[('Generales 2019', 27)]['pairs'] == 1 and rows[('Generales 2019', 27)]['ratio'] is None
+    assert (rows[('Generales 2023', 0)]['pairs'], rows[('Generales 2023', 0)]['ratio']) == (3, 1.06)
+    assert rows[('Generales 2026', 12)]['current'] is True and rows[('Generales 2026', 12)]['ratio'] == 1.41
+    assert rows[('Generales 2026', 3)]['ratio'] is None
+    mean = {m['lo']: (m['k'], m['ratio']) for m in weeks['mean']}
+    assert mean[0] == (2, 0.7) and mean[5] == (1, 1.06) and mean[27] == (0, None)
+    assert len(weeks['rows']) == 3 * 7
+
+
+def test_compute_herd_weeks_without_elections_of_the_scope(fresh_app, tmp_path):
+    weeks = compute(tmp_path, params={'weeks': {'scope': 'es', 'since': '2030-01-01', 'min_pairs': 2,
+                                                'buckets': [[0, 2], [27, 52]]}}).weeks
+    assert [r['label'] for r in weeks['rows']] == ['Generales 2026'] * 2 and weeks['mean'] == [
+        {'lo': 27, 'hi': 52, 'k': 0, 'ratio': None}, {'lo': 0, 'hi': 2, 'k': 0, 'ratio': None}]
+
+
+def test_compute_herd_weeks_skips_a_current_election_of_another_scope(fresh_app, tmp_path):
+    weeks = compute(tmp_path, params={'weeks': {'scope': 'es-md', 'since': '2000-01-01', 'min_pairs': 2,
+                                                'buckets': [[0, 2]]}}).weeks
+    assert [r['label'] for r in weeks['rows']] == ['Madrid 2021'] and not any(r['current'] for r in weeks['rows'])
 
 
 def test_comparisons_constant():

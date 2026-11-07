@@ -13,7 +13,7 @@ import pandas as pd
 from ...bundle import BundleReader
 from ....core.io import FileSystem
 from .data import Election, MissingInput, load_params, read_current, read_elections
-from .stats import _sig3, comparisons, compare, count, permutation_p
+from .stats import _sig3, by_buckets, comparisons, compare, count, permutation_p
 
 # Each comparison: the period taken as reference and the one expected to be closer
 COMPARISONS = {'far_final': ('far', 'final'), 'far_mid': ('far', 'mid'), 'mid_final': ('mid', 'final')}
@@ -37,6 +37,11 @@ class HerdStudy:
         ``far_final`` by kind of election).
     elections : list of dict
         One row per past election and comparison with a result (see ``_row``), in the order of the elections.
+    weeks : dict
+        ``buckets`` (``{lo, hi, label}``, farthest from the election first), ``rows`` (one per election and bucket,
+        the election in progress last: ``event_date``, ``label``, ``current``, ``lo``, ``hi``, ``pairs``,
+        ``comparisons`` and ``ratio`` at two decimals) and ``mean`` (per bucket: ``lo``, ``hi``, ``k`` past
+        elections with a ratio and their mean ``ratio``).
     current : dict or None
         The election in progress: ``scope``, ``event_date``, ``label``, ``days_left``, ``as_of``, ``windows`` and
         ``far_mid`` and ``mid_final`` (a row without ``kind`` and ``comparison``, or ``None``).
@@ -47,11 +52,12 @@ class HerdStudy:
     election: Optional[dict]
     summary: dict
     elections: list
+    weeks: dict
     current: Optional[dict]
     inputs: dict
 
 
-def _results(election: Election, params: dict) -> dict:
+def _results(election: Election, params: dict, rows: Optional[pd.DataFrame] = None) -> dict:
     """
     The results of an election in each comparison.
 
@@ -61,6 +67,8 @@ def _results(election: Election, params: dict) -> dict:
         The election.
     params : dict
         Parameters of the study.
+    rows : pandas.DataFrame, optional
+        The ``comparisons`` of the election, when already computed.
 
     Returns
     -------
@@ -68,7 +76,9 @@ def _results(election: Election, params: dict) -> dict:
         By key of ``COMPARISONS``, the unrounded ``compare`` result with its ``p`` (``permutation_p``, three
         significant figures); the comparisons without result are left out.
     """
-    rows = comparisons(election.polls, election.names, params)
+    if rows is None:
+        rows = comparisons(election.polls, election.names, params)
+
     results = {}
 
     for key, (a, b) in COMPARISONS.items():
@@ -144,9 +154,11 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
     dates = {key: [] for key in COMPARISONS}
     raw_kinds = {kind: [] for kind in KINDS}
     counted = []
+    all_rows = {}
 
     for election in elections:
-        results = _results(election, params)
+        all_rows[election.event_date, election.scope] = comparisons(election.polls, election.names, params)
+        results = _results(election, params, all_rows[election.event_date, election.scope])
 
         if results:
             counted.append(election)
@@ -165,9 +177,66 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
                                for key, results in raw.items()},
                'kinds': {kind: _count(results) for kind, results in raw_kinds.items()}}
 
+    current_rows = None if current is None else comparisons(current.polls, current.names, params)
+    weeks = _weeks(elections, all_rows, current, current_rows, params)
+
     return HerdStudy(params=params, election=None if current is None else _election(current), summary=summary,
-                     elections=rows, current=None if current is None else _current(current, params),
+                     elections=rows, weeks=weeks,
+                     current=None if current is None else _current(current, params, current_rows),
                      inputs={'elections': inputs_elections, 'current': inputs_current})
+
+
+def _weeks(elections: list, all_rows: dict, current: Optional[Election], current_rows: Optional[pd.DataFrame],
+           params: dict) -> dict:
+    """
+    The dispersion by bucket of weeks to the election, per election and on average.
+
+    Parameters
+    ----------
+    elections : list of Election
+        The past elections.
+    all_rows : dict
+        ``comparisons`` of each past election, by ``(event_date, scope)``.
+    current : Election or None
+        The election in progress.
+    current_rows : pandas.DataFrame or None
+        The ``comparisons`` of the election in progress.
+    params : dict
+        Parameters of the study; uses ``weeks`` (``scope``, ``since``, ``min_pairs`` and ``buckets``).
+
+    Returns
+    -------
+    dict
+        ``buckets``, ``rows`` and ``mean`` as described in ``HerdStudy.weeks``; the elections of another scope or
+        before ``since`` are left out.
+    """
+    config = params['weeks']
+    buckets = [[lo, hi] for lo, hi in reversed(config['buckets'])]
+    chosen = [(election, all_rows[election.event_date, election.scope]) for election in elections
+              if election.scope == config['scope']
+              and (config['since'] is None or election.event_date >= config['since'])]
+
+    if current is not None and current.scope == config['scope']:
+        chosen.append((current, current_rows))
+
+    rows = []
+    ratios = {(lo, hi): [] for lo, hi in buckets}
+
+    for election, election_rows in chosen:
+        for entry in by_buckets(election_rows, buckets, config['min_pairs']):
+            ratio = entry['ratio']
+            rows.append({'event_date': election.event_date, 'label': election.label, 'current': election.current,
+                         'lo': entry['lo'], 'hi': entry['hi'], 'pairs': entry['pairs'],
+                         'comparisons': entry['comparisons'], 'ratio': None if ratio is None else round(ratio, 2)})
+
+            if ratio is not None and not election.current:
+                ratios[entry['lo'], entry['hi']].append(ratio)
+
+    mean = [{'lo': lo, 'hi': hi, 'k': len(values),
+             'ratio': round(sum(values) / len(values), 2) if values else None}
+            for (lo, hi), values in ratios.items()]
+
+    return {'buckets': [{'lo': lo, 'hi': hi, 'label': f'{lo}-{hi}'} for lo, hi in buckets], 'rows': rows, 'mean': mean}
 
 
 def _days_left(current: Election) -> Optional[int]:
@@ -184,7 +253,7 @@ def _election(current: Election) -> dict:
             'as_of': current.as_of}
 
 
-def _current(current: Election, params: dict) -> dict:
+def _current(current: Election, params: dict, rows: Optional[pd.DataFrame] = None) -> dict:
     """
     The election in progress with what the study can say of it so far.
 
@@ -194,6 +263,8 @@ def _current(current: Election, params: dict) -> dict:
         The election in progress.
     params : dict
         Parameters of the study.
+    rows : pandas.DataFrame, optional
+        The ``comparisons`` of the election, when already computed.
 
     Returns
     -------
@@ -204,7 +275,7 @@ def _current(current: Election, params: dict) -> dict:
     event = pd.Timestamp(current.event_date)
     windows = {name: (event - pd.Timedelta(days=params['periods'][name][1] - 1)).strftime('%Y-%m-%d')
                for name in ('mid', 'final')}
-    results = _results(current, params)
+    results = _results(current, params, rows)
     out = {'scope': current.scope, 'event_date': current.event_date, 'label': current.label,
            'days_left': _days_left(current), 'as_of': current.as_of, 'windows': windows}
 
