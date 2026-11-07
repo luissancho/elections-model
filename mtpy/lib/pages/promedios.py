@@ -341,23 +341,43 @@ def chart_polls(polls: dict) -> dict:
     }
 
 
-def short_date(value) -> str:
+def fieldwork_label(start, end, date=None) -> str:
     """
-    Format a date as ``'01/10/26'``.
+    Days of the fieldwork of a poll, without the year: ``'29–30 Oct'``, ``'1 Sep–1 Nov'``, ``'30 Oct'``.
 
     Parameters
     ----------
-    value : str or datetime.date or None
-        ISO date or date-time.
+    start, end : str or datetime.date or None
+        First and last day of the fieldwork (ISO date or date-time); an invalid one counts as missing.
+    date : str or datetime.date or None, optional
+        Date of the poll, used when neither day is known.
 
     Returns
     -------
     str
-        ``dd/mm/aa``, or ``DASH`` when it is missing or invalid.
+        The two days with the month (``MONTH_LABELS``) and the en dash: ``'{d1}–{d2} {Mes}'`` within a month,
+        ``'{d1} {Mes1}–{d2} {Mes2}'`` across months (or years), a single ``'{d} {Mes}'`` when both are the same
+        day or only one is known; ``date`` alone when neither is; ``DASH`` without any valid date.
     """
-    parsed = _parse_datetime(value)
+    first, last = _parse_datetime(start), _parse_datetime(end)
 
-    return DASH if parsed is None else '{:02d}/{:02d}/{:02d}'.format(parsed.day, parsed.month, parsed.year % 100)
+    if first is None and last is None:
+        first = _parse_datetime(date)
+
+    days = [day for day in (first, last) if day is not None]
+
+    if not days:
+        return DASH
+
+    labels = ['{} {}'.format(day.day, MONTH_LABELS[day.month - 1]) for day in days]
+
+    if len(days) == 1 or (first.year, first.month, first.day) == (last.year, last.month, last.day):
+        return labels[0]
+
+    if (first.year, first.month) == (last.year, last.month):
+        return '{}–{} {}'.format(first.day, last.day, MONTH_LABELS[first.month - 1])
+
+    return '–'.join(labels)
 
 
 def poll_months(polls: list) -> list:
@@ -430,7 +450,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
         ``{'rows', 'mean', 'total'}``: ``total`` is ``len(polls)``; each row of the last ``n`` polls by date
         (ties keep the later published first) is ``{'pollster', 'href' (``poll_href``), 'rating' (at one decimal,
         or the dash), 'rating_color' (``gradient`` over ``RATING_COLORS``, ``None`` without rating), 'sponsor',
-        'date' (dd/mm/aa), 'fieldwork' (``None`` without fieldwork dates), 'sample', 'cells'}`` with a
+        'date' (the days of the fieldwork, ``fieldwork_label``), 'fieldwork' (the tooltip with the full dates,
+        ``None`` without fieldwork dates), 'sample', 'cells'}`` with a
         ``{'value', 'leader', 'color'}`` cell per party (``leader``: the highest of the row, every tied one);
         ``mean`` is ``{'n', 'cells'}``, the
         unweighted mean of all the polls (``n`` is ``total``) at one decimal in the same cells, the figure the
@@ -454,7 +475,7 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
             'rating': fmt_num(poll.get('rating'), 1),
             'rating_color': None if color == 'transparent' else color,
             'sponsor': poll.get('sponsor') or None,
-            'date': short_date(poll.get('date')),
+            'date': fieldwork_label(start, end, poll.get('date')),
             'fieldwork': fieldwork,
             'sample': fmt_int(poll.get('sample_size')),
             'cells': [

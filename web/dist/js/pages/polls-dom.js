@@ -1,7 +1,7 @@
 // DOM builders of the "Todas las encuestas" table (Promedios and the detail of a past election): header, body and footer, built with
 // `createElement`/`textContent` (never HTML with data).
 import {fmtDate, fmtInt, fmtNum, gradient} from '../format.js';
-import {leaderOf, pollsCount, seatsText, shortDate, valuesOf} from '../polls-table.js';
+import {fieldworkLabel, leaderOf, pollsCount, seatsText, valuesOf} from '../polls-table.js';
 
 /** Fixed columns, in order (key and label); any other column is a party. The server renders the same ones. */
 export const FIXED_COLUMNS = [['pollster', 'Encuestadora'], ['rating', 'Rating (0-100)'], ['date', 'Fecha'],
@@ -9,6 +9,7 @@ export const FIXED_COLUMNS = [['pollster', 'Encuestadora'], ['rating', 'Rating (
 /** Stops of the rating badge, from 0 to 100: red, grey at 50 and green (`pages.RATING_COLORS` of the server). */
 export const RATING_COLORS = ['#d62728', '#7f7f7f', '#2ca02c'];
 const RATING_TITLE = 'Rating de la encuestadora, de 0 a 100: cuanto más alto, más pesa su sondeo en el promedio. Rojo por debajo de 50, verde por encima.';
+const DATE_TITLE = 'Días del trabajo de campo del sondeo';
 
 /**
  * Create an element.
@@ -76,6 +77,8 @@ export function renderHead(thead, parties, catalog, sort) {
     const th = el('th', label, index === 0 ? 'f l' : '');
     if (key === 'rating') {
       th.title = RATING_TITLE;
+    } else if (key === 'date') {
+      th.title = DATE_TITLE;
     }
     add(th, key);
   });
@@ -149,7 +152,7 @@ export function renderBody(tbody, polls, parties, catalog, mode = 'pct') {
     return;
   }
   tbody.replaceChildren(...polls.map((poll) => {
-    const date = el('td', shortDate(poll.date));
+    const date = el('td', fieldworkLabel(poll.start_date, poll.end_date, poll.date));
     if (poll.start_date || poll.end_date) {
       date.title = `Trabajo de campo: ${fmtDate(poll.start_date || poll.end_date)} – ${fmtDate(poll.end_date || poll.start_date)}`;
     }

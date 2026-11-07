@@ -767,7 +767,7 @@ ol.notes > li:target { color: var(--color-text); }
    one line at 13 px; a longer name wraps, a longer medium is cut with an ellipsis */
 .et col.c-f { width: 150px; }
 .et col.c-r { width: 92px; }
-.et col.c-d { width: 80px; }
+.et col.c-d { width: 104px; }  /* the longest fieldwork label, «30 Sep–31 Oct» */
 .et col.c-s { width: 80px; }
 .et col.c-p { width: 72px; }
 .et th { color: var(--color-muted); user-select: none; }

@@ -465,7 +465,8 @@ def test_promedios_has_the_series_chart_the_polls_table_and_csv_link(api):
     page = html(body)
     assert 'id="series-chart"' in page and 'Todas las encuestas' in page
     assert 'href="/api/v1/forecast/es/polls?run={}&amp;format=csv"'.format(RUN) in page
-    assert '<th scope="col" data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>' in page
+    assert ('<th scope="col" data-key="date" aria-sort="descending" title="Días del trabajo de campo del sondeo">'
+            '<button type="button" class="sort">Fecha</button></th>') in page
     data = initial(body)
     assert data['projection']['dates'] and data['vote']['when']
 
@@ -557,7 +558,7 @@ def test_polls_table_marks_the_leader_formats_the_values_and_averages_all_the_po
     table = pages.polls_table(polls, ['PP', 'PSOE'], colors, n=2)
     assert table['total'] == 3 and [r['pollster'] for r in table['rows']] == ['GAD3', 'CIS']
     first = table['rows'][0]
-    assert first['date'] == '01/10/26' and first['sponsor'] == 'ABC' and first['sample'] == '1.010'
+    assert first['date'] == '28–30 Sep' and first['sponsor'] == 'ABC' and first['sample'] == '1.010'
     assert first['fieldwork'] == 'Trabajo de campo: 28 sept 2026 – 30 sept 2026'
     assert first['cells'] == [{'value': '31,1', 'leader': True, 'color': '#1d84ce'},
                               {'value': '26,1', 'leader': False, 'color': '#ef1c27'}]
@@ -573,6 +574,17 @@ def test_polls_table_marks_the_leader_formats_the_values_and_averages_all_the_po
                                         {'value': '2026-10', 'label': 'Oct 2026'}]
 
 
+def test_fieldwork_label_writes_the_days_of_the_fieldwork_without_the_year():
+    assert pages.fieldwork_label('2026-10-29', '2026-10-30') == '29–30 Oct'
+    assert pages.fieldwork_label('2026-09-01', '2026-11-01') == '1 Sep–1 Nov'
+    assert pages.fieldwork_label('2026-10-30', '2026-10-30') == '30 Oct'
+    assert pages.fieldwork_label('2026-12-28', '2027-01-03') == '28 Dic–3 Ene'
+    assert pages.fieldwork_label(None, '2026-10-30') == '30 Oct' and pages.fieldwork_label('2026-10-28', None) == '28 Oct'
+    assert pages.fieldwork_label(None, None, '2026-10-30') == '30 Oct'
+    assert pages.fieldwork_label(None, None, '2026-10-30T00:00:00') == '30 Oct'
+    assert pages.fieldwork_label('nope', None, None) == '–' and pages.fieldwork_label(None, None, None) == '–'
+
+
 def test_polls_table_orders_by_date_keeps_ties_and_tolerates_a_poll_without_date_or_house():
     polls = [
         {'date': '2026-09-05', 'pollster': 'CIS', 'PP': 41.0},
@@ -582,7 +594,7 @@ def test_polls_table_orders_by_date_keeps_ties_and_tolerates_a_poll_without_date
     ]
     table = pages.polls_table(polls, ['PP', 'PSOE'], {})
     assert [(r['pollster'], r['date']) for r in table['rows']] == [
-        ('CIS', '01/10/26'), ('GAD3', '01/10/26'), ('CIS', '05/09/26'), ('–', '–')]
+        ('CIS', '1 Oct'), ('GAD3', '1 Oct'), ('CIS', '5 Sep'), ('–', '–')]
     assert table['rows'][0]['cells'][0]['leader'] and table['rows'][0]['cells'][1]['leader']  # tie: both marked
     assert table['rows'][3]['sponsor'] is None and table['rows'][3]['cells'][1]['color'] == pages.OTHERS_COLOR
     assert len(pages.polls_table(polls * 20, ['PP'], {}, n=None)['rows']) == 80
@@ -648,7 +660,8 @@ def test_promedios_polls_table_carries_all_parties_counters_and_hides_the_pagina
     assert '<option value="2026-10" selected>Oct 2026</option>' in page and 'id="polls-count">1 sondeo<' in page
     assert re.search(r'<div class="pag" id="polls-pag" hidden>', page)
     assert 'data-key="PP"' in page and 'title="Partido Popular"' in page
-    assert '<th scope="col" data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>' in page
+    assert ('<th scope="col" data-key="date" aria-sort="descending" title="Días del trabajo de campo del sondeo">'
+            '<button type="button" class="sort">Fecha</button></th>') in page
     assert ('<th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>'
             in page)
     assert 'th data-key' not in page and 'data-key="sample_size"' in page and '<th scope="col" data-key="sample_size"' in page
@@ -2246,7 +2259,7 @@ def test_eleccion_detail_has_the_polls_table_of_the_cycle(events_site):
     page = html(body).replace('\n', ' ')
     assert status == 200 and 'Todas las encuestas' in page and 'id="polls-controls" hidden' in page
     assert 'id="polls-mode"' in page and 'Escaños</label>' in page  # el fixture trae escaños
-    assert polls_tbody(page).count('<tr>') == 3 and '16/07/23' in page and 'El País' in page
+    assert polls_tbody(page).count('<tr>') == 3 and '12–15 Jul' in page and 'El País' in page
     assert '<span id="polls-count">3 sondeos</span>' in page and 'href="/api/v1/events/es/2023-07-23/cycle?format=csv"' in page
     assert 'Sondeos del ciclo, tal como se publicaron' in page and 'no están publicados todavía' not in page
     data = initial(body)
@@ -5422,7 +5435,7 @@ def test_promedios_polls_table_shows_the_rating_badge_between_the_house_and_the_
     assert len(rows) == 3
     assert '<a href="/casas/sigma-dos"><b>Sigma Dos</b></a>' in rows[0]
     assert '<td><span class="rt" style="background: {}">73,1</span></td>'.format(pages.gradient(73.08, 0, 100, pages.RATING_COLORS)) in rows[0]
-    assert rows[0].index('</a>') < rows[0].index('class="rt"') < rows[0].index('01/10/26')
+    assert rows[0].index('</a>') < rows[0].index('class="rt"') < rows[0].index('1 Oct')
     assert '<td><span class="rt" style="background: #cd3031">5,0</span></td>' in rows[1]
     assert '<b>Sin casa</b>' in rows[2] and '<a href' not in rows[2] and '<td class="na">—</td>' in rows[2]
     foot = page[page.index('<tfoot>', start):page.index('</tfoot>', start)]
