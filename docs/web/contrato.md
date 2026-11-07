@@ -55,7 +55,8 @@ Todo JSON es un sobre:
 ## Convenciones
 
 - Redondeos: porcentajes (`pct`, `lo`, `hi`, `mean`, `sd`, ...) a 2 decimales; probabilidades (`p_*`,
-  `weight`, y las razones de `dispersion`) a 3; escaños estadísticos (`seats_mean`, `seats_lo`, ...) a 1.
+  `weight` y sus factores `weight_*`, y las razones de `dispersion`) a 3; escaños estadísticos (`seats_mean`,
+  `seats_lo`, ...) a 1.
 - `NaN` e infinitos se escriben como `null`.
 - Fechas `YYYY-MM-DD`; instantes ISO 8601 en UTC con `Z` (`2026-10-08T18:11:00Z`).
 - `run_id` es `YYYYMMDD-HHMMSS` en UTC, uno por invocación (compartido por todos los ámbitos); ordena
@@ -141,8 +142,13 @@ Sondeos publicados y resultado anterior. Fuente: `Forecaster.fc_series_raw` y `F
 `data`: `parties`, `columns` (`POLL_COLUMNS`), `polls` y `results`.
 
 - `polls`: registros con `date, pollster_id, pollster, sponsor, start_date, end_date, sample_size, mtype,
-  rating, weight` (10 columnas) más una columna por partido en puntos porcentuales. `weight` a 3
-  decimales. Enmienda 2026-10-14 (fase 7c): el sondeo que publica escaños lleva además `seats`,
+  rating, weight, weight_sample, weight_disp, weight_over, weight_rating` (14 columnas) más una columna por
+  partido en puntos porcentuales. `weight` y sus factores a 3 decimales. Enmienda 2026-11-07: los cuatro
+  factores del peso (`WEIGHT_FACTORS`): `weight = weight_sample · weight_over · weight_rating`, con
+  `weight_sample` como en `weights` (la dispersión de la casa dentro), `weight_disp` el factor de dispersión de
+  la casa (`dispersion.factor`, 1 sin él) de modo que la muestra sin la dispersión es `weight_sample /
+  weight_disp`, `weight_over` el de solape y frecuencia y `weight_rating` el del rating. Los runs anteriores no
+  los tienen (la web enseña entonces el peso sin desglose). Enmienda 2026-10-14 (fase 7c): el sondeo que publica escaños lleva además `seats`,
   `{partido: [mín, máx]}` (enteros; la encuestadora da un número, `mín = máx`, o una horquilla), solo con los
   partidos que los tienen; los sondeos sin escaños no llevan la clave. Son las cifras de la encuestadora
   (`polls_results.seats_min/seats_max`), no del modelo. Los runs anteriores no las tienen.
@@ -439,6 +445,8 @@ republica; `ban` desde la enmienda 2026-11-05, ver abajo):
   sondeos que `polls.rows` (`Computer.filter_polls(featured=True)`: cada fila de la tabla tiene su error), por
   fecha y casa ascendentes, con `sample_size` nulo cuando no se conoce y `weight` el producto del peso global y el
   de muestra; los escaños salen de `forecaster.published_seats`. El gemelo CSV añade `seats_min_*`/`seats_max_*`.
+  Enmienda 2026-11-07: lleva las 14 columnas de `POLL_COLUMNS`, con `weight_over` y `weight_sample` por separado
+  y `weight_disp` y `weight_rating` siempre nulos, porque su `weight` no los incluye.
 - `ban` (opcional): los sondeos publicados durante la veda (`ctype` `wban`, los «clandestinos») de la elección, con la
   forma de `cycle` (`parties`, `columns` y `polls`, cada uno con `error_avg`, `error_blocks` y `bias_blocks`) y `legal`,
   el último sondeo legal de cada casa que publicó uno clandestino (la misma forma). `publish event` la escribe siempre:

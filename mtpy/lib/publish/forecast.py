@@ -30,7 +30,10 @@ SEATS_COLS = ('seats_mean', 'seats_median', 'seats_lo', 'seats_hi', 'seats_min',
 
 
 POLL_COLUMNS = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'sample_size', 'mtype',
-                'rating', 'weight']
+                'rating', 'weight', 'weight_sample', 'weight_disp', 'weight_over', 'weight_rating']
+# The factors of ``weight`` (amendment 2026-11-07): ``weight = weight_sample · weight_over · weight_rating``, with the
+# dispersion factor of the house (``weight_disp``) already inside ``weight_sample``, as in the ``weights`` part
+WEIGHT_FACTORS = ('weight_sample', 'weight_disp', 'weight_over', 'weight_rating')
 
 
 HE_COLUMNS = ['pollster_id', 'name', 'pollster', 'n', 'w', 'level', 'dev', 'dev_err', 'prior', 'prior_err',
@@ -373,7 +376,8 @@ def export_poll_rows(polls, names, seats=None):
     ----------
     polls : pandas.DataFrame
         Polls with the columns of ``POLL_COLUMNS`` that exist (``date``, ``pollster_id`` and ``sponsor_id`` as
-        columns, not index levels; a missing column is exported null) and one share per party.
+        columns, not index levels; a missing column, the ``WEIGHT_FACTORS`` of a run before the amendment of
+        2026-11-07 included, is exported null) and one share per party.
     names : list of str
         Party names to export.
     seats : dict, optional
@@ -400,7 +404,8 @@ def export_poll_rows(polls, names, seats=None):
     # one block per party and, past a hundred of them, every seat column inserted afterwards would warn about
     # fragmentation (pandas ``PerformanceWarning``).
     polls = pd.concat([polls[POLL_COLUMNS], polls[names].round(PCT_DECIMALS)], axis=1)
-    polls['weight'] = polls['weight'].astype(float).round(PROB_DECIMALS)
+    for column in ('weight', *WEIGHT_FACTORS):
+        polls[column] = polls[column].astype(float).round(PROB_DECIMALS)
     records = polls.to_dict(orient='records')
     for key, record in zip(keys, records):
         found = {name: seats[key][name] for name in names if name in seats.get(key, {})}
@@ -411,6 +416,28 @@ def export_poll_rows(polls, names, seats=None):
         projections['seats_min_' + name] = pd.array([seats.get(k, {}).get(name, [None])[0] for k in keys], dtype='Int64')
         projections['seats_max_' + name] = pd.array([seats.get(k, {}).get(name, [None, None])[-1] for k in keys], dtype='Int64')
     return records, pd.concat([polls, pd.DataFrame(projections, index=polls.index)], axis=1)
+
+
+def dispersion_factors(fc, pollster_ids):
+    """Dispersion factor of the house of each poll (``weight_disp``), 1 for a house without one.
+
+    Parameters
+    ----------
+    fc : Forecaster
+        Fitted forecaster: ``fc.dispersion`` is the table by ``pollster_id`` with the ``factor`` column
+        (``house_dispersion``), or ``None`` before the fit.
+    pollster_ids : pandas.Series
+        ``pollster_id`` of each poll.
+
+    Returns
+    -------
+    pandas.Series
+        The factor of each poll, aligned with ``pollster_ids``; all ones without a dispersion table.
+    """
+    dispersion = getattr(fc, 'dispersion', None)
+    if isinstance(dispersion, pd.DataFrame) and 'factor' in dispersion.columns:
+        return pollster_ids.map(dispersion['factor']).astype(float).fillna(1.0)
+    return pd.Series(1.0, index=pollster_ids.index)
 
 
 def export_polls(fc, names, seats=None):
@@ -428,9 +455,13 @@ def export_polls(fc, names, seats=None):
     Returns
     -------
     tuple of (dict, pandas.DataFrame)
-        Data for the ``polls`` schema and the polls table as its CSV twin (see ``export_poll_rows``).
+        Data for the ``polls`` schema and the polls table as its CSV twin (see ``export_poll_rows``): the weight
+        factors of each poll come from ``fc.fc_series_raw`` and ``weight_disp`` from ``fc.dispersion``
+        (``dispersion_factors``).
     """
-    records, polls = export_poll_rows(fc.fc_series_raw.reset_index(), names, seats)
+    polls = fc.fc_series_raw.reset_index()
+    polls['weight_disp'] = dispersion_factors(fc, polls['pollster_id'])
+    records, polls = export_poll_rows(polls, names, seats)
     results = fc.nfc_series.reset_index()[['date', *names]]
     results = round_cols(results, pct=names)
     data = {'parties': list(names), 'columns': list(POLL_COLUMNS), 'polls': records,
