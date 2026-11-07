@@ -192,6 +192,7 @@ def bare_computer():
     c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
     c.pos_decay, c.year_decay = .5, .9
     c.bias_dev_tau, c.bias_dev_sigma, c.verbose = .01, .014, 0
+    c.quality_cap = 'median'
     c.drop_mtypes = []
     c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
     return c
@@ -294,7 +295,9 @@ def test_polls_of_one_election_count_as_one_election():
 
 
 def test_rating_follows_the_grouped_formula():
+    """La mezcla sin tope (`quality_cap=None`): el rating es la media ponderada de lo medido y la calidad."""
     c = bare_computer()
+    c.quality_cap = None
     out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
     tau, sigma = .01, .014
     se = sigma / 1.0                                  # one election: n_eff = 1
@@ -305,6 +308,82 @@ def test_rating_follows_the_grouped_formula():
     assert out.loc[1, 'bias_dev_err'] == pytest.approx(err_post)
     assert out.loc[1, 'bias_dev_adj'] == pytest.approx(d_post)
     assert out.loc[1, 'rating'] == pytest.approx((1.0 * r_adj + k * .6) / (1.0 + k))
+
+
+# --- 2026-11-07: tope de la calidad previa (`quality_cap`): sin elecciones no se supera la mediana ---
+
+K = (.014 / .01) ** 2
+
+
+def first_pass(out):
+    """R0 de cada casa a partir de las columnas devueltas: la mezcla sin tope."""
+    return (out['num_events_w'] * out['rating_adj'] + K * out['quality']) / (out['num_events_w'] + K)
+
+
+def test_quality_above_the_median_is_only_credited_with_evidence():
+    """B2: C (sin elecciones, calidad 90) baja a la mediana; D (calidad 20) no cambia; A (una elección,
+    calidad 60) sólo acredita el tramo sobre la mediana en W/(W + k)."""
+    c = bare_computer()
+    c.pollsters['quality'] = [60., 60., 90., 20.]
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    r0 = first_pass(out)
+    cap = r0.median()
+    assert out.loc[3, 'num_events_w'] == 0 and out.loc[3, 'rating'] == pytest.approx(cap)
+    assert out.loc[4, 'rating'] == pytest.approx(r0.loc[4]) and out.loc[4, 'rating'] == pytest.approx(.2)
+    w = out.loc[1, 'num_events_w']
+    q_eff = cap + (.6 - cap) * w / (w + K)
+    assert out.loc[1, 'rating'] == pytest.approx((w * out.loc[1, 'rating_adj'] + K * q_eff) / (w + K))
+    assert out.loc[1, 'rating'] < r0.loc[1]
+    assert np.allclose(out['weight_rating'], np.log1p(out['rating']) / np.log1p(out['rating'].mean()))
+
+
+def test_quality_cap_none_reproduces_the_plain_blend():
+    c = bare_computer()
+    c.quality_cap = None
+    c.pollsters['quality'] = [60., 60., 90., 20.]
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    assert np.allclose(out['rating'], first_pass(out))
+
+
+def test_quality_cap_mean_uses_the_mean_of_the_first_pass():
+    c = bare_computer()
+    c.quality_cap = 'mean'
+    c.pollsters['quality'] = [60., 60., 90., 20.]
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    assert out.loc[3, 'rating'] == pytest.approx(first_pass(out).mean())
+
+
+def test_quality_cap_rejects_an_unknown_value():
+    c = bare_computer()
+    c.quality_cap = 'max'
+    with pytest.raises(ValueError, match='quality_cap'):
+        c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters)
+
+
+def test_a_single_rated_pollster_is_capped_by_its_own_rating():
+    """Una sola casa con rating: el listón es su R0 y su calidad sobrante se acredita en W/(W + k)."""
+    c = bare_computer()
+    c.pollsters = c.pollsters.iloc[:1].copy()          # sólo A
+    c.pollsters['quality'] = [90.]
+    out = c.rate_events(pool([('es', '2019-11-10', 'A')]), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    r0 = first_pass(out).loc[1]
+    w = out.loc[1, 'num_events_w']
+    q_eff = r0 + (.9 - r0) * w / (w + K)
+    assert np.isfinite(out.loc[1, 'rating'])
+    assert out.loc[1, 'rating'] == pytest.approx((w * out.loc[1, 'rating_adj'] + K * q_eff) / (w + K))
+
+
+def test_every_pollster_without_evidence_above_the_median_falls_to_it():
+    """Con el ámbito `es` a peso 0 sólo C conserva evidencia (su sondeo de Madrid); A (0,8) y B (0,6), sin
+    elecciones y por encima de la mediana de R0, caen las dos a la mediana; D (0,2) no cambia."""
+    c = bare_computer()
+    c.pollsters['quality'] = [80., 60., 40., 20.]
+    out = c.rate_events(pool(ES19 + [('es-md', '2021-05-04', 'C')]), [JULY23], {'es': 0., 'es-md': 1.},
+                        c.pollsters).set_index('pollster_id')
+    assert (out.loc[[1, 2, 4], 'num_events_w'] == 0).all() and out.loc[3, 'num_events_w'] > 0
+    cap = first_pass(out).median()
+    assert out.loc[1, 'rating'] == pytest.approx(cap) and out.loc[2, 'rating'] == pytest.approx(cap)
+    assert out.loc[4, 'rating'] == pytest.approx(.2)
 
 
 def test_more_elections_shrink_the_standard_error():
@@ -611,6 +690,16 @@ def excluded_computer():
     c.drop_mtypes = ['aggr', 'online']
     c.pollsters = c.pollsters.assign(mtype=[None, 'online', None, None])
     return c
+
+
+def test_an_excluded_pollster_stays_out_of_the_quality_cap():
+    """B es un panel online: sin rating, y fuera de la mediana que hace de listón (2026-11-07)."""
+    c = excluded_computer()
+    c.pollsters['quality'] = [60., 60., 90., 20.]
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    assert np.isnan(out.loc[2, 'rating'])
+    cap = first_pass(out.drop(index=2)).median()
+    assert out.loc[3, 'rating'] == pytest.approx(cap)
 
 
 def test_an_excluded_pollster_keeps_its_means_without_a_rating():

@@ -533,6 +533,7 @@ class Computer(Core):
         year_decay: Optional[float] = .9,
         bias_dev_tau: Optional[float] = .01,
         bias_dev_sigma: Optional[float] = .014,
+        quality_cap: Optional[Literal['median', 'mean']] = 'median',
         ratings_margin: Optional[float] = .05,
         error_weights: Optional[dict[str, float]] = {'blocks': .7, 'within': .3},
         verbose: int = 0,
@@ -585,6 +586,11 @@ class Computer(Core):
             correction). It sets the standard error of the mean deviation of a pollster, `sigma / sqrt(n_eff)`,
             and the weight `k = (sigma / tau)^2` of the prior quality in the rating, in weighted elections:
             `R = (W * R_aj + k * Q) / (W + k)`.
+        quality_cap : {'median', 'mean'} or None, optional
+            Statistic of the first-pass ratings that caps the prior quality of a pollster without evidence
+            (`'median'` by default, `'mean'`, or `None` for no cap): the quality above the cap is only credited in
+            proportion `W / (W + k)` to its evidence, so a new pollster never rates above the typical one of the
+            table, whatever its paperwork (design of 2026-11-07).
         ratings_margin : float, optional
             The margin to be applied to the ratings around the [0, 1] range.
         error_weights : dict, optional
@@ -613,6 +619,7 @@ class Computer(Core):
         self.year_decay = year_decay
         self.bias_dev_tau = bias_dev_tau
         self.bias_dev_sigma = bias_dev_sigma
+        self.quality_cap = quality_cap
         self.ratings_margin = ratings_margin
         self.error_weights = error_weights
 
@@ -1480,7 +1487,8 @@ class Computer(Core):
             3. The mean deviation `d` is shrunk towards 0 according to that standard error, with a normal prior of
                standard deviation `tau = bias_dev_tau`, and `R_aj = Phi(-d / tau)` scales it to the range [0, 1]:
                0.5 for a house in line with the consensus, higher for a house that deviates less.
-            4. The rating mixes the evidence with the prior quality `Q` of the pollster (0 to 1), the one at the
+            4. The rating mixes the evidence with the prior quality `Q` of the pollster (0 to 1; capped by
+               `quality_cap` at the median rating of the table for the pollsters without evidence), the one at the
                date of the rated event (`quality.prior_quality`: the "implantation" criterion only counts the
                general elections held before it, saved as `num_national_events`):
                `R = (W * R_aj + k * Q) / (W + k)`, with `k = (sigma / tau)^2` (about 1.96 elections). This is the
@@ -2239,7 +2247,10 @@ class Computer(Core):
         `sigma / sqrt(n_eff)`, `n_eff = W^2 / sum(W_e^2)` and `sigma = bias_dev_sigma`. `d` is shrunk towards 0
         (bayesian update with a prior of standard deviation `bias_dev_tau`), converted into
         `rating_adj = Phi(-d / tau)` and blended with the prior quality `Q` as `R = (W * R_aj + k * Q) / (W + k)`,
-        with `k = (sigma / tau)^2`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house
+        with `k = (sigma / tau)^2`. With `quality_cap` (the default), `Q` is first replaced by
+        `Q_eff = min(Q, c) + max(Q - c, 0) * W / (W + k)`, `c` the median (or mean) of the ratings of that first
+        blend: the quality above the typical rating of the table is only credited with evidence, so a house without
+        elections rates at most `c`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house
         in the polling average. The descriptive means (`error_*`, `bias_*`) stay weighted by poll. The pollsters of a
         `drop_mtypes` type (aggregators and online panels, whose polls never enter the average) keep their means but
         get no `rating_adj`, `rating` nor `weight_rating`, and stay out of `mean R`.
@@ -2342,6 +2353,24 @@ class Computer(Core):
         if 'mtype' in pollsters.columns:
             excluded = pollsters.loc[pollsters['mtype'].isin(self.drop_mtypes or []), 'name']
             dr.loc[dr.index.isin(excluded), ['rating_adj', 'rating']] = np.nan
+        # Cap of the prior quality (design of 2026-11-07): the quality above the median (or mean) of the ratings
+        # just computed is only credited in proportion W / (W + k) to the evidence, so a pollster without
+        # elections rates at most like the typical pollster of the table, whatever its paperwork; the quality
+        # below the cap still counts in full. The excluded pollsters (NaN) stay out of the cap and keep no rating.
+        if self.quality_cap is not None:
+            if self.quality_cap not in ('median', 'mean'):
+                raise ValueError(
+                    "quality_cap: expected 'median', 'mean' or None, got {!r}".format(self.quality_cap)
+                )
+            cap = getattr(dr['rating'], self.quality_cap)()
+            credit = dr['num_events_w'] / (dr['num_events_w'] + k)
+            quality_eff = np.minimum(dr['quality'], cap) + (dr['quality'] - cap).clip(lower=0) * credit
+            rated = dr['rating'].notna()
+            dr.loc[rated, 'rating'] = (
+                (dr['num_events_w'] * dr['rating_adj']) + (k * quality_eff)
+            )[rated] / (dr['num_events_w'] + k)[rated]
+            if self.verbose > 1:
+                print('Quality cap ({}): {:.4f}'.format(self.quality_cap, cap))
         # Compute the weight that each pollster's predictions will have in the polling average forecaster.
         # The weight is computed using the logarithm of the rating, which compresses the differences between the
         # best pollsters while still separating them from the worst ones.
