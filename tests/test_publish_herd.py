@@ -7,7 +7,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from mtpy.lib.publish.herd import _subtitle
+from mtpy.lib.publish.herd import WEEK_COLUMNS, _subtitle
 from mtpy.lib.studies.herd.study import compute_herd
 from tests.fakes import write_herd_bundle
 from tests.test_publish_unit import fake_prov, make_writer
@@ -131,3 +131,24 @@ def test_publish_study_rebano_writes_the_four_parts(tmp_path):
 def test_study_runners_know_which_studies_are_live():
     assert {s: r['live'] for s, r in publish.STUDY_RUNNERS.items()} == {
         'voto-cera': False, 'sesgo-cis': True, 'rebano': True, 'voto-oculto': True, 'andorra': True}
+
+
+def test_export_herd_weeks_validates_and_flattens(study):
+    data, frames = publish.STUDY_EXPORTERS['rebano']['weeks'](study)
+    valid('rebano-weeks', data)
+    frame = frames['weeks']
+    assert list(frame.columns) == WEEK_COLUMNS and len(frame) == len(data['rows']) + len(data['mean'])
+    mean = frame[frame.label == 'Media']
+    assert len(mean) == len(data['mean']) and mean.event_date.isna().all() and not mean.current.any()
+    assert mean.pairs.isna().all() and mean.comparisons.isna().all()
+    assert frame.label.iloc[0] != 'Media' and mean.ratio.astype(object).where(mean.ratio.notna(), None).tolist() == [m['ratio'] for m in data['mean']]
+
+
+def test_publish_study_rebano_writes_weeks(tmp_path):
+    fs = FileSystem(str(tmp_path))
+    write_herd_bundle(fs)
+    publish.publish_study('rebano', make_writer(tmp_path, fs), prov=fake_prov)
+    reader = bundle.BundleReader(fs)
+    assert bundle.STUDY_PARTS['rebano'][-1] == 'weeks'
+    assert reader.read_json(bundle.path_study('rebano', 'weeks'))['data']['buckets']
+    assert fs.exists(f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'weeks')}")

@@ -24,6 +24,8 @@ RARE = 0.001
 ELECTION_COLUMNS = ['scope', 'event_date', 'label', 'kind', 'comparison', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
                     'change', 'falls', 'p']
 
+WEEK_COLUMNS = ['event_date', 'label', 'current', 'lo', 'hi', 'pairs', 'comparisons', 'ratio']
+
 
 def compute_for_publish(data: FileSystem, writer: bundle.BundleWriter):
     """Compute the study from the published parts of the live bundle (even if the writer is a dry run).
@@ -83,6 +85,23 @@ def export_herd_current(study) -> tuple:
         ``(data, {})``: ``data`` for ``rebano-current``.
     """
     return {'current': _clean(study.current)}, {}
+
+
+def export_herd_weeks(study) -> tuple:
+    """Export the dispersion between houses by bucket of weeks to the election, per election and on average.
+
+    Returns
+    -------
+    tuple
+        ``(data, {'weeks': frame})``: ``data`` for ``rebano-weeks`` (``buckets``, ``rows``, ``mean``); the frame is
+        long: the rows plus one row per bucket of the mean (label «Media», no date, pairs or comparisons).
+    """
+    data = _clean(study.weeks)
+    mean = [{'event_date': None, 'label': 'Media', 'current': False, 'lo': m['lo'], 'hi': m['hi'], 'pairs': None,
+             'comparisons': None, 'ratio': m['ratio']} for m in data['mean']]
+    frame = pd.DataFrame(data['rows'] + mean, columns=WEEK_COLUMNS)
+
+    return data, {'weeks': frame}
 
 
 def _significant(comparison: dict) -> bool:

@@ -592,7 +592,7 @@ from .lean import (  # noqa: E402
 )
 from .herd import (  # noqa: E402
     compute_for_publish as compute_herd_for_publish, export_herd_current, export_herd_elections, export_herd_meta,
-    export_herd_summary
+    export_herd_summary, export_herd_weeks
 )
 from .shy import (  # noqa: E402
     compute_for_publish as compute_shy_for_publish, export_shy_elections, export_shy_groups, export_shy_meta,
@@ -612,7 +612,7 @@ STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation':
                                  'houses': export_lean_houses, 'matrix': export_lean_matrix,
                                  'election': export_lean_election},
                    'rebano': {'summary': export_herd_summary, 'elections': export_herd_elections,
-                              'current': export_herd_current},
+                              'current': export_herd_current, 'weeks': export_herd_weeks},
                    'voto-oculto': {'summary': export_shy_summary, 'elections': export_shy_elections,
                                    'groups': export_shy_groups},
                    'andorra': {'summary': export_ban_summary, 'pairs': export_ban_pairs,

@@ -1,0 +1,653 @@
+{
+  "schema": "rebano-weeks@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-05T12:00:00Z",
+  "data": {
+    "buckets": [
+      {
+        "lo": 27,
+        "hi": 52,
+        "label": "27-52"
+      },
+      {
+        "lo": 18,
+        "hi": 26,
+        "label": "18-26"
+      },
+      {
+        "lo": 12,
+        "hi": 17,
+        "label": "12-17"
+      },
+      {
+        "lo": 8,
+        "hi": 11,
+        "label": "8-11"
+      },
+      {
+        "lo": 5,
+        "hi": 7,
+        "label": "5-7"
+      },
+      {
+        "lo": 3,
+        "hi": 4,
+        "label": "3-4"
+      },
+      {
+        "lo": 0,
+        "hi": 2,
+        "label": "0-2"
+      }
+    ],
+    "rows": [
+      {
+        "event_date": "2008-03-09",
+        "label": "Generales 2008",
+        "current": false,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 3,
+        "comparisons": 12,
+        "ratio": 1.12
+      },
+      {
+        "event_date": "2008-03-09",
+        "label": "Generales 2008",
+        "current": false,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 8,
+        "comparisons": 32,
+        "ratio": 0.65
+      },
+      {
+        "event_date": "2008-03-09",
+        "label": "Generales 2008",
+        "current": false,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 13,
+        "comparisons": 52,
+        "ratio": 0.71
+      },
+      {
+        "event_date": "2008-03-09",
+        "label": "Generales 2008",
+        "current": false,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 18,
+        "comparisons": 72,
+        "ratio": 1.13
+      },
+      {
+        "event_date": "2008-03-09",
+        "label": "Generales 2008",
+        "current": false,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 23,
+        "comparisons": 92,
+        "ratio": 1.2
+      },
+      {
+        "event_date": "2008-03-09",
+        "label": "Generales 2008",
+        "current": false,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 28,
+        "comparisons": 112,
+        "ratio": 0.93
+      },
+      {
+        "event_date": "2008-03-09",
+        "label": "Generales 2008",
+        "current": false,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 33,
+        "comparisons": 132,
+        "ratio": 0.74
+      },
+      {
+        "event_date": "2011-11-20",
+        "label": "Generales 2011",
+        "current": false,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 10,
+        "comparisons": 40,
+        "ratio": 1.45
+      },
+      {
+        "event_date": "2011-11-20",
+        "label": "Generales 2011",
+        "current": false,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 15,
+        "comparisons": 60,
+        "ratio": 0.89
+      },
+      {
+        "event_date": "2011-11-20",
+        "label": "Generales 2011",
+        "current": false,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 20,
+        "comparisons": 80,
+        "ratio": 1.37
+      },
+      {
+        "event_date": "2011-11-20",
+        "label": "Generales 2011",
+        "current": false,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 25,
+        "comparisons": 100,
+        "ratio": 0.69
+      },
+      {
+        "event_date": "2011-11-20",
+        "label": "Generales 2011",
+        "current": false,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 30,
+        "comparisons": 120,
+        "ratio": 0.86
+      },
+      {
+        "event_date": "2011-11-20",
+        "label": "Generales 2011",
+        "current": false,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 35,
+        "comparisons": 140,
+        "ratio": 1.09
+      },
+      {
+        "event_date": "2011-11-20",
+        "label": "Generales 2011",
+        "current": false,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 40,
+        "comparisons": 160,
+        "ratio": 1.15
+      },
+      {
+        "event_date": "2015-12-20",
+        "label": "Generales 2015",
+        "current": false,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 17,
+        "comparisons": 68,
+        "ratio": 3.03
+      },
+      {
+        "event_date": "2015-12-20",
+        "label": "Generales 2015",
+        "current": false,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 22,
+        "comparisons": 88,
+        "ratio": 2.6
+      },
+      {
+        "event_date": "2015-12-20",
+        "label": "Generales 2015",
+        "current": false,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 27,
+        "comparisons": 108,
+        "ratio": 2.4
+      },
+      {
+        "event_date": "2015-12-20",
+        "label": "Generales 2015",
+        "current": false,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 32,
+        "comparisons": 128,
+        "ratio": 2.98
+      },
+      {
+        "event_date": "2015-12-20",
+        "label": "Generales 2015",
+        "current": false,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 37,
+        "comparisons": 148,
+        "ratio": 1.81
+      },
+      {
+        "event_date": "2015-12-20",
+        "label": "Generales 2015",
+        "current": false,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 4,
+        "comparisons": 16,
+        "ratio": 1.89
+      },
+      {
+        "event_date": "2015-12-20",
+        "label": "Generales 2015",
+        "current": false,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 9,
+        "comparisons": 36,
+        "ratio": 1.36
+      },
+      {
+        "event_date": "2016-06-26",
+        "label": "Generales 2016",
+        "current": false,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 1,
+        "comparisons": 4,
+        "ratio": null
+      },
+      {
+        "event_date": "2016-06-26",
+        "label": "Generales 2016",
+        "current": false,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 29,
+        "comparisons": 116,
+        "ratio": 1.19
+      },
+      {
+        "event_date": "2016-06-26",
+        "label": "Generales 2016",
+        "current": false,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 34,
+        "comparisons": 136,
+        "ratio": 1.1
+      },
+      {
+        "event_date": "2016-06-26",
+        "label": "Generales 2016",
+        "current": false,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 39,
+        "comparisons": 156,
+        "ratio": 0.98
+      },
+      {
+        "event_date": "2016-06-26",
+        "label": "Generales 2016",
+        "current": false,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 6,
+        "comparisons": 24,
+        "ratio": 1.39
+      },
+      {
+        "event_date": "2016-06-26",
+        "label": "Generales 2016",
+        "current": false,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 11,
+        "comparisons": 44,
+        "ratio": 0.82
+      },
+      {
+        "event_date": "2016-06-26",
+        "label": "Generales 2016",
+        "current": false,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 16,
+        "comparisons": 64,
+        "ratio": 0.7
+      },
+      {
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "current": false,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 31,
+        "comparisons": 124,
+        "ratio": 1.51
+      },
+      {
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "current": false,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 36,
+        "comparisons": 144,
+        "ratio": 1.39
+      },
+      {
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "current": false,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 3,
+        "comparisons": 12,
+        "ratio": 1.71
+      },
+      {
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "current": false,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 8,
+        "comparisons": 32,
+        "ratio": 1.63
+      },
+      {
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "current": false,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 13,
+        "comparisons": 52,
+        "ratio": 1.78
+      },
+      {
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "current": false,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 18,
+        "comparisons": 72,
+        "ratio": 1.56
+      },
+      {
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "current": false,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 23,
+        "comparisons": 92,
+        "ratio": 1.33
+      },
+      {
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "current": false,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 1,
+        "comparisons": 4,
+        "ratio": null
+      },
+      {
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "current": false,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 5,
+        "comparisons": 20,
+        "ratio": 1.49
+      },
+      {
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "current": false,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 10,
+        "comparisons": 40,
+        "ratio": 1.32
+      },
+      {
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "current": false,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 15,
+        "comparisons": 60,
+        "ratio": 0.88
+      },
+      {
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "current": false,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 20,
+        "comparisons": 80,
+        "ratio": 1.08
+      },
+      {
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "current": false,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 25,
+        "comparisons": 100,
+        "ratio": 0.89
+      },
+      {
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "current": false,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 30,
+        "comparisons": 120,
+        "ratio": 0.93
+      },
+      {
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "current": false,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 7,
+        "comparisons": 28,
+        "ratio": 1.16
+      },
+      {
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "current": false,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 12,
+        "comparisons": 48,
+        "ratio": 0.97
+      },
+      {
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "current": false,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 17,
+        "comparisons": 68,
+        "ratio": 1.32
+      },
+      {
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "current": false,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 22,
+        "comparisons": 88,
+        "ratio": 1.66
+      },
+      {
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "current": false,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 27,
+        "comparisons": 108,
+        "ratio": 1.36
+      },
+      {
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "current": false,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 32,
+        "comparisons": 128,
+        "ratio": 1.12
+      },
+      {
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "current": false,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 37,
+        "comparisons": 148,
+        "ratio": 1.28
+      },
+      {
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "current": true,
+        "lo": 27,
+        "hi": 52,
+        "pairs": 14,
+        "comparisons": 56,
+        "ratio": 1.01
+      },
+      {
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "current": true,
+        "lo": 18,
+        "hi": 26,
+        "pairs": 19,
+        "comparisons": 76,
+        "ratio": 1.05
+      },
+      {
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "current": true,
+        "lo": 12,
+        "hi": 17,
+        "pairs": 24,
+        "comparisons": 96,
+        "ratio": 1.28
+      },
+      {
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "current": true,
+        "lo": 8,
+        "hi": 11,
+        "pairs": 29,
+        "comparisons": 116,
+        "ratio": 1.05
+      },
+      {
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "current": true,
+        "lo": 5,
+        "hi": 7,
+        "pairs": 34,
+        "comparisons": 136,
+        "ratio": 1.11
+      },
+      {
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "current": true,
+        "lo": 3,
+        "hi": 4,
+        "pairs": 39,
+        "comparisons": 156,
+        "ratio": 1.06
+      },
+      {
+        "event_date": "2026-11-29",
+        "label": "Generales 2026",
+        "current": true,
+        "lo": 0,
+        "hi": 2,
+        "pairs": 1,
+        "comparisons": 4,
+        "ratio": null
+      }
+    ],
+    "mean": [
+      {
+        "lo": 27,
+        "hi": 52,
+        "k": 5,
+        "ratio": 1.65
+      },
+      {
+        "lo": 18,
+        "hi": 26,
+        "k": 7,
+        "ratio": 1.31
+      },
+      {
+        "lo": 12,
+        "hi": 17,
+        "k": 7,
+        "ratio": 1.42
+      },
+      {
+        "lo": 8,
+        "hi": 11,
+        "k": 7,
+        "ratio": 1.42
+      },
+      {
+        "lo": 5,
+        "hi": 7,
+        "k": 7,
+        "ratio": 1.35
+      },
+      {
+        "lo": 3,
+        "hi": 4,
+        "k": 7,
+        "ratio": 1.19
+      },
+      {
+        "lo": 0,
+        "hi": 2,
+        "k": 7,
+        "ratio": 1.07
+      }
+    ]
+  }
+}
