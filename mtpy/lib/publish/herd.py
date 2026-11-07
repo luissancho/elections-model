@@ -100,6 +100,7 @@ def export_herd_weeks(study) -> tuple:
     mean = [{'event_date': None, 'label': 'Media', 'current': False, 'lo': m['lo'], 'hi': m['hi'], 'pairs': None,
              'comparisons': None, 'ratio': m['ratio']} for m in data['mean']]
     frame = pd.DataFrame(data['rows'] + mean, columns=WEEK_COLUMNS)
+    frame[['pairs', 'comparisons']] = frame[['pairs', 'comparisons']].astype('Int64')
 
     return data, {'weeks': frame}
 

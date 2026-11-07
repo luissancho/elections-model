@@ -112,7 +112,7 @@ def test_export_herd_current_is_none_without_an_election_in_progress(study):
     assert meta['election'] is None and valid('rebano-meta', meta)
 
 
-def test_publish_study_rebano_writes_the_four_parts(tmp_path):
+def test_publish_study_rebano_writes_every_part(tmp_path):
     fs = FileSystem(str(tmp_path))
     write_herd_bundle(fs)
     out = publish.publish_study('rebano', make_writer(tmp_path, fs), prov=fake_prov)
@@ -141,7 +141,19 @@ def test_export_herd_weeks_validates_and_flattens(study):
     mean = frame[frame.label == 'Media']
     assert len(mean) == len(data['mean']) and mean.event_date.isna().all() and not mean.current.any()
     assert mean.pairs.isna().all() and mean.comparisons.isna().all()
-    assert frame.label.iloc[0] != 'Media' and mean.ratio.astype(object).where(mean.ratio.notna(), None).tolist() == [m['ratio'] for m in data['mean']]
+    assert frame.label.iloc[0] != 'Media'
+    ratios = mean.ratio.astype(object).where(mean.ratio.notna(), None).tolist()
+    assert ratios == [m['ratio'] for m in data['mean']]
+
+
+def test_export_herd_weeks_csv_counts_are_integers(study):
+    frame = publish.STUDY_EXPORTERS['rebano']['weeks'](study)[1]['weeks']
+    lines = frame.to_csv(index=False).splitlines()
+    first = frame.iloc[0]
+    cells = lines[1].split(',')
+    assert cells[5] == str(int(first.pairs)) and cells[6] == str(int(first.comparisons))
+    media = [line.split(',') for line in lines if ',Media,' in line]
+    assert media and all(row[5] == '' and row[6] == '' for row in media)
 
 
 def test_publish_study_rebano_writes_weeks(tmp_path):
