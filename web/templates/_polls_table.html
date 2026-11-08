@@ -60,7 +60,7 @@
               <tr>
                 <th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>
                 <th scope="col" data-key="rating" title="Rating de la encuestadora, de 0 a 100: cuanto más alto, más pesa su sondeo en el promedio. Rojo por debajo de 50, verde por encima."><button type="button" class="sort">Rating (0-100)</button></th>
-                <th scope="col" data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>
+                <th scope="col" data-key="date" aria-sort="descending" title="Días del trabajo de campo del sondeo"><button type="button" class="sort">Fecha</button></th>
                 <th scope="col" data-key="sample_size"><button type="button" class="sort">Muestra</button></th>
                 {% for name in table_parties %}
                 <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><button type="button" class="sort"><i class="pd" style="background: {{ catalog[name].color }}"></i>{{ name }}</button></th>

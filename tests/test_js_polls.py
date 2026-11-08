@@ -86,12 +86,21 @@ def test_result_tooltip_line_names_the_official_result_and_the_date():
     assert '33,1' in line
 
 
-def test_months_labels_and_short_dates_of_the_polls_table():
+def test_months_labels_and_page_size_of_the_polls_table():
     assert table_js('p.monthsOf(POLLS)') == ['2026-09', '2026-10']
     assert table_js('p.monthOf({date: "2026-10-01"})') == '2026-10' and table_js('p.monthOf({})') is None
     assert table_js('p.monthLabel("2023-08")') == 'Ago 2023' and table_js('p.monthLabel("2026-12")') == 'Dic 2026'
-    assert table_js('p.shortDate("2026-10-01")') == '01/10/26' and table_js('p.shortDate(null)') == '–'
     assert table_js('p.PAGE_SIZE') == 15
+
+
+def test_fieldwork_label_of_the_polls_table_matches_the_server():
+    assert table_js('p.fieldworkLabel("2026-10-29", "2026-10-30")') == '29–30 Oct'
+    assert table_js('p.fieldworkLabel("2026-09-01", "2026-11-01")') == '1 Sep–1 Nov'
+    assert table_js('p.fieldworkLabel("2026-10-30", "2026-10-30")') == '30 Oct'
+    assert table_js('p.fieldworkLabel("2026-12-28", "2027-01-03")') == '28 Dic–3 Ene'
+    assert table_js('p.fieldworkLabel(null, "2026-10-30")') == '30 Oct' and table_js('p.fieldworkLabel("2026-10-28", null)') == '28 Oct'
+    assert table_js('p.fieldworkLabel(null, null, "2026-10-30T00:00:00")') == '30 Oct'
+    assert table_js('p.fieldworkLabel("nope", null, null)') == '–' and table_js('p.fieldworkLabel(undefined, undefined)') == '–'
 
 
 def test_filter_polls_by_pollster_and_inclusive_months():

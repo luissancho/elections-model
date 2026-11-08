@@ -24,6 +24,10 @@ RARE = 0.001
 ELECTION_COLUMNS = ['scope', 'event_date', 'label', 'kind', 'comparison', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
                     'change', 'falls', 'p']
 
+ROBUSTNESS_COLUMNS = ['pair_days', 'min_rows', 'default', 'comparison', 'n', 'k', 'median_change', 'change', 'p']
+
+WEEK_COLUMNS = ['event_date', 'label', 'current', 'lo', 'hi', 'pairs', 'comparisons', 'ratio']
+
 
 def compute_for_publish(data: FileSystem, writer: bundle.BundleWriter):
     """Compute the study from the published parts of the live bundle (even if the writer is a dry run).
@@ -57,9 +61,14 @@ def export_herd_summary(study) -> tuple:
     Returns
     -------
     tuple
-        ``(data, {})``: ``data`` for ``rebano-summary``.
+        ``(data, {'robustness': frame})``: ``data`` for ``rebano-summary``; the frame has the rows of the robustness
+        grid, with ``n`` and ``k`` as integers (0 in the empty cells) and ``None`` as NaN.
     """
-    return _clean(study.summary), {}
+    data = _clean(study.summary)
+    frame = pd.DataFrame(data['robustness']['rows'], columns=ROBUSTNESS_COLUMNS)
+    frame[['n', 'k']] = frame[['n', 'k']].astype('int64')
+
+    return data, {'robustness': frame}
 
 
 def export_herd_elections(study) -> tuple:
@@ -83,6 +92,24 @@ def export_herd_current(study) -> tuple:
         ``(data, {})``: ``data`` for ``rebano-current``.
     """
     return {'current': _clean(study.current)}, {}
+
+
+def export_herd_weeks(study) -> tuple:
+    """Export the dispersion between houses by bucket of weeks to the election, per election and on average.
+
+    Returns
+    -------
+    tuple
+        ``(data, {'weeks': frame})``: ``data`` for ``rebano-weeks`` (``buckets``, ``rows``, ``mean``); the frame is
+        long: the rows plus one row per bucket of the mean (label «Media», no date, pairs or comparisons).
+    """
+    data = _clean(study.weeks)
+    mean = [{'event_date': None, 'label': 'Media', 'current': False, 'lo': m['lo'], 'hi': m['hi'], 'pairs': None,
+             'comparisons': None, 'ratio': m['ratio']} for m in data['mean']]
+    frame = pd.DataFrame(data['rows'] + mean, columns=WEEK_COLUMNS)
+    frame[['pairs', 'comparisons']] = frame[['pairs', 'comparisons']].astype('Int64')
+
+    return data, {'weeks': frame}
 
 
 def _significant(comparison: dict) -> bool:

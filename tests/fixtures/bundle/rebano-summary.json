@@ -16,7 +16,21 @@
         "sign_p": 0.0013,
         "clear": 3,
         "median_change": -0.15,
-        "since_year": "1986"
+        "since_year": "1986",
+        "pooled": {
+          "elections": 23,
+          "pairs": 309,
+          "rows_a": 2501,
+          "rows_b": 1750,
+          "r_a": 1.42,
+          "r_b": 1.03,
+          "change": -0.274,
+          "p": 0.0
+        },
+        "ci": {
+          "lo": -0.348,
+          "hi": -0.032
+        }
       },
       "far_mid": {
         "n": 17,
@@ -24,7 +38,21 @@
         "sign_p": 0.5,
         "clear": 0,
         "median_change": -0.1,
-        "since_year": "1986"
+        "since_year": "1986",
+        "pooled": {
+          "elections": 17,
+          "pairs": 185,
+          "rows_a": 1701,
+          "rows_b": 1284,
+          "r_a": 1.33,
+          "r_b": 1.25,
+          "change": -0.062,
+          "p": 0.0575
+        },
+        "ci": {
+          "lo": -0.281,
+          "hi": 0.186
+        }
       },
       "mid_final": {
         "n": 29,
@@ -32,7 +60,21 @@
         "sign_p": 0.0012,
         "clear": 2,
         "median_change": -0.15,
-        "since_year": "1977"
+        "since_year": "1977",
+        "pooled": {
+          "elections": 29,
+          "pairs": 312,
+          "rows_a": 2027,
+          "rows_b": 1820,
+          "r_a": 1.36,
+          "r_b": 1.04,
+          "change": -0.232,
+          "p": 0.0
+        },
+        "ci": {
+          "lo": -0.274,
+          "hi": -0.022
+        }
       }
     },
     "kinds": {
@@ -44,6 +86,284 @@
         "n": 13,
         "k": 11
       }
+    },
+    "robustness": {
+      "pair_days": [
+        3,
+        5,
+        7,
+        10
+      ],
+      "min_rows": [
+        3,
+        6
+      ],
+      "rows": [
+        {
+          "pair_days": 3,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "far_final",
+          "n": 18,
+          "k": 11,
+          "median_change": -0.057,
+          "change": -0.226,
+          "p": 0.0
+        },
+        {
+          "pair_days": 3,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "far_mid",
+          "n": 13,
+          "k": 6,
+          "median_change": 0.03,
+          "change": -0.033,
+          "p": 0.289
+        },
+        {
+          "pair_days": 3,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "mid_final",
+          "n": 23,
+          "k": 14,
+          "median_change": -0.045,
+          "change": -0.217,
+          "p": 0.0
+        },
+        {
+          "pair_days": 3,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_final",
+          "n": 3,
+          "k": 2,
+          "median_change": -0.02,
+          "change": -0.057,
+          "p": 0.316
+        },
+        {
+          "pair_days": 3,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_mid",
+          "n": 2,
+          "k": 0,
+          "median_change": 0.203,
+          "change": 0.189,
+          "p": 0.994
+        },
+        {
+          "pair_days": 3,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "mid_final",
+          "n": 3,
+          "k": 3,
+          "median_change": -0.198,
+          "change": -0.324,
+          "p": 0.0
+        },
+        {
+          "pair_days": 5,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "far_final",
+          "n": 20,
+          "k": 14,
+          "median_change": -0.157,
+          "change": -0.249,
+          "p": 0.0
+        },
+        {
+          "pair_days": 5,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "far_mid",
+          "n": 16,
+          "k": 10,
+          "median_change": -0.221,
+          "change": -0.083,
+          "p": 0.0325
+        },
+        {
+          "pair_days": 5,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "mid_final",
+          "n": 28,
+          "k": 18,
+          "median_change": -0.163,
+          "change": -0.21,
+          "p": 0.0
+        },
+        {
+          "pair_days": 5,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_final",
+          "n": 4,
+          "k": 4,
+          "median_change": -0.302,
+          "change": -0.433,
+          "p": 0.0
+        },
+        {
+          "pair_days": 5,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_mid",
+          "n": 4,
+          "k": 2,
+          "median_change": -0.099,
+          "change": -0.154,
+          "p": 0.015
+        },
+        {
+          "pair_days": 5,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "mid_final",
+          "n": 6,
+          "k": 3,
+          "median_change": -0.041,
+          "change": -0.272,
+          "p": 0.0
+        },
+        {
+          "pair_days": 7,
+          "min_rows": 3,
+          "default": true,
+          "comparison": "far_final",
+          "n": 23,
+          "k": 19,
+          "median_change": -0.15,
+          "change": -0.274,
+          "p": 0.0
+        },
+        {
+          "pair_days": 7,
+          "min_rows": 3,
+          "default": true,
+          "comparison": "far_mid",
+          "n": 17,
+          "k": 9,
+          "median_change": -0.1,
+          "change": -0.062,
+          "p": 0.0575
+        },
+        {
+          "pair_days": 7,
+          "min_rows": 3,
+          "default": true,
+          "comparison": "mid_final",
+          "n": 29,
+          "k": 23,
+          "median_change": -0.15,
+          "change": -0.232,
+          "p": 0.0
+        },
+        {
+          "pair_days": 7,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_final",
+          "n": 5,
+          "k": 4,
+          "median_change": -0.465,
+          "change": -0.368,
+          "p": 0.0
+        },
+        {
+          "pair_days": 7,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_mid",
+          "n": 6,
+          "k": 3,
+          "median_change": -0.064,
+          "change": -0.118,
+          "p": 0.013
+        },
+        {
+          "pair_days": 7,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "mid_final",
+          "n": 9,
+          "k": 7,
+          "median_change": -0.113,
+          "change": -0.31,
+          "p": 0.0
+        },
+        {
+          "pair_days": 10,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "far_final",
+          "n": 27,
+          "k": 22,
+          "median_change": -0.214,
+          "change": -0.263,
+          "p": 0.0
+        },
+        {
+          "pair_days": 10,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "far_mid",
+          "n": 17,
+          "k": 8,
+          "median_change": 0.015,
+          "change": -0.072,
+          "p": 0.0125
+        },
+        {
+          "pair_days": 10,
+          "min_rows": 3,
+          "default": false,
+          "comparison": "mid_final",
+          "n": 30,
+          "k": 22,
+          "median_change": -0.109,
+          "change": -0.211,
+          "p": 0.0
+        },
+        {
+          "pair_days": 10,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_final",
+          "n": 8,
+          "k": 6,
+          "median_change": -0.259,
+          "change": -0.325,
+          "p": 0.0
+        },
+        {
+          "pair_days": 10,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "far_mid",
+          "n": 6,
+          "k": 3,
+          "median_change": -0.025,
+          "change": -0.119,
+          "p": 0.0005
+        },
+        {
+          "pair_days": 10,
+          "min_rows": 6,
+          "default": false,
+          "comparison": "mid_final",
+          "n": 11,
+          "k": 8,
+          "median_change": -0.103,
+          "change": -0.26,
+          "p": 0.0
+        }
+      ]
     }
   }
 }

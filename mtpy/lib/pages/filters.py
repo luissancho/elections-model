@@ -45,7 +45,9 @@ def fmt_num(x, digits: int = 0) -> str:
     """
     Format a number in Spanish notation (``.`` thousands, ``,`` decimals).
 
-    Ties round half away from zero, as ``Intl.NumberFormat`` does in ``format.js``.
+    Ties round half away from zero on the shortest decimal representation of the value, as ``Intl.NumberFormat``
+    does in ``format.js``: ``1.595`` is ``'1,60'``, not the ``'1,59'`` of its exact binary value (1.59499…), so
+    the server and the browser write the same figure.
 
     Parameters
     ----------
@@ -63,8 +65,9 @@ def fmt_num(x, digits: int = 0) -> str:
         return DASH
 
     try:
-        value = Decimal(x).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
-    except (InvalidOperation, TypeError, ValueError):
+        source = str(x) if isinstance(x, (int, Decimal)) else repr(float(x))
+        value = Decimal(source).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
         return DASH
 
     text = '{:,.{}f}'.format(value, digits)

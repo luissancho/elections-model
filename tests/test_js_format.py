@@ -96,6 +96,14 @@ def test_axis_date_names_each_tick_by_what_it_is():
     assert run_js(f'f.fmtAxisDate({t("2026-08-01")}, 2)') == 'ago'
 
 
+def test_fmt_num_rounds_ties_like_the_browser():
+    """`Intl.NumberFormat` redondea los empates alejándose de cero sobre la representación decimal más corta del
+    número (1.595 → «1,60»); `fmt_num` debe hacer lo mismo, no redondear el valor binario exacto (1.594999…)."""
+    for x, digits in ((1.595, 2), (2.175, 2), (1.225, 2), (1.005, 2), (2.675, 2), (0.145, 2), (73.05, 1), (1.45, 1),
+                      (-1.595, 2), (2.5, 0), (1.235, 2), (0.31, 2)):
+        assert run_js(f'f.fmtNum({x}, {digits})') == pages.fmt_num(x, digits), (x, digits)
+
+
 def test_fmt_count_marks_the_thousands_as_the_python_filter():
     """`fmtCount` agrupa también los millares de cuatro cifras, como `fmt_num`; `fmtInt` no (para que un año no
     salga con punto)."""

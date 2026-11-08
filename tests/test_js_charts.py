@@ -31,6 +31,7 @@ SERIES_WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'series-wire.js').as_uri()
 MATRIX_JS = pathlib.Path(DIST, 'js', 'charts', 'matrix.js').as_uri()
 RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
+WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 ERRORS_JS = pathlib.Path(DIST, 'js', 'charts', 'errors.js').as_uri()
 DUMBBELL_JS = pathlib.Path(DIST, 'js', 'charts', 'dumbbell.js').as_uri()
@@ -51,7 +52,7 @@ def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
     dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
-    ranking, `ds` distancia), el del voto oculto (`er` errores), el de
+    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el del voto oculto (`er` errores), el de
     Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las funciones de la opción se pierden en la
     serialización, como en `JSON.stringify`)."""
     script = (
@@ -63,14 +64,15 @@ def run_js(expr, rows=ROWS):
         'const sw = await import("{}"); const c = await import("{}"); '
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
-        'const rk = await import("{}"); const ds = await import("{}"); '
+        'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
         'const er = await import("{}"); '
         'const db = await import("{}"); const bw = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS, json.dumps(rows), expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS, json.dumps(rows),
+             expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -851,6 +853,76 @@ def test_matrix_option_bolds_the_columns_asked_for_and_can_keep_them_upright():
                   '{short: "GEN 23", label: "Generales 2023"}], houses: ["CIS"], cells: [[0, 0, 1.0]]}).xAxis; '
                   + labels)
     assert axis == {'rotate': 90, 'labels': ['AN 18', '{g|GEN 23}']}
+
+
+def weeks_data():
+    """The `weeks` part by hand: four buckets, two past elections (2016 without a ratio far away) and 2026."""
+    def row(event_date, label, current, bucket, pairs, ratio):
+        lo, hi = bucket
+        return {'event_date': event_date, 'label': label, 'current': current, 'lo': lo, 'hi': hi, 'pairs': pairs,
+                'comparisons': 4 * pairs, 'ratio': ratio}
+
+    buckets = [(27, 52), (5, 7), (3, 4), (0, 2)]
+    ratios = {('2016-06-26', 'Generales 2016', False): [(1, None), (6, 1.39), (11, 0.82), (16, 0.7)],
+              ('2023-07-23', 'Generales 2023', False): [(7, 1.16), (27, 1.36), (32, 1.12), (37, 1.28)],
+              ('2026-11-29', 'Generales 2026', True): [(14, 1.01), (34, 1.11), (39, 1.06), (1, None)]}
+    rows = [row(*key, bucket, pairs, ratio) for key, values in ratios.items()
+            for bucket, (pairs, ratio) in zip(buckets, values)]
+    mean = [{'lo': 27, 'hi': 52, 'k': 1, 'ratio': 1.16}, {'lo': 5, 'hi': 7, 'k': 2, 'ratio': 1.38},
+            {'lo': 3, 'hi': 4, 'k': 2, 'ratio': 0.97}, {'lo': 0, 'hi': 2, 'k': 2, 'ratio': 0.99}]
+    return {'buckets': [{'lo': lo, 'hi': hi, 'label': '%d-%d' % (lo, hi)} for lo, hi in buckets],
+            'rows': rows, 'mean': mean}
+
+
+def test_weeks_option_colours_each_election_and_marks_the_stretches():
+    data = weeks_data()
+    option = run_js('wk.weeksOption(%s)' % json.dumps(data))
+    names = [s['name'] for s in option['series']]
+    assert names == ['Generales 2016', 'Generales 2023', 'Media de las 2', 'Generales 2026']
+    series = option['series']
+    assert series[0]['lineStyle']['color'] == '#e07b39' and series[1]['lineStyle']['color'] == '#2a9d8f'
+    assert option['series'][0]['connectNulls'] is True and option['series'][3]['lineStyle']['width'] == 3.5
+    assert option['series'][0]['lineStyle']['width'] == 1.6 and option['series'][0]['data'] == [None, 1.39, 0.82, 0.7]
+    assert series[3]['lineStyle']['color'] == '#1d4f86' and series[3]['data'] == [1.01, 1.11, 1.06, None]
+    assert option['series'][3]['endLabel']['show'] is True
+    assert series[2]['lineStyle']['type'] == 'dashed' and series[2]['markLine']['data'][0]['yAxis'] == 1
+    assert option['series'][2]['markLine']['label']['formatter'] == 'lo que cabría esperar sólo por el azar'
+    areas = option['series'][2]['markArea']['data']
+    assert [a[0]['xAxis'] for a in areas] == ['5-7', '0-2'] and 'markArea' not in option['series'][3]
+    assert [(a[0]['name'], a[1]['xAxis']) for a in areas] == [('3-8 semanas', '3-4'), ('tres últimas', '0-2')]
+    # no band below the line of chance: the only areas are the two stretches, whose whole buckets the axis shades
+    assert all('yAxis' not in point for area in areas for point in area)
+    shades = option['xAxis']['splitArea']['areaStyle']['color']
+    assert shades[0] == 'rgba(0,0,0,0)' and shades[1] == shades[2] != shades[3] != shades[0]
+    assert option['xAxis']['data'] == ['27-52', '5-7', '3-4', '0-2'] and option['yAxis']['interval'] == 0.5
+    assert option['xAxis']['name'] == 'semanas antes de la elección'
+    assert (option['yAxis']['min'], option['yAxis']['max']) == (0, 3)
+    # the colours cycle and the top rises to the next half when a ratio passes `yMax`
+    data['rows'][1]['ratio'] = 3.03
+    option = run_js('wk.weeksOption(%s, {palette: ["#111111"]})' % json.dumps(data))
+    assert [s['lineStyle']['color'] for s in option['series'][:2]] == ['#111111', '#111111']
+    assert option['yAxis']['max'] == 3.5
+    # all seven labels show on a phone, and the palette has eight colours before it wraps
+    assert option['xAxis']['axisLabel']['interval'] == 0 and option['xAxis']['axisLabel']['fontSize'] == 10
+    colours = run_js('wk.PALETTE')
+    assert len(colours) == 9 and colours[7:] == ['#0e7490', '#b5179e'] and len(set(colours)) == 9
+
+
+def test_weeks_tooltip_gives_each_line_its_value_and_pairs():
+    """The tooltip of a bucket: «{label}: {valor} ({pairs} parejas)» per line with a value, and the end label of the
+    election in progress «{label} · {valor}»."""
+    data = json.dumps(weeks_data())
+    texts = run_js('(() => { const o = wk.weeksOption(%s); const at = (i) => o.series.map((s, j) => ({seriesName: '
+                   's.name, seriesIndex: j, dataIndex: i, value: s.data[i], marker: "", axisValue: o.xAxis.data[i]}));'
+                   ' return [o.tooltip.formatter(at(0)), o.tooltip.formatter(at(3)), '
+                   'o.series[3].endLabel.formatter({value: 1.06})]; })()' % data)
+    far, last, end = texts
+    # the mean says how many elections it has where fewer than all of them have a ratio
+    assert far.split('<br>') == ['27-52 semanas', 'Generales 2023: 1,16 (7 parejas)',
+                                 'Media de las 2: 1,16 (1 general)', 'Generales 2026: 1,01 (14 parejas)']
+    assert last.split('<br>') == ['0-2 semanas', 'Generales 2016: 0,70 (16 parejas)',
+                                  'Generales 2023: 1,28 (37 parejas)', 'Media de las 2: 0,99']
+    assert end == '2026 · 1,06'
 
 
 def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():

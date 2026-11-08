@@ -458,6 +458,7 @@ th, td { padding: 7px var(--space-2); border-bottom: 1px solid var(--color-line)
 th { font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); border-bottom: 1.5px solid var(--color-line-strong); }
 th[title] { cursor: help; }  /* the header explains its column in a tooltip */
 tbody tr:hover td { background: var(--color-row-hover); }
+.is-default td { font-weight: 700; }  /* the default cell of a grid of alternatives (robustness table) */
 th:first-child, td:first-child { text-align: left; }
 th.l, td.l { text-align: left; }  /* a column aligned left: the range bars (`.rng`), so they line up */
 td b, td strong { font-weight: 700; }
@@ -767,7 +768,7 @@ ol.notes > li:target { color: var(--color-text); }
    one line at 13 px; a longer name wraps, a longer medium is cut with an ellipsis */
 .et col.c-f { width: 150px; }
 .et col.c-r { width: 92px; }
-.et col.c-d { width: 80px; }
+.et col.c-d { width: 104px; }  /* the longest fieldwork label, «30 Sep–31 Oct» */
 .et col.c-s { width: 80px; }
 .et col.c-p { width: 72px; }
 .et th { color: var(--color-muted); user-select: none; }
@@ -987,8 +988,12 @@ td.blk { font-weight: 700; }
 .herd-page #study-head .pill { white-space: normal; border-radius: 10px; }
 .herd-page .kpi .l { white-space: normal; overflow: visible; text-overflow: clip; }
 .herd-page .table-wrap { max-width: 100%; }
+/* the separation by weeks of question 2, at full width above the squares (lower on phones) */
+.qcard .chart#weeks-chart { height: 320px; }
+#weeks-chart + .tnote { margin-bottom: var(--space-3); }
 @media (max-width: 719px) {
   .herd-bar { grid-template-columns: 6.5rem minmax(0, 1fr) 3.6rem; gap: 6px; font-size: 12px; }
+  .qcard .chart#weeks-chart { height: 260px; }
 }
 /* The shy-vote study (/analisis/voto-oculto): the bars of the left at full width and lower on phones, the bars of
    Vox, the strip of the parties beside the wider table of question 3, the quote of question 2 with its pill and the

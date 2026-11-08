@@ -86,7 +86,7 @@ EVENT_CSV = ('pollsters', 'polls', 'cycle', 'ban', 'ban-legal', 'results', 'mode
 STUDIES = ('voto-cera', 'sesgo-cis', 'rebano', 'voto-oculto', 'andorra')
 STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
                'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election'),
-               'rebano': ('meta', 'summary', 'elections', 'current'),
+               'rebano': ('meta', 'summary', 'elections', 'current', 'weeks'),
                'voto-oculto': ('meta', 'summary', 'elections', 'groups'),
                'andorra': ('meta', 'summary', 'pairs', 'elections', 'cells', 'houses', 'latest')}
 STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['voto-cera']},
@@ -97,7 +97,7 @@ STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['vo
 STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
                            'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
              'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses'),
-             'rebano': ('elections',),
+             'rebano': ('elections', 'weeks', 'robustness'),
              'voto-oculto': ('elections', 'groups'),
              'andorra': ('pairs', 'elections', 'cells', 'houses', 'latest-polls')}
 STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'census-countries'),
@@ -107,7 +107,7 @@ STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'c
                               'check': ('check',)},
                 'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
                               'election': ('election-houses',)},
-                'rebano': {'elections': ('elections',)},
+                'rebano': {'summary': ('robustness',), 'elections': ('elections',), 'weeks': ('weeks',)},
                 'voto-oculto': {'elections': ('elections',), 'groups': ('groups',)},
                 'andorra': {'pairs': ('pairs',), 'elections': ('elections',), 'cells': ('cells',), 'houses': ('houses',),
                             'latest': ('latest-polls',)}}
@@ -195,9 +195,10 @@ SCHEMAS = {
                     'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
                     'versions': dict, 'seconds': dict},
     'rebano-summary': {'n_elections': int, 'n_scopes': int, 'since_year': NULLABLE_STR, 'comparisons': dict,
-                       'kinds': dict},
+                       'kinds': dict, 'robustness': dict},
     'rebano-elections': {'rows': list},
     'rebano-current': {'current': (dict, type(None))},
+    'rebano-weeks': {'buckets': list, 'rows': list, 'mean': list},
     'voto-oculto-meta': {'study': str, 'title': str, 'subtitle': str, 'scopes': list, 'election': (dict, type(None)),
                          'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
                          'versions': dict, 'seconds': dict},

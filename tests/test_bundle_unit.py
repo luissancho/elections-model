@@ -96,9 +96,9 @@ def test_study_registry_is_per_study():
     assert bundle.STUDY_CSV['sesgo-cis'] == ('elections', 'houses', 'matrix', 'election-houses')
     assert bundle.path_study('sesgo-cis', 'matrix') == 'studies/sesgo-cis/matrix.json'
     assert bundle.path_study_csv('sesgo-cis', 'election-houses') == 'studies/sesgo-cis/csv/election-houses.csv'
-    assert bundle.STUDY_PARTS['rebano'] == ('meta', 'summary', 'elections', 'current')
+    assert bundle.STUDY_PARTS['rebano'] == ('meta', 'summary', 'elections', 'current', 'weeks')
     assert bundle.STUDY_SCHEMAS['rebano'] == {part: 'rebano-' + part for part in bundle.STUDY_PARTS['rebano']}
-    assert bundle.STUDY_CSV['rebano'] == ('elections',)
+    assert bundle.STUDY_CSV['rebano'] == ('elections', 'weeks', 'robustness')
     assert bundle.EVENT_PARTS == ('meta', 'pollsters', 'polls', 'cycle', 'ban', 'results', 'model', 'series')
     assert 'ban' in bundle.EVENT_CSV and 'ban-legal' in bundle.EVENT_CSV and 'model-ban' in bundle.EVENT_CSV
     assert bundle.SCHEMAS['event-ban'] == {'parties': list, 'columns': list, 'polls': list, 'legal': list}

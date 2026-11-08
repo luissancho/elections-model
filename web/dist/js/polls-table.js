@@ -52,14 +52,37 @@ export function monthLabel(month) {
 }
 
 /**
- * Numeric short date.
+ * Days of the fieldwork of a poll, without the year (`fieldwork_label` of the server).
  *
- * @param {string|null} iso ISO date
- * @returns {string} `dd/mm/aa`, or `–` without a valid date
+ * @param {string|null} start first day of the fieldwork (ISO); an invalid one counts as missing
+ * @param {string|null} end last day of the fieldwork (ISO)
+ * @param {string|null} [date=null] date of the poll, used when neither day is known
+ * @returns {string} `29–30 Oct` within a month, `1 Sep–1 Nov` across months (or years), `30 Oct` for a single
+ *   day or when only one is known; `–` without any valid date
  */
-export function shortDate(iso) {
-  const match = typeof iso === 'string' ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
-  return match ? `${match[3]}/${match[2]}/${match[1].slice(2)}` : DASH;
+export function fieldworkLabel(start, end, date = null) {
+  const parse = (iso) => {
+    const match = typeof iso === 'string' ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
+    const month = match ? Number(match[2]) : 0;
+    return match && month >= 1 && month <= 12 ? {year: Number(match[1]), month, day: Number(match[3])} : null;
+  };
+  let first = parse(start);
+  const last = parse(end);
+  if (first === null && last === null) {
+    first = parse(date);
+  }
+  const days = [first, last].filter((day) => day !== null);
+  if (!days.length) {
+    return DASH;
+  }
+  const labels = days.map((day) => `${day.day} ${MONTHS[day.month - 1]}`);
+  if (days.length === 1 || (first.year === last.year && first.month === last.month && first.day === last.day)) {
+    return labels[0];
+  }
+  if (first.year === last.year && first.month === last.month) {
+    return `${first.day}–${last.day} ${MONTHS[first.month - 1]}`;
+  }
+  return labels.join('–');
 }
 
 /**

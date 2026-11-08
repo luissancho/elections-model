@@ -13,13 +13,48 @@ from tests.fakes import write_herd_bundle
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 
-def compute(tmp_path, build=write_herd_bundle):
+def compute(tmp_path, build=write_herd_bundle, params=None):
     """Study over a synthetic bundle in ``tmp_path`` (``build`` writes it), with the repository ``data/``."""
     fs = FileSystem(str(tmp_path))
     build(fs)
     data = FileSystem(os.path.join(ROOT, 'data'))
 
-    return compute_herd(bundle.BundleReader(fs), data)
+    return compute_herd(bundle.BundleReader(fs), data, params)
+
+
+def test_compute_herd_weeks(fresh_app, tmp_path):
+    weeks = compute(tmp_path).weeks
+    assert [b['label'] for b in weeks['buckets']] == ['27-52', '18-26', '12-17', '8-11', '5-7', '3-4', '0-2']
+    rows = {(r['label'], r['lo']): r for r in weeks['rows']}
+    assert {r['label'] for r in weeks['rows']} == {'Generales 2019', 'Generales 2023', 'Generales 2026'}
+    assert (rows[('Generales 2019', 5)]['pairs'], rows[('Generales 2019', 5)]['ratio']) == (2, 1.06)
+    assert rows[('Generales 2019', 0)]['ratio'] == 0.35
+    assert rows[('Generales 2019', 27)]['pairs'] == 1 and rows[('Generales 2019', 27)]['ratio'] is None
+    assert (rows[('Generales 2023', 0)]['pairs'], rows[('Generales 2023', 0)]['ratio']) == (3, 1.06)
+    assert rows[('Generales 2026', 12)]['current'] is True and rows[('Generales 2026', 12)]['ratio'] == 1.41
+    assert rows[('Generales 2026', 3)]['ratio'] is None
+    mean = {m['lo']: (m['k'], m['ratio']) for m in weeks['mean']}
+    assert mean[0] == (2, 0.7) and mean[5] == (1, 1.06) and mean[27] == (0, None)
+    assert len(weeks['rows']) == 3 * 7
+
+
+def test_compute_herd_weeks_without_elections_of_the_scope(fresh_app, tmp_path):
+    weeks = compute(tmp_path, params={'weeks': {'scope': 'es', 'since': '2030-01-01', 'min_pairs': 2,
+                                                'buckets': [[0, 2], [27, 52]]}}).weeks
+    assert [r['label'] for r in weeks['rows']] == ['Generales 2026'] * 2 and weeks['mean'] == [
+        {'lo': 27, 'hi': 52, 'k': 0, 'ratio': None}, {'lo': 0, 'hi': 2, 'k': 0, 'ratio': None}]
+
+
+def test_compute_herd_weeks_skips_a_current_election_of_another_scope(fresh_app, tmp_path):
+    weeks = compute(tmp_path, params={'weeks': {'scope': 'es-md', 'since': '2000-01-01', 'min_pairs': 2,
+                                                'buckets': [[0, 2]]}}).weeks
+    assert [r['label'] for r in weeks['rows']] == ['Madrid 2021'] and not any(r['current'] for r in weeks['rows'])
+
+
+def test_compute_herd_weeks_without_comparisons(fresh_app, tmp_path):
+    weeks = compute(tmp_path, params={'pair_days': 0}).weeks
+    assert len(weeks['rows']) == 3 * 7 and all(r['ratio'] is None and r['pairs'] == 0 for r in weeks['rows'])
+    assert all(m['k'] == 0 and m['ratio'] is None for m in weeks['mean'])
 
 
 def test_comparisons_constant():
@@ -33,11 +68,12 @@ def test_compute_herd_rows(fresh_app, tmp_path):
     g19 = rows[('Generales 2019', 'far_final')]
     assert (g19['pairs'], g19['rows_a'], g19['rows_b'], g19['r_a'], g19['r_b'], g19['change'], g19['falls']) == (
         1, 4, 4, 1.41, 0.35, -0.749, True)
-    assert abs(g19['p'] - 0.214) < 0.03           # exact 15/70
+    assert abs(g19['p'] - 1 / 6) < 0.03           # exact 1/6: 4 blocks (2 pairs of polls per period)
     assert rows[('Generales 2019', 'far_mid')]['change'] == -0.248
     assert rows[('Generales 2019', 'mid_final')]['change'] == -0.667
     g23 = rows[('Generales 2023', 'far_final')]
     assert (g23['r_a'], g23['r_b'], g23['change'], g23['falls'], g23['kind']) == (0.35, 1.06, 1.986, False, 'generales')
+    assert abs(g23['p'] - 1.0) < 1e-9              # the observed rise is the largest of the 10 arrangements
     assert set(g19) == {'scope', 'event_date', 'label', 'kind', 'comparison', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
                         'change', 'falls', 'p'}
 
@@ -45,15 +81,48 @@ def test_compute_herd_rows(fresh_app, tmp_path):
 def test_compute_herd_summary(fresh_app, tmp_path):
     s = compute(tmp_path).summary
     assert (s['n_elections'], s['n_scopes'], s['since_year']) == (2, 1, '2019')
-    assert s['comparisons']['far_final'] == {'n': 2, 'k': 1, 'sign_p': 0.75, 'clear': 0, 'median_change': 0.62,
-                                             'since_year': '2019'}
-    assert s['comparisons']['far_mid'] == {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25,
-                                           'since_year': '2019'}
-    assert s['comparisons']['mid_final'] == {'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67,
-                                             'since_year': '2019'}
-    # exact permutation p: far_mid 23/70, mid_final 15/70: neither is clear
+    tally = ('n', 'k', 'sign_p', 'clear', 'median_change', 'since_year')
+    assert {k: s['comparisons']['far_final'][k] for k in tally} == {
+        'n': 2, 'k': 1, 'sign_p': 0.75, 'clear': 0, 'median_change': 0.62, 'since_year': '2019'}
+    assert {k: s['comparisons']['far_mid'][k] for k in tally} == {
+        'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.25, 'since_year': '2019'}
+    assert {k: s['comparisons']['mid_final'][k] for k in tally} == {
+        'n': 1, 'k': 1, 'sign_p': 0.5, 'clear': 0, 'median_change': -0.67, 'since_year': '2019'}
+    ff = s['comparisons']['far_final']
+    pooled = ff['pooled']
+    assert {k: pooled[k] for k in ('elections', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b', 'change')} == {
+        'elections': 2, 'pairs': 2, 'rows_a': 8, 'rows_b': 10, 'r_a': 0.98, 'r_b': 0.81, 'change': -0.173}
+    assert abs(pooled['p'] - 22 / 60) < 0.03 and ff['ci'] is None       # 2 elections: no interval
+    fm = s['comparisons']['far_mid']
+    assert fm['pooled']['change'] == -0.248 and abs(fm['pooled']['p'] - 1 / 6) < 0.03 and fm['ci'] is None
+    assert s['comparisons']['mid_final']['pooled']['change'] == -0.667
     assert s['kinds']['autonómicas'] == {'n': 0, 'k': 0, 'sign_p': None, 'clear': 0, 'median_change': None}
     assert s['kinds']['generales']['n'] == 2
+
+
+def test_compute_herd_robustness(fresh_app, tmp_path):
+    study = compute(tmp_path)
+    r = study.summary['robustness']
+    assert r['pair_days'] == [3, 5, 7, 10] and r['min_rows'] == [3, 6] and len(r['rows']) == 24
+    assert [(row['pair_days'], row['min_rows'], row['comparison']) for row in r['rows'][:4]] == [
+        (3, 3, 'far_final'), (3, 3, 'far_mid'), (3, 3, 'mid_final'), (3, 6, 'far_final')]
+    default = {row['comparison']: row for row in r['rows'] if row['default']}
+    s = study.summary['comparisons']
+    assert set(default) == set(COMPARISONS)
+    assert all(row['pair_days'] == 7 and row['min_rows'] == 3 for row in default.values())
+    for key, row in default.items():
+        # the summary publishes the median at two decimals, the grid at three
+        assert (row['n'], row['k'], round(row['median_change'], 2), row['change'], row['p']) == (
+            s[key]['n'], s[key]['k'], s[key]['median_change'], s[key]['pooled']['change'], s[key]['pooled']['p'])
+    d3 = next(row for row in r['rows'] if (row['pair_days'], row['min_rows'], row['comparison']) == (3, 3, 'far_final'))
+    assert (d3['n'], d3['k'], d3['median_change'], d3['change']) == (2, 1, 0.618, -0.234)
+    empty = next(row for row in r['rows']
+                 if (row['pair_days'], row['min_rows'], row['comparison']) == (3, 6, 'far_final'))
+    assert empty == {'pair_days': 3, 'min_rows': 6, 'default': False, 'comparison': 'far_final', 'n': 0, 'k': 0,
+                     'median_change': None, 'change': None, 'p': None}
+    ten = next(row for row in r['rows']
+               if (row['pair_days'], row['min_rows'], row['comparison']) == (10, 6, 'mid_final'))
+    assert (ten['n'], ten['k'], ten['change']) == (1, 1, -0.667)
 
 
 def test_compute_herd_current(fresh_app, tmp_path):
