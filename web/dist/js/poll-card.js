@@ -28,9 +28,11 @@ export function voteRows(poll, parties, average = {}) {
 }
 
 /**
- * Los escaños de una casa para el hemiciclo: el punto medio de cada horquilla, su rótulo y los escaños sin asignar.
+ * Los escaños de una casa para el hemiciclo: el punto medio de cada horquilla, su rótulo y el resto hasta la cámara
+ * (el arco «Otros»: los escaños que la casa da a partidos sin cifra propia en la tabla y el redondeo de las
+ * horquillas, no escaños sin asignar).
  * @param {Object|null} seats Las horquillas `[lo, hi]` por partido.
- * @param {number} nSeats Los escaños de la cámara.
+ * @param {number} nSeats Los escaños de la cámara (el hemiciclo necesita los mismos `nSeats` para dibujar el resto).
  * @returns {{seats: Object, labels: Object, rest: number|null}} Puntos medios, rótulos y resto (null si no queda).
  */
 export function pollSeats(seats, nSeats) {

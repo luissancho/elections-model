@@ -9,9 +9,18 @@ import {fmtDelta, fmtPct} from '../format.js';
 const LABEL_SHARE = 0.05;
 /** Width of the majority wedge, in seats. */
 const MARK_SEATS = 0.7;
-/** Name and colour of the arc that completes the chamber when the published seats do not add up to it. */
-const UNASSIGNED = 'Sin asignar';
-const UNASSIGNED_COLOR = '#d8dbe3';
+/**
+ * Name, colour and tooltip note of the arc that completes the chamber when the seats given do not add up to it (on
+ * the card of a poll: the pollster's seats for the parties without their own figure in the table, plus the rounding
+ * of the midpoints of its ranges). Its light grey is of the family of the «Otros» bar.
+ */
+const REST_NAME = 'Otros';
+const REST_COLOR = '#d8dbe3';
+const REST_NOTE = 'partidos sin cifra propia en esta tabla y redondeo de las horquillas';
+/** Size of the seats written in an arc: fixed, or scaled with the radius (down to a floor) when they are ranges. */
+const SEATS_FONT = 24;
+const SEATS_FONT_MIN = 13;
+const SEATS_FONT_RADIUS = 8.5;
 /** Outer radius from which the hole holds the majority line under «ESCAÑOS». */
 const SUBTITLE_RADIUS = 190;
 
@@ -62,8 +71,9 @@ export function hemicycleLabel(params) {
  * @param {object} opts `colors`, `order`, `nSeats`, `majority` (null for none), `fullnames` ({name: full name},
  *   tooltip), `deltas` ({name: seats difference against the last election, written after the seats) and `year`
  *   (of that election, for the tooltip), `labels` ({name: text written in the arc instead of the seats, e.g. the
- *   range a pollster published}), `rest` (seats left unassigned: a grey «Sin asignar» arc, outside `order`, that
- *   completes the chamber), `width` and `height` of the container
+ *   range a pollster published; the seats in the arcs then shrink with the radius so that a range fits on a
+ *   phone), `rest` (seats that complete the chamber: a light grey «Otros» arc, outside `order`, with its own
+ *   tooltip; it needs `nSeats`, the chamber it completes), `width` and `height` of the container
  * @returns {object} the option
  */
 export function hemicycleOption(seats, {
@@ -74,10 +84,13 @@ export function hemicycleOption(seats, {
   const total = nSeats || data.reduce((sum, item) => sum + item.value, 0);
   if (rest > 0) {
     data.push({
-      name: UNASSIGNED, value: rest, itemStyle: {color: UNASSIGNED_COLOR}, label: {show: false}, text: null, delta: null,
+      name: REST_NAME, value: rest, itemStyle: {color: REST_COLOR}, label: {show: false}, text: null, delta: null, rest: true,
     });
   }
   const radius = Math.max(40, Math.min(width / 2 - 10, height - 36));
+  // a range («115–123») is wider than a number: it shrinks with the radius so that it stays in its arc on a phone
+  const ranged = data.some((item) => typeof item.text === 'string');
+  const seatsFont = ranged ? Math.max(SEATS_FONT_MIN, Math.min(SEATS_FONT, Math.round(radius / SEATS_FONT_RADIUS))) : SEATS_FONT;
   const center = [width / 2, height - 12];
   const withMajority = majority !== null && majority !== undefined;
   const series = [{
@@ -92,7 +105,7 @@ export function hemicycleOption(seats, {
       formatter: hemicycleLabel,
       rich: {
         name: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 15, color: '#fff', align: 'center'},
-        seats: {fontFamily: THEME.headFamily, fontWeight: 800, fontSize: 24, color: '#fff', align: 'center'},
+        seats: {fontFamily: THEME.headFamily, fontWeight: 800, fontSize: seatsFont, color: '#fff', align: 'center'},
         // a little air between the seats and the arrow under them
         delta: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 12, color: '#fff', align: 'center', padding: [3, 0, 0, 0]},
       },
@@ -158,8 +171,8 @@ export function hemicycleOption(seats, {
       ...tooltipStyle(),
       trigger: 'item',
       formatter(params) {
-        if (params.name === UNASSIGNED) {
-          return escapeHtml(`${UNASSIGNED}: ${params.value} escaños`);
+        if (params.data && params.data.rest) {
+          return escapeHtml(`${REST_NAME}: ${params.value} escaños (${REST_NOTE})`);
         }
         const share = total ? fmtPct((params.value / total) * 100) : '';
         const name = fullnames[params.name] || params.name;

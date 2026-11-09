@@ -4454,7 +4454,10 @@ def test_polls_csv_link_survives_a_single_page_and_the_legend_is_accessible(api)
     assert data['inks'] == {'PP': pages.ink_color('#1d84ce'), 'Derecha': pages.ink_color('#1d84ce')}
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert '.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr));' in css
-    assert '.kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }' in css
+    # the last odd figure spans the row on a phone, without the divider of the odd ones (a background since the final
+    # review of 2026-11-09, so that the card image does not copy the phone's dividers)
+    assert '.kpi:last-child:nth-child(odd) { grid-column: 1 / -1; background: none; }' in css
+    assert '::before' not in css[css.index('.kpi {'):css.index('.kpi .l {')] and '.kpi:nth-child(odd)::after' not in css
     assert '.mut { color: var(--color-muted); font-size: 12px; }' in css and '.evbar .run small { font-size: 11.5px; color: var(--color-muted); }' in css
     for gone in ('.event-title', '.brand-tagline', '.event-run,'):
         assert gone not in css, gone
@@ -7294,6 +7297,30 @@ def test_poll_kpis_title_fieldwork_and_sheet():
     assert pages.sheet_rows({'date': '2026-11-09', 'pollster': 'X'}, '/casas/x', 'E', 'R')[3]['text'] == '9 nov 2026'  # the poll's date is its last fieldwork day
 
 
+def test_poll_kpis_and_lead_drop_the_unit_of_a_missing_value():
+    """Sin muestra o sin distancia, la cifra es un guion sin unidad (nunca «– entrevistas» ni «– pts»), y la entradilla
+    de la tarjeta no nombra la muestra (revisión final 2026-11-09)."""
+    for sample in (None, float('nan')):
+        kpis = pages.poll_kpis(POLL | {'sample_size': sample}, None)
+        assert [(k['value'], k['unit']) for k in kpis[2:]] == [('–', ''), ('–', '')]
+        assert pages.sample_text(POLL | {'sample_size': sample}) is None
+    assert [k['unit'] for k in pages.poll_kpis(POLL, 0.9)[2:]] == ['entrevistas', 'pts']
+    assert pages.sample_text(POLL | {'sample_size': 1200}) == '1.200 entrevistas'
+    assert pages.sample_text(POLL | {'sample_size': 0}) is None
+
+
+def test_sheet_links_the_source_only_with_a_web_address():
+    """La fuente sólo enlaza una dirección `http` o `https` con su host; cualquier otra cosa remite a la lista de
+    Wikipedia, sin enlace (revisión final 2026-11-09)."""
+    wikipedia = {'label': 'Fuente', 'text': 'Wikipedia, lista de sondeos', 'href': None}
+    for url in ('javascript:alert(1)', 'data:text/html,hola', 'ftp://example.com/sondeo', '//example.com/sondeo', 'www.larazon.es/encuesta',
+                'https://', 'http://[::1', '', '   ', 42):
+        assert pages.sheet_rows(POLL | {'url': url}, '/casas/nc-report', 'E', 'R')[7] == wikipedia, url
+    assert pages.sheet_rows(POLL | {'url': 'HTTP://Example.com/a '}, '/casas/x', 'E', 'R')[7] == {
+        'label': 'Fuente', 'text': 'example.com', 'href': 'HTTP://Example.com/a'}
+    assert pages.sheet_rows(POLL | {'url': 'http://www.larazon.es/e'}, '/casas/x', 'E', 'R')[7]['href'] == 'http://www.larazon.es/e'
+
+
 DETAIL_POLLS = [
     {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'start_date': '2026-10-01', 'end_date': '2026-10-04',
      'sample_size': 2000, 'mtype': 'cati', 'rating': 71.2, 'weight': 1.265, 'weight_over': 1.0, 'weight_sample': 1.265,
@@ -7345,6 +7372,14 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert pages.mtype_label('cati') in page
     kpis = page[page.index('id="poll-card"'):page.index('id="vote"')]
     assert '>Rating<' in kpis and '>71,2<' in kpis and '>Distancia al promedio<' in kpis and '>1,5<' in kpis  # 33.5 − 32.0
+    # the marks are explained inside the card (so in its image too), before the figures; «Cómo leerlo» calls them dark
+    note = ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. En gris, los escaños de los '
+            'demás partidos.</p>')
+    assert note in kpis and kpis.index(note) < kpis.index('class="kpis"') and kpis.index('id="poll-hemi"') < kpis.index(note)
+    assert 'la marca oscura sobre ella' in kpis and 'marca gris' not in page and 'El arco gris, «Otros», completa la cámara' in kpis
+    assert '2.000 entrevistas · ' in kpis and '>2.000<small>entrevistas</small>' in kpis
+    assert ('<meta name="description" content="Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: '
+            'voto por partido frente al promedio, escaños de la encuestadora, rating y peso en el promedio.">') in page
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
     assert '<th scope="col">Escaños</th>' in vote and '150–152' in vote and '>33,5<' in vote and '>32,0<' in vote
     assert 'Promedio del 5 oct 2026' in vote
@@ -7369,6 +7404,11 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     write_detail_polls(fresh_app.fs)
     page = html(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])
     assert 'Sigma Dos para El Mundo' in page and 'id="poll-hemi"' not in page and 'Sigma Dos no publicó escaños con este sondeo' in page
+    # without seats, the note of the card only explains the mark of the bars and the description does not offer seats
+    assert '<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día.</p>' in page
+    assert 'El arco gris' not in page
+    description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
+    assert description.endswith(': voto por partido frente al promedio, rating y peso en el promedio.') and 'escaños' not in description
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
     assert '<th scope="col">Escaños</th>' not in vote and 'Promedio del 20 sept 2026' in vote
     weight = page[page.index('id="weight"'):page.index('id="house"')]
@@ -7402,6 +7442,32 @@ def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
     # the run with both parts has the column
     page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
     assert 'Efecto de casa' in page[page.index('id="vote"'):page.index('id="weight"')]
+
+
+def test_sondeo_page_without_sample_nor_web_source(api, fresh_app):
+    """Un sondeo sin muestra y con una `url` que no es una dirección web: ni «– entrevistas» en la entradilla ni en la
+    cifra, y la fuente remite a Wikipedia sin enlace (revisión final 2026-11-09)."""
+    polls = [dict(DETAIL_POLLS[0], sample_size=None, url='javascript:alert(1)')] + DETAIL_POLLS[1:]
+    write_detail_polls(fresh_app.fs, polls=polls)
+    status, _, body = call(api, '/es/sondeos/2026-10-05/sigma-dos')
+    page = html(body)
+    assert status == 200 and 'entrevistas' not in page[page.index('id="poll-card"'):page.index('id="vote"')]
+    assert '<div class="v">–<small></small></div>' in page.replace('\n', '')
+    assert 'Trabajo de campo 1 oct 2026 – 4 oct 2026 · ' + pages.mtype_label('cati') in page
+    sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
+    assert 'javascript:' not in page and 'Wikipedia, lista de sondeos' in sheet
+
+
+def test_sondeo_page_of_a_run_without_polls_is_not_found(api, fresh_app):
+    """Un run sin la parte `polls`: la página de cualquier sondeo es un 404 «Sondeo no encontrado.»."""
+    other = '20261007-120000'
+    write_bundle(fresh_app.fs, run_id=other, manifest=False)
+    write_detail_polls(fresh_app.fs)
+    fresh_app.fs.remove(os.path.join(bundle.PREFIX, bundle.path_part('es', other, 'polls')))
+    webapi.site().files.clear()
+    status, _, body = call(api, '/es/sondeos/2026-10-05/sigma-dos', query='run=' + other)
+    assert status == 404 and 'Sondeo no encontrado.' in html(body)
+    assert call(api, '/es/sondeos/2026-10-05/sigma-dos')[0] == 200  # the run with the part has the page
 
 
 def test_sondeo_page_errors_and_pinned_run(api, fresh_app):

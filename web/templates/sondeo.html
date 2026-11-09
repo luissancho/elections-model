@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}{{ poll_title }} · {{ poll_date }} · {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}{% endblock %}
-{% block description %}Sondeo de {{ poll_title }} con trabajo de campo hasta el {{ poll_date }} para {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}: voto por partido frente al promedio, escaños de la encuestadora, rating y peso en el promedio.{% endblock %}
+{% block description %}Sondeo de {{ poll_title }} con trabajo de campo hasta el {{ poll_date }} para {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}: voto por partido frente al promedio{% if has_seats %}, escaños de la encuestadora{% endif %}, rating y peso en el promedio.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/sondeo.js"></script>
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
 {#- the date of a poll is the last day of its fieldwork: the page never calls it a publication date -#}
-{% set sample = poll.get('sample_size') %}
+{#- without a sample the lead leaves it out (never «– entrevistas») -#}
 {% set lead = ('Trabajo de campo ' ~ fieldwork if fieldwork else 'Fecha ' ~ poll_date)
-              ~ (' · ' ~ sample|int ~ ' entrevistas' if sample else '') ~ ' · ' ~ house.type %}
+              ~ (' · ' ~ sample_text if sample_text else '') ~ ' · ' ~ house.type %}
 {% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
     <div id="content" class="stack">
       <p class="back"><a href="{{ back_href }}">← Todas las encuestas</a></p>
@@ -29,17 +29,21 @@
         {% if not has_seats %}
         <p class="muted">{{ house.name }} no publicó escaños con este sondeo.</p>
         {% endif %}
+        {#- inside the card, so that the shared image explains its marks too -#}
+        <p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día.{% if has_seats %} En gris, los escaños de los demás partidos.{% endif %}</p>
         {{ m.kpis(kpis) }}
         {% call m.how() %}
         <p>
-          Cada barra es el voto que da el sondeo a un partido y la marca gris sobre ella, el promedio de sondeos de ese
-          mismo día. El rating es el de {{ house.name }} y el peso, lo que cuenta este sondeo en el promedio: los dos se
+          Cada barra es el voto que da el sondeo a un partido y la marca oscura sobre ella, el promedio de sondeos de
+          ese mismo día. El rating es el de {{ house.name }} y el peso, lo que cuenta este sondeo en el promedio: los dos se
           explican más abajo.
         </p>
         {% if has_seats %}
         <p>
           El hemiciclo reparte los escaños que dio {{ house.name }} con el sondeo, no un reparto nuestro: cada partido
-          entra con el punto medio de su horquilla, que se lee en su arco.
+          entra con el punto medio de su horquilla, que se lee en su arco. El arco gris, «Otros», completa la cámara:
+          son sobre todo los escaños que {{ house.name }} da a partidos sin cifra propia en esta tabla, más el redondeo
+          de las horquillas.
         </p>
         {% endif %}
         <p>

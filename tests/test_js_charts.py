@@ -186,8 +186,9 @@ def test_hemicycle_writes_the_seat_delta_under_the_seats():
     assert pie['data'][0]['delta'] == -25 and 'formatter' not in pie['label']  # la función no sobrevive al JSON
 
 
-def test_hemicycle_labels_the_arcs_with_a_range_and_fills_the_unassigned_seats():
-    """La tarjeta de un sondeo: los arcos se rotulan con la horquilla de la casa y un arco gris completa la cámara."""
+def test_hemicycle_labels_the_arcs_with_a_range_and_fills_the_chamber_with_others():
+    """La tarjeta de un sondeo: los arcos se rotulan con la horquilla de la casa y un arco gris «Otros» completa la
+    cámara (los escaños de los partidos sin cifra propia y el redondeo de las horquillas; revisión final 2026-11-09)."""
     assert run_js('h.hemicycleLabel({name: "PP", value: 137, data: {text: "136–138", delta: null}})') == '{name|PP}\n{seats|136–138}'
     assert run_js('h.hemicycleLabel({name: "PP", value: 137, data: {text: null}})') == '{name|PP}\n{seats|137}'
     data = run_js('h.hemicycleData({PP: 137, PSOE: 100}, {nSeats: 350, labels: {PP: "136–138"}})')
@@ -195,11 +196,33 @@ def test_hemicycle_labels_the_arcs_with_a_range_and_fills_the_unassigned_seats()
     option = run_js('h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, height: 330, '
                     'labels: {PP: "136–138", PSOE: "99–101"}, rest: 113})')
     items = option['series'][0]['data']
-    assert [(item['name'], item['value']) for item in items] == [('PP', 137), ('PSOE', 100), ('Sin asignar', 113)]
-    assert items[2]['itemStyle']['color'] == '#d8dbe3' and items[2]['label'] == {'show': False}
+    assert [(item['name'], item['value']) for item in items] == [('PP', 137), ('PSOE', 100), ('Otros', 113)]
+    assert items[2]['itemStyle']['color'] == '#d8dbe3' and items[2]['label'] == {'show': False} and items[2]['rest'] is True
     assert any(g.get('style', {}).get('text') == '350' for g in option['graphic'])
+    # the tooltip of the grey arc says what it holds; a party arc keeps its own; the majority ring still adds up to
+    # the chamber with the rest
+    probe = run_js('(() => { const o = h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, '
+                   'height: 330, rest: 113}); const items = o.series[0].data; '
+                   'return {rest: o.tooltip.formatter({name: items[2].name, value: items[2].value, data: items[2]}), '
+                   'party: o.tooltip.formatter({name: "PP", value: 137, data: items[0]}), '
+                   'ring: o.series[1].data.reduce((sum, d) => sum + d.value, 0), '
+                   'pie: items.reduce((sum, d) => sum + d.value, 0)}; })()')
+    assert probe['rest'] == 'Otros: 113 escaños (partidos sin cifra propia en esta tabla y redondeo de las horquillas)'
+    assert probe['party'].startswith('PP: 137 escaños (39,1') and 'Otros' not in probe['party']
+    assert probe['ring'] == pytest.approx(350) and probe['pie'] == 350
     plain = run_js('h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, height: 330})')
     assert len(plain['series'][0]['data']) == 2 and 'text' in plain['series'][0]['data'][0] and plain['series'][0]['data'][0]['text'] is None
+
+
+def test_hemicycle_shrinks_the_ranges_with_the_radius():
+    """Los rótulos de horquilla («115–123») encogen con el radio para caber en su arco en un móvil (revisión final
+    2026-11-09); sin horquillas, o con radio de sobra, los escaños siguen a 24 px."""
+    sizes = run_js(
+        '[[324, 178, true], [120, 80, true], [600, 330, true], [324, 178, false]].map(([width, height, ranged]) => '
+        'h.hemicycleOption({PP: 130, PSOE: 119}, {nSeats: 350, majority: 176, width, height, '
+        'labels: ranged ? {PP: "124–137", PSOE: "115–123"} : null}).series[0].label.rich.seats.fontSize)')
+    # a phone (radius 142), a tiny box (the floor), the desktop (radius 290) and a phone without ranges
+    assert sizes == [17, 13, 24, 24]
 
 
 def test_stacked_bar_labels_each_segment_with_its_seats_and_delta():

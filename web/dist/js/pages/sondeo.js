@@ -51,8 +51,9 @@ function paintBars(initial, catalog) {
 
 /**
  * Draw the hemicycle of the seats the house published with the poll (`#poll-hemi`, only rendered when it has them):
- * each party with the midpoint of its range, its arc labelled with the range, and a grey «Sin asignar» arc with the
- * seats the midpoints leave out of the chamber (`pollSeats`). The majority and the total are those of the run.
+ * each party with the midpoint of its range, its arc labelled with the range, and a grey «Otros» arc with the seats
+ * the midpoints leave out of the chamber (`pollSeats`): mostly the house's seats for the parties without their own
+ * figure in the table, plus the rounding of the ranges. The majority and the total are those of the run.
  *
  * @param {object} initial the page's initial data (`seats`, `n_seats`, `majority`)
  * @param {Catalog} catalog party catalogue of the page

@@ -151,7 +151,7 @@ Orden de las tarjetas (ids entre paréntesis), todas con `card_start`/`card_end`
    │  FA     ████▏6,9                          │     │ 99–101  136–138 │       │
    │  Otros  ██▏3,7                            │          350 · mayoría 176    │
    │  …                                        │                               │
-   │  (marca gris en cada barra: promedio del día)                             │
+   │  (marca oscura en cada barra: promedio del día)                           │
    │                                                                           │
    │  RATING 64,2 │ PESO EN EL PROMEDIO 0,84 │ DISTANCIA AL PROMEDIO 1,3 pts   │
    │                                                 demoscopio.es · @luis_sancho │
@@ -172,14 +172,18 @@ Orden de las tarjetas (ids entre paréntesis), todas con `card_start`/`card_end`
      arco se rotula con el texto de la horquilla («136–138», o el número si mín = máx): `hemicycleOption` gana
      una opción `labels` (`{nombre: texto}`) que sustituye al número en el rótulo del arco (`hemicycleData`
      guarda el texto en cada ítem y `hemicycleLabel` lo prefiere al valor); sin `labels`, nada cambia. Si la suma
-     de los puntos medios no llega a la cámara, un arco gris «Sin asignar» completa el total para que la
-     proporción sea la de la cámara; si se pasa, se dibuja tal cual (la tarta normaliza). La línea de la mayoría
+     de los puntos medios no llega a la cámara, un arco gris «Otros» completa el total para que la
+     proporción sea la de la cámara (2026-11-09, revisión final: no son escaños sin asignar, sino sobre todo los
+     que la casa da a partidos sin cifra propia en la tabla, más el redondeo de las horquillas; su tooltip lo dice y
+     una línea pequeña dentro de la tarjeta, sobre las cifras, explica la marca de las barras y el gris; antes se
+     llamaba «Sin asignar»); si se pasa, se dibuja tal cual (la tarta normaliza). La línea de la mayoría
      y el total del centro son los de `meta`. Sin `seats`, la columna no existe: las barras ocupan todo el ancho
      y una línea pequeña dice «{casa} no publicó escaños con este sondeo».
    - Fila de cifras (`m.kpis`): **Rating** (el `rating` del sondeo, a un decimal, en el color de la insignia de la
      tabla; un guion sin rating), **Peso en el promedio** (`weight`, a 2 decimales), **Muestra** (`fmt_int`) y
      **Distancia al promedio** (media de |sondeo − promedio del día| sobre los partidos con las dos cifras, a un
-     decimal, «pts»; un guion si no hay promedio). En la tarjeta no hay más texto: el resto va debajo.
+     decimal, «pts»; un guion si no hay promedio). Un guion va sin unidad (2026-11-09, revisión final). En la
+     tarjeta no hay más texto que la línea de la marca (2026-11-09, revisión final): el resto va debajo.
    - Botón `card_image_button` en la esquina (fichero `demoscopio-sondeo-{scope}-{fecha}-{casa}[-{medio}].png`,
      firma `{site_host} · {author_handle}`; la firma la añade `card-image.js` como `.shot-sign`).
    - En el móvil las dos columnas se apilan; la imagen siempre se dibuja a 1200 px (html2canvas evalúa las
@@ -279,7 +283,8 @@ parties)` y `highlightSeries(poll, parties, colors)` (las series del anillo).
   `event-cycle`; `weight == weight_over · weight_sample · weight_rating` redondeado; `url` nulo cuando la serie no
   lo trae.
 - `tests/test_js_charts.py`: `hemicycleOption` con `labels` rotula el texto y sin `labels` no cambia; el arco
-  «Sin asignar».
+  «Otros» (antes «Sin asignar»), su tooltip y el anillo de la mayoría que sigue sumando la cámara; los rótulos de
+  horquilla encogen con el radio.
 - `tests/test_js_card_image.py`: `chartOptions` devuelve la función `imageOption` del contenedor que la tiene y
   `null` en los demás; la copia la usa con el tamaño de la imagen.
 - `tests/test_js_poll_card.py` (nuevo, `node`): `voteRows`, `pollSeats`, `distanceToAverage`, `highlightSeries`.

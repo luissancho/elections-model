@@ -305,15 +305,37 @@ def poll_kpis(poll: dict, distance: Optional[float]) -> list:
     -------
     list
         The ``kpis`` of the page layout (``label``, ``value``, ``unit`` and ``color``, ``None`` but on the rating):
-        rating (coloured), weight, sample and distance.
+        rating (coloured), weight, sample and distance. A missing value is a dash without its unit.
     """
     rating = poll.get('rating')
+    sample = poll.get('sample_size')
 
     return [{'label': 'Rating', 'value': fmt_num(rating, 1), 'unit': '',
              'color': gradient(rating, 0, 100, RATING_COLORS) if _has_value(rating) else None},
             {'label': 'Peso en el promedio', 'value': fmt_num(poll.get('weight'), 2), 'unit': '', 'color': None},
-            {'label': 'Muestra', 'value': fmt_int(poll.get('sample_size')), 'unit': 'entrevistas', 'color': None},
-            {'label': 'Distancia al promedio', 'value': fmt_num(distance, 1), 'unit': 'pts', 'color': None}]
+            {'label': 'Muestra', 'value': fmt_int(sample), 'unit': 'entrevistas' if _has_value(sample) else '',
+             'color': None},
+            {'label': 'Distancia al promedio', 'value': fmt_num(distance, 1), 'unit': 'pts' if _has_value(distance) else '',
+             'color': None}]
+
+
+def sample_text(poll: dict) -> Optional[str]:
+    """
+    Sample of a poll for the lead line of its card.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``sample_size``).
+
+    Returns
+    -------
+    str or None
+        ``'1.200 entrevistas'``, ``None`` without a sample (the lead line then leaves it out).
+    """
+    sample = poll.get('sample_size')
+
+    return f'{fmt_int(sample)} entrevistas' if _has_value(sample) and sample > 0 else None
 
 
 def poll_title(poll: dict) -> str:
@@ -379,13 +401,19 @@ def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> 
     Returns
     -------
     list
-        ``{'label', 'text', 'href'}`` rows; the source links to the URL of the poll or, without it, names the
-        Wikipedia list.
+        ``{'label', 'text', 'href'}`` rows; the source links to the URL of the poll when it is an ``http`` or
+        ``https`` address with a host or, without one, names the Wikipedia list (without a link).
     """
-    url = poll.get('url')
+    url = poll.get('url').strip() if isinstance(poll.get('url'), str) else None
 
-    if url:
-        source = {'text': urlsplit(url).hostname or url, 'href': url}
+    try:
+        parts = urlsplit(url) if url else None
+        host = parts.hostname if parts is not None and parts.scheme.lower() in ('http', 'https') else None
+    except ValueError:  # a malformed address (a broken IPv6 host, a bad port): no link
+        host = None
+
+    if host:
+        source = {'text': host, 'href': url}
     else:
         source = {'text': 'Wikipedia, lista de sondeos', 'href': None}
 
@@ -447,7 +475,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     dict
         ``common_context`` of an event page, its ``event_bar['sections']`` linking the sections of the event page
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``poll``,
-        ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``poll_date``,
+        ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``sample_text``
+        (``sample_text``), ``poll_date``,
         ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``), ``vote_rows``, ``has_seats``,
         ``has_effects``, ``average_date`` (the day of the series compared, ``None`` without one), ``weight``
         (``weight_card``, its ``factors`` with an empty ``unit`` and no ``color`` for ``m.kpis``), ``weights_date``
@@ -507,6 +536,7 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'poll_title': poll_title(poll),
         'house': house,
         'fieldwork': fieldwork_text(poll),
+        'sample_text': sample_text(poll),
         'poll_date': fmt_date(date),
         'event_label': event_label,
         'kpis': poll_kpis(poll, distance_to_average(poll, poll_parties, average)),
