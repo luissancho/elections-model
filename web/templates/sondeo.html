@@ -20,7 +20,7 @@
         {{ m.card_image_button(image_file, image_sign) }}
         <p class="pc-event">{{ event_label }}</p>
         <div class="poll-grid{% if not has_seats %} single{% endif %}">
-          <div class="chart poll-bars" id="poll-bars" role="img" aria-label="Voto por partido según {{ house.name }}"></div>
+          <div class="chart poll-bars" id="poll-bars" role="img" aria-label="Voto por partido según {{ house.name }}" style="height: {{ 34 * vote_rows|length + 60 }}px"></div>
           {% if has_seats %}
           <div class="poll-seats">
             <p class="csub">Escaños según {{ house.name }}</p>
@@ -30,11 +30,15 @@
         </div>
         {#- the poll and its change against the previous delivery of the house and sponsor, never the average (Luis,
             2026-11-09); inside the card, so that the shared image says what the arrows compare with -#}
-        <p class="muted pc-note">{% if previous %}Flechas: frente al sondeo anterior de {{ previous.title }} ({{ previous_fieldwork }}){% if previous.overlap %}, con días de campo en común{% endif %}.{% else %}Primer sondeo de {{ poll_title }} en este ciclo.{% endif %}
-          {%- if has_seats %} En gris, los escaños de los demás partidos.{% else %} {{ house.name }} no publicó escaños con este sondeo.{% endif %}</p>
+        {% if previous %}
+        <p class="muted pc-note">Flechas: frente al sondeo anterior de {{ previous.title }} ({{ previous_fieldwork }}){% if previous.overlap %}, con días de campo en común{% endif %}.</p>
+        {% endif %}
+        {% if not has_seats %}
+        <p class="muted pc-note">{{ house.name }} no publicó escaños con este sondeo.</p>
+        {% endif %}
         {% call m.how() %}
         <p>
-          Cada barra es el voto que da el sondeo a un partido, tal como lo publicó {{ house.name }}.{% if previous %} Bajo
+          Cada barra es el voto que da el sondeo a un partido, tal como lo publicó {{ house.name }}.{% if previous %} Tras
           cada cifra, su cambio frente a la entrega anterior de la misma casa para el mismo medio en este ciclo: verde si
           sube, roja si baja, un guion si no cambia; nada, si la entrega anterior no daba cifra para ese partido.{% if has_seats %}
           En el hemiciclo, el cambio de los escaños compara el punto medio de las dos horquillas.{% endif %}{% endif %}
@@ -160,7 +164,7 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('sheet', 'Ficha', 'Los datos del sondeo, de dónde salen y con qué actualización del modelo se leen.') }}
+      {{ m.card_start('sheet', 'Ficha', 'Los datos del sondeo.') }}
         <div class="table-wrap">
           <table id="sheet-table">
             <tbody>
@@ -175,8 +179,8 @@
         </div>
         {% call m.how() %}
         <p>
-          La fecha de un sondeo es el último día de su trabajo de campo. La fuente enlaza al sondeo cuando tenemos su
-          dirección; si no, remite a la lista de sondeos de Wikipedia, de donde salen los datos.
+          La fecha de un sondeo es el último día de su trabajo de campo. Los datos salen de las listas de sondeos de
+          Wikipedia.
         </p>
         {% endcall %}
       {{ m.card_end() }}

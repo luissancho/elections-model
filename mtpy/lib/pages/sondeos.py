@@ -360,7 +360,7 @@ def fieldwork_text(poll: dict) -> Optional[str]:
     return f'{days[0]} {DASH} {days[1]}' if len(days) == 2 else (days[0] if days else None)
 
 
-def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> list:
+def sheet_rows(poll: dict, house_href: str, event_label: str) -> list:
     """
     Rows of the data sheet of a poll.
 
@@ -372,15 +372,13 @@ def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> 
         Link to the profile of the house.
     event_label : str
         Text of the election the poll belongs to.
-    run_text : str
-        Text of the model update shown.
 
     Returns
     -------
     list
         ``{'label', 'text', 'href'}`` rows: house (linked to its profile), sponsor, type, fieldwork, sample, rating,
-        weight, election and model update. No source row (Luis, 2026-11-09): the polls come from the Wikipedia lists,
-        as the footer of every page says.
+        weight and election. Neither the source nor the model update (Luis, 2026-11-09): the footer of every page
+        names both.
     """
     return [{'label': 'Encuestadora', 'text': poll.get('pollster'), 'href': house_href},
             {'label': 'Medio', 'text': poll.get('sponsor') or '—', 'href': None},
@@ -389,8 +387,7 @@ def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> 
             {'label': 'Muestra', 'text': fmt_int(poll.get('sample_size')), 'href': None},
             {'label': 'Rating', 'text': fmt_num(poll.get('rating'), 1), 'href': None},
             {'label': 'Peso', 'text': fmt_num(poll.get('weight'), 2), 'href': None},
-            {'label': 'Elección', 'text': event_label, 'href': None},
-            {'label': 'Actualización del modelo', 'text': run_text, 'href': None}]
+            {'label': 'Elección', 'text': event_label, 'href': None}]
 
 
 def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str] = None) -> dict:
@@ -455,7 +452,6 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     event_label = '{} · {}'.format(event['title'], fmt_date(event['date']))
     house = {'name': poll.get('pollster'), 'href': pollster_href(poll.get('pollster'), poll.get('pollster_id')),
              'type': mtype_label(poll.get('mtype'))}
-    run_text = 'Actualizado el ' + fmt_date(meta.get('run_at')) + (' (run anclado)' if full['pinned'] else '')
     weight = weight_card(poll, weights)
     house_slug = slugify(poll.get('pollster')) or str(poll.get('pollster_id'))
     sponsor_slug = slugify(poll.get('sponsor') or '')
@@ -489,7 +485,7 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'has_seats': bool(seats),
         'weight': dict(weight, factors=[dict(factor, unit='', color=None) for factor in weight['factors']]),
         'weights_date': weights.get('date') if weights is not None else None,
-        'sheet': sheet_rows(poll, house['href'], event_label, run_text),
+        'sheet': sheet_rows(poll, house['href'], event_label),
         'back_href': '/' + scope + query + '#tabla',
         'detail_href': poll_detail_href(scope, poll),
         'image_file': 'demoscopio-sondeo-{}-{}-{}{}.png'.format(scope, date, house_slug,

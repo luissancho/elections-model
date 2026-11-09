@@ -42,8 +42,10 @@ export function barRows(rows, {value, lo, hi}) {
  */
 export function barsOption(rows, {
   value = 'pct', lo = 'lo', hi = 'hi', colors = {}, fullnames = {}, formatter = String, axisFormatter = formatter, majority = null,
+  labelExtra = null,
 } = {}) {
   const data = barRows(rows, {value, lo, hi});
+  const extras = rows.map((row, i) => (labelExtra ? labelExtra(row, i) : null));
   const top = Math.max(0, ...data.map((row) => Math.max(row.value ?? 0, row.hi ?? 0)), majority ?? 0);
 
   const bar = {
@@ -87,7 +89,8 @@ export function barsOption(rows, {
       }
       if (Number.isFinite(val)) {
         const point = api.coord([labelAt, index]);
-        children.push({
+        const extra = extras[index];
+        const text = {
           type: 'text',
           x: point[0] + 6,
           y: point[1],
@@ -98,7 +101,17 @@ export function barsOption(rows, {
             fill: THEME.textColor,
             font: `12px ${THEME.fontFamily}`,
           },
-        });
+        };
+        if (extra && extra.text) {
+          // One rich text so the change follows the value wherever the label is.
+          const base = {fontSize: 12, fontFamily: THEME.fontFamily};
+          text.style.text = `{v|${text.style.text}}  {d|${extra.text}}`;
+          text.style.rich = {
+            v: {...base, fill: THEME.textColor},
+            d: {...base, fill: extra.color, fontWeight: 700},
+          };
+        }
+        children.push(text);
       }
       return {type: 'group', children};
     },
@@ -110,9 +123,11 @@ export function barsOption(rows, {
     xAxis: {
       type: 'value',
       min: 0,
-      max: niceMax(top * 1.15),
-      splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x)},
+      max: niceMax(top * (labelExtra ? 1.3 : 1.15)),
+      // with labelExtra the end of the axis is only room for the change: neither its line nor its label (a «42 %»
+      // next to the «40 %» tick)
+      splitLine: {lineStyle: {color: THEME.gridColor}, ...(labelExtra ? {showMaxLine: false} : {})},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x), ...(labelExtra ? {showMaxLabel: false} : {})},
     },
     yAxis: {
       type: 'category',
@@ -133,6 +148,10 @@ export function barsOption(rows, {
         if (row.lo !== null && row.hi !== null) {
           lines.push(`Intervalo: ${escapeHtml(formatter(row.lo))} – ${escapeHtml(formatter(row.hi))}`);
         }
+        const extra = extras[params[0].dataIndex];
+        if (extra && extra.tooltip) {
+          lines.push(escapeHtml(extra.tooltip));
+        }
         return lines.join('<br>');
       },
     },
@@ -150,7 +169,10 @@ export function barsOption(rows, {
  * @param {object[]} rows rows with a `name` and the value/interval fields
  * @param {object} opts `value`, `lo`, `hi` (field names), `colors` ({name: colour}; a name without one gets
  *   `THEME.barColor`), `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `axisFormatter`
- *   (axis ticks, default `formatter`), `majority` (vertical mark)
+ *   (axis ticks, default `formatter`), `majority` (vertical mark), `labelExtra` (`(row, index) => {text, color,
+ *   tooltip}|null` on the input row: a coloured bold text after the value label, e.g. a change «▲ 1,2», and a line
+ *   for the tooltip when `tooltip` is given; it also widens the axis by 30 % instead of 15 % to leave room, and hides
+ *   the line and label of the end of the axis, which is only that room)
  * @returns {object} the ECharts instance
  */
 export function renderBars(el, rows, opts = {}) {

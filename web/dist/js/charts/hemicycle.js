@@ -72,7 +72,8 @@ export function hemicycleLabel(params) {
  *   tooltip), `deltas` ({name: seats difference against the last election, written after the seats) and `year`
  *   (of that election, for the tooltip), `labels` ({name: text written in the arc instead of the seats, e.g. the
  *   range a pollster published; the seats in the arcs then shrink with the radius so that a range fits on a
- *   phone), `rest` (seats that complete the chamber: a light grey «Otros» arc, outside `order`, with its own
+ *   phone), `rest` (seats that complete the chamber: a light grey «Otros» arc, outside `order`, named in the arc when it
+ *   is big enough, with its own
  *   tooltip; it needs `nSeats`, the chamber it completes), `width` and `height` of the container
  * @returns {object} the option
  */
@@ -84,7 +85,9 @@ export function hemicycleOption(seats, {
   const total = nSeats || data.reduce((sum, item) => sum + item.value, 0);
   if (rest > 0) {
     data.push({
-      name: REST_NAME, value: rest, itemStyle: {color: REST_COLOR}, label: {show: false}, text: null, delta: null, rest: true,
+      // named «Otros» in the arc when it is big enough, in a dark ink over its light grey (Luis, 2026-11-09)
+      name: REST_NAME, value: rest, itemStyle: {color: REST_COLOR}, label: {show: rest >= total * LABEL_SHARE, formatter: `{other|${REST_NAME}}`},
+      text: null, delta: null, rest: true,
     });
   }
   const radius = Math.max(40, Math.min(width / 2 - 10, height - 36));
@@ -108,6 +111,7 @@ export function hemicycleOption(seats, {
         seats: {fontFamily: THEME.headFamily, fontWeight: 800, fontSize: seatsFont, color: '#fff', align: 'center'},
         // a little air between the seats and the arrow under them
         delta: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 12, color: '#fff', align: 'center', padding: [3, 0, 0, 0]},
+        other: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 15, color: THEME.mutedColor, align: 'center'},
       },
     },
     labelLine: {show: false},

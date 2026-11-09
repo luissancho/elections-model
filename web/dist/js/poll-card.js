@@ -1,6 +1,11 @@
 /** La lógica pura de la tarjeta de un sondeo: filas del voto, escaños de la casa y anillo sobre sus series. */
 import {OTHERS_COLOR} from './catalog.js';
+import {THEME} from './charts/base.js';
 import {dayTime} from './charts/series.js';
+import {fmtBadge} from './format.js';
+
+/** Colores del cambio según su sentido, los de las insignias `.dlt` de `site.css`. */
+export const CHANGE_COLORS = {up: '#2ca02c', down: '#d62728', flat: THEME.mutedColor};
 
 /** Un valor numérico finito (los huecos llegan como null o undefined). */
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
@@ -25,6 +30,22 @@ export function voteRows(poll, parties, previous = null) {
         }));
     rows.sort((a, b) => b.value - a.value);
     return rows;
+}
+
+/**
+ * El cambio de un partido escrito tras su cifra en las barras (`labelExtra` de `renderBars`): la flecha y la magnitud a
+ * un decimal («▲ 1,2» verde, «▼ 0,6» roja, «–» gris si no cambia) y su línea del tooltip; nada sin cambio (sin entrega
+ * anterior, o sin cifra del partido en ella): ni siquiera un guion.
+ * @param {{change: (number|null)}} row Una fila de `voteRows`.
+ * @returns {{text: string, color: string, tooltip: string}|null} El cambio, o null.
+ */
+export function changeLabel(row) {
+    const change = row ? row.change : null;
+    if (change === null || change === undefined || !Number.isFinite(change)) {
+        return null;
+    }
+    const {dir, text} = fmtBadge(change, 1);
+    return {text, color: CHANGE_COLORS[dir], tooltip: `${text} frente a la entrega anterior`};
 }
 
 /**

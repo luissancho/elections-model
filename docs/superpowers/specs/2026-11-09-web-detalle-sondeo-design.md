@@ -337,3 +337,8 @@ parties)` y `highlightSeries(poll, parties, colors)` (las series del anillo).
   entrega anterior, los gráficos no escriben ningún cambio (ni un guion): el «–» sólo dice «no cambia». La ficha pierde
   la fila «Fuente» (los sondeos salen de las listas de Wikipedia, como dice el pie de todas las páginas). El final del
   eje de las columnas no lleva línea ni rótulo.
+- Después (Luis): vuelven las barras **horizontales** (`renderBars` con `labelExtra`, el cambio tras la cifra y en el
+  tooltip; `charts/columns.js` retirado). El arco gris del hemiciclo se rotula «Otros» cuando cabe (≥ 5 % de la
+  cámara). La nota de la tarjeta sólo existe con entrega anterior y sólo dice con cuál se compara (fuera «En gris, los
+  escaños de los demás partidos»); «X no publicó escaños» queda como línea propia. La ficha pierde «Actualización del
+  modelo».

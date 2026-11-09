@@ -46,6 +46,14 @@ def test_vote_rows_carry_the_change_against_the_previous_delivery():
     assert [(r['name'], r['change']) for r in rows] == [('PP', 1.2), ('PSOE', 0), ('UP', None)]
 
 
+def test_change_label_colours_the_change_and_writes_nothing_without_one():
+    labels = run_js('[1.2, -0.6, 0, 0.04, null].map((change) => pc.changeLabel({change}))')
+    assert labels[0] == {'text': '▲ 1,2', 'color': '#2ca02c', 'tooltip': '▲ 1,2 frente a la entrega anterior'}
+    assert labels[1]['text'] == '▼ 0,6' and labels[1]['color'] == '#d62728'
+    assert labels[2]['text'] == '–' and labels[3]['text'] == '–' and labels[2]['color'] == '#5a5f72'  # no change
+    assert labels[4] is None  # no previous delivery, or no figure in it: nothing, not even a dash
+
+
 def test_seat_changes_compare_the_midpoints_of_the_ranges():
     changes = run_js('pc.seatChanges({PP: [136, 138], PSOE: [99, 101], VOX: [60, 60]}, {PP: [130, 134], VOX: [62, 64], BNG: [2, 2]})')
     assert changes == {'PP': 5, 'VOX': -3}  # 137 − 132, 60 − 63; PSOE has no range before

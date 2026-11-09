@@ -197,7 +197,12 @@ def test_hemicycle_labels_the_arcs_with_a_range_and_fills_the_chamber_with_other
                     'labels: {PP: "136–138", PSOE: "99–101"}, rest: 113})')
     items = option['series'][0]['data']
     assert [(item['name'], item['value']) for item in items] == [('PP', 137), ('PSOE', 100), ('Otros', 113)]
-    assert items[2]['itemStyle']['color'] == '#d8dbe3' and items[2]['label'] == {'show': False} and items[2]['rest'] is True
+    # named «Otros» in the arc when it is big enough (113 of 350), in a dark ink
+    assert items[2]['itemStyle']['color'] == '#d8dbe3' and items[2]['rest'] is True
+    assert items[2]['label'] == {'show': True, 'formatter': '{other|Otros}'}
+    assert option['series'][0]['label']['rich']['other']['color'] == '#5a5f72'
+    small = run_js('h.hemicycleOption({PP: 340}, {nSeats: 350, width: 600, height: 330, rest: 10})')
+    assert small['series'][0]['data'][-1]['label']['show'] is False  # 10 of 350: too small for a name
     assert any(g.get('style', {}).get('text') == '350' for g in option['graphic'])
     # the tooltip of the grey arc says what it holds; a party arc keeps its own; the majority ring still adds up to
     # the chamber with the rest
@@ -901,34 +906,25 @@ def test_chart_zoom_reads_the_window_given_and_the_drag():
     assert out['same'] is True
 
 
-def test_columns_write_the_share_and_its_change_under_it():
-    """Las columnas de la tarjeta de un sondeo: la cifra encima y, debajo, su cambio frente a la entrega anterior en el
-    color de las flechas de la web; «Otros» y los partidos sin cambio, sólo la cifra (Luis, 2026-11-09)."""
-    uri = pathlib.Path(DIST, 'js', 'charts', 'columns.js').as_uri()
-    got = run_js('await (async () => { const cl = await import("%s"); '
-                 'const o = cl.columnsOption([{name: "PP", value: 31, change: 1.2}, {name: "PSOE", value: 25.2, change: -0.6}, '
-                 '{name: "VOX", value: 19.4, change: 0}, {name: "Otros", value: 6.6, change: null}], '
-                 '{formatter: (x) => x.toFixed(1), colors: {PP: "#1d84ce"}}); const lb = o.series[0].label; '
-                 'return {labels: [0, 1, 2, 3].map((i) => lb.formatter({value: o.series[0].data[i].value, dataIndex: i})), '
-                 'colors: [0, 1, 2].map((i) => lb.rich["d" + i].color), x: o.xAxis.data, max: o.yAxis.max, '
-                 'tip: o.tooltip.formatter([{dataIndex: 0}]), bar: o.series[0].data[0].itemStyle.color, '
-                 'end: [o.yAxis.splitLine.showMaxLine, o.yAxis.axisLabel.showMaxLabel]}; })()' % uri)
-    assert got['labels'] == ['{v|31.0}\n{d0|▲ 1,2}', '{v|25.2}\n{d1|▼ 0,6}', '{v|19.4}\n{d2|–}', '{v|6.6}']
-    # without a previous delivery (every change null) the columns write only the share: no dash
-    bare = run_js('await (async () => { const cl = await import("%s"); const o = cl.columnsOption([{name: "PP", value: 31, change: null}], '
-                  '{formatter: (x) => x.toFixed(1)}); return [o.series[0].label.formatter({value: 31, dataIndex: 0}), '
-                  'o.tooltip.formatter([{dataIndex: 0}])]; })()' % uri)
-    assert bare == ['{v|31.0}', '<strong>PP</strong><br>31.0']
-    assert got['colors'] == ['#2ca02c', '#d62728', '#5a5f72'] and got['x'] == ['PP', 'PSOE', 'VOX', 'Otros']
-    assert got['max'] >= 31 * 1.25 and got['bar'] == '#1d84ce' and got['end'] == [False, False]  # the end of the axis is only room for the labels
-    assert got['tip'] == '<strong>PP</strong><br>31.0<br>▲ 1,2 frente a la entrega anterior'
-    # on a phone (compact) the share is the short one, the labels smaller and the names of the parties tilted
-    compact = run_js('await (async () => { const cl = await import("%s"); '
-                     'const o = cl.columnsOption([{name: "PP", value: 31, change: 1.2}], {formatter: (x) => x.toFixed(1) + " %%", '
-                     'shortFormatter: (x) => x.toFixed(1), compact: true}); '
-                     'return {label: o.series[0].label.formatter({value: 31, dataIndex: 0}), size: o.series[0].label.rich.v.fontSize, '
-                     'rotate: o.xAxis.axisLabel.rotate, width: cl.COMPACT_WIDTH}; })()' % uri)
-    assert compact == {'label': '{v|31.0}\n{d0|▲ 1,2}', 'size': 9, 'rotate': 45, 'width': 560}
+def test_bars_label_extra_writes_a_coloured_change_after_the_value():
+    """Las barras de la tarjeta de un sondeo: tras la cifra, su cambio frente a la entrega anterior en negrita y en su
+    color, también en el tooltip; el eje deja sitio y su final no lleva línea ni rótulo. Sin `labelExtra`, la opción de
+    siempre (Luis, 2026-11-09)."""
+    uri = pathlib.Path(DIST, 'js', 'charts', 'bars.js').as_uri()
+    got = run_js('await (async () => { const bs = await import("%s"); '
+                 'const rows = [{name: "PP", value: 31, change: -0.1}, {name: "VOX", value: 19.4, change: null}]; '
+                 'const extra = (row) => (row.change === null ? null : {text: "▼ 0,1", color: "#d62728", tooltip: "▼ 0,1 frente a la entrega anterior"}); '
+                 'const o = bs.barsOption(rows, {value: "value", formatter: (x) => x.toFixed(1), labelExtra: extra}); '
+                 'const plain = bs.barsOption(rows, {value: "value", formatter: (x) => x.toFixed(1)}); '
+                 'const api = (i) => ({value: (k) => o.series[1].data[i][k], coord: ([x, y]) => [x * 10, y * 30], size: () => [0, 30]}); '
+                 'const text = (i) => o.series[1].renderItem({}, api(i)).children.find((c) => c.type === "text").style; '
+                 'return {pp: [text(0).text, text(0).rich.d.fill, text(0).rich.d.fontWeight], vox: [text(1).text, text(1).rich === undefined], '
+                 'max: [o.xAxis.max, plain.xAxis.max], end: [o.xAxis.splitLine.showMaxLine, o.xAxis.axisLabel.showMaxLabel, '
+                 'plain.xAxis.splitLine.showMaxLine, plain.xAxis.axisLabel.showMaxLabel], '
+                 'tip: o.tooltip.formatter([{dataIndex: 0}])}; })()' % uri)
+    assert got['pp'] == ['{v|31.0}  {d|▼ 0,1}', '#d62728', 700] and got['vox'] == ['19.4', True]
+    assert got['max'][0] > got['max'][1] and got['end'] == [False, False, None, None]
+    assert got['tip'] == '<strong>PP</strong><br>31.0<br>▼ 0,1 frente a la entrega anterior'
 
 
 def histogram_option(args):
