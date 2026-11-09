@@ -61,9 +61,17 @@
           rating de la casa); la línea es el promedio ponderado del modelo. El selector Sondeos / Promedio / Ambos
           deja a la vista sólo los puntos, sólo la línea, o las dos cosas, para leer mejor cada una en el móvil. En el modo Elección, la línea discontinua
           lleva el voto estimado hasta el día de la votación y la barra del final es el rango del 95% de cada partido
-          ese día: pasa por el punto para ver las cifras. En la vista Bloques, cada bloque suma sus partidos, que se
+          ese día: pasa por el punto para ver las cifras.
+          {% if fitted_blocks %}
+          En la vista Bloques, la línea de cada bloque es el promedio de lo que suman sus partidos en cada sondeo, no
+          la suma de sus promedios: cuando un partido entra en las encuestas a mitad de ciclo, una línea discontinua lo
+          marca, y durante unos meses lo que pone cada partido al pasar por la línea de un bloque puede no cuadrar con
+          ella. Los partidos de cada bloque se leen bajo la leyenda, y Otros es lo que falta hasta 100.
+          {% else %}
+          En la vista Bloques, cada bloque suma sus partidos, que se
           leen bajo la leyenda, y Otros es lo que falta hasta 100; al pasar por la línea de un bloque se ve cuánto pone
           cada partido ese día.
+          {% endif %}
           Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
         </p>
         <p>

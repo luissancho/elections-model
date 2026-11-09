@@ -148,7 +148,8 @@ def test_study_exists_needs_the_meta(tmp_path):
 def test_event_paths_follow_the_published_layout_and_reject_bad_input():
     assert all(schema in bundle.SCHEMAS for schema in bundle.EVENT_SCHEMAS.values())
     assert bundle.path_event_csv('es', '2023-07-23', 'series') == 'events/es/2023-07-23/csv/series.csv'
-    assert bundle.SCHEMAS['event-series'] == {'horizon': int, 'dates': list, 'parties': list, 'mean': dict, 'lo': dict, 'hi': dict}
+    assert bundle.SCHEMAS['event-series'] == {'horizon': int, 'dates': list, 'parties': list, 'mean': dict, 'lo': dict, 'hi': dict,
+                                              'blocks': dict, 'first_polls': dict}
     assert bundle.path_event('es', '2023-07-23', 'meta') == 'events/es/2023-07-23/meta.json'
     assert bundle.path_event_csv('es-md', '2023-07-23', 'model-shares') == 'events/es-md/2023-07-23/csv/model-shares.csv'
     for call in (lambda: bundle.path_event('es', '2023-7-23', 'meta'), lambda: bundle.path_event('es', '2023-07-23', 'nope'),
