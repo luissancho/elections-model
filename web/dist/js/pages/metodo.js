@@ -49,8 +49,9 @@ function pairs(horizons, values) {
  * Wire the weights example: load the parts of the national scope after the page, then redraw the chart, the table
  * and the figures of the text (the `data-w` spans the server wrote for the national leader) whenever the reader
  * picks another scope (`select[name=scope]`), party (`select[name=party]`) or figure of the points (Publicada or
- * Corregida, `#weights-field`). The controls, the chart and the table stay hidden until the first draw; a scope
- * whose parts cannot be loaded leaves the card as it was, with a notice in the status line.
+ * Corregida, `#weights-field`). The controls, the chart box and the table are revealed at once, before the parts
+ * arrive, so the page does not jump when they do; a scope whose parts cannot be loaded leaves the card as it was,
+ * with a notice in the card (`#weights-status`) that the next successful draw clears.
  *
  * @param {HTMLElement} el the chart container
  * @param {object} initial the `example` of the page's initial data (`scope`, `party`, `scopes`)
@@ -59,6 +60,7 @@ export function wireWeightsExample(el, initial) {
   const pick = document.getElementById('weights-pick');
   const field = document.getElementById('weights-field');
   const list = document.getElementById('weights-list');
+  const status = document.getElementById('weights-status');
   const scopeSelect = pick && pick.querySelector('select[name=scope]');
   const partySelect = pick && pick.querySelector('select[name=party]');
   const scopes = new Map((initial.scopes || []).map((row) => [row.code, row]));
@@ -103,11 +105,9 @@ export function wireWeightsExample(el, initial) {
     }
     el.setAttribute('aria-label', `Sondeos que pesan en el promedio del ${texts.subject} leído el ${texts.date}, `
       + 'con la recta local, su banda y la campana del kernel');
-    [pick, field, list, el].forEach((node) => {
-      if (node) {
-        node.hidden = false;   // before drawing: ECharts measures the container
-      }
-    });
+    if (status) {
+      status.hidden = true;
+    }
     tryDraw(() => renderWeights(el, view, {field: state.field}), 'the weights example');
     return true;
   }
@@ -131,7 +131,16 @@ export function wireWeightsExample(el, initial) {
         return;
       }
       console.error('Could not load the weights example:', error);
-      showError('No se pudieron cargar los sondeos de este ámbito.');
+      // the first load has nothing to keep: say what is missing; later on, the card keeps the scope shown
+      const message = state.scope ? 'No se pudieron cargar los sondeos de este ámbito.'
+        : 'No se pudieron cargar los sondeos del ejemplo.';
+      if (status) {
+        status.textContent = message;
+        status.classList.add('error');
+        status.hidden = false;
+      } else {
+        showError(message);
+      }
       if (scopeSelect && state.scope) {
         scopeSelect.value = state.scope;
       }
@@ -156,6 +165,13 @@ export function wireWeightsExample(el, initial) {
       }
     });
   }
+  // revealed now, before the parts arrive: the chart box keeps its height (`chart-tall`), so the text below does not
+  // move when the chart is drawn; ECharts measures the box then, visible
+  [pick, field, el, list].forEach((node) => {
+    if (node) {
+      node.hidden = false;
+    }
+  });
   showScope(initial.scope, initial.party);
 }
 

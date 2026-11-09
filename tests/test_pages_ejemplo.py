@@ -158,6 +158,11 @@ def test_promedio_page_shows_the_example_block(api):
     # la lectura del gráfico y la de la tabla
     card = page[page.index('id="ejemplo"'):page.index('id="voto-estimado"')]
     assert '<form id="weights-pick" class="filters-bar" hidden>' in card
+    # the notice of a scope that cannot be loaded goes in the card, where the reader is, not at the top of the page
+    assert '<p class="status" id="weights-status" hidden></p>' in card
+    assert card.index('id="weights-pick"') < card.index('id="weights-status"') < card.index('id="weights-chart"')
+    # the caption follows the scope: its reading day is the one of the scope picked
+    assert re.search(r'<caption>Sondeos que entran en la recta del promedio leído el <span data-w="date">8 oct 2026</span>', raw)
     assert '<option value="es" selected>Generales</option>' in card and '<select name="party"></select>' in card
     assert card.index('id="weights-pick"') < card.index('id="weights-field"')
     assert '<details class="how"' not in card and 'Cómo leerlo' not in card

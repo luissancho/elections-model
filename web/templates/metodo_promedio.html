@@ -770,6 +770,7 @@
               <select name="party"></select>
             </label>
           </form>
+          <p class="status" id="weights-status" hidden></p>
           <fieldset id="weights-field" class="seg" hidden>
             <legend>Cifra de los puntos</legend>
             <label><input type="radio" name="weights-field" value="pct" checked> Publicada</label>
@@ -781,7 +782,7 @@
           <summary><span>Ver los <span data-w="n_rows">{{ example.n_rows }}</span> sondeos</span></summary>
           <div class="table-wrap">
             <table class="et et-fit" id="weights-table">
-              <caption>Sondeos que entran en la recta del promedio leído el {{ example.date|date }} y sus pesos, los más recientes primero.</caption>
+              <caption>Sondeos que entran en la recta del promedio leído el <span data-w="date">{{ example.date|date }}</span> y sus pesos, los más recientes primero.</caption>
               <thead>
                 <tr>
                   <th scope="col" class="f l">Fecha</th>
