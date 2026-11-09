@@ -533,10 +533,11 @@ def test_promedios_initial_polls_carry_the_chart_and_table_columns(api):
     parties = set(data['polls']['parties'])
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
-        assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | parties <= set(poll)
+        assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href', 'detail_href'} | parties <= set(poll)
         extra = {'sponsor', 'start_date', 'end_date', 'seats', 'rating'}
-        assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | extra | parties
+        assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href', 'detail_href'} | extra | parties
         assert poll['href'] == pages.pollster_href(poll['pollster'], poll['pollster_id'])
+        assert poll['detail_href'] == pages.poll_detail_href('es', poll)
 
 
 def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, tmp_path):
@@ -697,6 +698,21 @@ def test_promedios_polls_table_renders_fifteen_of_many_polls_and_the_island_carr
     assert re.search(r'<div class="pag" id="polls-pag" hidden>', page)  # the JS shows it: there are more pages
     data = initial(body)['polls']['polls']
     assert len(data) == 20 and {'sponsor', 'start_date', 'end_date'} <= set(data[0])
+
+
+def test_promedios_polls_table_links_each_poll_to_its_page(api, fresh_app, events_site):
+    polls = fixture_data('polls')
+    base = polls['polls'][0]
+    polls['polls'] = [base | {'date': '2026-08-02', 'sponsor': 'M1', 'start_date': '2026-08-01', 'end_date': '2026-08-02'}]
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
+    webapi.site().files.clear()
+    tbody = polls_tbody(html(call(api, '/es')[2]).replace('\n', ' '))
+    assert ('<td title="Trabajo de campo: 1 ago 2026 – 2 ago 2026"><a href="/es/sondeos/2026-08-02/sigma-dos/m1">1–2 Ago</a></td>'
+            in tbody)
+    # the polls of a past election have no page: their date cell is plain text
+    past = polls_tbody(html(call(events_site, '/elecciones/es/generales/2023-07')[2]).replace('\n', ' '))
+    assert '/sondeos/' not in past and '<td>' in past
 
 
 def test_event_page_seats_table_histograms_blocks_and_pills(api):
@@ -5481,7 +5497,7 @@ def test_promedios_polls_table_shows_the_rating_badge_between_the_house_and_the_
     assert '<td><span class="rt" style="background: {}">73,1</span></td>'.format(pages.gradient(73.08, 0, 100, pages.RATING_COLORS)) in rows[0]
     assert rows[0].index('</a>') < rows[0].index('class="rt"') < rows[0].index('1 Oct')
     assert '<td><span class="rt" style="background: #cd3031">5,0</span></td>' in rows[1]
-    assert '<b>Sin casa</b>' in rows[2] and '<a href' not in rows[2] and '<td class="na">—</td>' in rows[2]
+    assert '<b>Sin casa</b>' in rows[2] and '<a href="/casas' not in rows[2] and '<td class="na">—</td>' in rows[2]
     foot = page[page.index('<tfoot>', start):page.index('</tfoot>', start)]
     assert foot.count('<td></td>') == 3  # rating, fecha y muestra vacías bajo la media simple
     assert 'El rating (0-100)' in page and 'rojo (0)' in page and 'su perfil' in page
