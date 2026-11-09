@@ -32,10 +32,18 @@ def run_js(expr):
 POLL = {'date': '2026-11-09', 'PP': 32.6, 'PSOE': 25.6, 'VOX': 19.3, 'ERC': None}
 
 
+def test_vote_rows_carry_the_change_against_the_previous_delivery():
+    rows = run_js('pc.voteRows({PP: 32.6, PSOE: 25.6, UP: 1.2}, ["PP", "PSOE", "UP"], {}, {PP: 31.4, PSOE: 25.6})')
+    assert [(r['name'], r['change']) for r in rows] == [('PP', 1.2), ('PSOE', 0), ('UP', None), ('Otros', None)]
+    assert all(r['change'] is None for r in run_js('pc.voteRows({PP: 32.6}, ["PP"], {})'))
+
+
 def test_vote_rows_sort_the_parties_and_add_the_rest():
     rows = run_js('pc.voteRows(%s, ["PSOE", "PP", "VOX", "ERC"], {PP: 31.9, VOX: 18.0})' % json.dumps(POLL))
-    assert rows == [{'name': 'PP', 'value': 32.6, 'avg': 31.9}, {'name': 'PSOE', 'value': 25.6, 'avg': None},
-                    {'name': 'VOX', 'value': 19.3, 'avg': 18.0}, {'name': 'Otros', 'value': 22.5, 'avg': None}]
+    assert rows == [{'name': 'PP', 'value': 32.6, 'avg': 31.9, 'change': None},
+                    {'name': 'PSOE', 'value': 25.6, 'avg': None, 'change': None},
+                    {'name': 'VOX', 'value': 19.3, 'avg': 18.0, 'change': None},
+                    {'name': 'Otros', 'value': 22.5, 'avg': None, 'change': None}]
     full = run_js('pc.voteRows({PP: 60.0, PSOE: 39.7}, ["PP", "PSOE"])')
     assert [row['name'] for row in full] == ['PP', 'PSOE']  # a rest under 0.5 is not shown
     assert run_js('pc.voteRows({PP: 30, PSOE: 30}, ["PSOE", "PP"])')[0]['name'] == 'PSOE'  # ties keep the party order

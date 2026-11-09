@@ -922,6 +922,33 @@ def test_bars_tooltip_names_the_interval_with_interval_text():
     assert plain == ['<strong>PP</strong><br>33.5<br>Intervalo: 32.0 – 32.0', '<strong>Otros</strong><br>66.5']
 
 
+def test_bars_label_extra_writes_a_coloured_change_after_the_value():
+    """`labelExtra` añade tras la cifra un texto de color (el cambio frente a la entrega anterior), siga donde siga
+    la cifra, y deja más sitio en el eje, sin línea ni etiqueta en su final; sin ella la opción es la de siempre."""
+    rows = [{'name': 'PP', 'value': 31.9, 'lo': 30, 'hi': 33, 'change': 1.2}, {'name': 'Otros', 'value': 14.0, 'change': None}]
+    got = run_js('await (async () => { const bs = await import("%s"); const rows = %s; '
+                 'const draw = (opts) => { const o = bs.barsOption(rows, {value: "value", formatter: (x) => x.toFixed(1), ...opts}); '
+                 'const api = {value: (k) => o.series[1].data[o.series[1].__i][k], coord: ([x, y]) => [x * 10, y * 30], size: () => [0, 30]}; '
+                 'return [0, 1].map((i) => { o.series[1].__i = i; const g = o.series[1].renderItem({}, api); '
+                 'const t = g.children.find((c) => c.type === "text"); return t.style; }); }; '
+                 'const withExtra = bs.barsOption(rows, {value: "value", labelExtra: (r) => (r.change === null ? null : '
+                 '{text: (r.change > 0 ? "▲ " : "▼ ") + r.change, color: "#2ca02c"})}); '
+                 'const plain = bs.barsOption(rows, {value: "value"}); '
+                 'return {extra: draw({labelExtra: (r) => (r.change === null ? null : {text: "▲ " + r.change, color: "#2ca02c"})}), '
+                 'plain: draw({}), maxExtra: withExtra.xAxis.max, maxPlain: plain.xAxis.max, '
+                 'endExtra: [withExtra.xAxis.splitLine.showMaxLine, withExtra.xAxis.axisLabel.showMaxLabel], '
+                 'endPlain: [plain.xAxis.splitLine.showMaxLine ?? null, plain.xAxis.axisLabel.showMaxLabel ?? null]}; })()'
+                 % (BARS_JS, json.dumps(rows)))
+    pp, others = got['extra']
+    assert '▲ 1.2' in pp['text'] and pp['rich']['d']['fill'] == '#2ca02c' and pp['rich']['d']['fontWeight'] == 700
+    assert '31.9' in pp['text']
+    assert others['text'] == '14.0' and 'rich' not in others
+    assert got['plain'][0]['text'] == '31.9' and 'rich' not in got['plain'][0]
+    assert got['maxExtra'] > got['maxPlain']
+    # the end of the widened axis is only room for the change: no line or label there («42 %» next to «40 %»)
+    assert got['endExtra'] == [False, False] and got['endPlain'] == [None, None]
+
+
 def histogram_option(args):
     """Opción de `renderHistogram` con `args`, leída de un contenedor falso: `mountChart` reutiliza su `__chart`."""
     uri = pathlib.Path(DIST, 'js', 'charts', 'histogram.js').as_uri()
