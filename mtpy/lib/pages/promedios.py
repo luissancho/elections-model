@@ -12,7 +12,7 @@ from ..webapi import site
 from .common import OTHERS_COLOR, REST_BLOCK, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
                       fmt_prob, fmt_range, gradient)
-from .slugs import pollster_href
+from .slugs import poll_detail_href, pollster_href
 
 PAGE_SIZE = 15
 MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
@@ -333,7 +333,7 @@ def poll_name(poll: dict) -> str:
     return pollster + ' / ' + sponsor if sponsor else pollster
 
 
-def chart_polls(polls: dict) -> dict:
+def chart_polls(polls: dict, scope: Optional[str] = None) -> dict:
     """
     Polls part reduced to the columns the charts draw.
 
@@ -341,6 +341,8 @@ def chart_polls(polls: dict) -> dict:
     ----------
     polls : dict
         Data of the polls part (``parties``, ``columns``, ``polls``, ``results``).
+    scope : str, optional
+        Scope of the polls, for the link to the page of each one; without it the polls have no page (past elections).
 
     Returns
     -------
@@ -348,8 +350,8 @@ def chart_polls(polls: dict) -> dict:
         ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``, ``seats``
         (the pollster's projections, when it has them), ``rating`` (the pollster's rating the run used),
         ``pollster``, ``sponsor``, ``start_date``, ``end_date`` and one value per party (the keys it has),
-        plus ``name`` (``poll_name``), ``sample_size`` (``None`` when missing) and ``href`` (``poll_href``): the
-        box of each poll of the charts and the table of all the polls are drawn from them.
+        plus ``name`` (``poll_name``), ``sample_size`` (``None`` when missing) and ``href`` (``poll_href``) and ``detail_href``
+        (``poll_detail_href``, ``None`` without ``scope``): the box of each poll of the charts and the table of all the polls are drawn from them.
     """
     parties = list(polls.get('parties') or [])
     keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats', 'rating'] + parties
@@ -358,7 +360,8 @@ def chart_polls(polls: dict) -> dict:
         'parties': parties,
         'polls': [
             {key: poll.get(key) for key in keys if key in poll}
-            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size'), 'href': poll_href(poll)}
+            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size'), 'href': poll_href(poll),
+               'detail_href': poll_detail_href(scope, poll) if scope else None}
             for poll in polls.get('polls') or []
         ],
     }
@@ -451,7 +454,8 @@ def _leaders(values: list) -> list:
     return [not _is_missing(value) and value == max(present) for value in values]
 
 
-def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAGE_SIZE) -> dict:
+def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAGE_SIZE,
+                scope: Optional[str] = None) -> dict:
     """
     Formatted rows of the polls table, the most recent first, with the simple mean of all the polls.
 
@@ -466,6 +470,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
         Colour by party name; a party without one gets ``OTHERS_COLOR``.
     n : int, optional
         Maximum number of rows; ``None`` for all of them. The mean always covers every poll.
+    scope : str, optional
+        Scope of the polls, for the link to the page of each one; without it the rows do not link (past elections).
 
     Returns
     -------
@@ -474,7 +480,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
         (ties keep the later published first) is ``{'pollster', 'href' (``poll_href``), 'rating' (at one decimal,
         or the dash), 'rating_color' (``gradient`` over ``RATING_COLORS``, ``None`` without rating), 'sponsor',
         'date' (the days of the fieldwork, ``fieldwork_label``), 'fieldwork' (the tooltip with the full dates,
-        ``None`` without fieldwork dates), 'sample', 'cells'}`` with a
+        ``None`` without fieldwork dates), 'detail_href' (``poll_detail_href``, ``None`` without ``scope``),
+        'sample', 'cells'}`` with a
         ``{'value', 'leader', 'color'}`` cell per party (``leader``: the highest of the row, every tied one);
         ``mean`` is ``{'n', 'cells'}``, the
         unweighted mean of all the polls (``n`` is ``total``) at one decimal in the same cells, the figure the
@@ -500,6 +507,7 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
             'sponsor': poll.get('sponsor') or None,
             'date': fieldwork_label(start, end, poll.get('date')),
             'fieldwork': fieldwork,
+            'detail_href': poll_detail_href(scope, poll) if scope else None,
             'sample': fmt_int(poll.get('sample_size')),
             'cells': [
                 {'value': fmt_num(value, 1), 'leader': leader, 'color': colors.get(name, OTHERS_COLOR)}
@@ -821,7 +829,7 @@ def promedios_context(state: dict, region=None) -> dict:
     context['results_date'] = results['date'] if results else None
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
-    context['table'] = polls_table(poll_rows, context['table_parties'], colors)
+    context['table'] = polls_table(poll_rows, context['table_parties'], colors, scope=scope)
     context['fixed_rows'] = []  # only the detail of a past election pins the model and the result to the foot
     context['table_total'] = len(poll_rows)
     context['has_seats'] = any(poll.get('seats') for poll in poll_rows)  # the % de voto / Escaños switch
@@ -841,7 +849,7 @@ def promedios_context(state: dict, region=None) -> dict:
         'meta': meta,
         'headline': headline,
         'series': round_series(series),
-        'polls': chart_polls(polls),
+        'polls': chart_polls(polls, scope),
         'projection': part(scope, run, 'projection', mode=mode),
         'vote': part(scope, run, 'vote', mode=mode),
         'summary': summary,

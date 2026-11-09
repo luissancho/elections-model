@@ -305,7 +305,7 @@ class Forecaster(Core):
     @property
     def fc_series_raw(self) -> pd.DataFrame:
         """
-        Polls as they were published, before subtracting the house effects: the ones to show. The average is
+        Polls as they were published, before subtracting the house effects: the ones to show (with their `url`, the source). The average is
         fitted on `fc_series`, where each poll is net of the effect of its pollster (see `fit_house_effects`).
         """
         return self.series_raw.loc[self.series_raw.pollster.notnull()].reset_index(self.series_raw.index.names[1:])
@@ -576,7 +576,7 @@ class Forecaster(Core):
             print('Build series...')
 
         data_cols = [
-            'tfs', 'tte', 'start_date', 'end_date', 'pollster', 'sponsor', 'computed',
+            'tfs', 'tte', 'start_date', 'end_date', 'pollster', 'sponsor', 'url', 'computed',
             'sample_size', 'parties', 'days', 'mtype', 'proc_sample', 'rating',
             'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err',
             'weight_over', 'weight_sample', 'weight_rating', 'weight'
@@ -615,6 +615,10 @@ class Forecaster(Core):
             is_poll = series.pollster.notnull()
             series.loc[is_poll, 'weight_rating'] = series.loc[is_poll, 'weight_rating'] ** self.rating_exponent
         series['weight'] = series.weight_over * series.weight_sample * series.weight_rating
+
+        # Callers whose polls carry no source (tests, tuning) still get the column
+        if 'url' not in series.columns:
+            series['url'] = None
 
         # Sort index and columns
         series = series.set_index([

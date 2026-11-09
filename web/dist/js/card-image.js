@@ -1,6 +1,7 @@
 // Downloadable image of a whole card (`.card.shot`): the card as the page shows it, laid out at a fixed width and
 // rasterised with html2canvas (vendored, loaded on the first click), with its charts redrawn at that width from
-// their ECharts options, without its buttons and its folded «Cómo leerlo», and with a signature line at the bottom
+// their ECharts options (a chart that works out its geometry in pixels of its container, like the hemicycle, leaves
+// `el.__imageOption(width, height)` to get the option for the size of the image), without its buttons and its folded «Cómo leerlo», and with a signature line at the bottom
 // right. A page module reveals and wires the square button of each card (`wireCardImages`); the file name and the
 // signature travel in the button's data attributes.
 import {chartDataUrl, saveBlob} from './share.js';
@@ -39,26 +40,44 @@ export function loadHtml2canvas(src = CARD_IMAGE.vendor) {
 }
 
 /**
- * The charts of `card` with an ECharts instance mounted (`mountChart` keeps it in `el.__chart`): their container id
- * and their current option, to redraw them at the size the image gives them.
+ * The charts of `card` with an ECharts instance mounted (`mountChart` keeps it in `el.__chart`): their container id,
+ * their current option and, when the chart leaves one in `el.__imageOption`, the function that gives its option for
+ * a size, to redraw them at the size the image gives them.
  *
  * @param {HTMLElement} card the card
- * @returns {{id: string, option: object}[]} the charts
+ * @returns {{id: string, option: object, imageOption: ?function}[]} the charts
  */
 export function chartOptions(card) {
   return [...card.querySelectorAll('.chart')]
     .filter((el) => el.id && el.__chart)
-    .map((el) => ({id: el.id, option: el.__chart.getOption()}));
+    .map((el) => ({
+      id: el.id,
+      option: el.__chart.getOption(),
+      imageOption: typeof el.__imageOption === 'function' ? el.__imageOption : null,
+    }));
+}
+
+/**
+ * The option to draw a chart of `chartOptions` at a given size: the one its `imageOption` gives for that size, or
+ * the option of the screen when it has none.
+ *
+ * @param {{option: object, imageOption: ?function}} chart a chart of `chartOptions`
+ * @param {number} width width of the image in CSS pixels
+ * @param {number} height height of the image in CSS pixels
+ * @returns {object} the ECharts option
+ */
+export function imageOptionOf(chart, width, height) {
+  return chart.imageOption ? chart.imageOption(width, height) : chart.option;
 }
 
 /**
  * Prepare the copy of the card in the document html2canvas renders: strip the tools (`STRIPPED`), replace each
- * chart by an image of its option at the size the copy's layout gives the container, append the signature and wait
+ * chart by an image of its option (`imageOptionOf`) at the size the copy's layout gives the container, append the signature and wait
  * for the fonts.
  *
  * @param {Document} doc the cloned document
  * @param {string} cardId id of the card
- * @param {{id: string, option: object}[]} charts the charts of the card (`chartOptions`)
+ * @param {{id: string, option: object, imageOption: ?function}[]} charts the charts of the card (`chartOptions`)
  * @param {string} sign the signature line (nothing without it)
  * @param {number} scale device pixels per CSS pixel of the chart images
  */
@@ -69,7 +88,8 @@ export async function prepareClone(doc, cardId, charts, sign, scale) {
   }
   card.classList.add('shot-image');
   card.querySelectorAll(STRIPPED).forEach((el) => el.remove());
-  for (const {id, option} of charts) {
+  for (const chart of charts) {
+    const {id} = chart;
     const el = doc.getElementById(id);
     if (!el) {
       continue;
@@ -79,7 +99,7 @@ export async function prepareClone(doc, cardId, charts, sign, scale) {
     const height = Math.round(el.getBoundingClientRect().height);
     if (width > 0 && height > 0) {
       const image = doc.createElement('img');
-      image.src = chartDataUrl(option, {width, height, scale});
+      image.src = chartDataUrl(imageOptionOf(chart, width, height), {width, height, scale});
       image.width = width;
       image.height = height;
       image.alt = '';

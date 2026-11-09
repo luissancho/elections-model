@@ -30,7 +30,7 @@ SEATS_COLS = ('seats_mean', 'seats_median', 'seats_lo', 'seats_hi', 'seats_min',
 
 
 POLL_COLUMNS = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'sample_size', 'mtype',
-                'rating', 'weight']
+                'rating', 'weight', 'weight_over', 'weight_sample', 'weight_rating', 'url']
 
 
 HE_COLUMNS = ['pollster_id', 'name', 'pollster', 'n', 'w', 'level', 'dev', 'dev_err', 'prior', 'prior_err',
@@ -436,7 +436,8 @@ def export_poll_rows(polls, names, seats=None):
     -------
     tuple of (list of dict, pandas.DataFrame)
         The records of the ``polls`` member of the ``polls`` and ``event-cycle`` schemas and the table of their
-        CSV twin. A poll with projections carries ``seats`` (``{party: [min, max]}``, only the parties that have
+        CSV twin. The weight and its three factors (``weight_over``, ``weight_sample``, ``weight_rating``) are
+        rounded to ``PROB_DECIMALS``; ``url`` is the source of the poll. A poll with projections carries ``seats`` (``{party: [min, max]}``, only the parties that have
         one); the table adds ``seats_min_{party}`` and ``seats_max_{party}`` columns (nullable integers).
     """
     polls = polls.copy()
@@ -453,7 +454,8 @@ def export_poll_rows(polls, names, seats=None):
     # one block per party and, past a hundred of them, every seat column inserted afterwards would warn about
     # fragmentation (pandas ``PerformanceWarning``).
     polls = pd.concat([polls[POLL_COLUMNS], polls[names].round(PCT_DECIMALS)], axis=1)
-    polls['weight'] = polls['weight'].astype(float).round(PROB_DECIMALS)
+    for column in ('weight', 'weight_over', 'weight_sample', 'weight_rating'):
+        polls[column] = polls[column].astype(float).round(PROB_DECIMALS)
     records = polls.to_dict(orient='records')
     for key, record in zip(keys, records):
         found = {name: seats[key][name] for name in names if name in seats.get(key, {})}

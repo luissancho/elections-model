@@ -41,4 +41,16 @@ def test_chart_options_take_the_mounted_charts_with_an_id():
     contenedores sin gráfico o sin id (no se podrían volver a dibujar ni encontrar en la copia)."""
     card = ('{querySelectorAll: () => [{id: "a", __chart: {getOption: () => ({series: [1]})}}, '
             '{id: "", __chart: {getOption: () => ({})}}, {id: "b"}, {id: "c", __chart: {getOption: () => ({x: 2})}}]}')
-    assert run_js('c.chartOptions(%s)' % card) == [{'id': 'a', 'option': {'series': [1]}}, {'id': 'c', 'option': {'x': 2}}]
+    assert run_js('c.chartOptions(%s)' % card) == [{'id': 'a', 'option': {'series': [1]}, 'imageOption': None},
+                                                       {'id': 'c', 'option': {'x': 2}, 'imageOption': None}]
+
+
+def test_chart_options_carry_the_image_option_of_a_chart_and_image_option_of_picks_it():
+    """El hemiciclo de la tarjeta de un sondeo se redibuja al tamaño de la imagen con `el.__imageOption`; los gráficos sin
+    ella siguen con la opción de la pantalla."""
+    card = ('{querySelectorAll: () => [{id: "a", __chart: {getOption: () => ({series: [1]})}, __imageOption: (w, h) => ({w, h})}, '
+            '{id: "b", __chart: {getOption: () => ({x: 2})}}]}')
+    assert run_js('c.chartOptions(%s).map((chart) => [chart.id, typeof chart.imageOption])' % card) == [['a', 'function'], ['b', 'object']]
+    assert run_js('c.chartOptions(%s)[1].imageOption' % card) is None
+    assert run_js('c.imageOptionOf({option: {a: 1}, imageOption: (w, h) => ({w, h})}, 500, 300)') == {'w': 500, 'h': 300}
+    assert run_js('c.imageOptionOf({option: {a: 1}, imageOption: null}, 500, 300)') == {'a': 1}

@@ -270,6 +270,23 @@ def test_export_poll_rows_builds_the_table_at_once_without_fragmenting_it():
     assert str(frame['seats_min_P0'].dtype) == 'Int64' and frame.loc[1, 'weight'] == 0.25
 
 
+def test_export_poll_rows_publishes_the_weight_factors_and_the_source():
+    """Enmienda 2026-11-09: `polls` lleva los tres factores del peso (a 3 decimales) y la fuente; lo que la serie no
+    trae sale nulo, así que un sondeo sin `url` ni factores se publica igual."""
+    polls = pd.DataFrame({'date': pd.to_datetime(['2026-10-01', '2026-10-02']), 'pollster_id': [1, 2], 'sponsor_id': [None, 3],
+                          'weight': [0.5, 0.25], 'weight_over': [1.0, 0.5], 'weight_sample': [0.51234, 0.5],
+                          'weight_rating': [1.0, 1.0], 'url': ['https://x.test/a', None], 'PP': [30.0, 31.0]})
+    records, frame = publish.forecast.export_poll_rows(polls, ['PP'])
+    assert publish.POLL_COLUMNS == ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'sample_size',
+                                    'mtype', 'rating', 'weight', 'weight_over', 'weight_sample', 'weight_rating', 'url']
+    assert records[0]['weight_over'] == 1.0 and records[0]['weight_sample'] == 0.512 and records[0]['url'] == 'https://x.test/a'
+    assert records[1]['url'] is None and records[1]['weight_rating'] == 1.0
+    assert list(frame.columns)[:14] == publish.POLL_COLUMNS
+    bare = pd.DataFrame({'date': pd.to_datetime(['2026-10-01']), 'pollster_id': [1], 'sponsor_id': [None], 'weight': [0.5], 'PP': [30.0]})
+    records, _ = publish.forecast.export_poll_rows(bare, ['PP'])
+    assert pd.isna(records[0]['weight_over']) and pd.isna(records[0]['weight_rating']) and records[0]['url'] is None
+
+
 def test_forecaster_load_poll_seats_pairs_min_and_max_by_poll(monkeypatch):
     import types
     from mtpy.lib import forecaster as fc_module

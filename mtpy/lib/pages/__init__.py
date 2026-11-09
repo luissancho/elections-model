@@ -2,8 +2,8 @@
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
-``backtest``, ``analisis``, with the view models of the CERA study in ``cera``), plus ``common`` (routes, messages,
-environment and shared context) and ``filters`` (formatting filters). This facade re-exports every public name, so callers use ``pages.<name>``.
+``backtest``, ``analisis``, ``sondeos``, with the view models of the CERA study in ``cera``), plus ``common`` (routes,
+messages, environment and shared context) and ``filters`` (formatting filters). This facade re-exports every public name, so callers use ``pages.<name>``.
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
 from the templates of ``web/templates``. Every context is built from the published bundle through
@@ -43,8 +43,10 @@ from .inicio import INTRO, card_headline, event_cards, inicio_context, past_even
 from . import ban, herd, lean, shy
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, quality_rubric, subpages, thresholds_rows)
-from .slugs import (NATIONAL_SLUG, event_href, event_segment, pollster_href, pollster_slugs, resolve_event_path,
-                    resolve_pollster, scope_paths, scope_slug, slugify)
+from .slugs import (NATIONAL_SLUG, event_href, event_segment, poll_detail_href, pollster_href, pollster_slugs,
+                    resolve_event_path, resolve_pollster, scope_paths, scope_slug, slugify)
+from .sondeos import (distance_to_average, fieldwork_text, find_poll, house_effects_of, poll_kpis, poll_title, sample_text,
+                      seats_text, series_at, series_day, sheet_rows, sondeo_context, vote_rows, weight_card)
 from .promedios import (BLOCK_ORDER, PAGE_SIZE, RATING_COLORS, block_result_rows, chart_polls, fieldwork_label, inherited_results,
                         lineage_blocks, party_cards,
                         poll_href, poll_months, poll_name, polls_table, pollster_options, promedios_context, result_rows,

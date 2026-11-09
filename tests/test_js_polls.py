@@ -203,3 +203,36 @@ def test_polls_dom_fixed_columns_and_rating_colours_follow_the_server():
     fixed, colors = json.loads(out.stdout)
     assert fixed == [['pollster', 'Encuestadora'], ['rating', 'Rating (0-100)'], ['date', 'Fecha'], ['sample_size', 'Muestra']]
     assert colors == list(pages.RATING_COLORS)
+
+
+# A minimal `document` for the DOM builders of the table: elements with a tag, text, attributes and children, enough
+# for `createElement`, `textContent`, `append`, `appendChild` and `replaceChildren`
+DOM_SHIM = (
+    'class Node { constructor(tag) { this.tag = tag; this.textContent = ""; this.className = ""; this.style = {}; '
+    'this.children = []; } appendChild(child) { this.children.push(child); return child; } '
+    'append(...children) { this.children.push(...children); } replaceChildren(...children) { this.children = children; } } '
+    'globalThis.document = {createElement: (tag) => new Node(tag)}; '
+)
+
+
+def test_polls_dom_links_the_date_to_the_page_of_the_poll():
+    """Con `detail_href`, la fecha de la fila es un enlace a la página del sondeo y la celda conserva el `title` del
+    trabajo de campo; sin él, la fecha es texto (revisión final 2026-11-09)."""
+    polls = [{'date': '2026-10-30', 'start_date': '2026-10-29', 'end_date': '2026-10-30', 'pollster': 'GAD3', 'sponsor': 'ABC',
+              'sample_size': 1000, 'rating': 70.0, 'PP': 33.0, 'detail_href': '/es/sondeos/2026-10-30/gad3/abc'},
+             {'date': '2026-10-28', 'start_date': '2026-10-27', 'end_date': '2026-10-28', 'pollster': 'CIS', 'sample_size': 4000,
+              'rating': 40.0, 'PP': 30.0}]
+    script = DOM_SHIM + ('const d = await import("{}"); const p = await import("{}"); '
+              'const tbody = document.createElement("tbody"); d.renderBody(tbody, {}, ["PP"], {{color: () => "#1d84ce"}}); '
+              'console.log(JSON.stringify({{labels: [p.fieldworkLabel("2026-10-29", "2026-10-30", "2026-10-30"), '
+              'p.fieldworkLabel("2026-10-27", "2026-10-28", "2026-10-28")], rows: tbody.children.map((tr) => {{ '
+              'const td = tr.children[2]; return {{text: td.textContent, title: td.title || null, '
+              'links: td.children.map((a) => ({{tag: a.tag, href: a.href, text: a.textContent}}))}}; }})}}));').format(
+        DOM_JS, TABLE_JS, json.dumps(polls))
+    out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    result = json.loads(out.stdout)
+    (linked_label, plain_label), (linked, plain) = result['labels'], result['rows']
+    assert linked_label and plain_label
+    assert linked == {'text': '', 'title': 'Trabajo de campo: 29 oct 2026 – 30 oct 2026',
+                      'links': [{'tag': 'a', 'href': '/es/sondeos/2026-10-30/gad3/abc', 'text': linked_label}]}
+    assert plain == {'text': plain_label, 'title': 'Trabajo de campo: 27 oct 2026 – 28 oct 2026', 'links': []}

@@ -524,6 +524,7 @@ def _weights_builder(monkeypatch):
         'pollster_id': [1, 2, 1], 'sponsor_id': 0, 'pollster': ['A', 'B', 'A'], 'computed': True,
         'weight_over': [1.0, 1.0, 2.0], 'weight_sample': [0.5, 0.5, 1.5], 'weight_rating': [9.0, 9.0, 9.0],
         'PP': [33.0, 32.0, 34.0], 'PSOE': [30.0, 31.0, 29.0],
+        'url': ['https://a.test/1', 'https://a.test/2', 'https://a.test/1'],
     }).set_index(['date', 'pollster_id', 'sponsor_id'])
     events = pd.DataFrame({
         'date': pd.to_datetime(['2019-11-10', '2023-07-23']), 'pollster_id': np.nan, 'sponsor_id': np.nan,
@@ -571,6 +572,14 @@ def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
     # Sin la serie, el valor guardado manda
     stored = build(None).series_raw
     assert (stored.loc[stored.pollster.notnull(), 'weight_rating'] == 9.0).all()
+
+
+def test_build_series_keeps_the_source_url_of_the_polls(monkeypatch):
+    """La serie conserva la fuente de cada sondeo (`url`) para publicarla; los resultados oficiales no tienen."""
+    build, _ = _weights_builder(monkeypatch)
+    series = build(None).series_raw
+    assert series.loc[series.pollster == 'A', 'url'].eq('https://a.test/1').all()
+    assert series.loc[series.pollster.isnull(), 'url'].isnull().all()
 
 
 def test_rating_exponent_raises_every_poll_weight(monkeypatch):

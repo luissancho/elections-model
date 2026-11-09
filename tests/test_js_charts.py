@@ -14,6 +14,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DIST = os.path.join(ROOT, 'web', 'dist')
 ECHARTS = os.path.join(DIST, 'vendor', 'echarts-5.6.0.min.js')
 BULLSEYE_JS = pathlib.Path(DIST, 'js', 'charts', 'bullseye.js').as_uri()
+BARS_JS = pathlib.Path(DIST, 'js', 'charts', 'bars.js').as_uri()
 DIVERGING_JS = pathlib.Path(DIST, 'js', 'charts', 'diverging.js').as_uri()
 HEMICYCLE_JS = pathlib.Path(DIST, 'js', 'charts', 'hemicycle.js').as_uri()
 SERIES_JS = pathlib.Path(DIST, 'js', 'charts', 'series.js').as_uri()
@@ -184,6 +185,45 @@ def test_hemicycle_writes_the_seat_delta_under_the_seats():
     assert pie['label']['rich']['delta'] == {'fontFamily': pie['label']['rich']['seats']['fontFamily'], 'fontWeight': 700, 'fontSize': 12, 'color': '#fff',
                                              'align': 'center', 'padding': [3, 0, 0, 0]}
     assert pie['data'][0]['delta'] == -25 and 'formatter' not in pie['label']  # la función no sobrevive al JSON
+
+
+def test_hemicycle_labels_the_arcs_with_a_range_and_fills_the_chamber_with_others():
+    """La tarjeta de un sondeo: los arcos se rotulan con la horquilla de la casa y un arco gris «Otros» completa la
+    cámara (los escaños de los partidos sin cifra propia y el redondeo de las horquillas; revisión final 2026-11-09)."""
+    assert run_js('h.hemicycleLabel({name: "PP", value: 137, data: {text: "136–138", delta: null}})') == '{name|PP}\n{seats|136–138}'
+    assert run_js('h.hemicycleLabel({name: "PP", value: 137, data: {text: null}})') == '{name|PP}\n{seats|137}'
+    data = run_js('h.hemicycleData({PP: 137, PSOE: 100}, {nSeats: 350, labels: {PP: "136–138"}})')
+    assert [item['text'] for item in data] == ['136–138', None]
+    option = run_js('h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, height: 330, '
+                    'labels: {PP: "136–138", PSOE: "99–101"}, rest: 113})')
+    items = option['series'][0]['data']
+    assert [(item['name'], item['value']) for item in items] == [('PP', 137), ('PSOE', 100), ('Otros', 113)]
+    assert items[2]['itemStyle']['color'] == '#d8dbe3' and items[2]['label'] == {'show': False} and items[2]['rest'] is True
+    assert any(g.get('style', {}).get('text') == '350' for g in option['graphic'])
+    # the tooltip of the grey arc says what it holds; a party arc keeps its own; the majority ring still adds up to
+    # the chamber with the rest
+    probe = run_js('(() => { const o = h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, '
+                   'height: 330, rest: 113}); const items = o.series[0].data; '
+                   'return {rest: o.tooltip.formatter({name: items[2].name, value: items[2].value, data: items[2]}), '
+                   'party: o.tooltip.formatter({name: "PP", value: 137, data: items[0]}), '
+                   'ring: o.series[1].data.reduce((sum, d) => sum + d.value, 0), '
+                   'pie: items.reduce((sum, d) => sum + d.value, 0)}; })()')
+    assert probe['rest'] == 'Otros: 113 escaños (partidos sin cifra propia en esta tabla y redondeo de las horquillas)'
+    assert probe['party'].startswith('PP: 137 escaños (39,1') and 'Otros' not in probe['party']
+    assert probe['ring'] == pytest.approx(350) and probe['pie'] == 350
+    plain = run_js('h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, height: 330})')
+    assert len(plain['series'][0]['data']) == 2 and 'text' in plain['series'][0]['data'][0] and plain['series'][0]['data'][0]['text'] is None
+
+
+def test_hemicycle_shrinks_the_ranges_with_the_radius():
+    """Los rótulos de horquilla («115–123») encogen con el radio para caber en su arco en un móvil (revisión final
+    2026-11-09); sin horquillas, o con radio de sobra, los escaños siguen a 24 px."""
+    sizes = run_js(
+        '[[324, 178, true], [120, 80, true], [600, 330, true], [324, 178, false]].map(([width, height, ranged]) => '
+        'h.hemicycleOption({PP: 130, PSOE: 119}, {nSeats: 350, majority: 176, width, height, '
+        'labels: ranged ? {PP: "124–137", PSOE: "115–123"} : null}).series[0].label.rich.seats.fontSize)')
+    # a phone (radius 142), a tiny box (the floor), the desktop (radius 290) and a phone without ranges
+    assert sizes == [17, 13, 24, 24]
 
 
 def test_stacked_bar_labels_each_segment_with_its_seats_and_delta():
@@ -860,6 +900,26 @@ def test_chart_zoom_reads_the_window_given_and_the_drag():
     assert out['first']['endValue'] == run_js('s.dayTime("2026-10-01")')
     assert out['dragged'] != out['first'] and [out['dragged']['startValue'], out['dragged']['endValue']] == out['live']
     assert out['same'] is True
+
+
+def bars_tooltips(opts):
+    """Las líneas del tooltip de `renderBars` para un sondeo (PP con promedio, «Otros» sin él) con las opciones `opts`,
+    leídas de un contenedor falso: `mountChart` reutiliza su `__chart`."""
+    return run_js('await (async () => { const bs = await import("%s"); let got = null; '
+                  'bs.renderBars({__chart: {setOption: (o) => { got = o; }}}, '
+                  '[{name: "PP", value: 33.5, avg: 32}, {name: "Otros", value: 66.5, avg: null}], '
+                  '{value: "value", lo: "avg", hi: "avg", formatter: (x) => x.toFixed(1), ...%s}); '
+                  'return [0, 1].map((i) => got.tooltip.formatter([{dataIndex: i}])); })()' % (BARS_JS, opts))
+
+
+def test_bars_tooltip_names_the_interval_with_interval_text():
+    """`intervalText` sustituye la línea «Intervalo» del tooltip (la página de un sondeo la usa para la marca del
+    promedio del día); sin ella la línea sigue como estaba."""
+    named = bars_tooltips('{intervalText: (row) => (row.lo === null ? null : `Promedio del día: ${row.lo.toFixed(1)}`)}')
+    assert named == ['<strong>PP</strong><br>33.5<br>Promedio del día: 32.0', '<strong>Otros</strong><br>66.5']
+    assert not any('Intervalo' in text for text in named)
+    plain = bars_tooltips('{}')
+    assert plain == ['<strong>PP</strong><br>33.5<br>Intervalo: 32.0 – 32.0', '<strong>Otros</strong><br>66.5']
 
 
 def histogram_option(args):

@@ -72,7 +72,7 @@
               <tr>
                 <td class="f l">{% if row.href %}<a href="{{ row.href }}"><b>{{ row.pollster }}</b></a>{% else %}<b>{{ row.pollster }}</b>{% endif %}<small>{{ row.sponsor or '—' }}</small></td>
                 {% if row.rating_color %}<td><span class="rt" style="background: {{ row.rating_color }}">{{ row.rating }}</span></td>{% else %}<td class="na">—</td>{% endif %}
-                <td{% if row.fieldwork %} title="{{ row.fieldwork }}"{% endif %}>{{ row.date }}</td>
+                <td{% if row.fieldwork %} title="{{ row.fieldwork }}"{% endif %}>{% if row.detail_href %}<a href="{{ row.detail_href }}">{{ row.date }}</a>{% else %}{{ row.date }}{% endif %}</td>
                 <td>{{ row.sample }}</td>
                 {% for cell in row.cells %}
                 {% if cell.leader %}<td class="p mx" style="background: {{ cell.color }}24">{{ cell.value }}</td>

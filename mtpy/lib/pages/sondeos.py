@@ -1,0 +1,578 @@
+"""
+The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the lookup of the poll named by the URL, the
+average of its day (the last day of its fieldwork), the rows and figures of its cards and the template context.
+"""
+from typing import Optional
+from urllib.parse import urlsplit
+
+from ...core.api import HttpError
+from ..webapi import site
+from .casas import mtype_label
+from .common import block_color, bundle_part, common_context, ink_color, part
+from .elecciones import chart_parties
+from .filters import DASH, _is_missing, fmt_date, fmt_int, fmt_num, gradient
+from .promedios import RATING_COLORS, chart_polls, round_series
+from .slugs import poll_detail_href, pollster_href, slugify
+
+
+def find_poll(polls: list, date: str, pollster: str, sponsor: Optional[str] = None) -> dict:
+    """
+    Resolve the poll that a detail URL names.
+
+    Parameters
+    ----------
+    polls : list
+        Records of the ``polls`` part of a scope.
+    date : str
+        Day of the poll, ``YYYY-MM-DD``.
+    pollster : str
+        House segment of the URL: the slug of its name or its id.
+    sponsor : str, optional
+        Sponsor segment of the URL (the slug of the sponsor). Without it, the polls of the house that day without a
+        sponsor slug are preferred, and if there are none, all the polls of the house that day.
+
+    Returns
+    -------
+    dict
+        The poll record, when exactly one poll matches.
+
+    Raises
+    ------
+    HttpError
+        404 ``poll not found`` when no poll or more than one matches.
+    """
+    day_polls = [poll for poll in polls
+                 if str(poll.get('date'))[:10] == date
+                 and pollster in {slugify(poll.get('pollster')), str(poll.get('pollster_id'))}]
+
+    if sponsor is not None:
+        candidates = [poll for poll in day_polls if slugify(poll.get('sponsor') or '') == sponsor]
+    else:
+        candidates = [poll for poll in day_polls if not slugify(poll.get('sponsor') or '')] or day_polls
+
+    if len(candidates) != 1:
+        raise HttpError(404, 'poll not found')
+
+    return candidates[0]
+
+
+def _series_index(series: dict, date: str) -> Optional[int]:
+    """
+    Position in a series of its last day up to a date.
+
+    Parameters
+    ----------
+    series : dict
+        A ``series`` part: ``dates`` (ISO, ascending).
+    date : str
+        Day to look up, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    int or None
+        The index of the greatest ``dates[i] <= date``, ``None`` when every day of the series is after ``date``.
+    """
+    index = None
+
+    for i, day in enumerate(series.get('dates') or []):
+        if day <= date:
+            index = i
+
+    return index
+
+
+def series_day(series: dict, date: str) -> Optional[str]:
+    """
+    Day of a series whose average ``series_at`` takes for a date.
+
+    Parameters
+    ----------
+    series : dict
+        A ``series`` part: ``dates`` (ISO, ascending).
+    date : str
+        Day to look up, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    str or None
+        The last day of the series that is not after ``date`` (it can be before it when the series ends earlier),
+        ``None`` when the series has no such day.
+    """
+    index = _series_index(series, date)
+
+    return None if index is None else series['dates'][index]
+
+
+def series_at(series: dict, date: str) -> dict:
+    """
+    Average of the last day of a series up to a date.
+
+    Parameters
+    ----------
+    series : dict
+        A ``series`` part: ``dates`` (ISO, ascending), ``parties`` and ``mean`` (``{party: [values]}``).
+    date : str
+        Day to look up, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    dict
+        ``{party: mean}`` of the last day of the series that is not after ``date`` (``None`` for a party without a
+        value that day); ``{}`` when the series has no such day.
+    """
+    index = _series_index(series, date)
+
+    if index is None:
+        return {}
+
+    mean = series.get('mean') or {}
+
+    return {name: mean[name][index] if name in mean and index < len(mean[name]) else None
+            for name in series.get('parties') or []}
+
+
+def seats_text(seats_range) -> Optional[str]:
+    """
+    Text of the seats range of a party in a poll.
+
+    Parameters
+    ----------
+    seats_range : list or None
+        ``[low, high]`` seats.
+
+    Returns
+    -------
+    str or None
+        ``'136–138'``, or ``'100'`` when both ends coincide; ``None`` when there is no range.
+    """
+    if not seats_range or len(seats_range) < 2 or _is_missing(seats_range[0]) or _is_missing(seats_range[1]):
+        return None
+
+    low, high = int(seats_range[0]), int(seats_range[1])
+
+    return str(low) if low == high else f'{low}{DASH}{high}'
+
+
+def _has_value(value) -> bool:
+    """
+    Tell whether a poll value is a number.
+
+    Parameters
+    ----------
+    value : object
+        Value of a party in a poll or an average.
+
+    Returns
+    -------
+    bool
+        True for a number that is not NaN or infinite.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and not _is_missing(value)
+
+
+def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: Optional[dict] = None) -> list:
+    """
+    Rows of the vote table of a poll: its parties against the average of the day.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (a value per party, ``seats``).
+    parties : list
+        Parties of the scope, in their order (it breaks the ties).
+    average : dict
+        ``{party: mean}`` of the day of the poll.
+    colors : dict
+        ``{party: colour}``.
+    effects : dict, optional
+        ``{party: house effect}``.
+
+    Returns
+    -------
+    list
+        One dict per party with a number in the poll, by descending value: ``name``, ``color``, ``value``, ``avg``,
+        ``diff`` (value minus average, one decimal), ``effect`` and ``seats`` (``None`` when missing).
+    """
+    effects = effects or {}
+    seats = poll.get('seats') or {}
+    rows = []
+
+    for name in parties:
+        value = poll.get(name)
+
+        if not _has_value(value):
+            continue
+
+        avg = average.get(name)
+        avg = float(avg) if _has_value(avg) else None
+        rows.append({'name': name, 'color': colors.get(name), 'value': float(value), 'avg': avg,
+                     'diff': None if avg is None else round(value - avg, 1), 'effect': effects.get(name),
+                     'seats': seats_text(seats.get(name))})
+
+    return sorted(rows, key=lambda row: -row['value'])
+
+
+def distance_to_average(poll: dict, parties: list, average: dict) -> Optional[float]:
+    """
+    Mean absolute gap between a poll and the average, over the parties that have both figures.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record.
+    parties : list
+        Parties to consider.
+    average : dict
+        ``{party: mean}`` of the day of the poll.
+
+    Returns
+    -------
+    float or None
+        The mean of ``|poll - average|`` to one decimal, or ``None`` without any shared party.
+    """
+    gaps = [abs(poll[name] - average[name]) for name in parties
+            if _has_value(poll.get(name)) and _has_value(average.get(name))]
+
+    return round(sum(gaps) / len(gaps), 1) if gaps else None
+
+
+def weight_card(poll: dict, weights: Optional[dict]) -> dict:
+    """
+    Content of the weight card of a poll: the factors of its weight and the row of the ``weights`` part.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``weight``, ``weight_over``, ``weight_sample``, ``weight_rating``).
+    weights : dict or None
+        The published ``weights`` part, or ``None`` when the scope has none.
+
+    Returns
+    -------
+    dict
+        ``factors`` (label and two-decimal value), ``has_part``, ``today`` (``date``, ``kernel``, ``weight``,
+        ``party`` of the row of the poll for its biggest party, or ``None``), ``status`` (``None`` without part,
+        ``'today'``, ``'zero'``, ``'outside'`` or ``'absent'``) and ``overlap`` (a weight of 0 whose overlap factor
+        is 0 too).
+    """
+    factors = [{'label': label, 'value': fmt_num(poll.get(key), 2)}
+               for label, key in (('Solape', 'weight_over'), ('Muestra', 'weight_sample'),
+                                  ('Rating', 'weight_rating'), ('Peso', 'weight'))]
+    card = {'factors': factors, 'has_part': weights is not None, 'today': None, 'status': None, 'overlap': False}
+
+    if weights is None:
+        return card
+
+    weight = poll.get('weight')
+
+    if _is_missing(weight) or weight == 0:
+        card['status'] = 'zero'
+        card['overlap'] = not _is_missing(poll.get('weight_over')) and poll.get('weight_over') == 0
+
+        return card
+
+    date = str(poll.get('date'))[:10]
+    sponsor = poll.get('sponsor') or None
+    rows = [row for row in weights.get('rows') or []
+            if str(row.get('date'))[:10] == date and row.get('pollster_id') == poll.get('pollster_id')
+            and (row.get('sponsor') or None) == sponsor and _has_value(poll.get(row.get('name')))]
+
+    if rows:
+        row = max(rows, key=lambda r: poll[r['name']])
+        card['today'] = {'date': date, 'kernel': fmt_num(row.get('weight_kernel'), 2),
+                         'weight': fmt_num(row.get('weight'), 2), 'party': row['name']}
+        card['status'] = 'today'
+    elif any(line.get('dates') and date < str(line['dates'][0])[:10] for line in (weights.get('line') or {}).values()):
+        card['status'] = 'outside'
+    else:
+        card['status'] = 'absent'
+
+    return card
+
+
+def poll_kpis(poll: dict, distance: Optional[float]) -> list:
+    """
+    Figures of the header of a poll page.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record.
+    distance : float or None
+        Distance to the average (``distance_to_average``).
+
+    Returns
+    -------
+    list
+        The ``kpis`` of the page layout (``label``, ``value``, ``unit`` and ``color``, ``None`` but on the rating):
+        rating (coloured), weight, sample and distance. A missing value is a dash without its unit.
+    """
+    rating = poll.get('rating')
+    sample = poll.get('sample_size')
+
+    return [{'label': 'Rating', 'value': fmt_num(rating, 1), 'unit': '',
+             'color': gradient(rating, 0, 100, RATING_COLORS) if _has_value(rating) else None},
+            {'label': 'Peso en el promedio', 'value': fmt_num(poll.get('weight'), 2), 'unit': '', 'color': None},
+            {'label': 'Muestra', 'value': fmt_int(sample), 'unit': 'entrevistas' if _has_value(sample) else '',
+             'color': None},
+            {'label': 'Distancia al promedio', 'value': fmt_num(distance, 1), 'unit': 'pts' if _has_value(distance) else '',
+             'color': None}]
+
+
+def sample_text(poll: dict) -> Optional[str]:
+    """
+    Sample of a poll for the lead line of its card.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``sample_size``).
+
+    Returns
+    -------
+    str or None
+        ``'1.200 entrevistas'``, ``None`` without a sample (the lead line then leaves it out).
+    """
+    sample = poll.get('sample_size')
+
+    return f'{fmt_int(sample)} entrevistas' if _has_value(sample) and sample > 0 else None
+
+
+def poll_title(poll: dict) -> str:
+    """
+    Title of a poll: the house, plus ``' para '`` and the outlet that commissioned it when there is one.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``pollster``, ``sponsor``).
+
+    Returns
+    -------
+    str
+        For example ``'NC Report para La Razón'``.
+    """
+    sponsor = poll.get('sponsor')
+
+    return f"{poll.get('pollster')} para {sponsor}" if sponsor else str(poll.get('pollster'))
+
+
+def fieldwork_text(poll: dict) -> Optional[str]:
+    """
+    Fieldwork dates of a poll with the year.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``start_date``, ``end_date``).
+
+    Returns
+    -------
+    str or None
+        ``'29 oct 2026 – 30 oct 2026'``, a single date when they coincide or only one is known, ``None`` without
+        any valid date.
+    """
+    days = []
+
+    for key in ('start_date', 'end_date'):
+        text = fmt_date(poll.get(key))
+
+        if text != DASH and text not in days:
+            days.append(text)
+
+    return f'{days[0]} {DASH} {days[1]}' if len(days) == 2 else (days[0] if days else None)
+
+
+def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> list:
+    """
+    Rows of the data sheet of a poll.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record.
+    house_href : str
+        Link to the profile of the house.
+    event_label : str
+        Text of the election the poll belongs to.
+    run_text : str
+        Text of the model update shown.
+
+    Returns
+    -------
+    list
+        ``{'label', 'text', 'href'}`` rows; the source links to the URL of the poll when it is an ``http`` or
+        ``https`` address with a host or, without one, names the Wikipedia list (without a link).
+    """
+    url = poll.get('url').strip() if isinstance(poll.get('url'), str) else None
+
+    try:
+        parts = urlsplit(url) if url else None
+        host = parts.hostname if parts is not None and parts.scheme.lower() in ('http', 'https') else None
+    except ValueError:  # a malformed address (a broken IPv6 host, a bad port): no link
+        host = None
+
+    if host:
+        source = {'text': host, 'href': url}
+    else:
+        source = {'text': 'Wikipedia, lista de sondeos', 'href': None}
+
+    return [{'label': 'Encuestadora', 'text': poll.get('pollster'), 'href': house_href},
+            {'label': 'Medio', 'text': poll.get('sponsor') or '—', 'href': None},
+            {'label': 'Tipo', 'text': mtype_label(poll.get('mtype')), 'href': None},
+            {'label': 'Trabajo de campo', 'text': fieldwork_text(poll) or fmt_date(poll.get('date')), 'href': None},
+            {'label': 'Muestra', 'text': fmt_int(poll.get('sample_size')), 'href': None},
+            {'label': 'Rating', 'text': fmt_num(poll.get('rating'), 1), 'href': None},
+            {'label': 'Peso', 'text': fmt_num(poll.get('weight'), 2), 'href': None},
+            {'label': 'Fuente', **source},
+            {'label': 'Elección', 'text': event_label, 'href': None},
+            {'label': 'Actualización del modelo', 'text': run_text, 'href': None}]
+
+
+def house_effects_of(effects: Optional[dict], pollster_id) -> Optional[dict]:
+    """
+    House effect of a pollster by party, from the ``house-effects`` part of a run.
+
+    Parameters
+    ----------
+    effects : dict or None
+        The ``house-effects`` part (``rows`` with ``pollster_id``, ``name`` and ``effect``), ``None`` when the run
+        has none.
+    pollster_id : int or None
+        Id of the house.
+
+    Returns
+    -------
+    dict or None
+        ``{party: effect}`` of the rows of the house (empty when the house has none); ``None`` without the part or
+        with no row at all (the effects were not fitted), so the page drops the column.
+    """
+    rows = (effects or {}).get('rows') or []
+
+    if not rows:
+        return None
+
+    return {row['name']: row.get('effect') for row in rows if row.get('pollster_id') == pollster_id}
+
+
+def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str] = None) -> dict:
+    """
+    Template context of the page of a poll.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``), the scope taken from the route.
+    date : str
+        Day of the poll in the URL (already checked), the last day of its fieldwork.
+    pollster : str
+        House segment of the URL (``find_poll``).
+    sponsor : str, optional
+        Sponsor segment of the URL.
+
+    Returns
+    -------
+    dict
+        ``common_context`` of an event page, its ``event_bar['sections']`` linking the sections of the event page
+        (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``poll``,
+        ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``sample_text``
+        (``sample_text``), ``poll_date``,
+        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``), ``vote_rows``, ``has_seats``,
+        ``has_effects``, ``average_date`` (the day of the series compared, ``None`` without one), ``weight``
+        (``weight_card``, its ``factors`` with an empty ``unit`` and no ``color`` for ``m.kpis``), ``weights_date``
+        (the day of the ``weights`` part, ``None`` without it), ``sheet`` (``sheet_rows``), ``back_href`` (the polls
+        table of the event page), ``detail_href``, ``image_file`` and ``image_sign`` (the image of the card),
+        ``chart_file`` (the image of the chart of the house), ``blocks`` (the names of ``meta.bmaps.blocks``) and
+        ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``polls`` (``chart_polls`` with the polls of
+        the house only), ``projection`` and ``vote`` (the parts of the mode), ``catalog`` (``parties`` and ``bmaps``,
+        as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``, ``sponsor``, ``pollster`` and the
+        percentages), ``average``, ``seats`` (``None`` without them), ``n_seats`` and ``majority``.
+
+    Raises
+    ------
+    HttpError
+        404 ``poll not found`` without a ``polls`` part or without the poll; those of ``common_context``.
+    """
+    context = common_context(state, None, event=True)
+    full, meta, parties, query = context['state'], context['meta'], context['catalog'], context['query']
+    scope, mode, run = full['scope'], full['mode'], full['run']
+    polls = bundle_part(site().run_file, scope, run, 'polls')
+
+    if polls is None:
+        raise HttpError(404, 'poll not found')
+
+    poll = find_poll(polls.get('polls') or [], date, pollster, sponsor)
+    poll_parties = list(polls.get('parties') or [])
+    series = part(scope, run, 'series')
+    average = series_at(series, date)
+    weights = bundle_part(site().run_file, scope, run, 'weights')
+    effects = house_effects_of(bundle_part(site().run_file, scope, run, 'house-effects'), poll.get('pollster_id'))
+    colors = {name: parties[name]['color'] for name in poll_parties}
+    bmaps = meta.get('bmaps') or {}
+    blocks = bmaps.get('blocks')
+    blocks = list(blocks) if isinstance(blocks, dict) else []
+    event = context['event_bar']
+    event_label = '{} · {}'.format(event['title'], fmt_date(event['date']))
+    house = {'name': poll.get('pollster'), 'href': pollster_href(poll.get('pollster'), poll.get('pollster_id')),
+             'type': mtype_label(poll.get('mtype'))}
+    run_text = 'Actualizado el ' + fmt_date(meta.get('run_at')) + (' (run anclado)' if full['pinned'] else '')
+    weight = weight_card(poll, weights)
+    house_slug = slugify(poll.get('pollster')) or str(poll.get('pollster_id'))
+    sponsor_slug = slugify(poll.get('sponsor') or '')
+    # the index links the sections of the event page, keeping the mode and the pinned run; the territory only when
+    # the run has districts, as the event page does
+    districts = bundle_part(site().run_file, scope, run, 'districts', mode) or {}
+    missing = set() if districts.get('regions') else {'territorio'}
+    context['event_bar'] = dict(event, sections=[dict(entry, href='/' + scope + query + '#' + entry['id'])
+                                                 for entry in event['sections'] if entry['id'] not in missing])
+    # the polls of the chart of the house: the same id, or the same name when the poll has no id
+    key = 'pollster_id' if poll.get('pollster_id') is not None else 'pollster'
+    house_polls = dict(polls, polls=[other for other in polls.get('polls') or [] if other.get(key) == poll.get(key)])
+    run_parties = [entry['name'] for entry in meta.get('parties') or []]
+    seats = poll.get('seats') or None
+
+    context.update({
+        'poll': poll,
+        'poll_title': poll_title(poll),
+        'house': house,
+        'fieldwork': fieldwork_text(poll),
+        'sample_text': sample_text(poll),
+        'poll_date': fmt_date(date),
+        'event_label': event_label,
+        'kpis': poll_kpis(poll, distance_to_average(poll, poll_parties, average)),
+        'vote_rows': vote_rows(poll, poll_parties, average, colors, effects),
+        'has_seats': bool(seats),
+        'has_effects': effects is not None,
+        'average_date': series_day(series, date),
+        'weight': dict(weight, factors=[dict(factor, unit='', color=None) for factor in weight['factors']]),
+        'weights_date': weights.get('date') if weights is not None else None,
+        'sheet': sheet_rows(poll, house['href'], event_label, run_text),
+        'back_href': '/' + scope + query + '#tabla',
+        'detail_href': poll_detail_href(scope, poll),
+        'image_file': 'demoscopio-sondeo-{}-{}-{}{}.png'.format(scope, date, house_slug,
+                                                                '-' + sponsor_slug if sponsor_slug else ''),
+        'image_sign': '{} · {}'.format(context['site_host'], context['author_handle']),
+        'chart_file': 'demoscopio-encuestadora-{}-{}-{}.png'.format(scope, house_slug, date),
+        'blocks': blocks,
+    })
+    context['initial'] = {
+        'state': full,
+        'meta': meta,
+        'series': round_series(series),
+        'polls': chart_polls(house_polls, scope),
+        'projection': part(scope, run, 'projection', mode=mode),
+        'vote': part(scope, run, 'vote', mode=mode),
+        'catalog': {'parties': [dict(parties[name], name=name)
+                                for name in chart_parties(parties, run_parties, poll_parties)], 'bmaps': bmaps},
+        'inks': {**{name: ink_color(parties[name]['color'])
+                    for name in run_parties + poll_parties + list(series.get('parties') or [])},
+                 **{block: ink_color(block_color(block, meta, parties)) for block in blocks}},
+        'poll': {'date': poll.get('date'), 'pollster_id': poll.get('pollster_id'), 'sponsor': poll.get('sponsor'),
+                 'pollster': poll.get('pollster'), **{name: poll[name] for name in poll_parties if name in poll}},
+        'average': average,
+        'seats': seats,
+        'n_seats': meta.get('n_seats'),
+        'majority': meta.get('majority'),
+    }
+
+    return context

@@ -15,6 +15,8 @@ from ..webapi import check_date, query_pollsters, site
 NATIONAL_SLUG = 'generales'
 PROFILE_PATH = '/casas'
 DETAIL_PATH = '/elecciones'
+POLLS_PATH = 'sondeos'
+_DATE_RE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
 _MONTH_RE = re.compile(r'[0-9]{4}-[0-9]{2}')
 _NON_SLUG_RE = re.compile(r'[^a-z0-9]+')
 
@@ -188,6 +190,42 @@ def pollster_href(name: Optional[str], pollster_id: int) -> str:
         ``'/casas/gad3'``, or ``'/casas/{id}'`` when the name gives no slug (``resolve_pollster`` accepts both).
     """
     return '{}/{}'.format(PROFILE_PATH, slugify(name) or pollster_id)
+
+
+def poll_detail_href(scope: str, poll: dict) -> Optional[str]:
+    """
+    Link to the detail page of a poll.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code of the poll (``'es'``, ``'es-md'``).
+    poll : dict
+        A record of the ``polls`` part: ``date``, ``pollster``, ``pollster_id`` and ``sponsor``.
+
+    Returns
+    -------
+    str or None
+        ``'/es/sondeos/2026-11-09/nc-report/la-razon'``: the day, the house (its slug, or its id when the name gives
+        none) and the sponsor, left out when it has no slug. ``None`` when the poll has no valid date or no house.
+    """
+    date = str(poll.get('date') or '')[:10]
+
+    if not _DATE_RE.fullmatch(date):
+        return None
+
+    house = slugify(poll.get('pollster'))
+
+    if not house and poll.get('pollster_id') is not None:
+        house = str(int(poll['pollster_id']))
+
+    if not house:
+        return None
+
+    sponsor = slugify(poll.get('sponsor') or '')
+    href = '/{}/{}/{}/{}'.format(scope, POLLS_PATH, date, house)
+
+    return '{}/{}'.format(href, sponsor) if sponsor else href
 
 
 def pollster_slugs() -> dict:

@@ -364,6 +364,10 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .card-img-btn[hidden] { display: none; }
 .card.shot > .qh, .card.shot > .card-head { padding-right: 36px; }
 .shot-image { box-shadow: none; }
+/* The canvas of html2canvas cannot draw tabular figures: it measures each word in the copy and paints it with the
+   default figures, so a word with digits followed by another one («40dB para») ate the space between them. In the
+   copy the figures are the default ones too, so what is measured is what is drawn */
+.shot-image, .shot-image * { font-variant-numeric: normal !important; }
 .shot-sign { margin: 14px 0 0; text-align: right; font-size: 12px; font-weight: 600; color: var(--color-muted); }
 .card-head h2, .card-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0; }
 .card-head h2::before, .card-head h3::before {
@@ -489,7 +493,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); background: var(--color-card); border: 1px solid var(--color-line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .kpis[hidden] { display: none; }
 .kpi { position: relative; min-width: 0; min-height: 86px; padding: 14px 16px; }
-.kpi + .kpi::before { content: ""; position: absolute; left: 0; top: 20%; bottom: 20%; width: 1px; background: var(--color-line); }
+/* The dividers between figures are a background of the figure, not a pseudo-element: the image of a card
+   (`card-image.js`) lays it out again at 1200 px, and html2canvas copies pseudo-elements with the styles of the live
+   window, so a phone would put its 2×2 dividers on the 4-column row of the image */
+.kpi + .kpi { background: linear-gradient(var(--color-line), var(--color-line)) left center / 1px 60% no-repeat; }
 .kpi .l { font-size: 12px; font-weight: 500; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi .v { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; font: 700 22px/1.1 var(--font-head); white-space: nowrap; }
 .kpi .v small { font: 600 12px var(--font-body); color: var(--color-muted); }
@@ -683,6 +690,16 @@ ol.notes > li:target { color: var(--color-text); }
 .hemi-grid > * { min-width: 0; }
 .hemi-card { display: flex; flex-direction: column; }
 .hemi-card .chart:not(.hemi) { flex: 1; height: auto; min-height: 360px; max-height: 600px; }
+/* The page of a poll: its card to share, the vote bars on the left and the hemicycle of the seats the house gave on
+   the right (the bars take the whole width when it gave none); the house in the heading links its profile but reads
+   as the title (and draws as plain text in the image) */
+.poll-card .poll-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); align-items: center; }
+.poll-grid.single { grid-template-columns: 1fr; }
+.poll-card .pc-event { margin: -4px 0 var(--space-3); font-size: 13.5px; color: var(--color-muted); }
+.poll-card .pc-note { margin: var(--space-2) 0 var(--space-3); font-size: 12.5px; }
+.poll-card .poll-bars { height: auto; }
+.poll-seats .csub { margin: 0 0 4px; text-align: center; }
+.poll-card .card-head h2 a { color: inherit; text-decoration: none; }
 
 /* Escaños: histograms, blocks chart, majority calculator and district form */
 #ridge-chart { margin-top: var(--space-3); }
@@ -1055,7 +1072,7 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
   .side .card + .card { margin-top: 0; }
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .kpi:nth-child(n+4) { border-top: 1px solid var(--color-line); }
-  .kpi:nth-child(4)::before { display: none; }
+  .kpi:nth-child(4) { background: none; }
   .pc { flex-basis: calc((100% - 2 * var(--space-3)) / 3); }
   .hemi-grid, .split { grid-template-columns: 1fr; }
   .steps, .grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1085,6 +1102,7 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
   .chart, .qcard .chart { height: 250px; }
   .chart.chart-tall { height: 280px; min-height: 0; max-height: none; aspect-ratio: auto; }
   .chart.hemi { height: auto; }
+  .poll-card .poll-grid { grid-template-columns: 1fr; }
   .cmp, .tests { grid-template-columns: 1fr; }
   #coalition-chart { height: 298px; }
   table { font-size: 12.5px; }
@@ -1138,11 +1156,10 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi { min-height: 76px; padding: 12px 14px; }
-  .kpi + .kpi::before { display: none; }
-  .kpi:nth-child(odd)::after { content: ""; position: absolute; right: 0; top: 20%; bottom: 20%; width: 1px; background: var(--color-line); }
+  .kpi + .kpi { background: none; }
+  .kpi:nth-child(odd) { background: linear-gradient(var(--color-line), var(--color-line)) right center / 1px 60% no-repeat; }
   .kpi:nth-child(n+3) { border-top: 1px solid var(--color-line); }
-  .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  .kpi:last-child:nth-child(odd)::after { display: none; }
+  .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; background: none; }
   .kpi .v { font-size: 20px; }
   /* The party cards slide sideways, bleeding to the edges, 16 px under the KPIs like every block of the stack */
   .pcards { gap: 10px; margin: 0 calc(-1 * var(--band-pad)); padding: 2px var(--band-pad) var(--space-2); scroll-padding-left: var(--band-pad); }
