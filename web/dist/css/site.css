@@ -968,7 +968,8 @@ td.blk { font-weight: 700; }
 #study-head + .toc a.qb { border-color: var(--qc); color: var(--qc-ink); }
 /* The herd study (/analisis/rebano): the bars of the elections and the squares of the two comparisons, in HTML and
    CSS so that they come out the same in the image of the card. Blue = the houses get closer, orange = they part
-   (written out, not as variables, for the card images). The summary has two answers, not three. */
+   (written out, not as variables, for the card images). The summary has two answers, three with the null-hypothesis
+   test of question 3. */
 @media (min-width: 900px) {
   .three.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -998,12 +999,15 @@ td.blk { font-weight: 700; }
 .herd-page #study-head .pill { white-space: normal; border-radius: 10px; }
 .herd-page .kpi .l { white-space: normal; overflow: visible; text-overflow: clip; }
 .herd-page .table-wrap { max-width: 100%; }
-/* the separation by weeks of question 2, at full width above the squares (lower on phones) */
+/* the separation by weeks of question 2, at full width above the squares, and the histogram of the shuffles of
+   question 3 (both lower on phones) */
 .qcard .chart#weeks-chart { height: 320px; }
 #weeks-chart + .tnote { margin-bottom: var(--space-3); }
+.qcard .chart#chance-chart { height: 260px; }
 @media (max-width: 719px) {
   .herd-bar { grid-template-columns: 6.5rem minmax(0, 1fr) 3.6rem; gap: 6px; font-size: 12px; }
   .qcard .chart#weeks-chart { height: 260px; }
+  .qcard .chart#chance-chart { height: 220px; }
 }
 /* The shy-vote study (/analisis/voto-oculto): the bars of the left at full width and lower on phones, the bars of
    Vox, the strip of the parties beside the wider table of question 3, the quote of question 2 with its pill and the

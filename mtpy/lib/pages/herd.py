@@ -1,11 +1,11 @@
 """
-View models of the page of the herd study (``/analisis/rebano``): the verdicts of its two questions, the three KPIs,
-the bars of the elections, the squares of the two comparisons, the sentence of the chart by weeks and the one of the
-live card.
+View models of the page of the herd study (``/analisis/rebano``): the verdicts of its three questions, the three
+KPIs, the bars of the elections, the squares of the two comparisons, the sentence of the chart by weeks, the one of the
+live card and the sentences of the null-hypothesis test of question 3.
 
 ``analisis.herd_context`` assembles them from the published parts (``meta``, ``summary``, ``elections``, ``current``,
-``weeks``); each function takes the data it reads and returns what the template renders, with ``None`` or an empty
-structure for what the parts do not have, never an error.
+``weeks``, ``chance``); each function takes the data it reads and returns what the template renders, with ``None`` or
+an empty structure for what the parts do not have, never an error.
 """
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -17,6 +17,10 @@ from .filters import DASH, _madrid_tz, fmt_int, fmt_num
 HERD = 'rebano'
 # Significance level of the sign test
 ALPHA = 0.05
+# The p values of the null-hypothesis test (question 3): below ``STRONG`` chance is ruled out, below ``ALPHA`` hardly
+STRONG = 0.01
+# Below these p values the page writes «p < 0,0001» and «p < 0,001» instead of the figure: ``(floor, decimals)``
+P_FLOORS = ((0.0001, 4), (0.001, 3))
 # Below this probability the chance is written «menos de 1 entre 1.000»; above ``COIN`` it is «como una moneda»
 RARE, COIN = 0.001, 0.2
 # Days between the start of the LOREG ban on polls and the election
@@ -151,20 +155,24 @@ def _comparison(summary: Optional[dict], key: str) -> dict:
     return _get(summary, 'comparisons', key) or {}
 
 
-def verdicts(summary: Optional[dict]) -> dict:
+def verdicts(summary: Optional[dict], chance: Optional[dict] = None) -> dict:
     """
-    The verdicts of the two questions of the study.
+    The verdicts of the three questions of the study.
 
     Parameters
     ----------
     summary : dict or None
         The ``summary`` part.
+    chance : dict or None, optional
+        The ``chance`` block of the ``chance`` part (the null-hypothesis test).
 
     Returns
     -------
     dict
-        ``{'q1': {'label', 'tone'}, 'q2': {...}}``: question 1 reads ``far_final`` (do the houses get closer on the
-        whole?), question 2 ``mid_final`` and ``far_mid`` (is it in the last weeks?).
+        ``{'q1': {'label', 'tone'}, 'q2': {...}, 'q3': {...}}``: question 1 reads ``far_final`` (do the houses get
+        closer on the whole?), question 2 ``mid_final`` and ``far_mid`` (is it in the last weeks?), question 3 the
+        two-sided ``p_two`` of ``chance`` (could it be chance?): «NO» below ``STRONG``, «DIFÍCILMENTE» below
+        ``ALPHA``, «SÍ, PODRÍA» otherwise and «SIN DATOS» without it.
     """
     far_final = _comparison(summary, 'far_final')
     mid_final, far_mid = _comparison(summary, 'mid_final'), _comparison(summary, 'far_mid')
@@ -188,7 +196,19 @@ def verdicts(summary: Optional[dict]) -> dict:
     else:
         second = ('SÍ, EN LAS TRES ÚLTIMAS SEMANAS', 'q1')
 
-    return {'q1': {'label': first[0], 'tone': first[1]}, 'q2': {'label': second[0], 'tone': second[1]}}
+    p = _get(chance, 'p_two')
+
+    if not _is_num(p):
+        third = ('SIN DATOS', 'q2')
+    elif p < STRONG:
+        third = ('NO', 'q1')
+    elif p < ALPHA:
+        third = ('DIFÍCILMENTE', 'q2')
+    else:
+        third = ('SÍ, PODRÍA', 'q3')
+
+    return {'q1': {'label': first[0], 'tone': first[1]}, 'q2': {'label': second[0], 'tone': second[1]},
+            'q3': {'label': third[0], 'tone': third[1]}}
 
 
 def flags(meta: Optional[dict], current: Optional[dict]) -> dict:
@@ -735,3 +755,170 @@ def robustness_rows(summary: Optional[dict]) -> list:
     return [{'pair_days': days, 'min_rows': minimum, 'default': (days, minimum) in default,
              'far_final': _robustness_cell(cells[(days, minimum)].get('far_final')),
              'mid_final': _robustness_cell(cells[(days, minimum)].get('mid_final'))} for days, minimum in ordered]
+
+
+def p_text(p: Optional[float]) -> Optional[str]:
+    """
+    A p value as the third card writes it.
+
+    Parameters
+    ----------
+    p : float or None
+        The p value.
+
+    Returns
+    -------
+    str or None
+        «p < 0,0001» and «p < 0,001» below those floors, «p = 0,047» (three decimals) otherwise; ``None`` without ``p``.
+    """
+    if not _is_num(p):
+        return None
+
+    for floor, digits in P_FLOORS:
+        if p < floor:
+            return 'p < {}'.format(fmt_num(floor, digits))
+
+    return 'p = {}'.format(fmt_num(p, 3))
+
+
+def _chance_figures(chance: Optional[dict]) -> Optional[dict]:
+    """
+    The figures of the null-hypothesis test that the sentences of the third card share.
+
+    Returns
+    -------
+    dict or None
+        ``count`` (the shuffles as far as the observed value, both sides), ``shuffles`` («20.000»), ``observed``
+        («−26 %») and ``p`` (``p_text`` of ``p_two``); ``None`` without a ``change``, a count or a p value.
+    """
+    change, count, p = (_get(chance, key) for key in ('change', 'count_two', 'p_two'))
+
+    if not (_is_num(change) and _is_num(count) and _is_num(p)):
+        return None
+
+    return {'count': int(count), 'shuffles': fmt_int(_get(chance, 'permutations')), 'observed': percent(change),
+            'p': p_text(p)}
+
+
+def null_sentences(chance: Optional[dict]) -> Optional[tuple]:
+    """
+    The two parts of the sentence of the third card: the shuffles against the observed value, then the size of the
+    change and the count of elections (the page writes the first in bold).
+
+    Parameters
+    ----------
+    chance : dict or None
+        The ``chance`` block of the ``chance`` part.
+
+    Returns
+    -------
+    tuple of str or None
+        ``(first, rest)``: «Ninguna de las 20.000 barajas bajó del −12 %; lo observado es un −26 %, de 1,58 a 1,17
+        veces el error de las muestras: p < 0,0001 a dos colas.» (or «240 de las 20.000 barajas llegaron tan lejos
+        como lo observado (−26 %), que va de …» when some do) and «Las separaciones de las tres últimas semanas son un
+        26 % menores que en el resto del ciclo (entre el 4 y el 38 %). En 25 de las 34 elecciones las mismas casas se
+        acercan.» («mayores» for a rise, without the brackets without ``ci``); ``None`` without the test.
+    """
+    figures = _chance_figures(chance)
+
+    if figures is None:
+        return None
+
+    change = chance['change']
+    spread = 'de {} a {} veces el error de las muestras'.format(fmt_num(chance.get('r_a'), 2),
+                                                                 fmt_num(chance.get('r_b'), 2))
+
+    if not figures['count']:
+        edge = _get(chance, 'null', 'min' if change < 0 else 'max')
+        first = 'Ninguna de las {} barajas {} del {}; lo observado es un {}, {}'.format(
+            figures['shuffles'], 'bajó' if change < 0 else 'subió', percent(edge), figures['observed'], spread)
+    else:
+        first = '{} de las {} barajas {} tan lejos como lo observado ({}), que va {}'.format(
+            fmt_int(figures['count']), figures['shuffles'], 'llegó' if figures['count'] == 1 else 'llegaron',
+            figures['observed'], spread)
+
+    first += ': {} a dos colas.'.format(figures['p'])
+    value = _whole(change)
+    head = 'Las separaciones de las tres últimas semanas son '
+
+    if value:
+        interval = ci_text({'ci': chance.get('ci')})
+        rest = '{}un {} % {} que en el resto del ciclo{}.'.format(
+            head, fmt_int(value), 'menores' if change < 0 else 'mayores', ' ({})'.format(interval) if interval else '')
+    else:
+        rest = '{}iguales que en el resto del ciclo.'.format(head)
+
+    if _is_num(chance.get('elections')) and _is_num(chance.get('falls')):
+        rest += ' En {} de las {} elecciones las mismas casas se acercan.'.format(fmt_int(chance['falls']),
+                                                                                fmt_int(chance['elections']))
+
+    return first, rest
+
+
+def null_text(chance: Optional[dict]) -> Optional[str]:
+    """
+    The sentence of the third card (and the ``aria-label`` of its chart): the two ``null_sentences`` joined.
+
+    Parameters
+    ----------
+    chance : dict or None
+        The ``chance`` block of the ``chance`` part.
+
+    Returns
+    -------
+    str or None
+        ``None`` without the test.
+    """
+    sentences = null_sentences(chance)
+
+    return ' '.join(sentences) if sentences else None
+
+
+def null_summary_text(chance: Optional[dict]) -> Optional[str]:
+    """
+    The sentence of question 3 in the summary of the page.
+
+    Parameters
+    ----------
+    chance : dict or None
+        The ``chance`` block of the ``chance`` part.
+
+    Returns
+    -------
+    str or None
+        «Barajando 20.000 veces, ninguna baraja llega a lo observado: p < 0,0001.» or «240 de 20.000 barajas llegan a
+        lo observado: p = 0,012.»; ``None`` without the test.
+    """
+    figures = _chance_figures(chance)
+
+    if figures is None:
+        return None
+
+    if not figures['count']:
+        return 'Barajando {} veces, ninguna baraja llega a lo observado: {}.'.format(figures['shuffles'], figures['p'])
+
+    return '{} de {} {} a lo observado: {}.'.format(
+        fmt_int(figures['count']), figures['shuffles'], 'baraja llega' if figures['count'] == 1 else 'barajas llegan',
+        figures['p'])
+
+
+def sigmas(chance: Optional[dict]) -> Optional[int]:
+    """
+    How far the observed change lies from the null distribution, in standard deviations.
+
+    Parameters
+    ----------
+    chance : dict or None
+        The ``chance`` block of the ``chance`` part.
+
+    Returns
+    -------
+    int or None
+        ``round(|change − null.mean| / null.sd)``; ``None`` without the figures or with a zero ``sd``.
+    """
+    change, mean, sd = _get(chance, 'change'), _get(chance, 'null', 'mean'), _get(chance, 'null', 'sd')
+
+    if not (_is_num(change) and _is_num(mean) and _is_num(sd)) or sd <= 0:
+        return None
+
+    return round(abs(change - mean) / sd)

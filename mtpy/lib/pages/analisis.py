@@ -695,9 +695,14 @@ def herd_context(state: dict) -> dict:
         (``herd.live_text``), ``live_rows`` (``herd.live_rows``), ``chance`` (per comparison: the probability of its
         sign test in words), ``ci`` (the interval of the median change of ``far_final`` and ``mid_final``),
         ``pooled`` (the sentences of the joint test: ``far_final`` and ``both``), ``robustness_text`` and
-        ``robustness_rows`` (the note of robustness), ``csv_links``, ``sources``, ``published_at`` and the flags of
-        ``herd.flags`` (``has_run``, ``held``, ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``,
-        ``final_start``, ``final_started``).
+        ``robustness_rows`` (the note of robustness), ``chance_test`` (the block of the ``chance`` part, the
+        null-hypothesis test of question 3: ``None`` without it, and then the page leaves out card 3, its answer, its
+        sentence of the method and its CSV), ``null_text`` and ``null_sentences`` (``herd.null_text`` and
+        ``herd.null_sentences``), ``null_summary`` (``herd.null_summary_text``), ``null_p_one`` (the one-sided p of the
+        expert note, ``herd.p_text``), ``sigmas`` (``herd.sigmas``),
+        ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags`` (``has_run``, ``held``,
+        ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``, ``final_start``, ``final_started``).
+        The island ``initial`` also carries ``chance`` (the block, ``None`` without it).
 
     Raises
     ------
@@ -710,6 +715,9 @@ def herd_context(state: dict) -> dict:
     current = _get(parts['current'], 'current') or None
     flag = herd.flags(meta, current)
     since = herd.weeks_since(parts['weeks'])
+    chance = _get(parts['chance'], 'chance') or None
+    # without the test, its CSV is not offered either: the page stays as it was before the third card
+    csv_links = [link for link in _csv_links(herd.HERD) if chance or '/chance' not in link['href']]
     context.update(flag)
     context.update(
         study_meta=meta,
@@ -718,7 +726,7 @@ def herd_context(state: dict) -> dict:
         weeks_text=herd.weeks_text(parts['weeks']),
         weeks_rows=since is not None,
         weeks_since=since,
-        verdicts=herd.verdicts(summary),
+        verdicts=herd.verdicts(summary, chance),
         kpis=herd.kpis(summary, current, flag),
         bars=herd.bars(_get(parts['elections'], 'rows') or []),
         squares={key: herd.squares(_get(summary, 'comparisons', key)) for key in ('far_mid', 'mid_final')},
@@ -732,10 +740,16 @@ def herd_context(state: dict) -> dict:
                                               _get(summary, 'comparisons', 'far_mid'))},
         robustness_text=herd.robustness_text(summary),
         robustness_rows=herd.robustness_rows(summary),
-        csv_links=_csv_links(herd.HERD),
+        chance_test=chance,
+        null_text=herd.null_text(chance),
+        null_sentences=herd.null_sentences(chance),
+        null_summary=herd.null_summary_text(chance),
+        null_p_one=herd.p_text(_get(chance, 'p_one')),
+        sigmas=herd.sigmas(chance),
+        csv_links=csv_links,
         sources=meta.get('sources') or [],
         published_at=_published_at(herd.HERD),
-        initial={'weeks': parts['weeks'], 'state': context['state']},
+        initial={'weeks': parts['weeks'], 'chance': chance, 'state': context['state']},
     )
 
     return context

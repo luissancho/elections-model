@@ -32,6 +32,7 @@ MATRIX_JS = pathlib.Path(DIST, 'js', 'charts', 'matrix.js').as_uri()
 RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
+CHANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'chance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 ERRORS_JS = pathlib.Path(DIST, 'js', 'charts', 'errors.js').as_uri()
 DUMBBELL_JS = pathlib.Path(DIST, 'js', 'charts', 'dumbbell.js').as_uri()
@@ -52,9 +53,9 @@ def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
     dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
-    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el del voto oculto (`er` errores), el de
-    Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las funciones de la opción se pierden en la
-    serialización, como en `JSON.stringify`)."""
+    ranking, `ds` distancia), los del estudio del rebaño (`wk` semanas, `ch` azar), el del voto oculto (`er`
+    errores), el de Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las funciones de la opción se
+    pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
@@ -65,14 +66,14 @@ def run_js(expr, rows=ROWS):
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
         'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
-        'const er = await import("{}"); '
+        'const ch = await import("{}"); const er = await import("{}"); '
         'const db = await import("{}"); const bw = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS, json.dumps(rows),
-             expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, CHANCE_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS,
+             json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -1111,3 +1112,44 @@ def test_dumbbell_draws_one_custom_series_with_a_colour_per_row():
 def test_dumbbell_axis_grows_with_the_errors():
     option = run_js('db.dumbbellOption(rows)', rows=[{'label': 'A', 'error_legal': 4.2, 'error_ban': 3.9}])
     assert option['xAxis']['max'] == 4.5
+
+
+CHANCE = json.load(open(os.path.join(ROOT, 'tests', 'fixtures', 'bundle', 'rebano-chance.json'),
+                        encoding='utf-8'))['data']['chance']
+
+
+def test_chance_option_draws_the_null_histogram_and_marks_the_observed():
+    option = run_js('ch.chanceOption(%s)' % json.dumps(CHANCE))
+    bars = option['series'][0]
+    assert len(bars['data']) == 28 and option['xAxis']['type'] == 'value'
+    # the axis covers the bins and the observed value with a margin of two bins
+    assert option['xAxis']['min'] <= -26.3 - 2 and option['xAxis']['max'] >= 16 + 2
+    assert option['xAxis']['min'] >= -30 and option['xAxis']['max'] <= 20
+    # every bar spans exactly its bin, in %
+    assert [bar['value'][:3] for bar in bars['data'][:2]] == [[-12, -11, 2], [-11, -10, 8]]
+    assert sum(bar['value'][2] for bar in bars['data']) == 20000
+    marked = [series for series in option['series'] if 'markLine' in series]
+    line = marked[0]['markLine']
+    assert line['data'][0]['xAxis'] == pytest.approx(-26.3) and line['lineStyle']['color'] == '#1d4f86'
+    assert 'observado −26 %' in json.dumps(option, ensure_ascii=False)
+    assert option['xAxis']['name'] == 'cambio de la separación entre el resto del ciclo y las tres últimas semanas'
+    assert option['yAxis']['name'] == 'barajas'
+
+
+def test_chance_option_labels_the_axis_and_the_tooltip():
+    texts = run_js('(() => { const o = ch.chanceOption(%s); return {axis: [-20, 0, 10].map((x) => '
+                   'o.xAxis.axisLabel.formatter(x)), tip: o.tooltip.formatter({value: o.series[0].data[0].value}), '
+                   'mark: o.series[0].markLine.label.formatter}; })()' % json.dumps(CHANCE))
+    assert texts['axis'] == ['−20 %', '0 %', '+10 %']
+    assert texts['tip'] == 'de −12 a −11 %: 2 barajas'
+    assert texts['mark'] == 'observado −26 %'
+
+
+def test_chance_option_keeps_an_observed_value_beyond_the_bins_in_sight():
+    rise = dict(CHANCE, change=0.4)
+    option = run_js('ch.chanceOption(%s)' % json.dumps(rise))
+    assert option['xAxis']['max'] >= 42 and option['xAxis']['min'] <= -14
+    assert run_js('ch.chanceOption({null: {bins: []}, change: null}).series.length') >= 1
+    # over a phone the name of the axis goes in two lines (ECharts cuts a long axis name instead of wrapping it)
+    narrow = run_js('ch.chanceOption(%s, {narrow: true}).xAxis.name' % json.dumps(CHANCE))
+    assert narrow == 'cambio de la separación entre el resto del ciclo\ny las tres últimas semanas'
