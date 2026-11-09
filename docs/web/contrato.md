@@ -579,10 +579,15 @@ republica la acción `studies` del publicador y, como último paso, `update`:
 
 - `chance.chance` es la prueba de la hipótesis nula (¿podría ser azar?) del cambio de la separación entre casas: `periods`
   (`{final, rest}`, cada uno `[desde, hasta]` en días a la elección), `permutations` (barajas), `elections`, `falls`
-  (elecciones que bajan), `pairs`, `rows_a`, `rows_b`, `r_a`, `r_b`, `change`, `ci` (`{lo, hi}`, intervalo del 95 %),
-  `count_one` y `count_two` (barajas con un cambio igual o más extremo, a una y a dos colas), `p_one` y `p_two` (esos
-  recuentos entre `permutations`) y `null` (`mean`, `sd`, `min`, `max`, `bin_width` y `bins`: lista de `{lo, hi, count}`
-  que suma `permutations`). Es `null` sin parejas compartidas.
+  (elecciones que bajan), `pairs`, `rows_a`, `rows_b`, `r_a` y `r_b` (la separación del resto del ciclo y la de las tres
+  últimas semanas, en veces el error de las muestras), `change` (el cambio conjunto de la separación de las mismas
+  parejas de casas entre el resto del ciclo y las tres últimas semanas, `r_b / r_a − 1`), `ci` (el intervalo del 95 %
+  del cambio por bootstrap de las elecciones, `{lo, hi}` o `null`), `count_one` (barajas cuya separación al final, en
+  proporción a la del resto, es igual o menor que la observada: una bajada al menos tan grande, a una cola),
+  `count_two` (barajas con un cambio tan grande como el observado en valor absoluto, en cualquier dirección: a dos
+  colas), `p_one` y `p_two` (`(recuento + 1) / (permutations + 1)`: con recuento 0 son 1 / 20.001 = 0,00005) y `null`
+  (`mean`, `sd`, `min`, `max`, `bin_width` y `bins`: lista de `{lo, hi, count}` que suma `permutations`). Es `null`
+  sin parejas compartidas.
 
 Gemelos CSV: `elections`, `weeks` y `chance` (las cajas `lo`, `hi` y `count` entero de la distribución nula), con el nombre de la parte, y `robustness` (de `summary`: una fila por
 combinación y comparación, con `n` y `k` enteros). `weeks` es largo: una fila por elección y tramo más

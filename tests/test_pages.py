@@ -5938,7 +5938,8 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     assert '19 de 23' in text and '23 de 29' in text and '9 de 17' in text and 'como una moneda' in text
     assert '1 entre 769' in text and 'sólo en 3 la bajada es clara por sí sola' in text
     assert 'El tramo de las tres últimas semanas empieza el 9 de noviembre.' in text
-    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 4  # elections + weeks + robustness + chance CSVs
+    # elections + weeks + robustness + chance CSVs
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 4
     assert 'id="weeks-chart"' in page and 'matrix' not in page and 'id="initial-data"' in page
     for slug in ('resumen', 'pregunta-1', 'pregunta-2', 'directo', 'como', 'datos'):
         assert 'rebano-%s.png' % slug in page, slug
