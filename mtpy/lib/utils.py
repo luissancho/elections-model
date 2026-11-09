@@ -39,6 +39,81 @@ def web_blocks(vs: dict, names: list) -> Optional[dict]:
     return {'Izquierda': left, 'Derecha': right, REST_BLOCK: rest}
 
 
+def first_poll_dates(polls: pd.DataFrame, labels: list) -> pd.Series:
+    """
+    First date of a poll listing each label.
+
+    Parameters
+    ----------
+    polls : pd.DataFrame
+        Polls with a `date` index level or column and one column per poll label.
+    labels : list
+        Poll labels to look up.
+
+    Returns
+    -------
+    pd.Series
+        `{label: first date with a value}` for the labels with a column and at least one value; the others are
+        left out.
+    """
+    if 'date' in polls.columns:
+        dates = pd.to_datetime(polls['date']).to_numpy()
+    else:
+        dates = pd.to_datetime(polls.index.get_level_values('date')).to_numpy()
+    first = {}
+    for label in labels:
+        if label in polls.columns:
+            mask = polls[label].notnull().to_numpy()
+            if mask.any():
+                first[label] = pd.Timestamp(dates[mask].min())
+
+    return pd.Series(first, dtype='datetime64[ns]')
+
+
+def party_entries(
+    first_polls: pd.Series,
+    members: list,
+    labels: dict,
+    min_days: int = 90
+) -> dict:
+    """
+    Parties that pollsters start listing halfway through the cycle, with the date of their first poll.
+
+    The first poll of a party is the earliest of its poll labels (`labels`, e.g. FA with the polls of SUMAR it
+    inherits through the source map), so that a renamed or merged party is not taken for a new one.
+
+    Parameters
+    ----------
+    first_polls : pd.Series
+        First poll date of each poll label (`first_poll_dates`, `Forecaster.party_first_polls`).
+    members : list
+        Parties to check.
+    labels : dict
+        `{party: [poll labels]}`; a party without an entry has its own name as its only label.
+    min_days : int, optional
+        Days after the first poll of the cycle (the earliest of `first_polls`) from which a party counts as new.
+
+    Returns
+    -------
+    dict
+        `{party: 'YYYY-MM-DD'}`, ascending by date; empty without polls.
+    """
+    if first_polls.shape[0] == 0:
+        return {}
+
+    start = first_polls.min()
+    entries = {}
+    for name in members:
+        dates = [first_polls[label] for label in labels.get(name, [name]) if label in first_polls.index]
+        if not dates:
+            continue
+        first = min(dates)
+        if (first - start).days >= min_days:
+            entries[name] = first
+
+    return {name: day.strftime('%Y-%m-%d') for name, day in sorted(entries.items(), key=lambda item: item[1])}
+
+
 def build_blocks(
     bmap: Optional[dict[str, Any]] = None,
     parties: Optional[tuple | list | dict] = None

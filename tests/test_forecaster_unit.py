@@ -785,3 +785,12 @@ def test_fit_groups_skips_a_group_with_fewer_than_three_polls():
     with pytest.warns(UserWarning):
         forecast, stat = fc.fit_groups({'Raro': ['RARE'], 'Solo': ['PP']}, max_fc=0)
     assert list(forecast.columns) == ['Solo'] and list(stat.columns) == ['Solo']
+
+
+def test_cycle_births_uses_the_poll_labels_of_each_simulated_name():
+    """FA lleva los sondeos de SUMAR, así que no entra a mitad de ciclo; UP sí."""
+    fc = Forecaster.__new__(Forecaster)
+    fc.party_first_polls = pd.to_datetime(pd.Series({'PSOE': '2023-08-07', 'SUMAR': '2023-08-07', 'FA': '2025-05-01',
+                                                     'UP': '2023-12-15'}))
+    fc.blocks = pd.DataFrame({'parties': pd.Series([['PSOE'], ['FA', 'SUMAR'], ['UP']], index=['PSOE', 'FA', 'UP'])})
+    assert fc.cycle_births({'Izquierda': ['PSOE', 'FA', 'UP']}) == {'UP': '2023-12-15'}

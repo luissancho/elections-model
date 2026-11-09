@@ -29,7 +29,7 @@ from .data import (
     get_house_effects, get_scopes
 )
 from .utils import (
-    build_blocks, group_results, norm_range
+    build_blocks, group_results, norm_range, party_entries
 )
 
 def published_seats(
@@ -885,6 +885,35 @@ class Forecaster(Core):
 
         return (pd.DataFrame(forecast, index=index, columns=list(forecast), dtype=float),
                 pd.DataFrame(stat, index=index, columns=list(stat)))
+
+    def cycle_births(
+        self,
+        groups: dict[str, list[str]],
+        min_days: int = 90
+    ) -> dict[str, str]:
+        """
+        Members of the groups that pollsters start listing halfway through the cycle (`party_entries`).
+
+        The first poll of each name is the earliest of the poll labels its series gathers (`self.blocks`: FA with
+        the polls of SUMAR), over the polls that enter the average (`party_first_polls`).
+
+        Parameters
+        ----------
+        groups : dict
+            `{group: [names]}`, names of `self.names`.
+        min_days : int, optional
+            Days after the first poll of the cycle from which a name counts as new.
+
+        Returns
+        -------
+        dict
+            `{name: 'YYYY-MM-DD'}`, ascending by date.
+        """
+        first = self.party_first_polls if self.party_first_polls is not None else pd.Series(dtype='datetime64[ns]')
+        members = list(dict.fromkeys(n for names in groups.values() for n in names))
+        labels = {n: list(self.blocks.loc[n, 'parties']) for n in members if n in self.blocks.index}
+
+        return party_entries(first, members, labels, min_days=min_days)
 
     def get_forecast(
         self,
