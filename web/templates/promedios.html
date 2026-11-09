@@ -66,10 +66,10 @@
           En la vista Bloques, la línea de cada bloque es el promedio de lo que suman sus partidos en cada sondeo, no
           la suma de sus promedios: cuando un partido entra en las encuestas a mitad de ciclo, una línea discontinua lo
           marca, y durante unos meses lo que pone cada partido al pasar por la línea de un bloque puede no cuadrar con
-          ella. Los partidos de cada bloque se leen bajo la leyenda, y Otros es lo que falta hasta 100.
+          ella. Los partidos de cada bloque se leen bajo la leyenda, y Otros, que sale apagado, es lo que falta hasta 100.
           {% else %}
           En la vista Bloques, cada bloque suma sus partidos, que se
-          leen bajo la leyenda, y Otros es lo que falta hasta 100; al pasar por la línea de un bloque se ve cuánto pone
+          leen bajo la leyenda, y Otros, que sale apagado, es lo que falta hasta 100; al pasar por la línea de un bloque se ve cuánto pone
           cada partido ese día.
           {% endif %}
           Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
@@ -158,7 +158,8 @@
                 {#- the parties of each block, as the line under the legend of the block views of the charts (Luis,
                     2026-11-09: here, not under the switch of the hemicycle) -#}
                 {% set named = block_result_rows|selectattr('name', 'in', block_members)|list %}
-                <caption{% if named %} class="bm-caption"{% endif %}>{% if named %}{% for row in named %}<span><i class="dot" style="background-color: {{ row.color }}"></i><strong>{{ row.name }}:</strong> {{ block_members[row.name] }}</span>{% endfor %}{% else %}Izquierda y Derecha, con todos sus partidos; Otros es el resto de la cámara.{% endif %}</caption>
+                <caption{% if named %} class="bm-caption"{% endif %}>{% if named %}{#- in the order of the map (Izquierda, Derecha), as the line under the legend, not in that of the
+                rows, which go by seats (Luis, 2026-11-09) -#}{% for block, members in block_members.items() %}{% set row = named|selectattr('name', 'equalto', block)|first %}{% if row %}<span><i class="dot" style="background-color: {{ row.color }}"></i><strong>{{ block }}:</strong> {{ members }}</span>{% endif %}{% endfor %}{% else %}Izquierda y Derecha, con todos sus partidos; Otros es el resto de la cámara.{% endif %}</caption>
                 <thead>
                   <tr>
                     <th scope="col">Bloque</th>
@@ -196,7 +197,7 @@
             La cifra de escaños es el reparto central de las simulaciones y el rango, donde cae el 95% de ellas: deja
             fuera las más extremas de cada lado. P(escaño) es la probabilidad de obtener al menos uno; P(primero), la de
             ser el partido con más escaños, y P(mayoría), la de llegar a la mayoría absoluta sin ayuda, que está en
-            {{ majority|int }} de {{ n_seats|int }}. Los partidos van por escaños y, a igual número, por voto.
+            {{ majority|int }} de {{ n_seats|int }}. Los partidos, y en la vista Bloques los bloques, van por escaños y, a igual número, por voto.
           </p>
           <p>
             Con la vista Bloques del hemiciclo, la tabla pasa a los bloques: Izquierda y Derecha suman el voto y los
