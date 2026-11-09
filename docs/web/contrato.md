@@ -132,7 +132,20 @@ Serie diaria ajustada de cada partido con sus cotas, hasta `meta.as_of`, el día
 Orientación columnar. Fuente: `Forecaster.forecast` y `Forecaster.fc_stat` (`cmin`, `cmax`).
 
 `data`: `dates`, `parties`, y `mean`, `lo`, `hi` (cada uno `{partido: [valor por fecha]}`; `lo`/`hi` son
-`null` donde no hay estadística). CSV `csv/series.csv`: `date, name, mean, lo, hi` (largo).
+`null` donde no hay estadística), `blocks` y `first_polls`. CSV `csv/series.csv`: `date, name, kind, mean, lo, hi`
+(largo; `kind` es `party` o `block`, los partidos primero).
+
+Enmienda 2026-11-09 (claves adicionales, el contrato sigue en 1):
+
+- `blocks`: `{parties, mean, lo, hi}` con la misma forma y las mismas fechas que los partidos, para Izquierda y
+  Derecha (`meta.bmaps.blocks` sin Otros). Cada bloque se ajusta con el mismo estimador sobre **lo que suman sus
+  partidos en cada sondeo** (`Forecaster.fit_groups`), no sumando las series de los partidos: cuando las
+  encuestadoras empiezan a listar un partido a mitad de ciclo, la suma de las series salta durante meses y la suma
+  por sondeo no. Otros lo sigue calculando la web (100 menos los dos). Un ámbito sin Izquierda o Derecha lleva
+  `parties` vacío; un run anterior no lleva la clave y la web suma los partidos.
+- `first_polls`: `{partido: 'YYYY-MM-DD'}`, los partidos de Izquierda o Derecha cuyo primer sondeo llega al menos
+  90 días después del primero del ciclo, contando las etiquetas que heredan por el `smap` (FA lleva los sondeos de
+  SUMAR, así que no entra). La web marca su entrada en la vista Bloques.
 
 ### `polls`
 

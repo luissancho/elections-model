@@ -366,11 +366,12 @@ def case_series(sim: Simulator, event_date: str, horizon: int) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
-        One row per day and party: `event_date`, `horizon`, `date`, `name`, `mean`, `lo`, `hi`.
+        One row per day and party, then per day and block (Izquierda and Derecha, fitted on the sum per poll):
+        `event_date`, `horizon`, `date`, `name`, `kind` (`party` or `block`), `mean`, `lo`, `hi`.
     """
-    from .publish.forecast import export_series  # lazy: the publish package is not needed to run the model
+    from .publish.forecast import export_series, series_blocks  # lazy: the publish package is not needed to run the model
 
-    _, frame = export_series(sim.model, sim.params['names'], end=sim.as_of)
+    _, frame = export_series(sim.model, sim.params['names'], end=sim.as_of, blocks=series_blocks(sim))
     frame.insert(0, 'horizon', int(horizon))
     frame.insert(0, 'event_date', event_date)
 

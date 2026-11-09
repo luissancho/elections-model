@@ -79,10 +79,26 @@ def synthetic_forecaster(date_last='2026-10-01', date_fit_last='2026-10-05'):
                  'neff': 0.8 * len(frame), 'bandwidth': 30.}
         return {'polls': out, 'line': line, 'kernel': kernel, 'stats': stats}
 
+    calls = []
+
+    def fit_groups(groups, max_fc=0):
+        """Bloques sintéticos: la suma constante de sus partidos en los días ajustados, con banda de ±1."""
+        calls.append(('fit_groups', max_fc))
+        frame = pd.DataFrame({g: forecast[members].sum(axis=1).where(fitted) for g, members in groups.items()},
+                             index=dates)
+        stat = pd.DataFrame({g: [{'mean': v, 'cmin': v - 1., 'cmax': v + 1., 'err': .5} if ok else None
+                                 for v, ok in zip(frame[g], fitted)] for g in groups}, index=dates)
+        return frame, stat
+
+    def cycle_births(groups, min_days=90):
+        """VOX entra a mitad de ciclo si algún grupo lo lleva."""
+        return {'VOX': '2026-09-19'} if any('VOX' in members for members in groups.values()) else {}
+
     return types.SimpleNamespace(
         forecast=forecast, fc_stat=fc_stat, fc_series_raw=polls, nfc_series=results, house_effects=house_effects,
         dispersion=dispersion, date_last=pd.Timestamp(date_last), date_fit_last=pd.Timestamp(date_fit_last),
-        bmaps=BMAPS, colors=COLORS, names=NAMES, weights_at=weights_at,
+        bmaps=BMAPS, colors=COLORS, names=NAMES, weights_at=weights_at, max_fc=10, calls=calls,
+        fit_groups=fit_groups, cycle_births=cycle_births,
     )
 
 

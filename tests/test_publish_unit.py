@@ -175,7 +175,29 @@ def test_export_series_stops_at_the_last_fitted_day():
     assert data['dates'][0] == '2026-09-01' and data['dates'][-1] == '2026-10-05'
     assert data['parties'] == NAMES and len(data['mean']['PP']) == len(data['dates'])
     assert data['lo']['PP'][0] == 38.0 and data['hi']['PP'][0] == 42.0
-    assert list(frame.columns) == ['date', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 35 * 3
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi'] and frame.shape[0] == 35 * 3
+
+
+def test_export_series_publishes_the_fitted_blocks_and_the_entries():
+    """Con bloques, la serie lleva Izquierda y Derecha ajustados (Otros no: lo calcula la web), alineados a las fechas
+    de los partidos y ajustados con el mismo alcance (`max_fc`), y las entradas de partidos a mitad de ciclo."""
+    sim = synthetic_simulator()
+    blocks = {'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX'], 'Otros': []}
+    data, frame = publish.export_series(sim.model, NAMES, end='2026-10-03', blocks=blocks)
+    data = valid('series', data, mode=None)
+    assert data['blocks']['parties'] == ['Izquierda', 'Derecha']
+    assert data['blocks']['mean']['Derecha'] == [55.0] * 33 and data['blocks']['lo']['Derecha'][0] == 54.0
+    assert len(data['blocks']['mean']['Izquierda']) == len(data['dates'])
+    assert data['first_polls'] == {'VOX': '2026-09-19'} and sim.model.calls[-1] == ('fit_groups', 10)
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi']
+    assert frame.shape[0] == 33 * 3 + 33 * 2 and list(frame['kind'].unique()) == ['party', 'block']
+
+
+def test_export_series_without_blocks_has_empty_blocks_and_no_entries():
+    data, frame = publish.export_series(synthetic_simulator().model, NAMES)
+    data = valid('series', data, mode=None)
+    assert data['blocks'] == {'parties': [], 'mean': {}, 'lo': {}, 'hi': {}} and data['first_polls'] == {}
+    assert set(frame['kind']) == {'party'}
 
 
 def test_export_series_without_statistics_gives_null_bounds():
@@ -554,6 +576,8 @@ def test_publish_forecast_reads_the_average_today_and_cuts_the_series_at_the_anc
     assert factory.calls[0][3]['today'] == '2026-10-03'
     series = writer.read_json(bundle.path_part('es', RUN, 'series'))['data']
     assert series['dates'][-1] == '2026-10-03'
+    assert series['blocks']['parties'] == ['Izquierda', 'Derecha']
+    assert len(series['blocks']['mean']['Derecha']) == len(series['dates'])
     assert writer.read_json(bundle.path_part('es', RUN, 'weights'))['data']['date'] == '2026-10-03'
     meta = writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']
     assert meta['as_of'] == '2026-10-03' and meta['date_fit_last'] == '2026-10-05'
