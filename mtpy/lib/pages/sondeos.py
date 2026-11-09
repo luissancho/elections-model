@@ -10,7 +10,7 @@ from ..webapi import site
 from .casas import mtype_label
 from .common import block_color, bundle_part, common_context, ink_color, part
 from .elecciones import chart_parties
-from .filters import DASH, _is_missing, fmt_date, fmt_int, fmt_num, gradient
+from .filters import DASH, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num, gradient
 from .promedios import RATING_COLORS, chart_polls, round_series
 from .slugs import poll_detail_href, pollster_href, slugify
 
@@ -184,12 +184,15 @@ def previous_poll(polls: list, poll: dict) -> Optional[dict]:
     Returns
     -------
     dict or None
-        Among the polls of the same house (``pollster_id``) and sponsor, ordered by date and then by position in the
-        part, the last one strictly before ``poll``; ``None`` when there is none.
+        Among the polls of the same house (``pollster_id``, or ``pollster`` when ``poll`` has no id, as the chart of
+        the house of ``sondeo_context``) and sponsor (compared by its slug, as ``find_poll`` and the URLs), ordered by
+        date and then by position in the part, the last one strictly before ``poll``; ``None`` when there is none.
     """
+    house_key = 'pollster_id' if poll.get('pollster_id') is not None else 'pollster'
+    sponsor_slug = slugify(poll.get('sponsor') or '')
+
     def same_line(other: dict) -> bool:
-        return other.get('pollster_id') == poll.get('pollster_id') and (other.get('sponsor') or None) == (
-            poll.get('sponsor') or None)
+        return other.get(house_key) == poll.get(house_key) and slugify(other.get('sponsor') or '') == sponsor_slug
 
     keys = [(str(other.get('date'))[:10], index) for index, other in enumerate(polls) if same_line(other)]
     own = [index for index, other in enumerate(polls) if other is poll]
@@ -202,6 +205,29 @@ def previous_poll(polls: list, poll: dict) -> Optional[dict]:
     earlier = [item for item in keys if item < key]
 
     return polls[max(earlier)[1]] if earlier else None
+
+
+def fieldwork_overlaps(previous: dict, poll: dict) -> bool:
+    """
+    Tell whether the fieldwork of an earlier delivery reaches into the fieldwork of a poll.
+
+    Parameters
+    ----------
+    previous : dict
+        Poll record of the earlier delivery (``end_date``, else ``date``).
+    poll : dict
+        Poll record (``start_date``).
+
+    Returns
+    -------
+    bool
+        True when the last fieldwork day of ``previous`` is on or after the first fieldwork day of ``poll``; False
+        when either day is unknown.
+    """
+    end = _parse_datetime(previous.get('end_date')) or _parse_datetime(previous.get('date'))
+    start = _parse_datetime(poll.get('start_date'))
+
+    return end is not None and start is not None and end.date() >= start.date()
 
 
 def _seats_mid(seats_range) -> Optional[int]:
@@ -542,8 +568,9 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``poll``,
         ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``sample_text``
         (``sample_text``), ``poll_date``,
-        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``), ``vote_rows``, ``previous`` (``date``, ``href`` keeping the query and ``title`` of the previous delivery of the
-        house and sponsor, ``None`` without one), ``has_seats``,
+        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``), ``vote_rows``, ``previous`` (``date``, ``href`` keeping the query, ``title``,
+        ``fieldwork`` (``fieldwork_text``, ``None`` without dates) and ``overlap`` (``fieldwork_overlaps``) of the
+        previous delivery of the house and sponsor, ``None`` without one), ``has_seats``,
         ``has_effects``, ``average_date`` (the day of the series compared, ``None`` without one), ``weight``
         (``weight_card``, its ``factors`` with an empty ``unit`` and no ``color`` for ``m.kpis``), ``weights_date``
         (the day of the ``weights`` part, ``None`` without it), ``sheet`` (``sheet_rows``), ``back_href`` (the polls
@@ -599,7 +626,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     seats = poll.get('seats') or None
     prev = previous_poll(polls.get('polls') or [], poll)
     previous = None if prev is None else {'date': fmt_date(prev['date']), 'title': poll_title(prev),
-                                          'href': poll_detail_href(scope, prev) + query}
+                                          'href': poll_detail_href(scope, prev) + query,
+                                          'fieldwork': fieldwork_text(prev), 'overlap': fieldwork_overlaps(prev, poll)}
 
     context.update({
         'poll': poll,

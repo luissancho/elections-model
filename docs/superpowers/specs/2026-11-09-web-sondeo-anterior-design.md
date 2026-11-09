@@ -12,20 +12,25 @@ anterior): cuánto ha movido cada partido. Y lo quiere **en la imagen que se com
 
 ## Objetivos
 
-1. Encontrar la entrega anterior: entre los sondeos del run (el ciclo actual), los de la misma casa (`pollster_id`) y
-   el mismo medio (`sponsor`, comparado como `(a or None) == (b or None)`) con `date` estrictamente anterior; la de
+1. Encontrar la entrega anterior: entre los sondeos del run (el ciclo actual), los de la misma casa (`pollster_id`, o
+   `pollster` si el sondeo no tiene id, como el gráfico de la casa) y el mismo medio (`sponsor`, comparado por su slug
+   como `find_poll` y las URL) con `date` estrictamente anterior; la de
    fecha más reciente (empate: la última publicada en la parte, como en la tabla).
 2. **Tarjeta (imagen):** junto a la cifra de cada barra, el cambio frente a la anterior con el formato de las flechas
    de la web (`fmtDelta` a un decimal: «31,9 % ▲ 1,2», «▼ 0,4», «–» si no cambia), verde si sube y rojo si baja
    (los colores de `.dlt`), sólo en los partidos con cifra en las dos entregas; la fila «Otros» no lleva flecha (su
-   resto depende de qué partidos lista cada entrega). La nota de la tarjeta añade «Flechas: frente al sondeo de
-   {casa}{ para {medio}} del {fecha}.»; sin anterior, «Primer sondeo de {casa}{ para {medio}} en este ciclo.» y
+   resto depende de qué partidos lista cada entrega). La nota de la tarjeta añade «Flechas: frente al sondeo anterior de
+   {casa}{ para {medio}} (campo {fechas de campo})», más «, con días de campo en común» si el último día de campo de
+   la anterior (o su `date`) no es anterior al primero de este, y el punto final; sin fechas de campo en la anterior,
+   «(campo hasta el {fecha})»; sin anterior, «Primer sondeo de {casa}{ para {medio}} en este ciclo.» y
    ninguna flecha.
 3. **Tabla «Voto y escaños»:** dos columnas tras «Diferencia»: «Anterior» (la cifra de la entrega anterior) y
-   «Cambio» (`m.badge(…, 1)`); con escaños en las dos entregas, la columna «Escaños» muestra además el cambio del
-   punto medio de la horquilla (`m.badge(…, 0)`). Pie: «Anterior: sondeo del {fecha}» con enlace a su página. Sin
+   «Cambio» (`m.badge(…, 1)`, vacía si la anterior no da cifra para el partido); con escaños en las dos entregas, la columna «Escaños» muestra además el cambio del
+   punto medio de la horquilla (`m.badge(…, 0)`, omitido si es 0). Pie: «Anterior: sondeo de {casa}{ para {medio}},
+   campo {fechas de campo}» con enlace a su página. Sin
    anterior, las columnas no aparecen y el pie dice «Primer sondeo de … en este ciclo».
-4. «Cómo leerlo» de la tarjeta y de la tabla explica las flechas.
+4. «Cómo leerlo» de la tarjeta y de la tabla explica las flechas, el guion (no cambia) frente a la ausencia de flecha
+   (la anterior no daba cifra) y, en la tabla, la flecha de los escaños.
 
 ## No objetivos
 

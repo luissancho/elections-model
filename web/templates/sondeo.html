@@ -11,6 +11,8 @@
 {% set lead = ('Trabajo de campo ' ~ fieldwork if fieldwork else 'Fecha ' ~ poll_date)
               ~ (' · ' ~ sample_text if sample_text else '') ~ ' · ' ~ house.type %}
 {% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
+{#- the fieldwork of the previous delivery, so that overlapping trackers show in the shared image too -#}
+{% if previous %}{% set previous_fieldwork = 'campo ' ~ previous.fieldwork if previous.fieldwork else 'campo hasta el ' ~ previous.date %}{% endif %}
     <div id="content" class="stack">
       <p class="back"><a href="{{ back_href }}">← Todas las encuestas</a></p>
       {#- the card to share: what the image of `card-image.js` draws, at 1200 px from any screen -#}
@@ -30,7 +32,7 @@
         <p class="muted">{{ house.name }} no publicó escaños con este sondeo.</p>
         {% endif %}
         {#- inside the card, so that the shared image explains its marks too -#}
-        <p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día.{% if previous %} Flechas: frente al sondeo de {{ previous.title }} del {{ previous.date }}.{% else %} Primer sondeo de {{ poll_title }} en este ciclo.{% endif %}{% if has_seats %} En gris, los escaños de los demás partidos.{% endif %}</p>
+        <p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día.{% if previous %} Flechas: frente al sondeo anterior de {{ previous.title }} ({{ previous_fieldwork }}){% if previous.overlap %}, con días de campo en común{% endif %}.{% else %} Primer sondeo de {{ poll_title }} en este ciclo.{% endif %}{% if has_seats %} En gris, los escaños de los demás partidos.{% endif %}</p>
         {{ m.kpis(kpis) }}
         {% call m.how() %}
         <p>
@@ -51,7 +53,10 @@
           partidos que tienen las dos cifras.
         </p>
         {% if previous %}
-        <p>Las flechas comparan con la entrega anterior de la misma casa para el mismo medio en este ciclo: verde si sube, roja si baja.</p>
+        <p>
+          Las flechas comparan con la entrega anterior de la misma casa para el mismo medio en este ciclo: verde si sube,
+          roja si baja. Un guion, si no cambia; sin flecha, si la entrega anterior no daba cifra para ese partido.
+        </p>
         {% endif %}
         {% endcall %}
       {{ m.card_end() }}
@@ -78,9 +83,9 @@
                 <td>{{ row.avg|num(1) }}</td>
                 <td>{{ m.badge(row.diff, 1) }}</td>
                 {% if previous %}<td>{{ row.prev|num(1) }}</td>
-                <td>{{ m.badge(row.change, 1) }}</td>{% endif %}
+                <td>{% if row.change is not none %}{{ m.badge(row.change, 1) }}{% endif %}</td>{% endif %}
                 {% if has_effects %}<td>{{ row.effect|delta(1) }}</td>{% endif %}
-                {% if has_seats %}<td>{{ row.seats or '–' }}{% if row.seats_change is not none %} {{ m.badge(row.seats_change, 0) }}{% endif %}</td>{% endif %}
+                {% if has_seats %}<td>{{ row.seats or '–' }}{% if row.seats_change is not none and row.seats_change != 0 %} {{ m.badge(row.seats_change, 0) }}{% endif %}</td>{% endif %}
               </tr>
               {% endfor %}
             </tbody>
@@ -90,7 +95,7 @@
         <p class="muted">Promedio del {{ average_date|date }}{% if average_date != poll.date[:10] %}, el último día del promedio antes del sondeo{% endif %}.</p>
         {% endif %}
         {% if previous %}
-        <p class="muted">Anterior: <a href="{{ previous.href }}">sondeo del {{ previous.date }}</a>.</p>
+        <p class="muted">Anterior: <a href="{{ previous.href }}">sondeo de {{ previous.title }}, {{ previous_fieldwork }}</a>.</p>
         {% endif %}
         {% call m.how() %}
         <p>
@@ -99,7 +104,11 @@
           con la flecha verde si el sondeo da más y roja si da menos.
         </p>
         {% if previous %}
-        <p>Las flechas de Cambio comparan con la entrega anterior de la misma casa para el mismo medio en este ciclo: verde si sube, roja si baja.</p>
+        <p>
+          Las flechas de Cambio comparan con la entrega anterior de la misma casa para el mismo medio en este ciclo:
+          verde si sube, roja si baja. Un guion, si no cambia; la columna Cambio queda vacía, si la entrega anterior no
+          daba cifra para ese partido.
+        </p>
         {% endif %}
         {% if has_effects %}
         <p>
@@ -109,7 +118,11 @@
         </p>
         {% endif %}
         {% if has_seats %}
-        <p>Los escaños son la horquilla que dio {{ house.name }} con el sondeo, no un reparto nuestro.</p>
+        <p>
+          Los escaños son la horquilla que dio {{ house.name }} con el sondeo, no un reparto nuestro.
+          {%- if previous %} La flecha junto a los escaños es el cambio del punto medio de la horquilla frente a la
+          entrega anterior.{% endif %}
+        </p>
         {% endif %}
         {% endcall %}
       {{ m.card_end() }}

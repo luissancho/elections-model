@@ -7580,6 +7580,32 @@ def test_previous_poll_is_the_last_earlier_delivery_of_the_same_house_and_sponso
     assert pages.previous_poll([], poll) is None
 
 
+def test_previous_poll_keys_the_house_like_its_chart_and_the_sponsor_by_its_slug():
+    """La casa, como el gráfico de la casa: por `pollster_id` y, si el sondeo no lo tiene, por el nombre (dos casas sin id
+    con el mismo medio no se mezclan); el medio, por su slug, como `find_poll` y las URL (revisión final 2026-11-09)."""
+    polls = [
+        {'date': '2026-09-20', 'pollster_id': None, 'pollster': 'Hamalgama', 'sponsor': 'OKDiario', 'PP': 30.0},
+        {'date': '2026-09-25', 'pollster_id': None, 'pollster': 'Data10', 'sponsor': 'OKDiario', 'PP': 31.0},
+        {'date': '2026-10-02', 'pollster_id': None, 'pollster': 'Hamalgama', 'sponsor': 'OKDiario', 'PP': 32.0},
+        {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El mundo', 'PP': 33.0},
+        {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo', 'PP': 34.0},
+        {'date': '2026-10-06', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo Hoy', 'PP': 35.0},
+    ]
+    assert pages.previous_poll(polls, polls[2])['PP'] == 30.0  # not Data10's delivery of 25 sep for the same outlet
+    assert pages.previous_poll(polls, polls[1]) is None
+    assert pages.previous_poll(polls, polls[4])['PP'] == 33.0  # «El Mundo» and «El mundo» are the same outlet
+    assert pages.previous_poll(polls, polls[5]) is None
+
+
+def test_fieldwork_overlaps_compares_the_last_day_of_the_previous_with_the_first_of_the_poll():
+    poll = {'date': '2026-10-14', 'start_date': '2026-10-01', 'end_date': '2026-10-14'}
+    assert pages.fieldwork_overlaps({'date': '2026-10-08', 'start_date': '2026-10-01', 'end_date': '2026-10-08'}, poll)
+    assert pages.fieldwork_overlaps({'date': '2026-10-01'}, poll)  # without end_date, its date; the same day counts
+    assert not pages.fieldwork_overlaps({'date': '2026-09-30', 'end_date': '2026-09-30'}, poll)
+    assert not pages.fieldwork_overlaps({'date': '2026-10-08'}, {'date': '2026-10-14'})  # without start_date: unknown
+    assert not pages.fieldwork_overlaps({'date': None, 'end_date': float('nan')}, poll)
+
+
 def test_vote_rows_compare_with_the_previous_delivery():
     poll = {'PP': 32.6, 'PSOE': 25.6, 'UP': 1.2, 'seats': {'PP': [136, 138], 'PSOE': [99, 101]}}
     previous = {'PP': 31.4, 'PSOE': 25.6, 'seats': {'PP': [130, 134]}}
@@ -7645,8 +7671,9 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     kpis = page[page.index('id="poll-card"'):page.index('id="vote"')]
     assert '>Rating<' in kpis and '>71,2<' in kpis and '>Distancia al promedio<' in kpis and '>1,5<' in kpis  # 33.5 − 32.0
     # the marks are explained inside the card (so in its image too), before the figures; «Cómo leerlo» calls them dark
-    note = ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. Flechas: frente al sondeo de '
-            'Sigma Dos del 28 sept 2026. En gris, los escaños de los demás partidos.</p>')
+    # the previous delivery has no fieldwork dates: its date, as the last day of its fieldwork
+    note = ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. Flechas: frente al sondeo '
+            'anterior de Sigma Dos (campo hasta el 28 sept 2026). En gris, los escaños de los demás partidos.</p>')
     assert note in kpis and kpis.index(note) < kpis.index('class="kpis"') and kpis.index('id="poll-hemi"') < kpis.index(note)
     assert 'la marca oscura sobre ella' in kpis and 'marca gris' not in page and 'El arco gris, «Otros», completa la cámara' in kpis
     assert '2.000 entrevistas · ' in kpis and '>2.000<small>entrevistas</small>' in kpis
@@ -7658,7 +7685,16 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     # the comparison with the previous delivery of the same house and sponsor (28 sep, no sponsor)
     assert '<th scope="col">Anterior</th>' in vote and '<th scope="col">Cambio</th>' in vote and '>32,1<' in vote
     assert '▲ 1,4' in vote and '▲ 4' in vote and '150–152' in vote
-    assert 'href="/es/sondeos/2026-09-28/sigma-dos?mode=forecast"' in vote and '28 sept 2026' in vote
+    assert ('Anterior: <a href="/es/sondeos/2026-09-28/sigma-dos?mode=forecast">sondeo de Sigma Dos, campo hasta el '
+            '28 sept 2026</a>.') in vote
+    # «Cómo leerlo» tells a dash (no change) from no arrow (no figure in the previous delivery) and explains the seats arrow
+    flat = ' '.join(page.split())
+    assert ('Un guion, si no cambia; sin flecha, si la entrega anterior no daba cifra para ese partido.'
+            in flat[flat.index('id="poll-card"'):flat.index('id="vote"')])
+    vote_flat = flat[flat.index('id="vote"'):flat.index('id="weight"')]
+    assert 'Un guion, si no cambia; la columna Cambio queda vacía, si la entrega anterior no daba cifra para ese partido.' in vote_flat
+    assert ('La flecha junto a los escaños es el cambio del punto medio de la horquilla frente a la entrega anterior.'
+            in vote_flat)
     weight = page[page.index('id="weight"'):page.index('id="house"')]
     assert '>Solape<' in weight and '>1,27<' in weight and 'En el promedio del 8 oct 2026' in weight
     sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
@@ -7685,6 +7721,7 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     assert ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. Primer sondeo de Sigma Dos '
             'para El Mundo en este ciclo.</p>') in page
     assert '<th scope="col">Anterior</th>' not in page and '<th scope="col">Cambio</th>' not in page
+    assert 'Un guion, si no cambia' not in page and 'La flecha junto a los escaños' not in page
     assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['previous'] is None
     assert 'El arco gris' not in page
     description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
@@ -7700,6 +7737,38 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     # a poll of weight 0 (an overlapping wave): never «fuera de la ventana»
     zero = html(call(api, '/es/sondeos/2026-10-03/sigma-dos/tracking')[2])
     assert 'no entra en el promedio: su peso es 0' in zero and 'se solapa con otro sondeo de la misma casa' in zero and 'ventana' not in zero[zero.index('id="weight"'):zero.index('id="house"')]
+
+
+def test_sondeo_page_names_the_fieldwork_of_the_previous_delivery_and_its_overlap(api, fresh_app):
+    """La nota de la tarjeta (y de su imagen) y el pie de la tabla dan el campo de la entrega anterior y avisan cuando
+    comparte días de campo con este sondeo, como las oleadas de un tracking; sin cambio de escaños, sin flecha; sin
+    cifra en la anterior, la columna Cambio vacía (revisión final 2026-11-09)."""
+    overlap = dict(DETAIL_POLLS[5], date='2026-10-02', start_date='2026-09-28', end_date='2026-10-02', seats={'PP': [150, 152]})
+    write_detail_polls(fresh_app.fs, polls=DETAIL_POLLS[:5] + [overlap])
+    page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
+    assert ('Flechas: frente al sondeo anterior de Sigma Dos (campo 28 sept 2026 – 2 oct 2026), con días de campo en común. '
+            'En gris') in page
+    vote = page[page.index('id="vote"'):page.index('id="weight"')]
+    assert ('Anterior: <a href="/es/sondeos/2026-10-02/sigma-dos?mode=forecast">sondeo de Sigma Dos, campo 28 sept 2026 – '
+            '2 oct 2026</a>.') in vote
+    assert '<td>150–152</td>' in vote and '▲ 4' not in vote and '<span class="dlt flat">–</span></td>' not in vote  # 151 → 151
+    assert '▲ 1,4' in vote  # 32,1 → 33,5
+    assert_public_wording(page, 'sondeo con anterior solapada')
+
+    # a previous delivery whose fieldwork ends before this one starts, and without a figure for the PP
+    before = {key: value for key, value in DETAIL_POLLS[5].items() if key != 'PP'} | {
+        'start_date': '2026-09-25', 'end_date': '2026-09-28'}
+    write_detail_polls(fresh_app.fs, polls=DETAIL_POLLS[:5] + [before])
+    page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
+    assert 'Flechas: frente al sondeo anterior de Sigma Dos (campo 25 sept 2026 – 28 sept 2026). En gris' in page
+    assert 'en común' not in page
+    vote = page[page.index('id="vote"'):page.index('id="weight"')]
+    assert 'sondeo de Sigma Dos, campo 25 sept 2026 – 28 sept 2026</a>.' in vote
+    row = re.search(r'<tr>\s*<td title="[^"]*"><span class="pn">.*?</tr>', vote, re.S).group(0)
+    cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
+    assert cells[4] == '–' and cells[5] == ''  # Anterior with a dash, Cambio empty
+    assert '▲ 4' in cells[-1]  # the seats still compare: 147 → 151
+    assert initial(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])['previous']['values'] == {}
 
 
 def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
