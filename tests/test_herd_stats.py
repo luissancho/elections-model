@@ -319,3 +319,17 @@ def test_by_buckets_without_rows():
     empty = pd.DataFrame(columns=COMPARISON_COLUMNS)
     out = by_buckets(empty, BUCKETS, 2)
     assert len(out) == 7 and all((b['pairs'], b['comparisons'], b['ratio']) == (0, 0, None) for b in out)
+
+
+def test_histogram_counts_every_finite_value_even_at_the_rounded_edges():
+    for values in ([-1e-17, 0.004], [0.069999999999, 0.09], [0.01, 0.070000000001]):
+        assert sum(bin_['count'] for bin_ in histogram(values, 0.01)) == len(values)
+
+    assert histogram([float('nan'), 0.004, float('inf')], 0.01) == [{'lo': 0.0, 'hi': 0.01, 'count': 1}]
+    assert histogram([float('nan'), float('-inf')], 0.01) == []
+
+
+def test_null_distribution_count_one_matches_pooled_p():
+    rows = [block_frame('A|B', [3.0, 5.0], [2.0, 4.0]), block_frame('C|D', [6.0, 2.0], [1.0, 7.0])]
+    out = null_distribution(rows, 'far', 'final', 3, 3000, 7)
+    assert out['count_one'] / 3000 == pooled_p(rows, 'far', 'final', 3, 3000, 7)

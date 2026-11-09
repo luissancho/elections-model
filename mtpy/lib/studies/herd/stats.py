@@ -579,8 +579,8 @@ def null_distribution(rows_by_election: list, a: str, b: str, min_rows: int, per
     Returns
     -------
     dict or None
-        ``observed`` (the pooled change), ``permuted`` (array, one change per shuffle), ``count_one`` (shuffles with
-        a change not above the observed one), ``count_two`` (shuffles with a change at least as far from 0),
+        ``observed`` (the pooled change), ``permuted`` (array, one change per shuffle), ``count_one`` (shuffles whose ratio
+        ``R_b² / R_a²`` is not above the observed one, as in ``pooled_p``), ``count_two`` (shuffles with a change at least as far from 0),
         ``p_one`` and ``p_two`` (``(count + 1) / (permutations + 1)``); ``None`` when ``pooled`` is ``None``.
     """
     if pooled(rows_by_election, a, b, min_rows) is None:
@@ -606,7 +606,11 @@ def null_distribution(rows_by_election: list, a: str, b: str, min_rows: int, per
         permuted = np.sqrt(perm_b / perm_a) - 1
 
     observed = math.sqrt(obs_b / obs_a) - 1
-    count_one = int(np.sum(permuted <= observed + PERMUTATION_TOLERANCE))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        count_one = int(np.sum(perm_b / perm_a <= obs_b / obs_a * (1 + PERMUTATION_TOLERANCE)))
+
+    # Additive tolerance on the change scale: an observed change that is floating noise around 0 must still count
+    # the zero shuffles
     count_two = int(np.sum(np.abs(permuted) >= abs(observed) - PERMUTATION_TOLERANCE))
 
     return {'observed': observed, 'permuted': permuted, 'count_one': count_one, 'count_two': count_two,
@@ -628,10 +632,12 @@ def histogram(values, bin_width: float) -> list[dict]:
     -------
     list of dict
         ``lo``, ``hi`` (edges rounded to the decimals of ``bin_width``) and ``count`` of each bin, from the one with
-        the smallest value to the one with the largest (the last bin includes its upper edge); one bin when all the
-        values coincide; empty without values.
+        the smallest value to the one with the largest (the last bin includes its upper edge); every finite value
+        is counted; one bin when all the values coincide; empty without finite values (NaN and infinities are
+        ignored).
     """
     values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
 
     if len(values) == 0:
         return []
@@ -640,6 +646,14 @@ def histogram(values, bin_width: float) -> list[dict]:
     first = math.floor(round(values.min() / bin_width, 9))
     last = max(math.ceil(round(values.max() / bin_width, 9)), first + 1)
     edges = np.round(np.arange(first, last + 1) * bin_width, decimals)
+
+    # The rounded quotients may leave an extreme value just outside the edges: widen by one bin
+    if values.min() < edges[0]:
+        edges = np.round(np.arange(first - 1, last + 1) * bin_width, decimals)
+
+    if values.max() > edges[-1]:
+        edges = np.round(np.arange(edges[0] / bin_width, last + 2) * bin_width, decimals)
+
     counts, _ = np.histogram(values, bins=edges)
 
     return [{'lo': float(edges[k]), 'hi': float(edges[k + 1]), 'count': int(counts[k])} for k in range(len(counts))]
