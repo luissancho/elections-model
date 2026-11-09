@@ -312,6 +312,32 @@ def test_forecaster_load_poll_seats_pairs_min_and_max_by_poll(monkeypatch):
     assert calls[0]['drop_mtypes'] == ['exit']
 
 
+def test_forecaster_load_poll_seats_sums_the_labels_of_each_block(monkeypatch):
+    # Los escaños se publican por serie, como el porcentaje (`group_results`): FA suma las etiquetas que hereda
+    # por el smap (SUMAR antes de existir FA, FV cuando la casa da Compromís aparte: 40dB 4-11, FA 4-8 + FV 3)
+    import types
+    from mtpy.lib import forecaster as fc_module
+    dates = pd.to_datetime(['2026-10-11', '2026-11-04', '2026-11-05'])
+    frames = {
+        'seats_min': pd.DataFrame({'date': dates, 'pollster_id': [10, 15, 2], 'sponsor_id': [6, 11, 62],
+                                   'FA': [np.nan, 4, 12], 'SUMAR': [8, np.nan, np.nan], 'FV': [np.nan, 3, np.nan],
+                                   'UP': [2, 0, 1]}),
+        'seats_max': pd.DataFrame({'date': dates, 'pollster_id': [10, 15, 2], 'sponsor_id': [6, 11, 62],
+                                   'FA': [np.nan, 8, 12], 'SUMAR': [8, np.nan, np.nan], 'FV': [np.nan, 3, np.nan],
+                                   'UP': [2, 0, 1]}),
+    }
+    monkeypatch.setattr(fc_module, 'get_poll_series', lambda **kwargs: frames[kwargs['metric']].copy())
+    blocks = pd.DataFrame({'parties': [['FA', 'SUMAR', 'FV'], ['UP']]}, index=['FA', 'UP'])
+    fake = types.SimpleNamespace(scope='es', date_end=pd.Timestamp('2026-11-29'), drange=None, drop_mtypes=None,
+                                 parties=pd.DataFrame({'name': ['FA', 'SUMAR', 'FV', 'UP']}), blocks=blocks)
+    out = fc_module.Forecaster.load_poll_seats(fake)
+    assert out == {
+        ('2026-10-11', 10, 6): {'FA': [8, 8], 'UP': [2, 2]},
+        ('2026-11-04', 15, 11): {'FA': [7, 11], 'UP': [0, 0]},
+        ('2026-11-05', 2, 62): {'FA': [12, 12], 'UP': [1, 1]},
+    }
+
+
 def test_export_fan_house_effects_and_dispersion():
     sim = synthetic_simulator()
     fan, _ = publish.export_fan(sim)

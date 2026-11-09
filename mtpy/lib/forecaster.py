@@ -479,10 +479,24 @@ class Forecaster(Core):
         dict
             ``{(date, pollster_id, sponsor_id): {party: [min, max]}}`` with the date as ``YYYY-MM-DD`` and the
             seats as integers, only for the polls and the parties of `self.parties` with a projection; empty
-            when no poll has one.
+            when no poll has one. With `self.blocks` (`build_series`), the parties are the series and each one
+            sums the labels it gathers, as `group_results` does with the shares (FA = FA + SUMAR + FV).
         """
-        return published_seats(self.scope, self.date_end.strftime('%Y-%m-%d'), self.parties.name.tolist(),
-                               drange=self.drange, drop_mtypes=self.drop_mtypes)
+        seats = published_seats(self.scope, self.date_end.strftime('%Y-%m-%d'), self.parties.name.tolist(),
+                                drange=self.drange, drop_mtypes=self.drop_mtypes)
+        blocks = getattr(self, 'blocks', None)
+        if blocks is None:
+            return seats
+        out = {}
+        for key, found in seats.items():
+            grouped = {}
+            for name, members in blocks['parties'].items():
+                pairs = [found[n] for n in members if n in found]
+                if pairs:
+                    grouped[name] = [sum(p[0] for p in pairs), sum(p[1] for p in pairs)]
+            if grouped:
+                out[key] = grouped
+        return out
 
     def override_weight_rating(self, series: pd.DataFrame) -> np.ndarray:
         """
