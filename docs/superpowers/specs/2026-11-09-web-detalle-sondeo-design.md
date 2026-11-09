@@ -316,8 +316,8 @@ parties)` y `highlightSeries(poll, parties, colors)` (las series del anillo).
 - Rating y peso en el promedio pasan a la cabeza de la tarjeta «Peso en el promedio», sobre F(solape), F(muestra) y
   F(rating). La muestra ya está en la entradilla; la distancia al promedio desaparece.
 - La tabla «Voto y escaños» queda en: % Voto · vs Anterior · Escaños (con horquilla) · vs Anterior (puntos medios de
-  las horquillas) · Efecto de casa (con su explicación en la cabecera y en «Cómo leerlo»). Las comparaciones con el
-  promedio se ven en el gráfico de la casa en el ciclo.
+  las horquillas). El efecto de casa, que estuvo un rato como última columna, se quita también (Luis: no se entendía
+  bien). Las comparaciones con el promedio se ven en el gráfico de la casa en el ciclo.
 - El anillo del sondeo en ese gráfico pasa de 16 a 11 px (borde de 2 px) para no tapar los puntos vecinos.
 - Se retiran `series_at`, `series_day`, `distance_to_average`, las opciones `intervalText` y `labelExtra` de
   `renderBars` y el `average`/`previous` de la isla de datos.

@@ -56,7 +56,6 @@
                 {% if previous %}<th scope="col" title="Cambio del voto frente a la entrega anterior de {{ poll_title }}">vs Anterior</th>{% endif %}
                 {% if has_seats %}<th scope="col">Escaños</th>{% endif %}
                 {% if has_seats and previous %}<th scope="col" title="Cambio de los escaños frente a la entrega anterior de {{ poll_title }}, con el punto medio de cada horquilla">vs Anterior</th>{% endif %}
-                {% if has_effects %}<th scope="col" title="Cuántos puntos suele dar {{ house.name }} a cada partido por encima (+) o por debajo (−) de lo que dan las demás encuestadoras; el promedio lo descuenta">Efecto de casa</th>{% endif %}
               </tr>
             </thead>
             <tbody>
@@ -67,7 +66,6 @@
                 {% if previous %}<td>{% if row.change is not none %}{{ m.badge(row.change, 1) }}{% endif %}</td>{% endif %}
                 {% if has_seats %}<td>{{ row.seats or '–' }}</td>{% endif %}
                 {% if has_seats and previous %}<td>{% if row.seats_change is not none %}{{ m.badge(row.seats_change, 0) }}{% endif %}</td>{% endif %}
-                {% if has_effects %}<td>{{ row.effect|delta(1) }}</td>{% endif %}
               </tr>
               {% endfor %}
             </tbody>
@@ -90,14 +88,6 @@
           partido.{% if has_seats %} En los escaños se compara el punto medio de cada horquilla.{% endif %}
           {%- if previous.overlap %} Las dos entregas comparten días de trabajo de campo, así que parte de las entrevistas
           pueden ser las mismas y el cambio entre ellas es menor de lo que sería entre dos muestras distintas.{% endif %}
-        </p>
-        {% endif %}
-        {% if has_effects %}
-        <p>
-          El efecto de casa es la inclinación habitual de {{ house.name }}: cuántos puntos suele dar a cada partido por
-          encima (+) o por debajo (−) de lo que dan las demás encuestadoras a lo largo del ciclo. No es un error de este
-          sondeo, sino su costumbre; el promedio la descuenta antes de usar sus sondeos. Un guion, si no tiene para ese
-          partido.
         </p>
         {% endif %}
         {% endcall %}

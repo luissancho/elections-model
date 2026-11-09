@@ -7468,12 +7468,11 @@ POLL = {'date': '2026-11-09', 'pollster_id': 12, 'pollster': 'NC Report', 'spons
 COLORS = {'PP': '#1d84ce', 'PSOE': '#ef1c27', 'VOX': '#63be21', 'ERC': '#ffb232'}
 
 
-def test_vote_rows_order_the_parties_of_the_poll_with_their_seats_and_house_effect():
-    rows = pages.vote_rows(POLL, ['PSOE', 'PP', 'VOX', 'ERC'], COLORS, effects={'PP': 0.6})
+def test_vote_rows_order_the_parties_of_the_poll_with_their_seats():
+    rows = pages.vote_rows(POLL, ['PSOE', 'PP', 'VOX', 'ERC'], COLORS)
     assert [row['name'] for row in rows] == ['PP', 'PSOE', 'VOX']  # ERC has no value in the poll
-    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'effect': 0.6, 'seats': '136–138', 'change': None,
+    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'seats': '136–138', 'change': None,
                        'seats_change': None}
-    assert rows[1]['effect'] is None
     bare = pages.vote_rows(POLL | {'seats': {'PP': [136, 136]}}, ['PP', 'PSOE'], COLORS)
     assert bare[0]['seats'] == '136' and bare[1]['seats'] is None
     assert pages.seats_text([]) is None and pages.seats_text(None) is None
@@ -7654,20 +7653,21 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '2.000 entrevistas · ' in card and 'El arco gris, «Otros», completa la cámara' in card
     assert ('<meta name="description" content="Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: '
             'voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio.">') in page
-    # the table: % Voto, vs Anterior, Escaños, vs Anterior (midpoints of the ranges) and the house effect; nothing of the average
+    # the table: % Voto, vs Anterior, Escaños and vs Anterior (midpoints of the ranges); nothing of the average nor of the
+    # house effect (Luis, 2026-11-09)
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
     heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', vote)
-    assert heads == ['Partido', '% Voto', 'vs Anterior', 'Escaños', 'vs Anterior', 'Efecto de casa']
+    assert heads == ['Partido', '% Voto', 'vs Anterior', 'Escaños', 'vs Anterior']
     row = re.search(r'<tr>\s*<td title="[^"]*"><span class="pn">.*?</tr>', vote, re.S).group(0)
     cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
-    assert cells[1:4] == ['33,5', '<span class="dlt up">▲ 1,4</span>', '150–152'] and '▲ 4' in cells[4] and cells[5] == '–'  # the fixture house has no effect for the PP
+    assert cells[1:4] == ['33,5', '<span class="dlt up">▲ 1,4</span>', '150–152'] and '▲ 4' in cells[4] and len(cells) == 5
     assert 'Promedio' not in vote and 'Diferencia' not in vote
     assert ('Anterior: <a href="/es/sondeos/2026-09-28/sigma-dos?mode=forecast">sondeo de Sigma Dos, campo hasta el '
             '28 sept 2026</a>.') in vote
     vote_flat = ' '.join(vote.split())
     assert 'Las columnas «vs Anterior» comparan con la entrega anterior de la misma casa para el mismo medio' in vote_flat
     assert 'En los escaños se compara el punto medio de cada horquilla.' in vote_flat
-    assert 'No es un error de este sondeo, sino su costumbre' in vote_flat
+    assert 'Efecto de casa' not in vote and 'efecto de casa' not in vote_flat
     # the rating and the weight, at the head of the weight card, over the three factors
     weight = page[page.index('id="weight"'):page.index('id="house"')]
     assert '>Rating<' in weight and '>71,2<' in weight and '>Peso en el promedio<' in weight and '>1,27<' in weight
@@ -7740,8 +7740,8 @@ def test_sondeo_page_names_the_fieldwork_of_the_previous_delivery_and_its_overla
 
 
 def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
-    """Un run sin las partes `weights` ni `house-effects` (anterior a ellas): la página sale sin la línea del peso del día
-    ni la columna del efecto de casa."""
+    """Un run sin las partes `weights` ni `house-effects` (anterior a ellas): la página sale sin la línea del peso del
+    día; la página ya no usa el efecto de casa (Luis, 2026-11-09)."""
     other = '20261007-120000'
     write_bundle(fresh_app.fs, run_id=other, manifest=False)
     write_detail_polls(fresh_app.fs, run_id=other)
@@ -7754,11 +7754,7 @@ def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
         assert status == 200, path
         weight = page[page.index('id="weight"'):page.index('id="house"')]
         assert 'En el promedio del' not in weight and 'ya no pesa' not in weight and 'no entra en' not in weight, path
-        vote = page[page.index('id="vote"'):page.index('id="weight"')]
-        assert 'Efecto de casa' not in vote, path
-    # the run with both parts has the column
-    page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
-    assert 'Efecto de casa' in page[page.index('id="vote"'):page.index('id="weight"')]
+        assert 'Efecto de casa' not in page, path
 
 
 def test_sondeo_page_without_sample_nor_web_source(api, fresh_app):

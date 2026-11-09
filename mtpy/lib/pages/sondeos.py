@@ -175,8 +175,7 @@ def _seats_mid(seats_range) -> Optional[int]:
     return round((int(seats_range[0]) + int(seats_range[1])) / 2)
 
 
-def vote_rows(poll: dict, parties: list, colors: dict, effects: Optional[dict] = None,
-              previous: Optional[dict] = None) -> list:
+def vote_rows(poll: dict, parties: list, colors: dict, previous: Optional[dict] = None) -> list:
     """
     Rows of the vote table of a poll: its vote and seats by party, against the previous delivery of the same house and
     sponsor.
@@ -189,8 +188,6 @@ def vote_rows(poll: dict, parties: list, colors: dict, effects: Optional[dict] =
         Parties of the scope, in their order (it breaks the ties).
     colors : dict
         ``{party: colour}``.
-    effects : dict, optional
-        ``{party: house effect}``.
     previous : dict, optional
         Previous delivery of the same house and sponsor.
 
@@ -198,11 +195,10 @@ def vote_rows(poll: dict, parties: list, colors: dict, effects: Optional[dict] =
     -------
     list
         One dict per party with a number in the poll, by descending value: ``name``, ``color``, ``value``,
-        ``effect``, ``seats`` (``None`` when missing), ``change`` (value minus its figure in the previous delivery,
+        ``seats`` (``None`` when missing), ``change`` (value minus its figure in the previous delivery,
         one decimal) and ``seats_change`` (difference of the midpoints of the two ranges); ``None`` when the previous
         delivery lacks the figure.
     """
-    effects = effects or {}
     seats = poll.get('seats') or {}
     prev_seats = (previous or {}).get('seats') or {}
     rows = []
@@ -215,7 +211,7 @@ def vote_rows(poll: dict, parties: list, colors: dict, effects: Optional[dict] =
 
         prev = (previous or {}).get(name)
         mid, prev_mid = _seats_mid(seats.get(name)), _seats_mid(prev_seats.get(name))
-        rows.append({'name': name, 'color': colors.get(name), 'value': float(value), 'effect': effects.get(name),
+        rows.append({'name': name, 'color': colors.get(name), 'value': float(value),
                      'seats': seats_text(seats.get(name)),
                      'change': round(value - prev, 1) if _has_value(prev) else None,
                      'seats_change': None if mid is None or prev_mid is None else mid - prev_mid})
@@ -411,32 +407,6 @@ def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> 
             {'label': 'Actualización del modelo', 'text': run_text, 'href': None}]
 
 
-def house_effects_of(effects: Optional[dict], pollster_id) -> Optional[dict]:
-    """
-    House effect of a pollster by party, from the ``house-effects`` part of a run.
-
-    Parameters
-    ----------
-    effects : dict or None
-        The ``house-effects`` part (``rows`` with ``pollster_id``, ``name`` and ``effect``), ``None`` when the run
-        has none.
-    pollster_id : int or None
-        Id of the house.
-
-    Returns
-    -------
-    dict or None
-        ``{party: effect}`` of the rows of the house (empty when the house has none); ``None`` without the part or
-        with no row at all (the effects were not fitted), so the page drops the column.
-    """
-    rows = (effects or {}).get('rows') or []
-
-    if not rows:
-        return None
-
-    return {row['name']: row.get('effect') for row in rows if row.get('pollster_id') == pollster_id}
-
-
 def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str] = None) -> dict:
     """
     Template context of the page of a poll.
@@ -462,7 +432,7 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``, at the head of the weight card),
         ``vote_rows``, ``previous`` (``date``, ``href`` keeping the query, ``title``, ``fieldwork``
         (``fieldwork_text``, ``None`` without dates) and ``overlap`` (``fieldwork_overlaps``) of the previous delivery
-        of the house and sponsor, ``None`` without one), ``has_seats``, ``has_effects``, ``weight``
+        of the house and sponsor, ``None`` without one), ``has_seats``, ``weight``
         (``weight_card``, its ``factors`` with an empty ``unit`` and no ``color`` for ``m.kpis``), ``weights_date``
         (the day of the ``weights`` part, ``None`` without it), ``sheet`` (``sheet_rows``), ``back_href`` (the polls
         table of the event page), ``detail_href``, ``image_file`` and ``image_sign`` (the image of the card),
@@ -490,7 +460,6 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     poll_parties = list(polls.get('parties') or [])
     series = part(scope, run, 'series')
     weights = bundle_part(site().run_file, scope, run, 'weights')
-    effects = house_effects_of(bundle_part(site().run_file, scope, run, 'house-effects'), poll.get('pollster_id'))
     colors = {name: parties[name]['color'] for name in poll_parties}
     bmaps = meta.get('bmaps') or {}
     blocks = bmaps.get('blocks')
@@ -528,10 +497,9 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'poll_date': fmt_date(date),
         'event_label': event_label,
         'kpis': poll_kpis(poll),
-        'vote_rows': vote_rows(poll, poll_parties, colors, effects, prev),
+        'vote_rows': vote_rows(poll, poll_parties, colors, prev),
         'previous': previous,
         'has_seats': bool(seats),
-        'has_effects': effects is not None,
         'weight': dict(weight, factors=[dict(factor, unit='', color=None) for factor in weight['factors']]),
         'weights_date': weights.get('date') if weights is not None else None,
         'sheet': sheet_rows(poll, house['href'], event_label, run_text),

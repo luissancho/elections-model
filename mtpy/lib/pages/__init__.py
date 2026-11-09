@@ -45,7 +45,7 @@ from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, met
                      national_figures, quality_rubric, subpages, thresholds_rows)
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, poll_detail_href, pollster_href, pollster_slugs,
                     resolve_event_path, resolve_pollster, scope_paths, scope_slug, slugify)
-from .sondeos import (fieldwork_overlaps, fieldwork_text, find_poll, house_effects_of, poll_kpis, poll_title,
+from .sondeos import (fieldwork_overlaps, fieldwork_text, find_poll, poll_kpis, poll_title,
                       previous_poll, sample_text, seats_text, sheet_rows, sondeo_context, vote_rows,
                       weight_card)
 from .promedios import (BLOCK_ORDER, PAGE_SIZE, RATING_COLORS, block_result_rows, chart_polls, fieldwork_label, inherited_results,
