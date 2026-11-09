@@ -275,7 +275,7 @@ def weight_card(poll: dict, weights: Optional[dict]) -> dict:
 
 def rating_badge(poll: dict) -> Optional[dict]:
     """
-    Rating badge of the house of a poll, for the head of its card: the one of the polls table of the event page.
+    Rating of the house of a poll, for the head of its card: its figure in colour and a 0-100 bar.
 
     Parameters
     ----------
@@ -285,15 +285,17 @@ def rating_badge(poll: dict) -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``{'text', 'color'}``: the rating at one decimal on its colour, from red at 0 through grey at 50 to green at 100
-        (``gradient`` over ``RATING_COLORS``); ``None`` without a rating (aggregators and online panels).
+        ``{'text', 'color', 'width'}``: the rating at one decimal, its colour from red at 0 through grey at 50 to green
+        at 100 (``gradient`` over ``RATING_COLORS``, as the badge of the polls table) and the width of its 0-100 bar in
+        percent (clipped to 0-100); ``None`` without a rating (aggregators and online panels).
     """
     rating = poll.get('rating')
 
     if not _has_value(rating):
         return None
 
-    return {'text': fmt_num(rating, 1), 'color': gradient(rating, 0, 100, RATING_COLORS)}
+    return {'text': fmt_num(rating, 1), 'color': gradient(rating, 0, 100, RATING_COLORS),
+            'width': round(min(max(float(rating), 0.0), 100.0), 1)}
 
 
 def poll_kpis(poll: dict) -> list:

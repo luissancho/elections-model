@@ -695,8 +695,13 @@ ol.notes > li:target { color: var(--color-text); }
    as the title (and draws as plain text in the image) */
 .poll-card .poll-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); align-items: center; }
 .poll-grid.single { grid-template-columns: 1fr; }
-.poll-card .pc-event { margin: -4px 0 4px; font-size: 13.5px; color: var(--color-muted); }
-.poll-card .pc-rating { margin: 0 0 var(--space-3); font-size: 13.5px; color: var(--color-muted); }
+.poll-card .pc-event { margin: -4px 0 0; font-size: 13.5px; color: var(--color-muted); }
+.poll-card .pc-gauge { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 12px 0 var(--space-3); font-size: 13.5px; color: var(--color-muted); font-variant-numeric: normal; }
+.poll-card .pc-gauge .lbl { color: inherit; text-decoration: none; }
+.poll-card .pc-gauge .lbl:hover { color: var(--color-accent); text-decoration: underline; }
+.poll-card .pc-gauge b { font: 700 15px var(--font-head); }
+.poll-card .pc-gauge .bar { display: block; width: 190px; height: 6px; margin-left: 6px; border-radius: 3px; background: #e3e6ec; overflow: hidden; }
+.poll-card .pc-gauge .bar i { display: block; height: 100%; border-radius: 3px; }
 .poll-card .pc-note { margin: var(--space-2) 0 var(--space-3); font-size: 12.5px; }
 .poll-card .poll-bars { height: auto; }
 /* the table of the vote and the weight card side by side (Luis, 2026-11-09); stacked on phones */
@@ -819,7 +824,7 @@ ol.notes > li:target { color: var(--color-text); }
 .et td.f a:hover { color: var(--color-accent); text-decoration: underline; }
 /* Rating badge of "Todas las encuestas": the figure on a solid colour from red (0) through grey (50) to green (100),
    `gradient` over `RATING_COLORS` in the server and the browser alike */
-.et .rt, .pc-rating .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
+.et .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
 .et td.mx { font-weight: 800; }
 .et td.na { color: var(--color-muted); }
 /* The model scored like a pollster in the table of the last polls of an election: a highlighted row */
