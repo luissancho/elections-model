@@ -4229,13 +4229,13 @@ def test_event_page_blocks_table_caption_names_the_parties_of_each_block(api, fr
     table = re.search(r'<table id="blocks-table">(.*?)</table>', html(call(api, '/es')[2]), re.S).group(1)
     caption = re.search(r'<caption[^>]*>(.*?)</caption>', table, re.S).group(1)
     items = re.findall(r'<strong>([^<]*)</strong>([^<]*)</span>', caption)
-    assert items == [('Izquierda:', ' PSOE y SUMAR'), ('Derecha:', ' PP, VOX y SALF')]
+    assert items == [('Izquierda:', ' PSOE + SUMAR'), ('Derecha:', ' PP + VOX + SALF')]
     assert caption.count('class="dot"') == 2 and 'Otros' not in caption
 
 
-def test_block_members_lists_the_parties_in_spanish():
+def test_block_members_joins_the_parties_with_plus_signs():
     from mtpy.lib.pages.promedios import block_members
-    assert block_members({'Izquierda': ['PSOE', 'FA', 'UP'], 'Nadie': [], 'Otros': []}) == {'Izquierda': 'PSOE, FA y UP'}
+    assert block_members({'Izquierda': ['PSOE', 'FA', 'UP'], 'Nadie': [], 'Otros': []}) == {'Izquierda': 'PSOE + FA + UP'}
     assert block_members({'Derecha': ['PP'], 'Otros': ['PNV', 'ERC']}) == {'Derecha': 'PP'}
     assert block_members(None) == {} and block_members([]) == {}
 

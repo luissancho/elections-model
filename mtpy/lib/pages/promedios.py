@@ -198,23 +198,6 @@ def result_rows(summary: dict, results: Optional[dict] = None) -> list:
     ]
 
 
-def spanish_list(names: list) -> str:
-    """
-    A list in Spanish: the names joined with commas and a «y» before the last one («PSOE, FA y UP»).
-
-    Parameters
-    ----------
-    names : list of str
-        The items, in order.
-
-    Returns
-    -------
-    str
-        The list, empty without items.
-    """
-    return '{} y {}'.format(', '.join(names[:-1]), names[-1]) if len(names) > 1 else ''.join(names)
-
-
 def block_members(blocks: Optional[dict]) -> dict:
     """
     The parties of each block, for the caption of the table of results by block: the same text as ``blockMembers``
@@ -228,13 +211,14 @@ def block_members(blocks: Optional[dict]) -> dict:
     Returns
     -------
     dict
-        ``{block: parties}`` in the order of the map, the parties as a Spanish list; ``REST_BLOCK`` is left out (it
-        goes without saying, Luis 2026-11-09), and so is any block without parties. Empty without a map.
+        ``{block: parties}`` in the order of the map, the parties joined with « + » («PSOE + FA + UP», Luis
+        2026-11-09); ``REST_BLOCK`` is left out (it goes without saying), and so is any block without parties.
+        Empty without a map.
     """
     if not isinstance(blocks, dict):
         return {}
 
-    return {block: spanish_list(list(members)) for block, members in blocks.items() if block != REST_BLOCK and members}
+    return {block: ' + '.join(members) for block, members in blocks.items() if block != REST_BLOCK and members}
 
 
 def block_result_rows(summary: dict, meta: dict, parties: Catalog, results: Optional[dict] = None) -> list:

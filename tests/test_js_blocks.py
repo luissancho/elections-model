@@ -185,17 +185,17 @@ WEB_BLOCKS = {'Izquierda': ['PSOE', 'FA', 'UP'], 'Derecha': ['PP', 'VOX', 'SALF'
 
 
 def test_block_members_name_the_parties_of_each_block_but_the_rest():
-    """Cada bloque con sus partidos en el orden del mapa, unidos con comas y una «y»; Otros no sale, se sobreentiende
+    """Cada bloque con sus partidos en el orden del mapa, sumados con « + » (Luis, 2026-11-09); Otros no sale, se sobreentiende
     (Luis, 2026-11-09)."""
     assert run_js('b.blockMembers(%s)' % json.dumps(WEB_BLOCKS)) == [
-        {'block': 'Izquierda', 'text': 'PSOE, FA y UP'}, {'block': 'Derecha', 'text': 'PP, VOX y SALF'}]
-    assert run_js('b.blockMembersText(%s)' % json.dumps(WEB_BLOCKS)) == 'Izquierda: PSOE, FA y UP · Derecha: PP, VOX y SALF'
+        {'block': 'Izquierda', 'text': 'PSOE + FA + UP'}, {'block': 'Derecha', 'text': 'PP + VOX + SALF'}]
+    assert run_js('b.blockMembersText(%s)' % json.dumps(WEB_BLOCKS)) == 'Izquierda: PSOE + FA + UP · Derecha: PP + VOX + SALF'
 
 
 def test_block_members_with_one_party_an_empty_block_and_no_rest():
-    """Un partido solo va sin «y»; un bloque sin partidos no sale, y un mapa sin Otros (los runs antiguos de cuatro
+    """Un partido solo va sin «+»; un bloque sin partidos no sale, y un mapa sin Otros (los runs antiguos de cuatro
     bloques) va como viene."""
     out = run_js('b.blockMembers({Izquierda: ["PSOE"], Nadie: [], Otros: ["PNV"]})')
     assert out == [{'block': 'Izquierda', 'text': 'PSOE'}]
-    assert run_js('b.blockMembersText(blocks)') == 'Derecha: PP y VOX · Izquierda: PSOE'
+    assert run_js('b.blockMembersText(blocks)') == 'Derecha: PP + VOX · Izquierda: PSOE'
     assert run_js('b.blockMembers({})') == [] and run_js('b.blockMembersText(null)') == ''
