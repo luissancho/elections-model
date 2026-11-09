@@ -23,8 +23,8 @@ const OTHERS_ROW = 'Otros';
 
 /**
  * Draw the bars of the vote of the poll (`#poll-bars`): one per party with a value, from the largest, the share
- * written after the bar, the average of the day as a capped zero-length interval on it (none without an average)
- * and a grey «Otros» row with the rest up to 100 (`voteRows`).
+ * written after the bar, the average of the day as a capped zero-length interval on it (none without an average),
+ * named «Promedio del día» in the tooltip, and a grey «Otros» row with the rest up to 100 (`voteRows`).
  *
  * @param {object} initial the page's initial data (`poll`, `polls.parties`, `average`)
  * @param {Catalog} catalog party catalogue of the page
@@ -44,6 +44,8 @@ function paintBars(initial, catalog) {
     fullnames: mapNames(names, (name) => catalog.fullname(name)),
     formatter: (x) => fmtPct(x),
     axisFormatter: (x) => fmtPct(x, 0),
+    // the interval is the zero-length mark of the average: the tooltip names it as such
+    intervalText: (row) => (row.lo === null ? null : `Promedio del día: ${fmtPct(row.lo)}`),
   });
 }
 

@@ -14,6 +14,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DIST = os.path.join(ROOT, 'web', 'dist')
 ECHARTS = os.path.join(DIST, 'vendor', 'echarts-5.6.0.min.js')
 BULLSEYE_JS = pathlib.Path(DIST, 'js', 'charts', 'bullseye.js').as_uri()
+BARS_JS = pathlib.Path(DIST, 'js', 'charts', 'bars.js').as_uri()
 DIVERGING_JS = pathlib.Path(DIST, 'js', 'charts', 'diverging.js').as_uri()
 HEMICYCLE_JS = pathlib.Path(DIST, 'js', 'charts', 'hemicycle.js').as_uri()
 SERIES_JS = pathlib.Path(DIST, 'js', 'charts', 'series.js').as_uri()
@@ -843,6 +844,26 @@ def test_chart_zoom_reads_the_window_given_and_the_drag():
     assert out['first']['endValue'] == run_js('s.dayTime("2026-10-01")')
     assert out['dragged'] != out['first'] and [out['dragged']['startValue'], out['dragged']['endValue']] == out['live']
     assert out['same'] is True
+
+
+def bars_tooltips(opts):
+    """Las líneas del tooltip de `renderBars` para un sondeo (PP con promedio, «Otros» sin él) con las opciones `opts`,
+    leídas de un contenedor falso: `mountChart` reutiliza su `__chart`."""
+    return run_js('await (async () => { const bs = await import("%s"); let got = null; '
+                  'bs.renderBars({__chart: {setOption: (o) => { got = o; }}}, '
+                  '[{name: "PP", value: 33.5, avg: 32}, {name: "Otros", value: 66.5, avg: null}], '
+                  '{value: "value", lo: "avg", hi: "avg", formatter: (x) => x.toFixed(1), ...%s}); '
+                  'return [0, 1].map((i) => got.tooltip.formatter([{dataIndex: i}])); })()' % (BARS_JS, opts))
+
+
+def test_bars_tooltip_names_the_interval_with_interval_text():
+    """`intervalText` sustituye la línea «Intervalo» del tooltip (la página de un sondeo la usa para la marca del
+    promedio del día); sin ella la línea sigue como estaba."""
+    named = bars_tooltips('{intervalText: (row) => (row.lo === null ? null : `Promedio del día: ${row.lo.toFixed(1)}`)}')
+    assert named == ['<strong>PP</strong><br>33.5<br>Promedio del día: 32.0', '<strong>Otros</strong><br>66.5']
+    assert not any('Intervalo' in text for text in named)
+    plain = bars_tooltips('{}')
+    assert plain == ['<strong>PP</strong><br>33.5<br>Intervalo: 32.0 – 32.0', '<strong>Otros</strong><br>66.5']
 
 
 def histogram_option(args):

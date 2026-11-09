@@ -41,11 +41,14 @@ export function barRows(rows, {value, lo, hi}) {
  * @param {object[]} rows rows with a `name` and the value/interval fields
  * @param {object} opts `value`, `lo`, `hi` (field names), `colors` ({name: colour}; a name without one gets
  *   `THEME.barColor`),
- *   `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `axisFormatter` (axis ticks, default `formatter`), `majority` (vertical mark)
+ *   `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `axisFormatter` (axis ticks, default `formatter`), `majority` (vertical mark),
+ *   `intervalText` (`(row) => string|null`, the tooltip line of the interval of a normalised row `{name, value, lo,
+ *   hi}`, null for no line; without it the line is «Intervalo: lo – hi» when the row has both ends)
  * @returns {object} the ECharts instance
  */
 export function renderBars(el, rows, {
   value = 'pct', lo = 'lo', hi = 'hi', colors = {}, fullnames = {}, formatter = String, axisFormatter = formatter, majority = null,
+  intervalText = null,
 } = {}) {
   const data = barRows(rows, {value, lo, hi});
   const top = Math.max(0, ...data.map((row) => Math.max(row.value ?? 0, row.hi ?? 0)), majority ?? 0);
@@ -134,7 +137,12 @@ export function renderBars(el, rows, {
           return '';
         }
         const lines = [`<strong>${escapeHtml(fullnames[row.name] || row.name)}</strong>`, escapeHtml(formatter(row.value))];
-        if (row.lo !== null && row.hi !== null) {
+        if (intervalText) {
+          const text = intervalText(row);
+          if (text !== null && text !== undefined) {
+            lines.push(escapeHtml(text));
+          }
+        } else if (row.lo !== null && row.hi !== null) {
           lines.push(`Intervalo: ${escapeHtml(formatter(row.lo))} – ${escapeHtml(formatter(row.hi))}`);
         }
         return lines.join('<br>');
