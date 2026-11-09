@@ -7229,3 +7229,66 @@ def test_series_at_takes_the_average_of_the_last_day_up_to_the_date():
     assert pages.series_at(series, '2026-10-09') == {'PP': 31.0, 'PSOE': 27.0}
     assert pages.series_at(series, '2026-09-30') == {}
     assert pages.series_at({'dates': [], 'parties': [], 'mean': {}}, '2026-10-01') == {}
+
+
+POLL = {'date': '2026-11-09', 'pollster_id': 12, 'pollster': 'NC Report', 'sponsor': 'La Razón', 'start_date': '2026-11-05',
+        'end_date': '2026-11-07', 'sample_size': 1000, 'mtype': 'cati', 'rating': 64.23, 'weight': 0.8412, 'weight_over': 1.0,
+        'weight_sample': 0.8412, 'weight_rating': 1.0, 'url': 'https://www.larazon.es/encuesta', 'PP': 32.6, 'PSOE': 25.6,
+        'VOX': 19.3, 'ERC': None, 'seats': {'PP': [136, 138], 'PSOE': [99, 101], 'VOX': [67, 69]}}
+AVERAGE = {'PP': 31.9, 'PSOE': 26.4, 'VOX': 18.0, 'ERC': 2.0}
+COLORS = {'PP': '#1d84ce', 'PSOE': '#ef1c27', 'VOX': '#63be21', 'ERC': '#ffb232'}
+
+
+def test_vote_rows_order_the_parties_of_the_poll_and_compare_them_with_the_average():
+    rows = pages.vote_rows(POLL, ['PSOE', 'PP', 'VOX', 'ERC'], AVERAGE, COLORS, effects={'PP': 0.6})
+    assert [row['name'] for row in rows] == ['PP', 'PSOE', 'VOX']  # ERC has no value in the poll
+    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'avg': 31.9, 'diff': 0.7, 'effect': 0.6, 'seats': '136–138'}
+    assert rows[1]['diff'] == -0.8 and rows[1]['effect'] is None
+    bare = pages.vote_rows(POLL | {'seats': {'PP': [136, 136]}}, ['PP', 'PSOE'], {}, COLORS)
+    assert bare[0]['avg'] is None and bare[0]['diff'] is None and bare[0]['seats'] == '136' and bare[1]['seats'] is None
+    assert pages.seats_text([]) is None and pages.seats_text(None) is None
+
+
+def test_distance_to_average_is_the_mean_absolute_gap_over_the_shared_parties():
+    assert pages.distance_to_average(POLL, ['PP', 'PSOE', 'VOX', 'ERC'], AVERAGE) == 0.9  # (0.7 + 0.8 + 1.3) / 3
+    assert pages.distance_to_average(POLL, ['PP'], {}) is None
+
+
+def test_weight_card_shows_the_factors_and_the_kernel_of_the_day():
+    weights = {'date': '2026-11-09', 'parties': ['PP', 'PSOE'], 'rows': [
+        {'name': 'PSOE', 'date': '2026-11-09', 'pollster_id': 12, 'sponsor': 'La Razón', 'weight_kernel': 0.97, 'weight': 0.816},
+        {'name': 'PP', 'date': '2026-11-09', 'pollster_id': 12, 'sponsor': 'La Razón', 'weight_kernel': 0.98, 'weight': 0.824},
+        {'name': 'PP', 'date': '2026-11-09', 'pollster_id': 12, 'sponsor': None, 'weight_kernel': 0.5, 'weight': 0.4},
+    ], 'line': {'PP': {'dates': ['2026-09-20', '2026-11-09'], 'mean': [30.0, 32.0], 'lo': [29.0, 31.0], 'hi': [31.0, 33.0]}},
+        'kernel': {}, 'stats': {}}
+    card = pages.weight_card(POLL, weights)
+    assert [(f['label'], f['value']) for f in card['factors']] == [('Solape', '1,00'), ('Muestra', '0,84'), ('Rating', '1,00'), ('Peso', '0,84')]
+    assert card['has_part'] and card['status'] == 'today' and not card['overlap']
+    assert card['today'] == {'date': '2026-11-09', 'kernel': '0,98', 'weight': '0,82', 'party': 'PP'}
+    old = pages.weight_card({k: v for k, v in POLL.items() if not k.startswith('weight_')} | {'date': '2026-08-01'}, weights)
+    assert [f['value'] for f in old['factors']] == ['–', '–', '–', '0,84'] and old['today'] is None and old['status'] == 'outside'
+    inside = pages.weight_card(POLL | {'date': '2026-10-20'}, weights)
+    assert inside['today'] is None and inside['status'] == 'absent'
+    zero = pages.weight_card(POLL | {'date': '2026-11-09', 'weight': 0.0, 'weight_over': 0.0}, weights)
+    assert zero['status'] == 'zero' and zero['overlap'] and zero['today'] is None  # the rows of a poll of weight 0 are not looked up
+    assert pages.weight_card(POLL | {'weight': 0.0, 'weight_over': 1.0}, weights)['overlap'] is False
+    assert pages.weight_card(POLL, None) == {'factors': card['factors'], 'has_part': False, 'today': None, 'status': None, 'overlap': False}
+
+
+def test_poll_kpis_title_fieldwork_and_sheet():
+    kpis = pages.poll_kpis(POLL, 0.9)
+    assert [(k['label'], k['value'], k['unit']) for k in kpis] == [('Rating', '64,2', ''), ('Peso en el promedio', '0,84', ''),
+                                                                 ('Muestra', '1.000', 'entrevistas'), ('Distancia al promedio', '0,9', 'pts')]
+    assert kpis[0]['color'] == pages.gradient(64.23, 0, 100, pages.RATING_COLORS)
+    assert pages.poll_kpis(POLL | {'rating': None}, None)[0]['color'] is None and pages.poll_kpis(POLL, None)[3]['value'] == '–'
+    assert pages.poll_title(POLL) == 'NC Report para La Razón' and pages.poll_title(POLL | {'sponsor': None}) == 'NC Report'
+    assert pages.fieldwork_text(POLL) == '5 nov 2026 – 7 nov 2026'
+    assert pages.fieldwork_text(POLL | {'end_date': None}) == '5 nov 2026' and pages.fieldwork_text({'date': '2026-11-09'}) is None
+    sheet = pages.sheet_rows(POLL, '/casas/nc-report', 'Elecciones generales · 29 nov 2026', 'Actualizado el 9 nov 2026')
+    assert [row['label'] for row in sheet] == ['Encuestadora', 'Medio', 'Tipo', 'Trabajo de campo', 'Muestra', 'Rating', 'Peso', 'Fuente',
+                                               'Elección', 'Actualización del modelo']
+    assert sheet[0] == {'label': 'Encuestadora', 'text': 'NC Report', 'href': '/casas/nc-report'}
+    assert sheet[3]['text'] == '5 nov 2026 – 7 nov 2026'
+    assert sheet[7] == {'label': 'Fuente', 'text': 'www.larazon.es', 'href': 'https://www.larazon.es/encuesta'}
+    assert pages.sheet_rows(POLL | {'url': None}, '/casas/nc-report', 'E', 'R')[7] == {'label': 'Fuente', 'text': 'Wikipedia, lista de sondeos', 'href': None}
+    assert pages.sheet_rows({'date': '2026-11-09', 'pollster': 'X'}, '/casas/x', 'E', 'R')[3]['text'] == '9 nov 2026'  # the poll's date is its last fieldwork day
