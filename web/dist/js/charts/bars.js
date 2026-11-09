@@ -124,8 +124,10 @@ export function barsOption(rows, {
       type: 'value',
       min: 0,
       max: niceMax(top * (labelExtra ? 1.3 : 1.15)),
-      splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x)},
+      // with labelExtra the end of the axis is only room for the change: neither its line nor its label (a «42 %»
+      // next to the «40 %» tick)
+      splitLine: {lineStyle: {color: THEME.gridColor}, ...(labelExtra ? {showMaxLine: false} : {})},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x), ...(labelExtra ? {showMaxLabel: false} : {})},
     },
     yAxis: {
       type: 'category',
@@ -172,7 +174,8 @@ export function barsOption(rows, {
  *   tooltip line of the interval of a normalised row `{name, value, lo, hi}`, null for no line; without it the
  *   line is «Intervalo: lo – hi» when the row has both ends), `labelExtra` (`(row, index) => {text, color}|null`
  *   on the input row: a coloured bold text after the value label, e.g. a change «▲ 1,2»; it also widens the axis
- *   by 30 % instead of 15 % to leave room)
+ *   by 30 % instead of 15 % to leave room, and hides the line and label of the end of the axis, which is only that
+ *   room)
  * @returns {object} the ECharts instance
  */
 export function renderBars(el, rows, opts = {}) {

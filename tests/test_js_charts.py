@@ -924,7 +924,7 @@ def test_bars_tooltip_names_the_interval_with_interval_text():
 
 def test_bars_label_extra_writes_a_coloured_change_after_the_value():
     """`labelExtra` añade tras la cifra un texto de color (el cambio frente a la entrega anterior), siga donde siga
-    la cifra, y deja más sitio en el eje; sin ella la opción es la de siempre."""
+    la cifra, y deja más sitio en el eje, sin línea ni etiqueta en su final; sin ella la opción es la de siempre."""
     rows = [{'name': 'PP', 'value': 31.9, 'lo': 30, 'hi': 33, 'change': 1.2}, {'name': 'Otros', 'value': 14.0, 'change': None}]
     got = run_js('await (async () => { const bs = await import("%s"); const rows = %s; '
                  'const draw = (opts) => { const o = bs.barsOption(rows, {value: "value", formatter: (x) => x.toFixed(1), ...opts}); '
@@ -935,13 +935,18 @@ def test_bars_label_extra_writes_a_coloured_change_after_the_value():
                  '{text: (r.change > 0 ? "▲ " : "▼ ") + r.change, color: "#2ca02c"})}); '
                  'const plain = bs.barsOption(rows, {value: "value"}); '
                  'return {extra: draw({labelExtra: (r) => (r.change === null ? null : {text: "▲ " + r.change, color: "#2ca02c"})}), '
-                 'plain: draw({}), maxExtra: withExtra.xAxis.max, maxPlain: plain.xAxis.max}; })()' % (BARS_JS, json.dumps(rows)))
+                 'plain: draw({}), maxExtra: withExtra.xAxis.max, maxPlain: plain.xAxis.max, '
+                 'endExtra: [withExtra.xAxis.splitLine.showMaxLine, withExtra.xAxis.axisLabel.showMaxLabel], '
+                 'endPlain: [plain.xAxis.splitLine.showMaxLine ?? null, plain.xAxis.axisLabel.showMaxLabel ?? null]}; })()'
+                 % (BARS_JS, json.dumps(rows)))
     pp, others = got['extra']
     assert '▲ 1.2' in pp['text'] and pp['rich']['d']['fill'] == '#2ca02c' and pp['rich']['d']['fontWeight'] == 700
     assert '31.9' in pp['text']
     assert others['text'] == '14.0' and 'rich' not in others
     assert got['plain'][0]['text'] == '31.9' and 'rich' not in got['plain'][0]
     assert got['maxExtra'] > got['maxPlain']
+    # the end of the widened axis is only room for the change: no line or label there («42 %» next to «40 %»)
+    assert got['endExtra'] == [False, False] and got['endPlain'] == [None, None]
 
 
 def histogram_option(args):
