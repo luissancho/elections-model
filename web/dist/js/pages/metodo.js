@@ -1,7 +1,8 @@
 // Method pages: the controls; on the backtest subpage, the vote error, the coverage and the seat error of the
 // backtest by horizon and the reliability of its bands (the PIT by population and group of horizons, and the
 // probabilities of majority against how often there was one); on the average subpage, the live examples: the
-// weights of the polls (`charts/weights.js`) and the bullseye of the last polls of one house before every election
+// weights of the polls of a scope and party the reader picks (`weights-example.js` loads the parts after the page,
+// `charts/weights.js` draws them) and the bullseye of the last polls of one house before every election
 // since a date (`charts/bullseye.js`); on the rating subpage, the cloud of the rating check (the differential the
 // rating gave each pollster before an election against the one it had, `charts/scatter.js`) with its download, all
 // drawn from the data embedded by the server; on every page, the footnotes that unfold in place (`notes.js`). The
@@ -15,6 +16,7 @@ import {renderScatter, scatterOption} from '../charts/scatter.js';
 import {renderWeights} from '../charts/weights.js';
 import {wireNotes} from '../notes.js';
 import {IMAGE, wireDownload} from '../share.js';
+import {defaultParty, exampleTexts, exampleView, loadExample, partyOptions, tableRowsHtml} from '../weights-example.js';
 import {wireBullseye} from './bullseye-wire.js';
 import {mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 
@@ -44,25 +46,117 @@ function pairs(horizons, values) {
 }
 
 /**
- * Reveal the Publicada/Corregida switch of the weights example (`#weights-field`, hidden without JS) and redraw the
- * points with the chosen figure when it changes: the published one, or the one net of the house effect that the
- * line is fitted on.
+ * Wire the weights example: load the parts of the national scope after the page, then redraw the chart, the table
+ * and the figures of the text (the `data-w` spans the server wrote for the national leader) whenever the reader
+ * picks another scope (`select[name=scope]`), party (`select[name=party]`) or figure of the points (Publicada or
+ * Corregida, `#weights-field`). The controls, the chart and the table stay hidden until the first draw; a scope
+ * whose parts cannot be loaded leaves the card as it was, with a notice in the status line.
  *
  * @param {HTMLElement} el the chart container
- * @param {object} example the `example` of the page's initial data
+ * @param {object} initial the `example` of the page's initial data (`scope`, `party`, `scopes`)
  */
-export function wireWeightsField(el, example) {
+export function wireWeightsExample(el, initial) {
+  const pick = document.getElementById('weights-pick');
   const field = document.getElementById('weights-field');
-  if (!field) {
-    return;
-  }
-  field.hidden = false;
-  field.addEventListener('change', (event) => {
-    const value = event.target && event.target.value;
-    if (value === 'pct' || value === 'pct_adj') {
-      tryDraw(() => renderWeights(el, example, {field: value}), 'the weights example');
+  const list = document.getElementById('weights-list');
+  const scopeSelect = pick && pick.querySelector('select[name=scope]');
+  const partySelect = pick && pick.querySelector('select[name=party]');
+  const scopes = new Map((initial.scopes || []).map((row) => [row.code, row]));
+  const cache = new Map();   // code → the promise of its parts: each scope is asked for once
+  const state = {scope: null, party: null, field: 'pct', data: null};
+  let request = 0;           // only the answer to the last pick paints
+
+  const parts = (code) => {
+    if (!cache.has(code)) {
+      cache.set(code, loadExample(scopes.get(code)).catch((error) => {
+        cache.delete(code);  // a failed request can be retried
+        throw error;
+      }));
     }
-  });
+    return cache.get(code);
+  };
+
+  /** Draw the party of `state` and write its figures; false (and nothing written) when the party is missing. */
+  function paintParty() {
+    const scope = scopes.get(state.scope);
+    const view = exampleView(state.data.weights, state.data.meta, state.party);
+    if (!view) {
+      return false;
+    }
+    const texts = exampleTexts(view, scope);
+    document.querySelectorAll('#ejemplo [data-w]').forEach((span) => {
+      if (span.dataset.w in texts) {
+        span.textContent = texts[span.dataset.w];
+      }
+    });
+    const dates = document.getElementById('weights-dates');
+    if (dates) {
+      dates.hidden = texts.dates_hidden;
+    }
+    const body = document.querySelector('#weights-table tbody');
+    if (body) {
+      body.innerHTML = tableRowsHtml(view.rows);
+    }
+    const csv = document.getElementById('weights-csv');
+    if (csv) {
+      csv.href = scope.csv_href;
+    }
+    el.setAttribute('aria-label', `Sondeos que pesan en el promedio del ${texts.subject} leído el ${texts.date}, `
+      + 'con la recta local, su banda y la campana del kernel');
+    [pick, field, list, el].forEach((node) => {
+      if (node) {
+        node.hidden = false;   // before drawing: ECharts measures the container
+      }
+    });
+    tryDraw(() => renderWeights(el, view, {field: state.field}), 'the weights example');
+    return true;
+  }
+
+  /** Load a scope and paint `party`, or its default; on failure the selects go back to what is painted. */
+  function showScope(code, party) {
+    const ticket = ++request;
+    return parts(code).then((data) => {
+      if (ticket !== request) {
+        return;
+      }
+      const options = partyOptions(data.weights);
+      const chosen = options.includes(party) ? party : defaultParty(data.weights);
+      Object.assign(state, {scope: code, party: chosen, data});
+      if (partySelect) {
+        partySelect.replaceChildren(...options.map((name) => new Option(name, name, false, name === chosen)));
+      }
+      paintParty();
+    }).catch((error) => {
+      if (ticket !== request) {
+        return;
+      }
+      console.error('Could not load the weights example:', error);
+      showError('No se pudieron cargar los sondeos de este ámbito.');
+      if (scopeSelect && state.scope) {
+        scopeSelect.value = state.scope;
+      }
+    });
+  }
+
+  if (scopeSelect) {
+    scopeSelect.addEventListener('change', () => showScope(scopeSelect.value, null));
+  }
+  if (partySelect) {
+    partySelect.addEventListener('change', () => {
+      state.party = partySelect.value;
+      paintParty();
+    });
+  }
+  if (field) {
+    field.addEventListener('change', (event) => {
+      const value = event.target && event.target.value;
+      if ((value === 'pct' || value === 'pct_adj') && state.data) {
+        state.field = value;
+        paintParty();
+      }
+    });
+  }
+  showScope(initial.scope, initial.party);
 }
 
 /**
@@ -153,9 +247,8 @@ function paint() {
 
   const data = readInitial();
   const weightsEl = document.getElementById('weights-chart');
-  if (weightsEl && data.example) {
-    tryDraw(() => renderWeights(weightsEl, data.example), 'the weights example');
-    wireWeightsField(weightsEl, data.example);
+  if (weightsEl && data.example && (data.example.scopes || []).length) {
+    wireWeightsExample(weightsEl, data.example);
   }
 
   const houseEl = document.getElementById('house-chart');

@@ -129,7 +129,8 @@ def test_promedio_page_shows_the_example_block(api):
     # sin JS no hay gráfico ni tabla: el navegador los carga y los revela
     assert 'class="chart chart-tall" id="weights-chart" hidden' in page
     assert '<details class="weights-list" id="weights-list" hidden>' in page   # plegado
-    assert re.search(r'<summary[^>]*>\s*Ver los <span data-w="n_rows">3</span> sondeos', page)
+    # one span for the whole label: the summary is a flex box and would eat the spaces around the figure
+    assert re.search(r'<summary[^>]*><span>Ver los <span data-w="n_rows">3</span> sondeos</span></summary>', page)
     table = page[page.index('id="weights-table"'):]
     table = table[:table.index('</table>')]
     assert '<tbody></tbody>' in table and '<td' not in table
