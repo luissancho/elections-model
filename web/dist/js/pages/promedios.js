@@ -16,7 +16,7 @@ import {markLegend} from './legend-dom.js';
 import {wireEvolution} from './evolution-wire.js';
 import {wirePollsTable} from './polls-wire.js';
 import {wireSeatsPage} from './seats-wire.js';
-import {WINDOWS, chosenNames, fillLegend, seriesViews, wireAverage} from './series-wire.js';
+import {WINDOWS, chosenNames, fillLegend, seriesViews, viewCaption, wireAverage} from './series-wire.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
 import {dropParam, sectionTarget, withSection} from '../url-state.js';
 
@@ -27,7 +27,8 @@ const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
  * Draw the hemicycle and wire the one Partidos/Bloques switch of the results (`#results-view`): it draws the
  * hemicycle of the view and tells `onView`, which shows its results table and redraws its distributions when they
  * are open (`wireSeatsPage`, wired apart by `paint` so that a failure here does not stop the seats). The download
- * button draws the hemicycle of the view shown beside its results table, as a signed image.
+ * button draws the hemicycle of the view shown beside its results table, as a signed image, with the parties of each
+ * block as its caption in the block view (on the page they head the table of blocks, server-rendered).
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
@@ -47,6 +48,7 @@ function paintResults(initial, catalog, onView) {
   const nSeats = meta.n_seats ?? summary.n_seats;
   const majority = meta.majority ?? summary.majority;
   const blocks = (summary.blocks || []).filter((row) => row.seats !== null && row.seats !== undefined);
+  const members = catalog.bmaps.blocks && !Array.isArray(catalog.bmaps.blocks) ? catalog.bmaps.blocks : null;
   // the seat differences against the last published election, written after the seats of each arc
   const deltas = initial.deltas || {parties: {}, blocks: {}, year: null};
   const views = {
@@ -65,6 +67,7 @@ function paintResults(initial, catalog, onView) {
       order: (list) => catalog.orderBlocks(list),
       label: 'Hemiciclo con los escaños previstos por bloque',
       table: '#seats-blocks table',
+      members,
     },
   };
   const el = document.getElementById('hemicycle');
@@ -85,7 +88,9 @@ function paintResults(initial, catalog, onView) {
   wireDownload(document.getElementById('hemicycle-download'), (box) => hemicycleOption(shown.seats, {
     colors: shown.colors, order: shown.order, nSeats, majority, deltas: shown.deltas, year: deltas.year,
     width: box.width, height: box.height,
-  }), showError, {...HEMICYCLE_IMAGE, side: () => tableImage(document.querySelector(shown.table))});
+  }), showError, {
+    ...HEMICYCLE_IMAGE, side: () => tableImage(document.querySelector(shown.table)), caption: () => viewCaption(shown),
+  });
   const fieldset = document.getElementById('results-view');
   if (fieldset) {
     fieldset.hidden = false;
@@ -178,6 +183,7 @@ function wireHouse(initial, views, start, render, imageOf) {
       const house = select ? select.value : '';
       return house ? {subtitle: `${house} ${subtitle}`, file: file.replace(/\.png$/, `-${fileSlug(house)}.png`)} : {};
     },
+    caption: () => viewCaption(views[state.view]),
   });
 
   if (controls) {
@@ -243,6 +249,7 @@ function wireSeries(initial, catalog) {
       anchor,
       legend: 'hidden',
       layers: chartState.layers,
+      breakdown: current.breakdown || null,
     };
   }
 

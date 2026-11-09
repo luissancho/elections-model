@@ -554,6 +554,16 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .lg .dot { margin: 0; background: var(--c, var(--color-faint)); }
 .lg.on { background: var(--c, var(--color-text)); color: var(--ink, #fff); }
 .lg.on .dot { background: var(--ink, #fff); opacity: .9; }
+/* The parties of each block, under the legend (or the switch) of a block view */
+.block-members { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 10px 0 6px; font-size: 12px; color: var(--color-muted); }
+.block-members[hidden] { display: none; }
+.block-members span { display: inline-flex; align-items: center; gap: 6px; }
+.block-members .dot { margin: 0; }
+.block-members strong { font-weight: 600; color: var(--color-text); }
+/* The same names in the caption of the table of results by block */
+.bm-caption span { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; }
+.bm-caption .dot { margin: 0; }
+.bm-caption strong { font-weight: 600; color: var(--color-text); }
 .hemi-lg { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; font-weight: 600; }
 .hemi-lg span { display: inline-flex; align-items: center; gap: 6px; }
 .hemi-lg .dot { margin: 0; }

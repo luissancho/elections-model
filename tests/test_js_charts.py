@@ -480,6 +480,47 @@ def test_series_views_carry_the_result_of_each_view():
     assert bloques['projection']['groups']['parties']['lo'] == {'Derecha': [37, 36]}
 
 
+def test_series_views_of_blocks_carry_their_members_and_the_breakdown():
+    """La vista Bloques lleva el mapa de bloques (la línea de la composición) y el desglose del tooltip: las medias de
+    los partidos y sus colores; la vista Partidos no lleva ninguno."""
+    initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'VOX', 'PSOE'], 'mean': {'PP': [30], 'VOX': [10], 'PSOE': [28]},
+                          'lo': {'PP': [29], 'VOX': [9], 'PSOE': [27]}, 'hi': {'PP': [31], 'VOX': [11], 'PSOE': [29]}},
+               'polls': {'parties': ['PP', 'VOX', 'PSOE'], 'polls': []}, 'projection': None,
+               'catalog': {'parties': [{'name': 'PP', 'color': '#0000ff', 'fullname': 'PP', 'block': None},
+                                       {'name': 'VOX', 'color': '#00ff00', 'fullname': 'VOX', 'block': None},
+                                       {'name': 'PSOE', 'color': '#ff0000', 'fullname': 'PSOE', 'block': None}],
+                           'bmaps': {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE'], 'Otros': []}}}}
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
+    assert views['bloques']['members'] == {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE'], 'Otros': []}
+    assert views['bloques']['breakdown'] == {'members': views['bloques']['members'], 'values': initial['series']['mean'],
+                                             'colors': {'PP': '#0000ff', 'VOX': '#00ff00', 'PSOE': '#ff0000'}}
+    assert views['partidos'].get('members') is None and views['partidos'].get('breakdown') is None
+
+
+BREAKDOWN_ARGS = ("{series: {dates: ['2026-10-01', '2026-10-02'], parties: ['Derecha', 'Otros'], "
+                  "mean: {Derecha: [40, 41], Otros: [12, 12]}, lo: {}, hi: {}}, polls: {parties: [], polls: []}, "
+                  "projection: null, parties: ['Derecha', 'Otros'], selected: null, colors: {}, asOf: '2026-10-02', "
+                  "when: '2026-10-02', window: 'all', legend: 'hidden', layers: 'promedio', breakdown: {members: "
+                  "{Derecha: ['PP', 'VOX'], Otros: ['PNV']}, values: {PP: [30, 31.04], VOX: [10, 9.96], PNV: [2, 2]}, "
+                  "colors: {PP: '#0000ff', VOX: '#00ff00', PNV: '#00aa00'}}}")
+
+
+def test_series_tooltip_of_a_block_breaks_it_down_into_its_parties():
+    """Al pasar por un día de la línea de un bloque, el tooltip da el bloque y debajo cada partido con su media de ese
+    día, de mayor a menor; en Otros, lo que no suman sus partidos va como «Resto»."""
+    tip = ("(() => { const o = s.seriesOption(%s); const i = o.series.findIndex((x) => x.name === '%s'); "
+           "return o.tooltip.formatter({seriesIndex: i, seriesName: '%s', dataIndex: 1}); })()")
+    lines = run_js(tip % (BREAKDOWN_ARGS, 'Derecha', 'Derecha')).split('<br>')
+    assert lines[0].endswith('Derecha: 41,0% · 2 oct 2026')
+    assert lines[1].endswith('PP 31,0') and '#0000ff' in lines[1]
+    assert lines[2].endswith('VOX 10,0') and len(lines) == 3
+    rest = run_js(tip % (BREAKDOWN_ARGS, 'Otros', 'Otros')).split('<br>')
+    assert rest[1].endswith('PNV 2,0') and rest[2].endswith('Resto 10,0') and len(rest) == 3
+    # without a breakdown the box is the line of the day alone
+    plain = run_js(tip % (BREAKDOWN_ARGS.replace("breakdown: {", "nobreakdown: {"), 'Derecha', 'Derecha'))
+    assert '<br>' not in plain
+
+
 def test_ridge_rows_are_taller_on_desktop():
     assert run_js('r.ridgeRowHeight(1440)') == 110 and run_js('r.ridgeRowHeight(720)') == 110
     assert run_js('r.ridgeRowHeight(719)') == 64 and run_js('r.ridgeRowHeight(390)') == 64

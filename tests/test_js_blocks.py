@@ -167,3 +167,23 @@ def test_block_runs_without_rest_block_and_with_an_empty_block():
     assert rows[0] == [{'name': 'Derecha', 'pct': pytest.approx(50.6)}]  # Sep has no party in the run: no row, no rest
     with_rest = run_js('b.blockRuns(runs, %s, "pct").map((run) => run.nowcast.parties)' % json.dumps({'Derecha': ['PP'], 'Sep': ['ERC'], 'Otros': []}))
     assert with_rest[0] == [{'name': 'Derecha', 'pct': 32.7}]  # a block without row: no rest either
+
+
+WEB_BLOCKS = {'Izquierda': ['PSOE', 'FA', 'UP'], 'Derecha': ['PP', 'VOX', 'SALF'], 'Otros': ['PNV', 'ERC']}
+
+
+def test_block_members_name_the_parties_of_each_block_but_the_rest():
+    """Cada bloque con sus partidos en el orden del mapa, unidos con comas y una «y»; Otros no sale, se sobreentiende
+    (Luis, 2026-11-09)."""
+    assert run_js('b.blockMembers(%s)' % json.dumps(WEB_BLOCKS)) == [
+        {'block': 'Izquierda', 'text': 'PSOE, FA y UP'}, {'block': 'Derecha', 'text': 'PP, VOX y SALF'}]
+    assert run_js('b.blockMembersText(%s)' % json.dumps(WEB_BLOCKS)) == 'Izquierda: PSOE, FA y UP · Derecha: PP, VOX y SALF'
+
+
+def test_block_members_with_one_party_an_empty_block_and_no_rest():
+    """Un partido solo va sin «y»; un bloque sin partidos no sale, y un mapa sin Otros (los runs antiguos de cuatro
+    bloques) va como viene."""
+    out = run_js('b.blockMembers({Izquierda: ["PSOE"], Nadie: [], Otros: ["PNV"]})')
+    assert out == [{'block': 'Izquierda', 'text': 'PSOE'}]
+    assert run_js('b.blockMembersText(blocks)') == 'Derecha: PP y VOX · Izquierda: PSOE'
+    assert run_js('b.blockMembers({})') == [] and run_js('b.blockMembersText(null)') == ''

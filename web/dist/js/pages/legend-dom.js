@@ -1,4 +1,6 @@
-// HTML legend of the series charts: a pill per party or block that toggles the ECharts legend selection.
+// HTML legend of the series charts: a pill per party or block that toggles the ECharts legend selection, and the line
+// under it that names the parties of each block in a block view.
+import {blockMembers} from '../blocks.js';
 
 /**
  * Fill `container` with one pill per item and show it.
@@ -41,4 +43,40 @@ export function markLegend(container, selected) {
     button.classList.toggle('on', on);
     button.setAttribute('aria-pressed', String(on));
   }
+}
+
+/**
+ * Show, right after `anchor`, the parties of each block (`blockMembers`): one item per block with its dot, its name
+ * in bold and its parties; with no blocks the line is hidden. The line is a `p.block-members` sibling of `anchor`,
+ * made the first time.
+ *
+ * @param {HTMLElement|null} anchor the element the line follows (the pill legend, or the switch of the hemicycle)
+ * @param {Object<string, string[]>|null} blocks block → party names (`meta.bmaps.blocks`), null in a party view
+ * @param {Object<string, string>} [colors] colour of each block
+ */
+export function renderMembers(anchor, blocks, colors = {}) {
+  if (!anchor) {
+    return;
+  }
+  let line = anchor.nextElementSibling;
+  if (!blocks && !(line && line.classList.contains('block-members'))) {
+    return;
+  }
+  if (!line || !line.classList.contains('block-members')) {
+    line = document.createElement('p');
+    line.className = 'block-members';
+    anchor.after(line);
+  }
+  const items = blocks ? blockMembers(blocks) : [];
+  line.replaceChildren(...items.map(({block, text}) => {
+    const item = document.createElement('span');
+    const dot = document.createElement('i');
+    dot.className = 'dot';
+    dot.style.backgroundColor = colors[block] || '';
+    const name = document.createElement('strong');
+    name.textContent = `${block}:`;
+    item.append(dot, name, ` ${text}`);
+    return item;
+  }));
+  line.hidden = !items.length;
 }

@@ -128,6 +128,8 @@ def test_evolution_views_take_the_parties_given_in_their_order_with_the_main_one
     assert views['bloques']['parties'] == ['Izquierda', 'Otros', 'Derecha'] and views['bloques']['defaults'] is None
     assert views['bloques']['colors'] == {'Izquierda': '#e3001b', 'Otros': '#9e9e9e', 'Derecha': '#1e5aa8'}
     assert views['bloques']['runs'][0]['nowcast']['parties'][0] == {'name': 'Derecha', 'pct': pytest.approx(50.64)}
+    # the block view carries the map of the blocks, for the line naming the parties of each block
+    assert views['bloques']['members'] == META['bmaps']['blocks'] and views['partidos'].get('members') is None
 
 
 def test_evolution_views_without_blocks_or_main_parties():

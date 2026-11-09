@@ -3,7 +3,7 @@
 // module wires the download button of a card (`wireDownload`) with a function that returns the ECharts option to
 // draw and, optionally, a note chip under the subtitle (the text of the majority calculator) and a panel at the
 // right of the chart or under it: a table of the page read from the DOM (`tableImage`), drawn on the canvas as the
-// site's tables look.
+// site's tables look, and a caption under the charts (the parties of each block of a block view).
 import {THEME} from './charts/base.js';
 import {fileSlug} from './format.js';
 
@@ -15,8 +15,13 @@ export {fileSlug};
  */
 export const IMAGE = {
   width: 800, chartHeight: 440, scale: 2,
-  pad: 28, titleLine: 28, subtitleLine: 20, gap: 12, signGap: 8, signLine: 16, bottom: 20, sideGap: 32,
+  pad: 28, titleLine: 28, subtitleLine: 20, gap: 12, signGap: 8, signLine: 16, bottom: 20, sideGap: 32, captionLine: 16,
 };
+
+/** Font of the caption lines of an image (the parties of each block of a block view), small and muted. */
+const CAPTION_FONT = `500 12px ${THEME.fontFamily}`;
+/** Separator of the parts of a caption, where its lines break first. */
+const CAPTION_SEPARATOR = ' · ';
 
 /**
  * A table of an image (`tableDrawing`) as the site's tables look: the heights of the header and of a row, the
@@ -42,10 +47,40 @@ export const CHIP = {
 };
 
 /**
+ * Break `text` into lines no wider than `maxWidth`: the parts between « · » go together on a line while they fit,
+ * and a part wider than a line breaks between words.
+ *
+ * @param {string} text the text
+ * @param {number} maxWidth the width of a line
+ * @param {function} measure the width of a text: `(text) => number`
+ * @returns {string[]} the lines, none for an empty text
+ */
+export function wrapLines(text, maxWidth, measure) {
+  const lines = [];
+  /** Add `piece` to the last line with `glue`, or start a line with it when it does not fit. */
+  const push = (piece, glue) => {
+    const last = lines.length ? lines[lines.length - 1] : null;
+    if (last !== null && measure(last + glue + piece) <= maxWidth) {
+      lines[lines.length - 1] = last + glue + piece;
+    } else {
+      lines.push(piece);
+    }
+  };
+  for (const part of (text || '').split(CAPTION_SEPARATOR).filter(Boolean)) {
+    if (measure(part) <= maxWidth) {
+      push(part, CAPTION_SEPARATOR);
+      continue;
+    }
+    part.split(' ').forEach((word, i) => push(word, i ? ' ' : CAPTION_SEPARATOR));
+  }
+  return lines;
+}
+
+/**
  * Layout of the image: the texts given (title, subtitle, signature) with their position, font and colour, the
  * boxes of the charts and the size of the whole. The title and the subtitle go at the top left, the charts under
- * them, one under another between the same side margins, and the signature, small and muted, under everything at
- * the right. The `y` of a text is its top edge. With a `note`, a chip with its text goes between the subtitle and
+ * them, one under another between the same side margins, the lines of the `caption`, small and muted, under them at
+ * the left, and the signature, small and muted, under everything at the right. The `y` of a text is its top edge. With a `note`, a chip with its text goes between the subtitle and
  * the charts. With a `side` panel, the charts narrow to leave it room at the right, and the shorter of the two
  * (the column of charts, the panel) is centred vertically against the taller. With a `bottom` panel, it goes
  * under the charts, centred, and the image widens if the panel needs it.
@@ -54,7 +89,8 @@ export const CHIP = {
  *   (of the single chart, when `charts` is not given) and `scale` (`IMAGE` by default), `charts` (the heights of
  *   the charts stacked, `[{height}]`), `note` (`{text, width, ok}`, the text of the chip, its measured width and
  *   whether it is green; null for none), `side` (a panel at the right of the charts, `{width, height, items}` as
- *   `tableDrawing` returns it; null for none) and `bottom` (a panel under the charts, the same shape)
+ *   `tableDrawing` returns it; null for none), `bottom` (a panel under the charts, the same shape) and `caption` (the
+ *   lines of text under the charts and the bottom panel, `wrapLines`; null or empty for none)
  * @returns {object} `{width, height, scale, texts: [{role, text, x, y, align, font, color}], chart: {x, y, width,
  *   height}, charts: [{x, y, width, height}], note: {x, y, width, height, r, text, font, color, background}|null,
  *   side: {x, y, width, height, items}|null, bottom: {x, y, width, height, items}|null}` (`chart` is the first
@@ -62,7 +98,7 @@ export const CHIP = {
  */
 export function imageLayout({
   title, subtitle, sign, width = IMAGE.width, chartHeight = IMAGE.chartHeight, scale = IMAGE.scale, side = null,
-  charts = null, note = null, bottom = null,
+  charts = null, note = null, bottom = null, caption = null,
 } = {}) {
   const heights = (charts || [{height: chartHeight}]).map((chart) => chart.height);
   if (bottom) {
@@ -108,6 +144,13 @@ export function imageLayout({
     y += IMAGE.gap;
     foot = {x: Math.round((width - bottom.width) / 2), y, width: bottom.width, height: bottom.height, items: bottom.items};
     y += bottom.height;
+  }
+  if (caption && caption.length) {
+    y += IMAGE.gap;
+    for (const line of caption) {
+      texts.push({role: 'caption', text: line, x: IMAGE.pad, y, align: 'left', font: CAPTION_FONT, color: THEME.mutedColor});
+      y += IMAGE.captionLine;
+    }
   }
   if (sign) {
     y += IMAGE.signGap;
@@ -329,7 +372,7 @@ export function chartDataUrl(option, {width, height, scale}) {
  */
 export async function composeImage(layout, chartUrls) {
   const urls = Array.isArray(chartUrls) ? chartUrls : [chartUrls];
-  const fonts = [...layout.texts.map((text) => text.font), ...(layout.note ? [layout.note.font] : [])];
+  const fonts = [...new Set([...layout.texts.map((text) => text.font), ...(layout.note ? [layout.note.font] : [])])];
   if (document.fonts) {
     await Promise.all(fonts.map((font) => document.fonts.load(font).catch(() => null)));
   }
@@ -411,10 +454,31 @@ async function measuredNote(note) {
 }
 
 /**
+ * The lines of the caption of an image (`imageLayout`): `text` broken to the width between the margins of the
+ * image, measured in the caption font once it is loaded.
+ *
+ * @param {string|null} text the caption, null or empty for none
+ * @param {number} width the width of the image
+ * @returns {Promise<string[]|null>} the lines, or null without a caption
+ */
+async function measuredCaption(text, width) {
+  if (!text) {
+    return null;
+  }
+  if (document.fonts) {
+    await document.fonts.load(CAPTION_FONT).catch(() => null);
+  }
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = CAPTION_FONT;
+  return wrapLines(text, width - 2 * IMAGE.pad, (line) => ctx.measureText(line).width);
+}
+
+/**
  * Reveal `button` (hidden without JS) and, when clicked, download the chart as a PNG: the option of
  * `optionOf(box)` (`box` is the chart box of the layout, `{width, height}` among others) drawn under the texts of
  * the button's data attributes (`title`, `subtitle`, `sign`) and saved as `file`, with the note chip of `note()`
- * under the subtitle, the panel of `side()` at its right and the panel of `bottom()` under it when given. With
+ * under the subtitle, the panel of `side()` at its right, the panel of `bottom()` under it and the caption of
+ * `caption()` under everything when given. With
  * `charts`, several charts go one under another instead of the single one of `optionOf`.
  *
  * @param {HTMLButtonElement|null} button the download button (nothing happens without it)
@@ -424,10 +488,11 @@ async function measuredNote(note) {
  *   stacked, `[{height, option}]` with `option` as `optionOf`, or a function returning them at the moment of the
  *   click), `note` (`() => {text, ok}|null`, the chip of the moment), `side` and `bottom` (async, return a panel,
  *   `tableImage`) and `texts` (`(dataset) => {title, subtitle, sign, file}`, the texts of the moment when they
- *   follow a control of the card, over those of the data attributes)
+ *   follow a control of the card, over those of the data attributes) and `caption` (`() => string|null`, the
+ *   caption of the moment, broken into lines to the width of the image)
  */
 export function wireDownload(button, optionOf, onError = null, {
-  width, chartHeight, side = null, texts = null, charts = null, note = null, bottom = null,
+  width, chartHeight, side = null, texts = null, charts = null, note = null, bottom = null, caption = null,
 } = {}) {
   if (!button) {
     return;
@@ -442,6 +507,7 @@ export function wireDownload(button, optionOf, onError = null, {
       const layout = imageLayout({
         title, subtitle, sign, width, chartHeight, side: side ? await side() : null, bottom: bottom ? await bottom() : null,
         charts: stack ? stack.map(({height}) => ({height})) : null, note: await measuredNote(note ? note() : null),
+        caption: await measuredCaption(caption ? caption() : null, width || IMAGE.width),
       });
       const urls = layout.charts.map((box, i) => chartDataUrl(options[i](box), {width: box.width, height: box.height, scale: layout.scale}));
       saveBlob(await composeImage(layout, urls), file || 'grafico.png');

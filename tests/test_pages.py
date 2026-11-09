@@ -710,7 +710,8 @@ def test_event_page_seats_table_histograms_blocks_and_pills(api):
     assert 'id="blocks-chart"' not in page and 'id="blocks"' not in page and 'id="seats"' in page
     assert '<fieldset class="pills" id="coalition-parties">' in page
     assert 'class="pill"' in page and 'name="coalition"' in page
-    assert re.search(r'Izquierda y Derecha, con todos sus\s+partidos; Otros es el resto de la cámara\.', page)
+    # the caption names the parties of each block of the map (Luis, 2026-11-09), not the old generic sentence
+    assert '<caption class="bm-caption">' in page and '<strong>Derecha:</strong> PP</span>' in page
     assert 'Bloques ideológicos' not in page
 
 
@@ -4159,6 +4160,28 @@ def test_event_page_blocks_table_lists_the_three_blocks_and_dashes_the_majority_
     assert 'background-color: {}'.format(pages.OTHERS_COLOR) in rows[2]
     assert re.findall(r'<td>([^<]*)</td>\s*$', rows[2].strip(), re.S) == ['–']  # P(mayoría) of Otros, on the event page
     assert re.findall(r'<td>([^<]*)</td>\s*$', rows[1].strip(), re.S) == ['41,0%']
+
+
+def test_event_page_blocks_table_caption_names_the_parties_of_each_block(api, fresh_app):
+    """La cabecera de la tabla de bloques dice qué partidos entran en cada uno, con el punto de su color (Luis,
+    2026-11-09: en la tabla de Resultados, no bajo el selector del hemiciclo); Otros no sale, se sobreentiende."""
+    write_summary(fresh_app.fs, three_block_summary())
+    meta = fixture_data('meta')
+    meta['bmaps'] = dict(meta['bmaps'], blocks={'Izquierda': ['PSOE', 'SUMAR'], 'Derecha': ['PP', 'VOX', 'SALF'], 'Otros': ['PNV']})
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
+    webapi.site().manifest_cache_clear()
+    table = re.search(r'<table id="blocks-table">(.*?)</table>', html(call(api, '/es')[2]), re.S).group(1)
+    caption = re.search(r'<caption[^>]*>(.*?)</caption>', table, re.S).group(1)
+    items = re.findall(r'<strong>([^<]*)</strong>([^<]*)</span>', caption)
+    assert items == [('Izquierda:', ' PSOE y SUMAR'), ('Derecha:', ' PP, VOX y SALF')]
+    assert caption.count('class="dot"') == 2 and 'Otros' not in caption
+
+
+def test_block_members_lists_the_parties_in_spanish():
+    from mtpy.lib.pages.promedios import block_members
+    assert block_members({'Izquierda': ['PSOE', 'FA', 'UP'], 'Nadie': [], 'Otros': []}) == {'Izquierda': 'PSOE, FA y UP'}
+    assert block_members({'Derecha': ['PP'], 'Otros': ['PNV', 'ERC']}) == {'Derecha': 'PP'}
+    assert block_members(None) == {} and block_members([]) == {}
 
 
 def test_promedios_majority_kpi_keeps_the_vs_block_when_otros_has_the_most_seats(api, fresh_app):

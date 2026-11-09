@@ -209,6 +209,41 @@ export function blockResult(result, blocks) {
 }
 
 /**
+ * A list in Spanish: the names joined with commas and a «y» before the last one («PSOE, FA y UP»).
+ *
+ * @param {string[]} names the items, in order
+ * @returns {string} the list, empty without items
+ */
+function spanishList(names) {
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}` : names.join('');
+}
+
+/**
+ * The parties of each block, for the line under the legend of a block view and the caption of its image: one
+ * entry per block in the order of the map, its parties as a Spanish list. The `REST_BLOCK` is left out (it goes
+ * without saying, Luis 2026-11-09), and so is any block without parties.
+ *
+ * @param {Object<string, string[]>|null} blocks block → party names (`meta.bmaps.blocks`)
+ * @returns {Array<{block: string, text: string}>} the blocks with the list of their parties
+ */
+export function blockMembers(blocks) {
+  return Object.entries(blocks || {})
+    .filter(([block, members]) => block !== REST_BLOCK && members.length)
+    .map(([block, members]) => ({block, text: spanishList(members)}));
+}
+
+/**
+ * The parties of each block in one line: `{block}: {parties}` joined with « · » («Izquierda: PSOE, FA y UP ·
+ * Derecha: PP, VOX y SALF»), as the caption of the image of a block view.
+ *
+ * @param {Object<string, string[]>|null} blocks block → party names (`meta.bmaps.blocks`)
+ * @returns {string} the line, empty without blocks
+ */
+export function blockMembersText(blocks) {
+  return blockMembers(blocks).map(({block, text}) => `${block}: ${text}`).join(' · ');
+}
+
+/**
  * State of the average controls read from the URL hash (`#ventana=…&vista=…&sel=A,B&mostrar=sondeos`).
  *
  * @param {string} hash `location.hash`, with or without the leading `#`
