@@ -69,3 +69,9 @@ anterior): cuánto ha movido cada partido. Y lo quiere **en la imagen que se com
 
 La posición exacta del segundo texto (separación, tamaño) y si la flecha va en negrita; que no se salga del gráfico
 con el partido más votado (el eje ya deja un 15 % de margen: ampliarlo si hace falta sólo cuando hay flechas).
+
+## Cambio de Luis, 2026-11-09 (tras la fusión)
+
+Las flechas salen de la tarjeta y de su imagen: la comparación con la entrega anterior queda sólo en la tabla «Voto y
+escaños» (columnas «vs Anterior» del voto y de los escaños) y en su pie, que da el campo de la anterior y avisa de los
+días en común. Ver el cambio en `2026-11-09-web-detalle-sondeo-design.md`.

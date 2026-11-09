@@ -1,17 +1,16 @@
-// Page of a poll (`/{scope}/sondeos/{date}/{pollster}[/{sponsor}]`): the card to share, with the bars of the vote of
-// the poll and the mark of the average of the day on each one and, when the house published seats, the hemicycle of its
-// seats (the midpoint of each range, its arc labelled with the range); the chart of the house in the cycle against the
+// Page of a poll (`/{scope}/sondeos/{date}/{pollster}[/{sponsor}]`): the card to share, only what the poll says (Luis,
+// 2026-11-09): the bars of its vote and, when the house published seats, the hemicycle of its seats (the midpoint of each range, its arc labelled with the range); the chart of the house in the cycle against the
 // average, the house fixed, with this poll ringed, its own window and Partidos/Bloques view and its pill legend (as the
 // house chart of the event page, `promedios.js`, but its state never touches the URL); and the downloads of the chart
 // (`share.js`) and of the card (`card-image.js`). Everything is drawn from the data embedded by the server; the pure
 // logic of the card lives in `poll-card.js`.
 import {Catalog, OTHERS_COLOR} from '../catalog.js';
 import {renderBars} from '../charts/bars.js';
-import {THEME, mountChart} from '../charts/base.js';
+import {mountChart} from '../charts/base.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {chartZoom, seriesImageOption, seriesOption, setWindow} from '../charts/series.js';
 import {wireCardImages} from '../card-image.js';
-import {fmtBadge, fmtPct} from '../format.js';
+import {fmtPct} from '../format.js';
 import {highlightSeries, pollSeats, voteRows} from '../poll-card.js';
 import {wireDownload} from '../share.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
@@ -21,33 +20,12 @@ import {chosenNames, fillLegend, seriesViews, viewCaption} from './series-wire.j
 /** Name of the row of the rest of the vote in `voteRows`, painted grey. */
 const OTHERS_ROW = 'Otros';
 
-/** Colours of the change arrow after a bar by its direction, those of the `.dlt` badges of `site.css`. */
-const CHANGE_COLORS = {up: '#2ca02c', down: '#d62728', flat: THEME.mutedColor};
-
-/**
- * The coloured arrow written after the value of a bar: the change against the previous delivery of the house and
- * sponsor (`fmtDelta` at one decimal: «▲ 1,2» green, «▼ 0,8» red, «–» grey when it rounds to zero), none for
- * «Otros» or a party without a figure in both deliveries.
- *
- * @param {{name: string, change: (number|null)}} row a row of `voteRows`
- * @returns {({text: string, color: string}|null)} the `labelExtra` of `renderBars`
- */
-function changeLabel(row) {
-  if (row.name === OTHERS_ROW || row.change === null || row.change === undefined) {
-    return null;
-  }
-  const {dir, text} = fmtBadge(row.change, 1);
-  return {text, color: CHANGE_COLORS[dir]};
-}
-
 /**
  * Draw the bars of the vote of the poll (`#poll-bars`): one per party with a value, from the largest, the share
- * written after the bar, the average of the day as a capped zero-length interval on it (none without an average),
- * named «Promedio del día» in the tooltip, a grey «Otros» row with the rest up to 100 (`voteRows`) and, when the
- * house and sponsor have an earlier delivery in the cycle, the change against it as a coloured arrow after each
- * share (`changeLabel`).
+ * written after the bar and a grey «Otros» row with the rest up to 100 (`voteRows`). Nothing of the average nor of the
+ * previous delivery: the card shows only the poll.
  *
- * @param {object} initial the page's initial data (`poll`, `polls.parties`, `average`, `previous`)
+ * @param {object} initial the page's initial data (`poll`, `polls.parties`)
  * @param {Catalog} catalog party catalogue of the page
  */
 function paintBars(initial, catalog) {
@@ -55,20 +33,14 @@ function paintBars(initial, catalog) {
   if (!el) {
     return;
   }
-  const previous = initial.previous ? initial.previous.values : null;
-  const rows = voteRows(initial.poll, initial.polls.parties || [], initial.average || {}, previous);
+  const rows = voteRows(initial.poll, initial.polls.parties || []);
   const names = rows.map((row) => row.name);
   renderBars(el, rows, {
     value: 'value',
-    lo: 'avg',
-    hi: 'avg',
     colors: mapNames(names, (name) => (name === OTHERS_ROW ? OTHERS_COLOR : catalog.color(name))),
     fullnames: mapNames(names, (name) => catalog.fullname(name)),
     formatter: (x) => fmtPct(x),
     axisFormatter: (x) => fmtPct(x, 0),
-    // the interval is the zero-length mark of the average: the tooltip names it as such
-    intervalText: (row) => (row.lo === null ? null : `Promedio del día: ${fmtPct(row.lo)}`),
-    labelExtra: previous ? changeLabel : null,
   });
 }
 

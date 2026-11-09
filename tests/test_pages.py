@@ -7461,38 +7461,22 @@ def test_find_poll_matches_the_date_the_house_and_the_sponsor():
         assert (err.value.status, err.value.message) == (404, 'poll not found')
 
 
-def test_series_at_takes_the_average_of_the_last_day_up_to_the_date():
-    series = {'dates': ['2026-10-01', '2026-10-02', '2026-10-05'], 'parties': ['PP', 'PSOE'],
-              'mean': {'PP': [30.0, 30.5, 31.0], 'PSOE': [28.0, None, 27.0]}, 'lo': {}, 'hi': {}}
-    assert pages.series_at(series, '2026-10-02') == {'PP': 30.5, 'PSOE': None}
-    assert pages.series_at(series, '2026-10-04') == {'PP': 30.5, 'PSOE': None}
-    assert pages.series_at(series, '2026-10-09') == {'PP': 31.0, 'PSOE': 27.0}
-    assert pages.series_at(series, '2026-09-30') == {}
-    assert pages.series_at({'dates': [], 'parties': [], 'mean': {}}, '2026-10-01') == {}
-
-
 POLL = {'date': '2026-11-09', 'pollster_id': 12, 'pollster': 'NC Report', 'sponsor': 'La Razón', 'start_date': '2026-11-05',
         'end_date': '2026-11-07', 'sample_size': 1000, 'mtype': 'cati', 'rating': 64.23, 'weight': 0.8412, 'weight_over': 1.0,
         'weight_sample': 0.8412, 'weight_rating': 1.0, 'url': 'https://www.larazon.es/encuesta', 'PP': 32.6, 'PSOE': 25.6,
         'VOX': 19.3, 'ERC': None, 'seats': {'PP': [136, 138], 'PSOE': [99, 101], 'VOX': [67, 69]}}
-AVERAGE = {'PP': 31.9, 'PSOE': 26.4, 'VOX': 18.0, 'ERC': 2.0}
 COLORS = {'PP': '#1d84ce', 'PSOE': '#ef1c27', 'VOX': '#63be21', 'ERC': '#ffb232'}
 
 
-def test_vote_rows_order_the_parties_of_the_poll_and_compare_them_with_the_average():
-    rows = pages.vote_rows(POLL, ['PSOE', 'PP', 'VOX', 'ERC'], AVERAGE, COLORS, effects={'PP': 0.6})
+def test_vote_rows_order_the_parties_of_the_poll_with_their_seats_and_house_effect():
+    rows = pages.vote_rows(POLL, ['PSOE', 'PP', 'VOX', 'ERC'], COLORS, effects={'PP': 0.6})
     assert [row['name'] for row in rows] == ['PP', 'PSOE', 'VOX']  # ERC has no value in the poll
-    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'avg': 31.9, 'diff': 0.7, 'effect': 0.6, 'seats': '136–138',
-                       'prev': None, 'change': None, 'seats_change': None}
-    assert rows[1]['diff'] == -0.8 and rows[1]['effect'] is None
-    bare = pages.vote_rows(POLL | {'seats': {'PP': [136, 136]}}, ['PP', 'PSOE'], {}, COLORS)
-    assert bare[0]['avg'] is None and bare[0]['diff'] is None and bare[0]['seats'] == '136' and bare[1]['seats'] is None
+    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'effect': 0.6, 'seats': '136–138', 'change': None,
+                       'seats_change': None}
+    assert rows[1]['effect'] is None
+    bare = pages.vote_rows(POLL | {'seats': {'PP': [136, 136]}}, ['PP', 'PSOE'], COLORS)
+    assert bare[0]['seats'] == '136' and bare[1]['seats'] is None
     assert pages.seats_text([]) is None and pages.seats_text(None) is None
-
-
-def test_distance_to_average_is_the_mean_absolute_gap_over_the_shared_parties():
-    assert pages.distance_to_average(POLL, ['PP', 'PSOE', 'VOX', 'ERC'], AVERAGE) == 0.9  # (0.7 + 0.8 + 1.3) / 3
-    assert pages.distance_to_average(POLL, ['PP'], {}) is None
 
 
 def test_weight_card_shows_the_factors_and_the_kernel_of_the_day():
@@ -7503,11 +7487,11 @@ def test_weight_card_shows_the_factors_and_the_kernel_of_the_day():
     ], 'line': {'PP': {'dates': ['2026-09-20', '2026-11-09'], 'mean': [30.0, 32.0], 'lo': [29.0, 31.0], 'hi': [31.0, 33.0]}},
         'kernel': {}, 'stats': {}}
     card = pages.weight_card(POLL, weights)
-    assert [(f['label'], f['value']) for f in card['factors']] == [('Solape', '1,00'), ('Muestra', '0,84'), ('Rating', '1,00'), ('Peso', '0,84')]
+    assert [(f['label'], f['value']) for f in card['factors']] == [('F(solape)', '1,00'), ('F(muestra)', '0,84'), ('F(rating)', '1,00')]
     assert card['has_part'] and card['status'] == 'today' and not card['overlap']
     assert card['today'] == {'date': '2026-11-09', 'kernel': '0,98', 'weight': '0,82', 'party': 'PP'}
     old = pages.weight_card({k: v for k, v in POLL.items() if not k.startswith('weight_')} | {'date': '2026-08-01'}, weights)
-    assert [f['value'] for f in old['factors']] == ['–', '–', '–', '0,84'] and old['today'] is None and old['status'] == 'outside'
+    assert [f['value'] for f in old['factors']] == ['–', '–', '–'] and old['today'] is None and old['status'] == 'outside'
     inside = pages.weight_card(POLL | {'date': '2026-10-20'}, weights)
     assert inside['today'] is None and inside['status'] == 'absent'
     zero = pages.weight_card(POLL | {'date': '2026-11-09', 'weight': 0.0, 'weight_over': 0.0}, weights)
@@ -7517,11 +7501,12 @@ def test_weight_card_shows_the_factors_and_the_kernel_of_the_day():
 
 
 def test_poll_kpis_title_fieldwork_and_sheet():
-    kpis = pages.poll_kpis(POLL, 0.9)
-    assert [(k['label'], k['value'], k['unit']) for k in kpis] == [('Rating', '64,2', ''), ('Peso en el promedio', '0,84', ''),
-                                                                 ('Muestra', '1.000', 'entrevistas'), ('Distancia al promedio', '0,9', 'pts')]
+    # the rating and the weight of the poll, at the head of the weight card (Luis, 2026-11-09)
+    kpis = pages.poll_kpis(POLL)
+    assert [(k['label'], k['value'], k['unit']) for k in kpis] == [('Rating', '64,2', ''), ('Peso en el promedio', '0,84', '')]
     assert kpis[0]['color'] == pages.gradient(64.23, 0, 100, pages.RATING_COLORS)
-    assert pages.poll_kpis(POLL | {'rating': None}, None)[0]['color'] is None and pages.poll_kpis(POLL, None)[3]['value'] == '–'
+    assert pages.poll_kpis(POLL | {'rating': None, 'weight': None})[0]['color'] is None
+    assert [k['value'] for k in pages.poll_kpis(POLL | {'rating': None, 'weight': None})] == ['–', '–']
     assert pages.poll_title(POLL) == 'NC Report para La Razón' and pages.poll_title(POLL | {'sponsor': None}) == 'NC Report'
     assert pages.fieldwork_text(POLL) == '5 nov 2026 – 7 nov 2026'
     assert pages.fieldwork_text(POLL | {'end_date': None}) == '5 nov 2026' and pages.fieldwork_text({'date': '2026-11-09'}) is None
@@ -7535,16 +7520,11 @@ def test_poll_kpis_title_fieldwork_and_sheet():
     assert pages.sheet_rows({'date': '2026-11-09', 'pollster': 'X'}, '/casas/x', 'E', 'R')[3]['text'] == '9 nov 2026'  # the poll's date is its last fieldwork day
 
 
-def test_poll_kpis_and_lead_drop_the_unit_of_a_missing_value():
-    """Sin muestra o sin distancia, la cifra es un guion sin unidad (nunca «– entrevistas» ni «– pts»), y la entradilla
-    de la tarjeta no nombra la muestra (revisión final 2026-11-09)."""
-    for sample in (None, float('nan')):
-        kpis = pages.poll_kpis(POLL | {'sample_size': sample}, None)
-        assert [(k['value'], k['unit']) for k in kpis[2:]] == [('–', ''), ('–', '')]
+def test_lead_drops_a_missing_sample():
+    """Sin muestra, la entradilla de la tarjeta no la nombra (nunca «– entrevistas», revisión final 2026-11-09)."""
+    for sample in (None, float('nan'), 0):
         assert pages.sample_text(POLL | {'sample_size': sample}) is None
-    assert [k['unit'] for k in pages.poll_kpis(POLL, 0.9)[2:]] == ['entrevistas', 'pts']
     assert pages.sample_text(POLL | {'sample_size': 1200}) == '1.200 entrevistas'
-    assert pages.sample_text(POLL | {'sample_size': 0}) is None
 
 
 def test_sheet_links_the_source_only_with_a_web_address():
@@ -7609,10 +7589,9 @@ def test_fieldwork_overlaps_compares_the_last_day_of_the_previous_with_the_first
 def test_vote_rows_compare_with_the_previous_delivery():
     poll = {'PP': 32.6, 'PSOE': 25.6, 'UP': 1.2, 'seats': {'PP': [136, 138], 'PSOE': [99, 101]}}
     previous = {'PP': 31.4, 'PSOE': 25.6, 'seats': {'PP': [130, 134]}}
-    rows = pages.vote_rows(poll, ['PP', 'PSOE', 'UP'], {}, {}, previous=previous)
-    assert [(r['name'], r['prev'], r['change'], r['seats_change']) for r in rows] == [
-        ('PP', 31.4, 1.2, 5), ('PSOE', 25.6, 0.0, None), ('UP', None, None, None)]
-    assert all(r['prev'] is None and r['change'] is None for r in pages.vote_rows(poll, ['PP'], {}, {}))
+    rows = pages.vote_rows(poll, ['PP', 'PSOE', 'UP'], {}, previous=previous)
+    assert [(r['name'], r['change'], r['seats_change']) for r in rows] == [('PP', 1.2, 5), ('PSOE', 0.0, None), ('UP', None, None)]
+    assert all(r['change'] is None for r in pages.vote_rows(poll, ['PP'], {}))
 
 
 DETAIL_POLLS = [
@@ -7668,35 +7647,32 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert 'id="poll-bars"' in page and 'id="poll-hemi"' in page and 'Escaños según Sigma Dos' in page
     assert 'Trabajo de campo 1 oct 2026 – 4 oct 2026' in page and '2.000' in page and 'ublicad' not in page  # the date is the last fieldwork day
     assert pages.mtype_label('cati') in page
-    kpis = page[page.index('id="poll-card"'):page.index('id="vote"')]
-    assert '>Rating<' in kpis and '>71,2<' in kpis and '>Distancia al promedio<' in kpis and '>1,5<' in kpis  # 33.5 − 32.0
-    # the marks are explained inside the card (so in its image too), before the figures; «Cómo leerlo» calls them dark
-    # the previous delivery has no fieldwork dates: its date, as the last day of its fieldwork
-    note = ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. Flechas: frente al sondeo '
-            'anterior de Sigma Dos (campo hasta el 28 sept 2026). En gris, los escaños de los demás partidos.</p>')
-    assert note in kpis and kpis.index(note) < kpis.index('class="kpis"') and kpis.index('id="poll-hemi"') < kpis.index(note)
-    assert 'la marca oscura sobre ella' in kpis and 'marca gris' not in page and 'El arco gris, «Otros», completa la cámara' in kpis
-    assert '2.000 entrevistas · ' in kpis and '>2.000<small>entrevistas</small>' in kpis
+    # the card shows only the poll (Luis, 2026-11-09): no average, no comparison, no figures of our model
+    card = page[page.index('id="poll-card"'):page.index('id="vote"')]
+    assert '<p class="muted pc-note">En gris, los escaños de los demás partidos.</p>' in card
+    assert 'class="kpis"' not in card and 'promedio' not in card and 'Flechas' not in card and 'Distancia' not in card
+    assert '2.000 entrevistas · ' in card and 'El arco gris, «Otros», completa la cámara' in card
     assert ('<meta name="description" content="Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: '
-            'voto por partido frente al promedio, escaños de la encuestadora, rating y peso en el promedio.">') in page
+            'voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio.">') in page
+    # the table: % Voto, vs Anterior, Escaños, vs Anterior (midpoints of the ranges) and the house effect; nothing of the average
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
-    assert '<th scope="col">Escaños</th>' in vote and '150–152' in vote and '>33,5<' in vote and '>32,0<' in vote
-    assert 'Promedio del 5 oct 2026' in vote
-    # the comparison with the previous delivery of the same house and sponsor (28 sep, no sponsor)
-    assert '<th scope="col">Anterior</th>' in vote and '<th scope="col">Cambio</th>' in vote and '>32,1<' in vote
-    assert '▲ 1,4' in vote and '▲ 4' in vote and '150–152' in vote
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', vote)
+    assert heads == ['Partido', '% Voto', 'vs Anterior', 'Escaños', 'vs Anterior', 'Efecto de casa']
+    row = re.search(r'<tr>\s*<td title="[^"]*"><span class="pn">.*?</tr>', vote, re.S).group(0)
+    cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
+    assert cells[1:4] == ['33,5', '<span class="dlt up">▲ 1,4</span>', '150–152'] and '▲ 4' in cells[4] and cells[5] == '–'  # the fixture house has no effect for the PP
+    assert 'Promedio' not in vote and 'Diferencia' not in vote
     assert ('Anterior: <a href="/es/sondeos/2026-09-28/sigma-dos?mode=forecast">sondeo de Sigma Dos, campo hasta el '
             '28 sept 2026</a>.') in vote
-    # «Cómo leerlo» tells a dash (no change) from no arrow (no figure in the previous delivery) and explains the seats arrow
-    flat = ' '.join(page.split())
-    assert ('Un guion, si no cambia; sin flecha, si la entrega anterior no daba cifra para ese partido.'
-            in flat[flat.index('id="poll-card"'):flat.index('id="vote"')])
-    vote_flat = flat[flat.index('id="vote"'):flat.index('id="weight"')]
-    assert 'Un guion, si no cambia; la columna Cambio queda vacía, si la entrega anterior no daba cifra para ese partido.' in vote_flat
-    assert ('La flecha junto a los escaños es el cambio del punto medio de la horquilla frente a la entrega anterior.'
-            in vote_flat)
+    vote_flat = ' '.join(vote.split())
+    assert 'Las columnas «vs Anterior» comparan con la entrega anterior de la misma casa para el mismo medio' in vote_flat
+    assert 'En los escaños se compara el punto medio de cada horquilla.' in vote_flat
+    assert 'No es un error de este sondeo, sino su costumbre' in vote_flat
+    # the rating and the weight, at the head of the weight card, over the three factors
     weight = page[page.index('id="weight"'):page.index('id="house"')]
-    assert '>Solape<' in weight and '>1,27<' in weight and 'En el promedio del 8 oct 2026' in weight
+    assert '>Rating<' in weight and '>71,2<' in weight and '>Peso en el promedio<' in weight and '>1,27<' in weight
+    assert '>F(solape)<' in weight and '>F(muestra)<' in weight and '>F(rating)<' in weight
+    assert weight.index('>Rating<') < weight.index('>F(solape)<') and 'En el promedio del 8 oct 2026' in weight
     sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
     assert '<a href="/casas/sigma-dos">Sigma Dos</a>' in sheet and 'href="https://www.elmundo.es/sondeo"' in sheet
     assert '<h2><a href="/casas/sigma-dos">Sigma Dos</a></h2>' in page  # the house in the heading of the card links its profile
@@ -7705,29 +7681,25 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '/dist/js/pages/sondeo.js' in page  # the module that draws the charts
     assert_public_wording(page, 'sondeo')
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'previous', 'average',
-                         'seats', 'n_seats', 'majority'}
+    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'seats', 'n_seats',
+                         'majority'}
     assert [p['date'] for p in data['polls']['polls']] == ['2026-10-05', '2026-09-24', '2026-10-03', '2026-09-28']  # only the house's polls, in the order of the part
-    assert data['poll']['PP'] == 33.5 and data['average'] == {'PP': 32.0} and data['seats'] == {'PP': [150, 152]}
+    assert data['poll']['PP'] == 33.5 and data['seats'] == {'PP': [150, 152]}
     assert data['n_seats'] == 350 and data['majority'] == 176
-    assert data['previous'] == {'date': '2026-09-28', 'title': 'Sigma Dos', 'values': {'PP': 32.1}}
 
 
 def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     write_detail_polls(fresh_app.fs)
     page = html(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])
     assert 'Sigma Dos para El Mundo' in page and 'id="poll-hemi"' not in page and 'Sigma Dos no publicó escaños con este sondeo' in page
-    # without seats, the note of the card only explains the mark of the bars and the description does not offer seats
-    assert ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. Primer sondeo de Sigma Dos '
-            'para El Mundo en este ciclo.</p>') in page
-    assert '<th scope="col">Anterior</th>' not in page and '<th scope="col">Cambio</th>' not in page
-    assert 'Un guion, si no cambia' not in page and 'La flecha junto a los escaños' not in page
-    assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['previous'] is None
-    assert 'El arco gris' not in page
+    # without seats nor a previous delivery: the note says so, and the table has only the vote (and the house effect)
+    assert '<p class="muted pc-note">Sigma Dos no publicó escaños con este sondeo.</p>' in page
+    assert 'vs Anterior' not in page and 'Las columnas «vs Anterior»' not in page and 'El arco gris' not in page
+    assert 'Primer sondeo de Sigma Dos para El Mundo en este ciclo: no hay entrega anterior con la que comparar.' in page
     description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
-    assert description.endswith(': voto por partido frente al promedio, rating y peso en el promedio.') and 'escaños' not in description
+    assert description.endswith(': voto por partido, rating y peso en el promedio.') and 'escaños' not in description
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
-    assert '<th scope="col">Escaños</th>' not in vote and 'Promedio del 20 sept 2026' in vote
+    assert '<th scope="col">Escaños</th>' not in vote and 'Promedio' not in vote
     weight = page[page.index('id="weight"'):page.index('id="house"')]
     assert weight.count('>–<') >= 3 and 'ya no pesa en el promedio del 8 oct 2026' in weight  # before the line starts (26 sep)
     assert 'Wikipedia, lista de sondeos' in page and initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['seats'] is None
@@ -7740,19 +7712,19 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
 
 
 def test_sondeo_page_names_the_fieldwork_of_the_previous_delivery_and_its_overlap(api, fresh_app):
-    """La nota de la tarjeta (y de su imagen) y el pie de la tabla dan el campo de la entrega anterior y avisan cuando
-    comparte días de campo con este sondeo, como las oleadas de un tracking; sin cambio de escaños, sin flecha; sin
-    cifra en la anterior, la columna Cambio vacía (revisión final 2026-11-09)."""
+    """El pie de la tabla da el campo de la entrega anterior y avisa cuando comparte días de campo con este sondeo, como
+    las oleadas de un tracking; sin cambio de escaños, un guion; sin cifra en la anterior, la columna vacía (revisión
+    final 2026-11-09; la tarjeta ya no compara, Luis 2026-11-09)."""
     overlap = dict(DETAIL_POLLS[5], date='2026-10-02', start_date='2026-09-28', end_date='2026-10-02', seats={'PP': [150, 152]})
     write_detail_polls(fresh_app.fs, polls=DETAIL_POLLS[:5] + [overlap])
     page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
-    assert ('Flechas: frente al sondeo anterior de Sigma Dos (campo 28 sept 2026 – 2 oct 2026), con días de campo en común. '
-            'En gris') in page
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
     assert ('Anterior: <a href="/es/sondeos/2026-10-02/sigma-dos?mode=forecast">sondeo de Sigma Dos, campo 28 sept 2026 – '
-            '2 oct 2026</a>.') in vote
-    assert '<td>150–152</td>' in vote and '▲ 4' not in vote and '<span class="dlt flat">–</span></td>' not in vote  # 151 → 151
+            '2 oct 2026</a>, con días de campo en común.') in vote
+    assert 'parte de las entrevistas pueden ser las mismas' in ' '.join(vote.split())
+    assert '<td>150–152</td>' in vote and '▲ 4' not in vote and '<td><span class="dlt flat">–</span></td>' in vote  # 151 → 151
     assert '▲ 1,4' in vote  # 32,1 → 33,5
+    assert 'Flechas' not in page
     assert_public_wording(page, 'sondeo con anterior solapada')
 
     # a previous delivery whose fieldwork ends before this one starts, and without a figure for the PP
@@ -7760,15 +7732,11 @@ def test_sondeo_page_names_the_fieldwork_of_the_previous_delivery_and_its_overla
         'start_date': '2026-09-25', 'end_date': '2026-09-28'}
     write_detail_polls(fresh_app.fs, polls=DETAIL_POLLS[:5] + [before])
     page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
-    assert 'Flechas: frente al sondeo anterior de Sigma Dos (campo 25 sept 2026 – 28 sept 2026). En gris' in page
-    assert 'en común' not in page
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
-    assert 'sondeo de Sigma Dos, campo 25 sept 2026 – 28 sept 2026</a>.' in vote
+    assert 'sondeo de Sigma Dos, campo 25 sept 2026 – 28 sept 2026</a>.' in vote and 'en común' not in page
     row = re.search(r'<tr>\s*<td title="[^"]*"><span class="pn">.*?</tr>', vote, re.S).group(0)
     cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
-    assert cells[4] == '–' and cells[5] == ''  # Anterior with a dash, Cambio empty
-    assert '▲ 4' in cells[-1]  # the seats still compare: 147 → 151
-    assert initial(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])['previous']['values'] == {}
+    assert cells[2] == '' and cells[3] == '150–152' and '▲ 4' in cells[4]  # no vote figure before; the seats compare: 147 → 151
 
 
 def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
@@ -7794,14 +7762,13 @@ def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
 
 
 def test_sondeo_page_without_sample_nor_web_source(api, fresh_app):
-    """Un sondeo sin muestra y con una `url` que no es una dirección web: ni «– entrevistas» en la entradilla ni en la
-    cifra, y la fuente remite a Wikipedia sin enlace (revisión final 2026-11-09)."""
+    """Un sondeo sin muestra y con una `url` que no es una dirección web: ni «– entrevistas» en la entradilla, y la
+    fuente remite a Wikipedia sin enlace (revisión final 2026-11-09)."""
     polls = [dict(DETAIL_POLLS[0], sample_size=None, url='javascript:alert(1)')] + DETAIL_POLLS[1:]
     write_detail_polls(fresh_app.fs, polls=polls)
     status, _, body = call(api, '/es/sondeos/2026-10-05/sigma-dos')
     page = html(body)
     assert status == 200 and 'entrevistas' not in page[page.index('id="poll-card"'):page.index('id="vote"')]
-    assert '<div class="v">–<small></small></div>' in page.replace('\n', '')
     assert 'Trabajo de campo 1 oct 2026 – 4 oct 2026 · ' + pages.mtype_label('cati') in page
     sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
     assert 'javascript:' not in page and 'Wikipedia, lista de sondeos' in sheet

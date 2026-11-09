@@ -1,6 +1,6 @@
 """
-The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the lookup of the poll named by the URL, the
-average of its day (the last day of its fieldwork), the rows and figures of its cards and the template context.
+The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the lookup of the poll named by the URL and
+of the previous delivery of its house and sponsor, the rows and figures of its cards and the template context.
 """
 from typing import Optional
 from urllib.parse import urlsplit
@@ -54,81 +54,6 @@ def find_poll(polls: list, date: str, pollster: str, sponsor: Optional[str] = No
         raise HttpError(404, 'poll not found')
 
     return candidates[0]
-
-
-def _series_index(series: dict, date: str) -> Optional[int]:
-    """
-    Position in a series of its last day up to a date.
-
-    Parameters
-    ----------
-    series : dict
-        A ``series`` part: ``dates`` (ISO, ascending).
-    date : str
-        Day to look up, ``YYYY-MM-DD``.
-
-    Returns
-    -------
-    int or None
-        The index of the greatest ``dates[i] <= date``, ``None`` when every day of the series is after ``date``.
-    """
-    index = None
-
-    for i, day in enumerate(series.get('dates') or []):
-        if day <= date:
-            index = i
-
-    return index
-
-
-def series_day(series: dict, date: str) -> Optional[str]:
-    """
-    Day of a series whose average ``series_at`` takes for a date.
-
-    Parameters
-    ----------
-    series : dict
-        A ``series`` part: ``dates`` (ISO, ascending).
-    date : str
-        Day to look up, ``YYYY-MM-DD``.
-
-    Returns
-    -------
-    str or None
-        The last day of the series that is not after ``date`` (it can be before it when the series ends earlier),
-        ``None`` when the series has no such day.
-    """
-    index = _series_index(series, date)
-
-    return None if index is None else series['dates'][index]
-
-
-def series_at(series: dict, date: str) -> dict:
-    """
-    Average of the last day of a series up to a date.
-
-    Parameters
-    ----------
-    series : dict
-        A ``series`` part: ``dates`` (ISO, ascending), ``parties`` and ``mean`` (``{party: [values]}``).
-    date : str
-        Day to look up, ``YYYY-MM-DD``.
-
-    Returns
-    -------
-    dict
-        ``{party: mean}`` of the last day of the series that is not after ``date`` (``None`` for a party without a
-        value that day); ``{}`` when the series has no such day.
-    """
-    index = _series_index(series, date)
-
-    if index is None:
-        return {}
-
-    mean = series.get('mean') or {}
-
-    return {name: mean[name][index] if name in mean and index < len(mean[name]) else None
-            for name in series.get('parties') or []}
 
 
 def seats_text(seats_range) -> Optional[str]:
@@ -250,10 +175,11 @@ def _seats_mid(seats_range) -> Optional[int]:
     return round((int(seats_range[0]) + int(seats_range[1])) / 2)
 
 
-def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: Optional[dict] = None,
+def vote_rows(poll: dict, parties: list, colors: dict, effects: Optional[dict] = None,
               previous: Optional[dict] = None) -> list:
     """
-    Rows of the vote table of a poll: its parties against the average of the day.
+    Rows of the vote table of a poll: its vote and seats by party, against the previous delivery of the same house and
+    sponsor.
 
     Parameters
     ----------
@@ -261,8 +187,6 @@ def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: O
         Poll record (a value per party, ``seats``).
     parties : list
         Parties of the scope, in their order (it breaks the ties).
-    average : dict
-        ``{party: mean}`` of the day of the poll.
     colors : dict
         ``{party: colour}``.
     effects : dict, optional
@@ -273,10 +197,10 @@ def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: O
     Returns
     -------
     list
-        One dict per party with a number in the poll, by descending value: ``name``, ``color``, ``value``, ``avg``,
-        ``diff`` (value minus average, one decimal), ``effect``, ``seats`` (``None`` when missing), ``prev`` (its
-        figure in the previous delivery), ``change`` (value minus ``prev``, one decimal) and ``seats_change``
-        (difference of the midpoints of the two ranges); ``None`` when the previous delivery lacks the figure.
+        One dict per party with a number in the poll, by descending value: ``name``, ``color``, ``value``,
+        ``effect``, ``seats`` (``None`` when missing), ``change`` (value minus its figure in the previous delivery,
+        one decimal) and ``seats_change`` (difference of the midpoints of the two ranges); ``None`` when the previous
+        delivery lacks the figure.
     """
     effects = effects or {}
     seats = poll.get('seats') or {}
@@ -289,42 +213,14 @@ def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: O
         if not _has_value(value):
             continue
 
-        avg = average.get(name)
-        avg = float(avg) if _has_value(avg) else None
         prev = (previous or {}).get(name)
-        prev = float(prev) if _has_value(prev) else None
         mid, prev_mid = _seats_mid(seats.get(name)), _seats_mid(prev_seats.get(name))
-        rows.append({'name': name, 'color': colors.get(name), 'value': float(value), 'avg': avg,
-                     'diff': None if avg is None else round(value - avg, 1), 'effect': effects.get(name),
-                     'seats': seats_text(seats.get(name)), 'prev': prev,
-                     'change': None if prev is None else round(value - prev, 1),
+        rows.append({'name': name, 'color': colors.get(name), 'value': float(value), 'effect': effects.get(name),
+                     'seats': seats_text(seats.get(name)),
+                     'change': round(value - prev, 1) if _has_value(prev) else None,
                      'seats_change': None if mid is None or prev_mid is None else mid - prev_mid})
 
     return sorted(rows, key=lambda row: -row['value'])
-
-
-def distance_to_average(poll: dict, parties: list, average: dict) -> Optional[float]:
-    """
-    Mean absolute gap between a poll and the average, over the parties that have both figures.
-
-    Parameters
-    ----------
-    poll : dict
-        Poll record.
-    parties : list
-        Parties to consider.
-    average : dict
-        ``{party: mean}`` of the day of the poll.
-
-    Returns
-    -------
-    float or None
-        The mean of ``|poll - average|`` to one decimal, or ``None`` without any shared party.
-    """
-    gaps = [abs(poll[name] - average[name]) for name in parties
-            if _has_value(poll.get(name)) and _has_value(average.get(name))]
-
-    return round(sum(gaps) / len(gaps), 1) if gaps else None
 
 
 def weight_card(poll: dict, weights: Optional[dict]) -> dict:
@@ -341,14 +237,15 @@ def weight_card(poll: dict, weights: Optional[dict]) -> dict:
     Returns
     -------
     dict
-        ``factors`` (label and two-decimal value), ``has_part``, ``today`` (``date``, ``kernel``, ``weight``,
+        ``factors`` (label and two-decimal value of F(solape), F(muestra) and F(rating); the total weight is in
+        ``poll_kpis``), ``has_part``, ``today`` (``date``, ``kernel``, ``weight``,
         ``party`` of the row of the poll for its biggest party, or ``None``), ``status`` (``None`` without part,
         ``'today'``, ``'zero'``, ``'outside'`` or ``'absent'``) and ``overlap`` (a weight of 0 whose overlap factor
         is 0 too).
     """
     factors = [{'label': label, 'value': fmt_num(poll.get(key), 2)}
-               for label, key in (('Solape', 'weight_over'), ('Muestra', 'weight_sample'),
-                                  ('Rating', 'weight_rating'), ('Peso', 'weight'))]
+               for label, key in (('F(solape)', 'weight_over'), ('F(muestra)', 'weight_sample'),
+                                  ('F(rating)', 'weight_rating'))]
     card = {'factors': factors, 'has_part': weights is not None, 'today': None, 'status': None, 'overlap': False}
 
     if weights is None:
@@ -381,33 +278,27 @@ def weight_card(poll: dict, weights: Optional[dict]) -> dict:
     return card
 
 
-def poll_kpis(poll: dict, distance: Optional[float]) -> list:
+def poll_kpis(poll: dict) -> list:
     """
-    Figures of the header of a poll page.
+    Figures of a poll in the average, at the head of its weight card.
 
     Parameters
     ----------
     poll : dict
         Poll record.
-    distance : float or None
-        Distance to the average (``distance_to_average``).
 
     Returns
     -------
     list
         The ``kpis`` of the page layout (``label``, ``value``, ``unit`` and ``color``, ``None`` but on the rating):
-        rating (coloured), weight, sample and distance. A missing value is a dash without its unit.
+        the rating of the house (0-100, coloured as the badge of the polls table) and the weight of the poll in the
+        average. A missing value is a dash.
     """
     rating = poll.get('rating')
-    sample = poll.get('sample_size')
 
     return [{'label': 'Rating', 'value': fmt_num(rating, 1), 'unit': '',
              'color': gradient(rating, 0, 100, RATING_COLORS) if _has_value(rating) else None},
-            {'label': 'Peso en el promedio', 'value': fmt_num(poll.get('weight'), 2), 'unit': '', 'color': None},
-            {'label': 'Muestra', 'value': fmt_int(sample), 'unit': 'entrevistas' if _has_value(sample) else '',
-             'color': None},
-            {'label': 'Distancia al promedio', 'value': fmt_num(distance, 1), 'unit': 'pts' if _has_value(distance) else '',
-             'color': None}]
+            {'label': 'Peso en el promedio', 'value': fmt_num(poll.get('weight'), 2), 'unit': '', 'color': None}]
 
 
 def sample_text(poll: dict) -> Optional[str]:
@@ -568,10 +459,10 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``poll``,
         ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``sample_text``
         (``sample_text``), ``poll_date``,
-        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``), ``vote_rows``, ``previous`` (``date``, ``href`` keeping the query, ``title``,
-        ``fieldwork`` (``fieldwork_text``, ``None`` without dates) and ``overlap`` (``fieldwork_overlaps``) of the
-        previous delivery of the house and sponsor, ``None`` without one), ``has_seats``,
-        ``has_effects``, ``average_date`` (the day of the series compared, ``None`` without one), ``weight``
+        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``, at the head of the weight card),
+        ``vote_rows``, ``previous`` (``date``, ``href`` keeping the query, ``title``, ``fieldwork``
+        (``fieldwork_text``, ``None`` without dates) and ``overlap`` (``fieldwork_overlaps``) of the previous delivery
+        of the house and sponsor, ``None`` without one), ``has_seats``, ``has_effects``, ``weight``
         (``weight_card``, its ``factors`` with an empty ``unit`` and no ``color`` for ``m.kpis``), ``weights_date``
         (the day of the ``weights`` part, ``None`` without it), ``sheet`` (``sheet_rows``), ``back_href`` (the polls
         table of the event page), ``detail_href``, ``image_file`` and ``image_sign`` (the image of the card),
@@ -579,8 +470,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``polls`` (``chart_polls`` with the polls of
         the house only), ``projection`` and ``vote`` (the parts of the mode), ``catalog`` (``parties`` and ``bmaps``,
         as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``, ``sponsor``, ``pollster`` and the
-        percentages), ``previous`` (``date``, ``title`` and ``values`` of the previous delivery, or ``None``),
-        ``average``, ``seats`` (``None`` without them), ``n_seats`` and ``majority``.
+        percentages), ``seats`` (``None`` without them), ``n_seats`` and ``majority``. The card of the poll shows only
+        what the poll says (Luis, 2026-11-09): no average, no comparison; those are in the table and the chart.
 
     Raises
     ------
@@ -598,7 +489,6 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     poll = find_poll(polls.get('polls') or [], date, pollster, sponsor)
     poll_parties = list(polls.get('parties') or [])
     series = part(scope, run, 'series')
-    average = series_at(series, date)
     weights = bundle_part(site().run_file, scope, run, 'weights')
     effects = house_effects_of(bundle_part(site().run_file, scope, run, 'house-effects'), poll.get('pollster_id'))
     colors = {name: parties[name]['color'] for name in poll_parties}
@@ -637,12 +527,11 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'sample_text': sample_text(poll),
         'poll_date': fmt_date(date),
         'event_label': event_label,
-        'kpis': poll_kpis(poll, distance_to_average(poll, poll_parties, average)),
-        'vote_rows': vote_rows(poll, poll_parties, average, colors, effects, prev),
+        'kpis': poll_kpis(poll),
+        'vote_rows': vote_rows(poll, poll_parties, colors, effects, prev),
         'previous': previous,
         'has_seats': bool(seats),
         'has_effects': effects is not None,
-        'average_date': series_day(series, date),
         'weight': dict(weight, factors=[dict(factor, unit='', color=None) for factor in weight['factors']]),
         'weights_date': weights.get('date') if weights is not None else None,
         'sheet': sheet_rows(poll, house['href'], event_label, run_text),
@@ -668,10 +557,6 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
                  **{block: ink_color(block_color(block, meta, parties)) for block in blocks}},
         'poll': {'date': poll.get('date'), 'pollster_id': poll.get('pollster_id'), 'sponsor': poll.get('sponsor'),
                  'pollster': poll.get('pollster'), **{name: poll[name] for name in poll_parties if name in poll}},
-        'previous': None if prev is None else {
-            'date': str(prev['date'])[:10], 'title': poll_title(prev),
-            'values': {name: prev[name] for name in poll_parties if _has_value(prev.get(name))}},
-        'average': average,
         'seats': seats,
         'n_seats': meta.get('n_seats'),
         'majority': meta.get('majority'),

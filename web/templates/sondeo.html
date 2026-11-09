@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{{ poll_title }} · {{ poll_date }} · {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}{% endblock %}
-{% block description %}Sondeo de {{ poll_title }} con trabajo de campo hasta el {{ poll_date }} para {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}: voto por partido frente al promedio{% if has_seats %}, escaños de la encuestadora{% endif %}, rating y peso en el promedio.{% endblock %}
+{% block description %}Sondeo de {{ poll_title }} con trabajo de campo hasta el {{ poll_date }} para {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}: voto{% if has_seats %} y escaños{% endif %} por partido{% if previous %}, su cambio frente a la entrega anterior{% endif %}, rating y peso en el promedio.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/sondeo.js"></script>
 {% endblock %}
@@ -11,7 +11,7 @@
 {% set lead = ('Trabajo de campo ' ~ fieldwork if fieldwork else 'Fecha ' ~ poll_date)
               ~ (' · ' ~ sample_text if sample_text else '') ~ ' · ' ~ house.type %}
 {% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
-{#- the fieldwork of the previous delivery, so that overlapping trackers show in the shared image too -#}
+{#- the fieldwork of the previous delivery, so that overlapping trackers show in the footer of the table -#}
 {% if previous %}{% set previous_fieldwork = 'campo ' ~ previous.fieldwork if previous.fieldwork else 'campo hasta el ' ~ previous.date %}{% endif %}
     <div id="content" class="stack">
       <p class="back"><a href="{{ back_href }}">← Todas las encuestas</a></p>
@@ -28,18 +28,14 @@
           </div>
           {% endif %}
         </div>
-        {% if not has_seats %}
-        <p class="muted">{{ house.name }} no publicó escaños con este sondeo.</p>
+        {#- only what the poll says (Luis, 2026-11-09): no average, no comparison, no figures of our model -#}
+        {% if has_seats %}
+        <p class="muted pc-note">En gris, los escaños de los demás partidos.</p>
+        {% else %}
+        <p class="muted pc-note">{{ house.name }} no publicó escaños con este sondeo.</p>
         {% endif %}
-        {#- inside the card, so that the shared image explains its marks too -#}
-        <p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día.{% if previous %} Flechas: frente al sondeo anterior de {{ previous.title }} ({{ previous_fieldwork }}){% if previous.overlap %}, con días de campo en común{% endif %}.{% else %} Primer sondeo de {{ poll_title }} en este ciclo.{% endif %}{% if has_seats %} En gris, los escaños de los demás partidos.{% endif %}</p>
-        {{ m.kpis(kpis) }}
         {% call m.how() %}
-        <p>
-          Cada barra es el voto que da el sondeo a un partido y la marca oscura sobre ella, el promedio de sondeos de
-          ese mismo día. El rating es el de {{ house.name }} y el peso, lo que cuenta este sondeo en el promedio: los dos se
-          explican más abajo.
-        </p>
+        <p>Cada barra es el voto que da el sondeo a un partido, tal como lo publicó {{ house.name }}.</p>
         {% if has_seats %}
         <p>
           El hemiciclo reparte los escaños que dio {{ house.name }} con el sondeo, no un reparto nuestro: cada partido
@@ -48,31 +44,19 @@
           de las horquillas.
         </p>
         {% endif %}
-        <p>
-          La distancia al promedio es la media de las diferencias, sin signo, entre el sondeo y el promedio en los
-          partidos que tienen las dos cifras.
-        </p>
-        {% if previous %}
-        <p>
-          Las flechas comparan con la entrega anterior de la misma casa para el mismo medio en este ciclo: verde si sube,
-          roja si baja. Un guion, si no cambia; sin flecha, si la entrega anterior no daba cifra para ese partido.
-        </p>
-        {% endif %}
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('vote', 'Voto y escaños', 'El voto de cada partido según el sondeo frente al promedio de sondeos del mismo día, con la diferencia entre los dos' ~ (', el efecto de casa' if has_effects else '') ~ (' y los escaños de ' ~ house.name if has_seats else '') ~ '.') }}
+      {{ m.card_start('vote', 'Voto y escaños', 'El voto' ~ (' y los escaños' if has_seats else '') ~ ' de cada partido según el sondeo' ~ (', y cuánto cambian frente a la entrega anterior de ' ~ poll_title if previous else '') ~ '.') }}
         <div class="table-wrap">
           <table id="vote-table">
             <thead>
               <tr>
                 <th scope="col">Partido</th>
-                <th scope="col">Sondeo</th>
-                <th scope="col">Promedio del día</th>
-                <th scope="col">Diferencia</th>
-                {% if previous %}<th scope="col">Anterior</th>
-                <th scope="col">Cambio</th>{% endif %}
-                {% if has_effects %}<th scope="col">Efecto de casa</th>{% endif %}
+                <th scope="col">% Voto</th>
+                {% if previous %}<th scope="col" title="Cambio del voto frente a la entrega anterior de {{ poll_title }}">vs Anterior</th>{% endif %}
                 {% if has_seats %}<th scope="col">Escaños</th>{% endif %}
+                {% if has_seats and previous %}<th scope="col" title="Cambio de los escaños frente a la entrega anterior de {{ poll_title }}, con el punto medio de cada horquilla">vs Anterior</th>{% endif %}
+                {% if has_effects %}<th scope="col" title="Cuántos puntos suele dar {{ house.name }} a cada partido por encima (+) o por debajo (−) de lo que dan las demás encuestadoras; el promedio lo descuenta">Efecto de casa</th>{% endif %}
               </tr>
             </thead>
             <tbody>
@@ -80,53 +64,46 @@
               <tr>
                 <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
                 <td>{{ row.value|num(1) }}</td>
-                <td>{{ row.avg|num(1) }}</td>
-                <td>{{ m.badge(row.diff, 1) }}</td>
-                {% if previous %}<td>{{ row.prev|num(1) }}</td>
-                <td>{% if row.change is not none %}{{ m.badge(row.change, 1) }}{% endif %}</td>{% endif %}
+                {% if previous %}<td>{% if row.change is not none %}{{ m.badge(row.change, 1) }}{% endif %}</td>{% endif %}
+                {% if has_seats %}<td>{{ row.seats or '–' }}</td>{% endif %}
+                {% if has_seats and previous %}<td>{% if row.seats_change is not none %}{{ m.badge(row.seats_change, 0) }}{% endif %}</td>{% endif %}
                 {% if has_effects %}<td>{{ row.effect|delta(1) }}</td>{% endif %}
-                {% if has_seats %}<td>{{ row.seats or '–' }}{% if row.seats_change is not none and row.seats_change != 0 %} {{ m.badge(row.seats_change, 0) }}{% endif %}</td>{% endif %}
               </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
-        {% if average_date %}
-        <p class="muted">Promedio del {{ average_date|date }}{% if average_date != poll.date[:10] %}, el último día del promedio antes del sondeo{% endif %}.</p>
-        {% endif %}
         {% if previous %}
-        <p class="muted">Anterior: <a href="{{ previous.href }}">sondeo de {{ previous.title }}, {{ previous_fieldwork }}</a>.</p>
+        <p class="muted">Anterior: <a href="{{ previous.href }}">sondeo de {{ previous.title }}, {{ previous_fieldwork }}</a>{% if previous.overlap %}, con días de campo en común{% endif %}.</p>
+        {% else %}
+        <p class="muted">Primer sondeo de {{ poll_title }} en este ciclo: no hay entrega anterior con la que comparar.</p>
         {% endif %}
         {% call m.how() %}
         <p>
-          Sondeo es el voto que dio {{ house.name }} a cada partido, en porcentaje; Promedio del día, el del promedio de
-          sondeos el último día de trabajo de campo de este sondeo; Diferencia, lo que se separa el sondeo del promedio,
-          con la flecha verde si el sondeo da más y roja si da menos.
+          % Voto es el voto que dio {{ house.name }} a cada partido{% if has_seats %}, y Escaños, la horquilla que dio con el
+          sondeo, no un reparto nuestro{% endif %}.
         </p>
         {% if previous %}
         <p>
-          Las flechas de Cambio comparan con la entrega anterior de la misma casa para el mismo medio en este ciclo:
-          verde si sube, roja si baja. Un guion, si no cambia; la columna Cambio queda vacía, si la entrega anterior no
-          daba cifra para ese partido.
+          Las columnas «vs Anterior» comparan con la entrega anterior de la misma casa para el mismo medio en este ciclo:
+          verde si sube, roja si baja, un guion si no cambia, y vacía si la entrega anterior no daba cifra para ese
+          partido.{% if has_seats %} En los escaños se compara el punto medio de cada horquilla.{% endif %}
+          {%- if previous.overlap %} Las dos entregas comparten días de trabajo de campo, así que parte de las entrevistas
+          pueden ser las mismas y el cambio entre ellas es menor de lo que sería entre dos muestras distintas.{% endif %}
         </p>
         {% endif %}
         {% if has_effects %}
         <p>
-          El efecto de casa es la inclinación habitual de {{ house.name }} con cada partido frente a las demás
-          encuestadoras, en puntos: el promedio la descuenta antes de usar sus sondeos. Un guion, si no tiene para ese
+          El efecto de casa es la inclinación habitual de {{ house.name }}: cuántos puntos suele dar a cada partido por
+          encima (+) o por debajo (−) de lo que dan las demás encuestadoras a lo largo del ciclo. No es un error de este
+          sondeo, sino su costumbre; el promedio la descuenta antes de usar sus sondeos. Un guion, si no tiene para ese
           partido.
-        </p>
-        {% endif %}
-        {% if has_seats %}
-        <p>
-          Los escaños son la horquilla que dio {{ house.name }} con el sondeo, no un reparto nuestro.
-          {%- if previous %} La flecha junto a los escaños es el cambio del punto medio de la horquilla frente a la
-          entrega anterior.{% endif %}
         </p>
         {% endif %}
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('weight', 'Peso en el promedio', 'Cuánto cuenta este sondeo en el promedio: el producto de sus tres factores propios.') }}
+      {{ m.card_start('weight', 'Peso en el promedio', 'El rating de ' ~ house.name ~ ' y cuánto cuenta este sondeo en el promedio: el producto de sus tres factores propios.') }}
+        {{ m.kpis(kpis) }}
         {{ m.kpis(weight.factors) }}
         {% if weight.has_part %}
         {% if weight.status == 'today' %}
@@ -141,7 +118,8 @@
         {% endif %}
         {% call m.how() %}
         <p>
-          El peso de un sondeo es el producto de tres factores. F(solape) vale 0 cuando su trabajo de campo se solapa
+          El rating, de 0 a 100, es la nota de {{ house.name }} según el acierto de sus sondeos pasados: rojo por debajo de
+          50, verde por encima. El peso de un sondeo es el producto de tres factores. F(solape) vale 0 cuando su trabajo de campo se solapa
           con el de otro sondeo posterior de la misma casa, y se reparte entre los sondeos de una racha de la misma casa
           en pocos días; F(muestra) es la raíz de su muestra entre la mediana de las muestras de la elección; F(rating)
           sale del rating de la encuestadora.

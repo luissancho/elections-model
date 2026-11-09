@@ -7,28 +7,21 @@ const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 
 /**
  * Las filas del voto de un sondeo: los partidos con valor, de mayor a menor (los empates conservan el orden de
- * `parties`), con su promedio, y al final «Otros» si el resto hasta 100 llega a 0,5 puntos.
+ * `parties`), y al final «Otros» si el resto hasta 100 llega a 0,5 puntos. Sólo lo que dice el sondeo: ni promedio ni
+ * entrega anterior (Luis, 2026-11-09).
  * @param {Object} poll El sondeo, con el valor de cada partido por nombre.
  * @param {string[]} parties Los partidos, en su orden.
- * @param {Object} [average] El promedio por partido.
- * @param {Object|null} [previous] La entrega anterior de la casa y medio (voto por partido), si la hay.
- * @returns {{name: string, value: number, avg: number|null, change: number|null}[]} Las filas; `change` es la
- *   diferencia con la entrega anterior a un decimal (null sin cifra en las dos entregas y en «Otros»).
+ * @returns {{name: string, value: number}[]} Las filas.
  */
-export function voteRows(poll, parties, average = {}, previous = null) {
+export function voteRows(poll, parties) {
     const rows = parties
         .filter((name) => isNumber(poll[name]))
-        .map((name) => ({
-            name,
-            value: poll[name],
-            avg: isNumber(average[name]) ? average[name] : null,
-            change: previous && isNumber(previous[name]) ? Math.round((poll[name] - previous[name]) * 10) / 10 : null,
-        }));
+        .map((name) => ({name, value: poll[name]}));
     rows.sort((a, b) => b.value - a.value);
     const total = rows.reduce((sum, row) => sum + row.value, 0);
     const rest = Math.round((100 - total) * 10) / 10;
     if (rest >= 0.5) {
-        rows.push({name: 'Otros', value: rest, avg: null, change: null});
+        rows.push({name: 'Otros', value: rest});
     }
 
     return rows;
@@ -77,8 +70,8 @@ export function highlightSeries(poll, parties, colors) {
         silent: true,
         z: 6,
         symbol: 'circle',
-        symbolSize: 16,
-        itemStyle: {color: 'transparent', borderColor: colors[name] || OTHERS_COLOR, borderWidth: 3},
+        symbolSize: 11,
+        itemStyle: {color: 'transparent', borderColor: colors[name] || OTHERS_COLOR, borderWidth: 2},
         tooltip: {show: false},
         data: [[dayTime(poll.date), poll[name]]],
     }));
