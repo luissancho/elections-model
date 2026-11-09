@@ -199,3 +199,17 @@ en vivo traiga `blocks`; sin ello la web sigue sumando. Backtest y eventos, cuan
   pequeño desnivel entre el final de la línea ajustada y el inicio de la proyección; fuera de una transición es de
   centésimas (0,16 puntos en octubre de 2024, con SALF a medio asentar). No se corrige.
 - Hasta que se vuelva a correr el backtest, el detalle de las elecciones pasadas suma partidos: igual que hoy.
+
+## Cambios tras la implementación (2026-11-09)
+
+- **Partidos que un sondeo no lista.** Con datos reales, la suma por sondeo pura dejaba Derecha 0,8 puntos por
+  debajo de la suma de partidos el día del titular: 25 de 84 sondeos de los últimos seis meses no listan a SALF y sus
+  votantes se van a «otros». Desde el primer sondeo que lista a un miembro, un sondeo que no lo lista suma el promedio
+  de ese miembro ese día. Medido: sin escalones (0,01 puntos de salto diario máximo, frente a 2,0 y 3,8 de la suma) y
+  la línea coincide con la suma una vez acabada la transición (51,58 frente a 51,56 el 9-11-2026). El desnivel con la
+  proyección queda en centésimas.
+- **Rótulos «Entra X»** dentro del gráfico, en vertical junto a su línea (`insideEndTop`): al pie pisaban las
+  fechas del eje y, en móvil, el uno al otro.
+- **Tooltip.** «Resto» sólo en Otros: en Izquierda y Derecha leía como un partido que faltaba.
+- **Entradas.** No se marca un partido con resultado en la elección anterior (Cs omitido en el primer sondeo de un
+  ciclo autonómico) ni uno sin línea (menos de tres sondeos).
