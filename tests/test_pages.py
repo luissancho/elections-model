@@ -7352,7 +7352,8 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '>Solape<' in weight and '>1,27<' in weight and 'En el promedio del 8 oct 2026' in weight
     sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
     assert '<a href="/casas/sigma-dos">Sigma Dos</a>' in sheet and 'href="https://www.elmundo.es/sondeo"' in sheet
-    assert '<a href="/casas/sigma-dos"' in page and 'id="house-chart"' in page
+    assert '<h2><a href="/casas/sigma-dos">Sigma Dos</a></h2>' in page  # the house in the heading of the card links its profile
+    assert 'id="poll-house-chart"' in page and 'id="house-chart"' not in page  # not the square bullseye of the other pages
     assert 'data-file="demoscopio-encuestadora-es-sigma-dos-2026-10-05.png"' in page
     assert_public_wording(page, 'sondeo')
     data = initial(body)

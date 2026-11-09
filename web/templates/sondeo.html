@@ -14,7 +14,7 @@
     <div id="content" class="stack">
       <p class="back"><a href="{{ back_href }}">← Todas las encuestas</a></p>
       {#- the card to share: what the image of `card-image.js` draws, at 1200 px from any screen -#}
-      {{ m.card_start('poll-card', poll_title, lead, classes='shot poll-card') }}
+      {{ m.card_start('poll-card', poll_title, lead, classes='shot poll-card', title_href=house.href) }}
         {{ m.card_image_button(image_file, image_sign) }}
         <p class="pc-event">{{ event_label }}</p>
         <div class="poll-grid{% if not has_seats %} single{% endif %}">
@@ -143,7 +143,7 @@
           </fieldset>
         </div>
         <div class="legend" id="house-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
-        <div class="chart chart-tall" id="house-chart" role="img" aria-label="Sondeos de {{ house.name }} frente al promedio de sondeos{{ projection_label }}"></div>
+        <div class="chart chart-tall" id="poll-house-chart" role="img" aria-label="Sondeos de {{ house.name }} frente al promedio de sondeos{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
           Los puntos son sólo los sondeos de {{ house.name }}; la línea es el promedio de todas las encuestadoras. El
