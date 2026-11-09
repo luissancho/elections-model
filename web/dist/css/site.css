@@ -683,6 +683,15 @@ ol.notes > li:target { color: var(--color-text); }
 .hemi-grid > * { min-width: 0; }
 .hemi-card { display: flex; flex-direction: column; }
 .hemi-card .chart:not(.hemi) { flex: 1; height: auto; min-height: 360px; max-height: 600px; }
+/* The page of a poll: its card to share, the vote bars on the left and the hemicycle of the seats the house gave on
+   the right (the bars take the whole width when it gave none); the chart of the house is the wide one of the event page,
+   not the square bullseye `#house-chart` is elsewhere */
+.poll-card .poll-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); align-items: center; }
+.poll-grid.single { grid-template-columns: 1fr; }
+.poll-card .pc-event { margin: -4px 0 var(--space-3); font-size: 13.5px; color: var(--color-muted); }
+.poll-card .poll-bars { height: auto; }
+.poll-seats .csub { margin: 0 0 4px; text-align: center; }
+#house #house-chart.chart-tall { aspect-ratio: 2 / 1; max-width: none; margin: 0; }
 
 /* Escaños: histograms, blocks chart, majority calculator and district form */
 #ridge-chart { margin-top: var(--space-3); }
@@ -1081,6 +1090,8 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
   .chart, .qcard .chart { height: 250px; }
   .chart.chart-tall { height: 280px; min-height: 0; max-height: none; aspect-ratio: auto; }
   .chart.hemi { height: auto; }
+  .poll-card .poll-grid { grid-template-columns: 1fr; }
+  #house #house-chart.chart-tall { aspect-ratio: auto; }
   .cmp, .tests { grid-template-columns: 1fr; }
   #coalition-chart { height: 298px; }
   table { font-size: 12.5px; }

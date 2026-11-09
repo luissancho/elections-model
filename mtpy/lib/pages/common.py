@@ -80,6 +80,9 @@ ROUTES = [
     ('/{scope}', 'promedios', 'index', ['GET']),
     # the old seats page of a scope (before 2026-11-04): a 301 to its section of the event page
     ('/{scope}/escanos', 'redirect', 'seats', ['GET']),
+    # the page of a poll: its day (the last day of its fieldwork), its house and, when it has one, its sponsor
+    ('/{scope}/sondeos/{date}/{pollster}', 'sondeos', 'detail', ['GET']),
+    ('/{scope}/sondeos/{date}/{pollster}/{sponsor}', 'sondeos', 'detail', ['GET']),
 ]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MESSAGES = {
