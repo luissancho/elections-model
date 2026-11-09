@@ -7577,8 +7577,10 @@ def write_detail_polls(fs, polls=DETAIL_POLLS, scope='es', run_id=RUN):
     writer = bundle.BundleWriter(fs)
     part = fixture_data('polls') | {'polls': polls}
     writer.write_json(bundle.path_part(scope, run_id, 'polls'), 'polls', part, scope, run_id=run_id)
-    series = {'dates': ['2026-09-20', '2026-10-01', '2026-10-05'], 'parties': ['PP'], 'mean': {'PP': [31.0, 31.5, 32.0]},
-              'lo': {'PP': [30.0, 30.5, 31.0]}, 'hi': {'PP': [32.0, 32.5, 33.0]}}
+    # from the fixture's series, so the part keeps every key of its schema (`blocks`, `first_polls` since 2026-11-09)
+    series = fixture_data('series') | {
+        'dates': ['2026-09-20', '2026-10-01', '2026-10-05'], 'parties': ['PP'], 'mean': {'PP': [31.0, 31.5, 32.0]},
+        'lo': {'PP': [30.0, 30.5, 31.0]}, 'hi': {'PP': [32.0, 32.5, 33.0]}}
     writer.write_json(bundle.path_part(scope, run_id, 'series'), 'series', series, scope, run_id=run_id)
     weights = fixture_data('weights') | {
         'date': '2026-10-08', 'parties': ['PP'],
