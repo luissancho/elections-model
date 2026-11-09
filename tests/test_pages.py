@@ -7510,12 +7510,11 @@ def test_poll_kpis_title_fieldwork_and_sheet():
     assert pages.fieldwork_text(POLL) == '5 nov 2026 – 7 nov 2026'
     assert pages.fieldwork_text(POLL | {'end_date': None}) == '5 nov 2026' and pages.fieldwork_text({'date': '2026-11-09'}) is None
     sheet = pages.sheet_rows(POLL, '/casas/nc-report', 'Elecciones generales · 29 nov 2026', 'Actualizado el 9 nov 2026')
-    assert [row['label'] for row in sheet] == ['Encuestadora', 'Medio', 'Tipo', 'Trabajo de campo', 'Muestra', 'Rating', 'Peso', 'Fuente',
+    assert [row['label'] for row in sheet] == ['Encuestadora', 'Medio', 'Tipo', 'Trabajo de campo', 'Muestra', 'Rating', 'Peso',
                                                'Elección', 'Actualización del modelo']
     assert sheet[0] == {'label': 'Encuestadora', 'text': 'NC Report', 'href': '/casas/nc-report'}
     assert sheet[3]['text'] == '5 nov 2026 – 7 nov 2026'
-    assert sheet[7] == {'label': 'Fuente', 'text': 'www.larazon.es', 'href': 'https://www.larazon.es/encuesta'}
-    assert pages.sheet_rows(POLL | {'url': None}, '/casas/nc-report', 'E', 'R')[7] == {'label': 'Fuente', 'text': 'Wikipedia, lista de sondeos', 'href': None}
+    assert all(row['label'] != 'Fuente' for row in sheet)  # no source row (Luis, 2026-11-09)
     assert pages.sheet_rows({'date': '2026-11-09', 'pollster': 'X'}, '/casas/x', 'E', 'R')[3]['text'] == '9 nov 2026'  # the poll's date is its last fieldwork day
 
 
@@ -7524,18 +7523,6 @@ def test_lead_drops_a_missing_sample():
     for sample in (None, float('nan'), 0):
         assert pages.sample_text(POLL | {'sample_size': sample}) is None
     assert pages.sample_text(POLL | {'sample_size': 1200}) == '1.200 entrevistas'
-
-
-def test_sheet_links_the_source_only_with_a_web_address():
-    """La fuente sólo enlaza una dirección `http` o `https` con su host; cualquier otra cosa remite a la lista de
-    Wikipedia, sin enlace (revisión final 2026-11-09)."""
-    wikipedia = {'label': 'Fuente', 'text': 'Wikipedia, lista de sondeos', 'href': None}
-    for url in ('javascript:alert(1)', 'data:text/html,hola', 'ftp://example.com/sondeo', '//example.com/sondeo', 'www.larazon.es/encuesta',
-                'https://', 'http://[::1', '', '   ', 42):
-        assert pages.sheet_rows(POLL | {'url': url}, '/casas/nc-report', 'E', 'R')[7] == wikipedia, url
-    assert pages.sheet_rows(POLL | {'url': 'HTTP://Example.com/a '}, '/casas/x', 'E', 'R')[7] == {
-        'label': 'Fuente', 'text': 'example.com', 'href': 'HTTP://Example.com/a'}
-    assert pages.sheet_rows(POLL | {'url': 'http://www.larazon.es/e'}, '/casas/x', 'E', 'R')[7]['href'] == 'http://www.larazon.es/e'
 
 
 PREV_POLLS = [
@@ -7679,7 +7666,7 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '>F(solape)<' in weight and '>F(muestra)<' in weight and '>F(rating)<' in weight
     assert weight.index('>Rating<') < weight.index('>F(solape)<') and 'En el promedio del 8 oct 2026' in weight
     sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
-    assert '<a href="/casas/sigma-dos">Sigma Dos</a>' in sheet and 'href="https://www.elmundo.es/sondeo"' in sheet
+    assert '<a href="/casas/sigma-dos">Sigma Dos</a>' in sheet and 'elmundo.es' not in page and 'Fuente' not in sheet
     assert '<h2><a href="/casas/sigma-dos">Sigma Dos</a></h2>' in page  # the house in the heading of the card links its profile
     assert 'id="poll-house-chart"' in page and 'id="house-chart"' not in page  # not the square bullseye of the other pages
     assert 'data-file="demoscopio-encuestadora-es-sigma-dos-2026-10-05.png"' in page
@@ -7701,6 +7688,7 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     # without seats nor a previous delivery: the note says so, and the table has only the vote (and the house effect)
     assert ('<p class="muted pc-note">Primer sondeo de Sigma Dos para El Mundo en este ciclo. Sigma Dos no publicó escaños con '
             'este sondeo.</p>') in page
+    # without a previous delivery the charts write no change at all, not even a dash: the island carries none
     assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['previous'] is None
     assert 'vs Anterior' not in page and 'Las columnas «vs Anterior»' not in page and 'El arco gris' not in page
     assert 'Primer sondeo de Sigma Dos para El Mundo en este ciclo: no hay entrega anterior con la que comparar.' in page
@@ -7710,7 +7698,7 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     assert '<th scope="col">Escaños</th>' not in vote and 'Promedio' not in vote
     weight = page[page.index('id="weight"'):page.index('id="house"')]
     assert weight.count('>–<') >= 3 and 'ya no pesa en el promedio del 8 oct 2026' in weight  # before the line starts (26 sep)
-    assert 'Wikipedia, lista de sondeos' in page and initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['seats'] is None
+    assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['seats'] is None
     # inside the window but without a row: no claim about the window
     inside = html(call(api, '/es/sondeos/2026-10-01/gad3/abc')[2])
     assert 'no entra en la recta del promedio del 8 oct 2026' in inside and 'ventana' not in inside[inside.index('id="weight"'):inside.index('id="house"')]
@@ -7766,9 +7754,9 @@ def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
         assert 'Efecto de casa' not in page, path
 
 
-def test_sondeo_page_without_sample_nor_web_source(api, fresh_app):
-    """Un sondeo sin muestra y con una `url` que no es una dirección web: ni «– entrevistas» en la entradilla, y la
-    fuente remite a Wikipedia sin enlace (revisión final 2026-11-09)."""
+def test_sondeo_page_without_sample_nor_source(api, fresh_app):
+    """Un sondeo sin muestra: ni «– entrevistas» en la entradilla (revisión final 2026-11-09); y su `url`, sea la que sea,
+    no sale en la página: la ficha no tiene fuente (Luis, 2026-11-09)."""
     polls = [dict(DETAIL_POLLS[0], sample_size=None, url='javascript:alert(1)')] + DETAIL_POLLS[1:]
     write_detail_polls(fresh_app.fs, polls=polls)
     status, _, body = call(api, '/es/sondeos/2026-10-05/sigma-dos')
@@ -7776,7 +7764,7 @@ def test_sondeo_page_without_sample_nor_web_source(api, fresh_app):
     assert status == 200 and 'entrevistas' not in page[page.index('id="poll-card"'):page.index('id="vote"')]
     assert 'Trabajo de campo 1 oct 2026 – 4 oct 2026 · ' + pages.mtype_label('cati') in page
     sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
-    assert 'javascript:' not in page and 'Wikipedia, lista de sondeos' in sheet
+    assert 'javascript:' not in page and 'Fuente' not in sheet
 
 
 def test_sondeo_page_of_a_run_without_polls_is_not_found(api, fresh_app):

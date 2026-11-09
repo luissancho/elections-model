@@ -76,8 +76,10 @@ export function columnsOption(rows, {
       type: 'value',
       min: 0,
       max: niceMax(top * 1.25),
-      splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x)},
+      // the end of the axis is only room for the labels over the tallest column: neither its line nor its label (a
+      // «44 %» next to the «40 %» tick)
+      splitLine: {lineStyle: {color: THEME.gridColor}, showMaxLine: false},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x), showMaxLabel: false},
     },
     tooltip: {
       ...tooltipStyle(),

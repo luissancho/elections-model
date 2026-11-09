@@ -6,7 +6,7 @@
 // house chart of the event page, `promedios.js`, but its state never touches the URL); and the downloads of the chart
 // (`share.js`) and of the card (`card-image.js`). Everything is drawn from the data embedded by the server; the pure
 // logic of the card lives in `poll-card.js`.
-import {Catalog, OTHERS_COLOR} from '../catalog.js';
+import {Catalog} from '../catalog.js';
 import {renderColumns} from '../charts/columns.js';
 import {mountChart} from '../charts/base.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
@@ -19,13 +19,10 @@ import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw,
 import {markLegend} from './legend-dom.js';
 import {chosenNames, fillLegend, seriesViews, viewCaption} from './series-wire.js';
 
-/** Name of the row of the rest of the vote in `voteRows`, painted grey. */
-const OTHERS_ROW = 'Otros';
-
 /**
- * Draw the columns of the vote of the poll (`#poll-bars`): one per party with a value, from the largest, and a grey
- * «Otros» with the rest up to 100 (`voteRows`), the share over each column and, under it, its change against the
- * previous delivery of the house and sponsor when there is one (`renderColumns`).
+ * Draw the columns of the vote of the poll (`#poll-bars`): one per party with a value, from the largest (`voteRows`,
+ * without the rest of the vote), the share over each column and, under it, its change against the previous delivery
+ * of the house and sponsor when there is one (`renderColumns`).
  *
  * @param {object} initial the page's initial data (`poll`, `polls.parties`, `previous`)
  * @param {Catalog} catalog party catalogue of the page
@@ -38,7 +35,7 @@ function paintBars(initial, catalog) {
   const rows = voteRows(initial.poll, initial.polls.parties || [], initial.previous ? initial.previous.values : null);
   const names = rows.map((row) => row.name);
   renderColumns(el, rows, {
-    colors: mapNames(names, (name) => (name === OTHERS_ROW ? OTHERS_COLOR : catalog.color(name))),
+    colors: mapNames(names, (name) => catalog.color(name)),
     fullnames: mapNames(names, (name) => catalog.fullname(name)),
     formatter: (x) => fmtPct(x),
     axisFormatter: (x) => fmtPct(x, 0),

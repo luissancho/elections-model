@@ -333,3 +333,7 @@ parties)` y `highlightSeries(poll, parties, colors)` (las series del anillo).
   imagen siempre usa la versión ancha (`__imageOption`), así que sale igual desde el móvil.
 - La tabla «Voto y escaños» y la tarjeta «Peso en el promedio» comparten fila a dos columnas (`.poll-pair`, 3:2),
   apiladas en el móvil. El efecto de casa sale de la tabla.
+- Después (Luis): las columnas no dibujan «Otros» (el resto del voto); el hemiciclo mantiene su arco «Otros». Sin
+  entrega anterior, los gráficos no escriben ningún cambio (ni un guion): el «–» sólo dice «no cambia». La ficha pierde
+  la fila «Fuente» (los sondeos salen de las listas de Wikipedia, como dice el pie de todas las páginas). El final del
+  eje de las columnas no lleva línea ni rótulo.

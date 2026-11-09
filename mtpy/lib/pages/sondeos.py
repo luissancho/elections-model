@@ -3,7 +3,6 @@ The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the loo
 of the previous delivery of its house and sponsor, the rows and figures of its cards and the template context.
 """
 from typing import Optional
-from urllib.parse import urlsplit
 
 from ...core.api import HttpError
 from ..webapi import site
@@ -379,22 +378,10 @@ def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> 
     Returns
     -------
     list
-        ``{'label', 'text', 'href'}`` rows; the source links to the URL of the poll when it is an ``http`` or
-        ``https`` address with a host or, without one, names the Wikipedia list (without a link).
+        ``{'label', 'text', 'href'}`` rows: house (linked to its profile), sponsor, type, fieldwork, sample, rating,
+        weight, election and model update. No source row (Luis, 2026-11-09): the polls come from the Wikipedia lists,
+        as the footer of every page says.
     """
-    url = poll.get('url').strip() if isinstance(poll.get('url'), str) else None
-
-    try:
-        parts = urlsplit(url) if url else None
-        host = parts.hostname if parts is not None and parts.scheme.lower() in ('http', 'https') else None
-    except ValueError:  # a malformed address (a broken IPv6 host, a bad port): no link
-        host = None
-
-    if host:
-        source = {'text': host, 'href': url}
-    else:
-        source = {'text': 'Wikipedia, lista de sondeos', 'href': None}
-
     return [{'label': 'Encuestadora', 'text': poll.get('pollster'), 'href': house_href},
             {'label': 'Medio', 'text': poll.get('sponsor') or '—', 'href': None},
             {'label': 'Tipo', 'text': mtype_label(poll.get('mtype')), 'href': None},
@@ -402,7 +389,6 @@ def sheet_rows(poll: dict, house_href: str, event_label: str, run_text: str) -> 
             {'label': 'Muestra', 'text': fmt_int(poll.get('sample_size')), 'href': None},
             {'label': 'Rating', 'text': fmt_num(poll.get('rating'), 1), 'href': None},
             {'label': 'Peso', 'text': fmt_num(poll.get('weight'), 2), 'href': None},
-            {'label': 'Fuente', **source},
             {'label': 'Elección', 'text': event_label, 'href': None},
             {'label': 'Actualización del modelo', 'text': run_text, 'href': None}]
 

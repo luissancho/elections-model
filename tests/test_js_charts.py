@@ -911,10 +911,16 @@ def test_columns_write_the_share_and_its_change_under_it():
                  '{formatter: (x) => x.toFixed(1), colors: {PP: "#1d84ce"}}); const lb = o.series[0].label; '
                  'return {labels: [0, 1, 2, 3].map((i) => lb.formatter({value: o.series[0].data[i].value, dataIndex: i})), '
                  'colors: [0, 1, 2].map((i) => lb.rich["d" + i].color), x: o.xAxis.data, max: o.yAxis.max, '
-                 'tip: o.tooltip.formatter([{dataIndex: 0}]), bar: o.series[0].data[0].itemStyle.color}; })()' % uri)
+                 'tip: o.tooltip.formatter([{dataIndex: 0}]), bar: o.series[0].data[0].itemStyle.color, '
+                 'end: [o.yAxis.splitLine.showMaxLine, o.yAxis.axisLabel.showMaxLabel]}; })()' % uri)
     assert got['labels'] == ['{v|31.0}\n{d0|▲ 1,2}', '{v|25.2}\n{d1|▼ 0,6}', '{v|19.4}\n{d2|–}', '{v|6.6}']
+    # without a previous delivery (every change null) the columns write only the share: no dash
+    bare = run_js('await (async () => { const cl = await import("%s"); const o = cl.columnsOption([{name: "PP", value: 31, change: null}], '
+                  '{formatter: (x) => x.toFixed(1)}); return [o.series[0].label.formatter({value: 31, dataIndex: 0}), '
+                  'o.tooltip.formatter([{dataIndex: 0}])]; })()' % uri)
+    assert bare == ['{v|31.0}', '<strong>PP</strong><br>31.0']
     assert got['colors'] == ['#2ca02c', '#d62728', '#5a5f72'] and got['x'] == ['PP', 'PSOE', 'VOX', 'Otros']
-    assert got['max'] >= 31 * 1.25 and got['bar'] == '#1d84ce'
+    assert got['max'] >= 31 * 1.25 and got['bar'] == '#1d84ce' and got['end'] == [False, False]  # the end of the axis is only room for the labels
     assert got['tip'] == '<strong>PP</strong><br>31.0<br>▲ 1,2 frente a la entrega anterior'
     # on a phone (compact) the share is the short one, the labels smaller and the names of the parties tilted
     compact = run_js('await (async () => { const cl = await import("%s"); '

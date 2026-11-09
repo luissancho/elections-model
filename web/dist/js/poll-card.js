@@ -7,13 +7,13 @@ const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 
 /**
  * Las filas del voto de un sondeo: los partidos con valor, de mayor a menor (los empates conservan el orden de
- * `parties`), con su cambio frente a la entrega anterior de la casa y medio, y al final «Otros» si el resto hasta 100
- * llega a 0,5 puntos.
+ * `parties`), con su cambio frente a la entrega anterior de la casa y medio. Sin «Otros» (Luis, 2026-11-09): el resto
+ * del voto no se dibuja; en los escaños, el arco «Otros» del hemiciclo sí.
  * @param {Object} poll El sondeo, con el valor de cada partido por nombre.
  * @param {string[]} parties Los partidos, en su orden.
  * @param {Object|null} [previous] La entrega anterior (voto por partido), si la hay.
  * @returns {{name: string, value: number, change: number|null}[]} Las filas; `change` es la diferencia con la entrega
- *   anterior a un decimal (null sin cifra en las dos entregas y en «Otros»).
+ *   anterior a un decimal (null sin cifra en las dos entregas).
  */
 export function voteRows(poll, parties, previous = null) {
     const rows = parties
@@ -24,12 +24,6 @@ export function voteRows(poll, parties, previous = null) {
             change: previous && isNumber(previous[name]) ? Math.round((poll[name] - previous[name]) * 10) / 10 : null,
         }));
     rows.sort((a, b) => b.value - a.value);
-    const total = rows.reduce((sum, row) => sum + row.value, 0);
-    const rest = Math.round((100 - total) * 10) / 10;
-    if (rest >= 0.5) {
-        rows.push({name: 'Otros', value: rest, change: null});
-    }
-
     return rows;
 }
 
