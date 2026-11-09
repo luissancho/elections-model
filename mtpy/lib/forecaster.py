@@ -849,7 +849,10 @@ class Forecaster(Core):
         house effects and with the weight of the average, and the group is fitted with the same estimator, band and
         grid as a party (`fit`). When pollsters start listing a new party halfway through the cycle the sum of the
         party averages jumps (the new party starts at its smoothed level while the others still lean on polls that
-        do not list it); the sum per poll does not.
+        do not list it); the sum per poll does not. From the first poll listing a member on, a poll that still does
+        not list it adds the average of that member that day (`self.forecast`, so `fit_forecast` must have fitted
+        it): otherwise a house that keeps leaving out a small party (25 of 84 polls without SALF in the six months
+        to 2026-11-09) would sink the group, 0.8 points below the sum of the parties on the day of the headline.
 
         Parameters
         ----------
@@ -872,10 +875,20 @@ class Forecaster(Core):
             self.fit_house_effects()
 
         polls = self.fc_series
+        days = pd.DatetimeIndex(polls.index)
         forecast, stat = {}, {}
         for group, members in groups.items():
             present = [n for n in members if n in polls.columns]
             values = polls[present].sum(axis=1, min_count=1) if present else pd.Series(np.nan, index=polls.index)
+            # A poll that does not list a member once pollsters list it (its voters go to the rest) would sink the
+            # group: it takes the average of that member that day, as the sum of the party averages does
+            for name in present:
+                listed = polls[name].notnull().to_numpy()
+                if not listed.any() or self.forecast is None or name not in self.forecast.columns:
+                    continue
+                level = self.forecast[name].astype(float).reindex(days).to_numpy()
+                fill = ~listed & (days >= days[listed].min()) & values.notnull().to_numpy() & ~np.isnan(level)
+                values = values.where(~fill, values + np.where(fill, level, 0.))
             res = self._fit_column(group, values, max_fc=max_fc, ret_stat=True)
             if res is None:
                 continue
@@ -895,7 +908,8 @@ class Forecaster(Core):
         Members of the groups that pollsters start listing halfway through the cycle (`party_entries`).
 
         The first poll of each name is the earliest of the poll labels its series gathers (`self.blocks`: FA with
-        the polls of SUMAR), over the polls that enter the average (`party_first_polls`).
+        the polls of SUMAR), over the polls that enter the average (`party_first_polls`). A name with a result in
+        the previous election (the result rows of `self.series`, before the first poll) is not new.
 
         Parameters
         ----------
@@ -912,8 +926,14 @@ class Forecaster(Core):
         first = self.party_first_polls if self.party_first_polls is not None else pd.Series(dtype='datetime64[ns]')
         members = list(dict.fromkeys(n for names in groups.values() for n in names))
         labels = {n: list(self.blocks.loc[n, 'parties']) for n in members if n in self.blocks.index}
+        known = set()
+        series = getattr(self, 'series', None)
+        if series is not None and first.shape[0] > 0:
+            results = series.loc[series['pollster'].isnull().to_numpy()]
+            results = results.loc[results.index.get_level_values('date') < first.min()]
+            known = {n for n in members if n in results.columns and results[n].notnull().any()}
 
-        return party_entries(first, members, labels, min_days=min_days)
+        return party_entries(first, members, labels, min_days=min_days, known=known)
 
     def get_forecast(
         self,

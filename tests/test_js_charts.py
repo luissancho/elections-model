@@ -516,6 +516,10 @@ def test_series_tooltip_of_a_block_breaks_it_down_into_its_parties():
     assert lines[2].endswith('VOX 10,0') and len(lines) == 3
     rest = run_js(tip % (BREAKDOWN_ARGS, 'Otros', 'Otros')).split('<br>')
     assert rest[1].endswith('PNV 2,0') and rest[2].endswith('Resto 10,0') and len(rest) == 3
+    # a fitted block line can differ from the sum of its parties: that is not a missing party, no «Resto» outside Otros
+    fitted = BREAKDOWN_ARGS.replace('mean: {Derecha: [40, 41]', 'mean: {Derecha: [40, 42.5]')
+    lines = run_js(tip % (fitted, 'Derecha', 'Derecha')).split('<br>')
+    assert len(lines) == 3 and not any('Resto' in line for line in lines)
     # without a breakdown the box is the line of the day alone
     plain = run_js(tip % (BREAKDOWN_ARGS.replace("breakdown: {", "nobreakdown: {"), 'Derecha', 'Derecha'))
     assert '<br>' not in plain
@@ -528,7 +532,8 @@ def test_series_draws_the_entries_as_dashed_marks_at_the_foot():
     option = run_js('s.seriesOption(%s)' % args)
     marks = next(x for x in option['series'] if x['name'] == 'marks')['markLine']['data']
     entry = next(m for m in marks if m['label']['formatter'] == 'Entra SALF')
-    assert entry['label']['position'] == 'start' and len(marks) == 2      # «Estimación» y la entrada
+    # dentro del gráfico, en vertical junto a su línea: ni sobre las fechas del eje ni encima de otra entrada cercana
+    assert entry['label']['position'] == 'insideEndTop' and len(marks) == 2      # «Estimación» y la entrada
     plain = run_js('s.seriesOption(%s)' % BREAKDOWN_ARGS)
     assert len(next(x for x in plain['series'] if x['name'] == 'marks')['markLine']['data']) == 1
 

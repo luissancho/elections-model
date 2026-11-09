@@ -348,7 +348,7 @@ def export_event_series(source: Optional[str], event_date: str, first_polls: Opt
     return data, frame
 
 
-def event_entries(comp, event_date: str, polls: pd.DataFrame) -> dict:
+def event_entries(comp, event_date: str, polls: pd.DataFrame, known: Optional[Sequence] = None) -> dict:
     """Parties of Izquierda or Derecha that pollsters started listing halfway through the cycle of a past election.
 
     The same rule as the ``first_polls`` of a run (``utils.party_entries``): the simulated parties of the election
@@ -363,6 +363,8 @@ def event_entries(comp, event_date: str, polls: pd.DataFrame) -> dict:
         Election date, ``YYYY-MM-DD``.
     polls : pandas.DataFrame
         Polls of the cycle (``Computer.filter_polls``), with a ``date`` level and the poll labels as columns.
+    known : sequence, optional
+        Parties with a result in the previous election (``previous_parties``): never new.
 
     Returns
     -------
@@ -380,7 +382,38 @@ def event_entries(comp, event_date: str, polls: pd.DataFrame) -> dict:
     labels = Simulator.poll_blocks(names, params.get('smap') or {})
     every = list(dict.fromkeys(label for name in members for label in labels.get(name, [name])))
 
-    return party_entries(first_poll_dates(polls, every), members, labels)
+    return party_entries(first_poll_dates(polls, every), members, labels, known=known)
+
+
+def previous_parties(table: pd.DataFrame, event_date: str, results: Callable, scope: str) -> list:
+    """Parties with votes in the election before ``event_date`` (``table`` of ``get_events``; none without one).
+
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Elections of the scope (``date``, ``has_results``).
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+    results : callable
+        ``get_event_results(scope, date, region)``.
+    scope : str
+        Scope of the election.
+
+    Returns
+    -------
+    list
+        Names of the parties of the previous election with votes, nationwide (region 0).
+    """
+    dates = _iso_dates(table['date'])
+    before = sorted(d for d, has in zip(dates, table['has_results'].astype(bool)) if has and d < event_date)
+    if not before:
+        return []
+    previous = results(scope, before[-1], 0)
+    if previous is None or previous.empty or 'party' not in previous.columns:
+        return []
+    votes = previous['votes'] if 'votes' in previous.columns else pd.Series(1, index=previous.index)
+
+    return [str(p) for p in previous.loc[votes.fillna(0).to_numpy() > 0, 'party']]
 
 
 def event_summary(frame: pd.DataFrame, blocks: Sequence[str]) -> dict:
@@ -590,7 +623,8 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     src = backtest_source(scope, source)
     model, model_frames = export_event_model(src, event_date)
     seconds['model'] = lap()
-    series_data, series_frame = export_event_series(src, event_date, event_entries(comp, event_date, cycle))
+    known = previous_parties(table, event_date, results or get_event_results, scope)
+    series_data, series_frame = export_event_series(src, event_date, event_entries(comp, event_date, cycle, known))
     seconds['series'] = lap()
     live_meta = bundle.path_event(scope, event_date, 'meta')
     live_model = writer.exists(live_meta) and bool(writer.read_json(live_meta)['data'].get('has_model'))

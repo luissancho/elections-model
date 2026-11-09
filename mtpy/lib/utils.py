@@ -74,13 +74,16 @@ def party_entries(
     first_polls: pd.Series,
     members: list,
     labels: dict,
-    min_days: int = 90
+    min_days: int = 90,
+    known: Optional[Any] = None
 ) -> dict:
     """
     Parties that pollsters start listing halfway through the cycle, with the date of their first poll.
 
     The first poll of a party is the earliest of its poll labels (`labels`, e.g. FA with the polls of SUMAR it
-    inherits through the source map), so that a renamed or merged party is not taken for a new one.
+    inherits through the source map), so that a renamed or merged party is not taken for a new one. A party that
+    ran in the previous election (`known`) is never new, however late the polls of a sparse cycle list it (Cs
+    left out of the first poll of a regional cycle).
 
     Parameters
     ----------
@@ -92,6 +95,9 @@ def party_entries(
         `{party: [poll labels]}`; a party without an entry has its own name as its only label.
     min_days : int, optional
         Days after the first poll of the cycle (the earliest of `first_polls`) from which a party counts as new.
+    known : iterable, optional
+        Parties or poll labels with a result in the previous election: a party named there, or with a label there,
+        is left out.
 
     Returns
     -------
@@ -101,10 +107,14 @@ def party_entries(
     if first_polls.shape[0] == 0:
         return {}
 
+    known = set(known or ())
     start = first_polls.min()
     entries = {}
     for name in members:
-        dates = [first_polls[label] for label in labels.get(name, [name]) if label in first_polls.index]
+        own = labels.get(name, [name])
+        if name in known or any(label in known for label in own):
+            continue
+        dates = [first_polls[label] for label in own if label in first_polls.index]
         if not dates:
             continue
         first = min(dates)

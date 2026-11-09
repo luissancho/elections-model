@@ -776,6 +776,31 @@ def test_fit_groups_has_no_step_when_a_member_enters_mid_cycle():
     assert summed.loc[first] - summed.loc[prev] > 1.          # el artefacto de hoy
 
 
+def test_fit_groups_fills_a_member_a_house_does_not_list_with_its_average():
+    """Una casa que, tras la entrada de un partido, sigue sin listarlo (sus votantes se le van a «otros») hundiría el
+    bloque: el sondeo lleva el promedio de ese día del miembro que no lista, y el grupo coincide con la suma de los
+    ajustes una vez pasada la entrada. Antes de la entrada no se completa nada."""
+    fc, _, _ = _synthetic_forecaster(noise={1: 0.01, 2: 0.01, 3: 0.01, 4: 0.01})
+    dates = fc.series.index.get_level_values('date')
+    houses = fc.series.index.get_level_values('pollster_id')
+    born = dates >= pd.Timestamp('2026-03-01')
+    listed = born & (houses != 3)                        # la casa 3 nunca lista al nuevo
+    series = fc.series.copy()
+    series['NEW'] = np.where(listed, 4., np.nan)
+    series.loc[born, 'PP'] -= 4.                          # todas las casas le quitan al PP lo que se lleva
+    fc.names = ['PP', 'PSOE', 'NEW']
+    fc.he_enabled = False
+    fc.series_raw = None
+    fc._set_series(series)
+    fc.fit_forecast(names=['PP', 'NEW'], max_fc=0)
+    forecast, _ = fc.fit_groups({'Derecha': ['PP', 'NEW']}, max_fc=0)
+    summed = fc.forecast[['PP', 'NEW']].sum(axis=1, min_count=1)
+    late = pd.Timestamp('2026-08-01')
+    assert forecast.loc[late, 'Derecha'] == pytest.approx(summed.loc[late], abs=0.15)
+    early = pd.Timestamp('2026-02-01')
+    assert forecast.loc[early, 'Derecha'] == pytest.approx(fc.forecast.loc[early, 'PP'], abs=0.6)
+
+
 def test_fit_groups_skips_a_group_with_fewer_than_three_polls():
     """Un grupo con menos de tres sondeos útiles no se ajusta: avisa y no tiene columna."""
     fc, _, _ = _synthetic_forecaster()
@@ -794,3 +819,8 @@ def test_cycle_births_uses_the_poll_labels_of_each_simulated_name():
                                                      'UP': '2023-12-15'}))
     fc.blocks = pd.DataFrame({'parties': pd.Series([['PSOE'], ['FA', 'SUMAR'], ['UP']], index=['PSOE', 'FA', 'UP'])})
     assert fc.cycle_births({'Izquierda': ['PSOE', 'FA', 'UP']}) == {'UP': '2023-12-15'}
+    # with the previous result in the series, a party that ran then is not new (Cs listed late in a regional cycle)
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-07-23'), np.nan, np.nan)],
+                                      names=['date', 'pollster_id', 'sponsor_id'])
+    fc.series = pd.DataFrame({'pollster': [None], 'PSOE': [31.7], 'FA': [12.3], 'UP': [2.0]}, index=index)
+    assert fc.cycle_births({'Izquierda': ['PSOE', 'FA', 'UP']}) == {}

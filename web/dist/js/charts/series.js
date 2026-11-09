@@ -283,7 +283,8 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   and `breakdown` (the block view: `{members, values, colors}`, the parties of each block, the series of each
  *   party and its colour, which break a day of a block line down into its parties; null for none) and `marks`
  *   (`[{date, label}]`: more dashed mark lines, the entry of a party in the polls in the block view, with their
- *   label at the foot so that it never covers «Estimación» or «Elección»; none by default)
+ *   label inside the plot along the line, so that it covers neither the axis dates nor another entry; none by
+ *   default)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
@@ -393,7 +394,9 @@ export function seriesOption({
   }
   for (const entry of entries || []) {
     const mark = markAt(dayTime(entry.date), entry.label);
-    marks.push({...mark, label: {...mark.label, position: 'start'}});
+    // inside the plot, written along its line from the top: never over the dates of the axis, and two entries a
+    // few weeks apart (UP and SALF on a phone) do not cover each other
+    marks.push({...mark, label: {...mark.label, position: 'insideEndTop', align: undefined}});
   }
   // Mark lines on their own empty series, so hiding a party never hides them.
   const markSeries = {

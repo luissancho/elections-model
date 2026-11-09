@@ -388,7 +388,9 @@ def export_series(fc, names, end=None, blocks: Optional[dict] = None):
         keys = [block for block in groups if block in forecast.columns]
         b_mean, b_lo, b_hi = columns(forecast, stat, keys)
         fitted = {'parties': keys, 'mean': b_mean, 'lo': b_lo, 'hi': b_hi}
-        entries = fc.cycle_births(groups)
+        # a party without a line (fewer than three polls) has no legend entry either: its entry is not marked
+        entries = {name: day for name, day in fc.cycle_births(groups).items()
+                   if name in fc.forecast.columns and fc.forecast[name].loc[:end].notnull().any()}
     data = {'dates': dates, 'parties': list(names), 'mean': mean, 'lo': lo, 'hi': hi, 'blocks': fitted,
             'first_polls': entries}
     rows = [{'date': d, 'name': name, 'kind': 'party', 'mean': mean[name][i], 'lo': lo[name][i], 'hi': hi[name][i]}

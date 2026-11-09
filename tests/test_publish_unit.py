@@ -193,6 +193,14 @@ def test_export_series_publishes_the_fitted_blocks_and_the_entries():
     assert frame.shape[0] == 33 * 3 + 33 * 2 and list(frame['kind'].unique()) == ['party', 'block']
 
 
+def test_export_series_does_not_mark_a_party_without_a_line():
+    """Un partido sin línea (menos de tres sondeos) no tiene leyenda: su entrada no se marca."""
+    sim = synthetic_simulator()
+    sim.model.forecast['VOX'] = np.nan
+    data, _ = publish.export_series(sim.model, NAMES, blocks={'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX']})
+    assert data['first_polls'] == {}
+
+
 def test_export_series_without_blocks_has_empty_blocks_and_no_entries():
     data, frame = publish.export_series(synthetic_simulator().model, NAMES)
     data = valid('series', data, mode=None)
@@ -1545,6 +1553,7 @@ def test_event_entries_reads_the_simulated_parties_and_their_labels():
         'parties': {'event': ['PP', 'PSOE', 'FA', 'UP']}, 'smap': {'FA': {'type': 'agg', 'names': ['SUMAR']}},
         'bmaps': {'vs': {'Izquierda': ['PSOE', 'FA', 'UP'], 'Derecha': ['PP']}}}})
     assert publish.event_entries(comp, '2023-07-23', polls) == {'UP': '2023-06-01'}
+    assert publish.event_entries(comp, '2023-07-23', polls, known={'UP'}) == {}
     bare = types.SimpleNamespace(event_params={'2023-07-23': {'bmaps': {'vs': {}}}})
     assert publish.event_entries(bare, '2023-07-23', polls) == {}
 

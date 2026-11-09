@@ -17,6 +17,9 @@ def test_party_entries_marks_only_the_parties_born_mid_cycle_with_their_inherite
     assert out == {'UP': '2023-12-15', 'SALF': '2024-06-06'} and list(out) == ['UP', 'SALF']
     assert party_entries(first, ['UP'], {}, min_days=200) == {}
     assert party_entries(pd.Series(dtype='datetime64[ns]'), ['UP'], {}) == {}
+    # a party with a result in the previous election is not new, however late the cycle's polls list it
+    assert party_entries(first, ['UP', 'SALF'], {}, known={'UP'}) == {'SALF': '2024-06-06'}
+    assert party_entries(first, ['FA'], labels, known={'SUMAR'}, min_days=0) == {}
 
 
 def test_first_poll_dates_reads_the_first_non_null_of_each_label():
