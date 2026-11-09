@@ -96,6 +96,7 @@ MESSAGES = {
     'database unavailable': 'La base de datos no está disponible.',
     'pollster not found': 'Encuestadora no encontrada.',
     'invalid pollster': 'Encuestadora no válida.',
+    'poll not found': 'Sondeo no encontrado.',
     'invalid date': 'Fecha no válida.',
     'event not published': 'Elección no publicada.',
     'backtest not published': 'Backtest no publicado.',

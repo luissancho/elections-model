@@ -43,8 +43,9 @@ from .inicio import INTRO, card_headline, event_cards, inicio_context, past_even
 from . import ban, herd, lean, shy
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, quality_rubric, subpages, thresholds_rows)
-from .slugs import (NATIONAL_SLUG, event_href, event_segment, pollster_href, pollster_slugs, resolve_event_path,
-                    resolve_pollster, scope_paths, scope_slug, slugify)
+from .slugs import (NATIONAL_SLUG, event_href, event_segment, poll_detail_href, pollster_href, pollster_slugs,
+                    resolve_event_path, resolve_pollster, scope_paths, scope_slug, slugify)
+from .sondeos import find_poll, series_at
 from .promedios import (BLOCK_ORDER, PAGE_SIZE, RATING_COLORS, block_result_rows, chart_polls, fieldwork_label, inherited_results,
                         lineage_blocks, party_cards,
                         poll_href, poll_months, poll_name, polls_table, pollster_options, promedios_context, result_rows,

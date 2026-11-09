@@ -1941,7 +1941,7 @@ def test_pages_package_layout():
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
     assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters',
-                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'shy', 'slugs']
+                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'shy', 'slugs', 'sondeos']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -7164,3 +7164,52 @@ def test_run_less_colours_take_the_colours_from_the_vs_of_the_election():
     assert pages.block_color('Derecha', out, catalog) == '#1d84ce'
     assert pages.block_color('Izquierda', out, catalog) == '#ef1c27'
     assert pages.block_color('Otros', out, catalog) == pages.OTHERS_COLOR
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Detalle de un sondeo
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def test_poll_detail_href_builds_the_route_from_the_poll():
+    poll = {'date': '2026-11-09', 'pollster_id': 12, 'pollster': 'NC Report', 'sponsor': 'La Razón'}
+    assert pages.poll_detail_href('es', poll) == '/es/sondeos/2026-11-09/nc-report/la-razon'
+    assert pages.poll_detail_href('es-md', poll | {'sponsor': None}) == '/es-md/sondeos/2026-11-09/nc-report'
+    assert pages.poll_detail_href('es', poll | {'sponsor': '—'}) == '/es/sondeos/2026-11-09/nc-report'  # a sponsor without a slug
+    assert pages.poll_detail_href('es', poll | {'pollster': '???'}) == '/es/sondeos/2026-11-09/12/la-razon'
+    assert pages.poll_detail_href('es', poll | {'date': '2026-11-09T00:00:00'}) == '/es/sondeos/2026-11-09/nc-report/la-razon'
+    assert pages.poll_detail_href('es', poll | {'date': None}) is None
+    assert pages.poll_detail_href('es', {'date': '2026-11-09', 'pollster': None, 'pollster_id': None}) is None
+
+
+POLLS_OF_A_DAY = [
+    {'date': '2026-10-01', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': 'ABC', 'PP': 33.0},
+    {'date': '2026-10-01', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': 'El Mundo', 'PP': 34.0},
+    {'date': '2026-10-01', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 32.0},
+    {'date': '2026-10-02', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo', 'PP': 31.0},
+    {'date': '2026-10-03', 'pollster_id': 9, 'pollster': 'Casa', 'sponsor': '—', 'PP': 30.0},
+]
+
+
+def test_find_poll_matches_the_date_the_house_and_the_sponsor():
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-01', 'gad3', 'abc')['PP'] == 33.0
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-01', 'sigma-dos')['PP'] == 32.0
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-02', 'sigma-dos')['PP'] == 31.0  # the only one of the house that day
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-03', 'casa')['PP'] == 30.0  # a sponsor without a slug
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-01', '1')['PP'] == 32.0  # the id stands for a house without a slug
+    assert pages.MESSAGES['poll not found'] == 'Sondeo no encontrado.'
+    for args in (('2026-10-01', 'gad3'), ('2026-10-01', 'gad3', 'la-razon'), ('2026-10-03', 'gad3'), ('2026-10-01', 'nadie'),
+                 ('2026-10-02', 'sigma-dos', 'el-pais')):
+        with pytest.raises(HttpError) as err:
+            pages.find_poll(POLLS_OF_A_DAY, *args)
+        assert (err.value.status, err.value.message) == (404, 'poll not found')
+
+
+def test_series_at_takes_the_average_of_the_last_day_up_to_the_date():
+    series = {'dates': ['2026-10-01', '2026-10-02', '2026-10-05'], 'parties': ['PP', 'PSOE'],
+              'mean': {'PP': [30.0, 30.5, 31.0], 'PSOE': [28.0, None, 27.0]}, 'lo': {}, 'hi': {}}
+    assert pages.series_at(series, '2026-10-02') == {'PP': 30.5, 'PSOE': None}
+    assert pages.series_at(series, '2026-10-04') == {'PP': 30.5, 'PSOE': None}
+    assert pages.series_at(series, '2026-10-09') == {'PP': 31.0, 'PSOE': 27.0}
+    assert pages.series_at(series, '2026-09-30') == {}
+    assert pages.series_at({'dates': [], 'parties': [], 'mean': {}}, '2026-10-01') == {}
