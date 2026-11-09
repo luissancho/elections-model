@@ -141,8 +141,11 @@ Sondeos publicados y resultado anterior. Fuente: `Forecaster.fc_series_raw` y `F
 `data`: `parties`, `columns` (`POLL_COLUMNS`), `polls` y `results`.
 
 - `polls`: registros con `date, pollster_id, pollster, sponsor, start_date, end_date, sample_size, mtype,
-  rating, weight` (10 columnas) más una columna por partido en puntos porcentuales. `weight` a 3
-  decimales. Enmienda 2026-10-14 (fase 7c): el sondeo que publica escaños lleva además `seats`,
+  rating, weight, weight_over, weight_sample, weight_rating, url` (14 columnas) más una columna por
+  partido en puntos porcentuales. `weight` a 3 decimales. Enmienda 2026-11-09: `weight_over`, `weight_sample` y
+  `weight_rating` (a 3 decimales; `weight` es su producto) y `url`, la fuente del sondeo tal como la guarda la
+  tabla `polls` (`null` sin ella); los runs anteriores no las traen y la página de un sondeo enseña entonces
+  sólo el peso total. Enmienda 2026-10-14 (fase 7c): el sondeo que publica escaños lleva además `seats`,
   `{partido: [mín, máx]}` (enteros; la encuestadora da un número, `mín = máx`, o una horquilla), solo con los
   partidos que los tienen; los sondeos sin escaños no llevan la clave. Son las cifras de la encuestadora
   (`polls_results.seats_min/seats_max`), no del modelo. Los runs anteriores no las tienen.
