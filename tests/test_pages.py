@@ -7518,6 +7518,11 @@ def test_poll_kpis_title_fieldwork_and_sheet():
     assert pages.sheet_rows({'date': '2026-11-09', 'pollster': 'X'}, '/casas/x', 'E')[3]['text'] == '9 nov 2026'  # the poll's date is its last fieldwork day
 
 
+def test_rating_badge_colours_the_rating_of_the_house():
+    assert pages.rating_badge(POLL) == {'text': '64,2', 'color': pages.gradient(64.23, 0, 100, pages.RATING_COLORS)}
+    assert pages.rating_badge(POLL | {'rating': None}) is None and pages.rating_badge(POLL | {'rating': float('nan')}) is None
+
+
 def test_lead_drops_a_missing_sample():
     """Sin muestra, la entradilla de la tarjeta no la nombra (nunca «– entrevistas», revisión final 2026-11-09)."""
     for sample in (None, float('nan'), 0):
@@ -7639,6 +7644,10 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '<p class="muted pc-note">Flechas: frente al sondeo anterior de Sigma Dos (campo hasta el 28 sept 2026).</p>' in card
     assert 'En gris' not in card
     assert 'class="kpis"' not in card and 'promedio' not in card and 'Distancia' not in card
+    # under the election, the rating of the house with the badge of the polls table (Luis, 2026-11-09)
+    badge = '<p class="pc-rating">Rating (0-100): <span class="rt" style="background: %s">71,2</span></p>' % pages.gradient(
+        71.2, 0, 100, pages.RATING_COLORS)
+    assert badge in card and card.index('class="pc-event"') < card.index('class="pc-rating"') < card.index('id="poll-bars"')
     assert 'En el hemiciclo, el cambio de los escaños compara el punto medio de las dos horquillas.' in ' '.join(card.split())
     # the table of the vote and the weight card share a row
     assert page.index('<div class="poll-pair">') < page.index('id="vote"') < page.index('id="weight"') < page.index('id="house"')

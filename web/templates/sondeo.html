@@ -19,6 +19,8 @@
       {{ m.card_start('poll-card', poll_title, lead, classes='shot poll-card', title_href=house.href) }}
         {{ m.card_image_button(image_file, image_sign) }}
         <p class="pc-event">{{ event_label }}</p>
+        {#- the rating of the house, with the badge of the polls table of the event page (Luis, 2026-11-09) -#}
+        <p class="pc-rating">Rating (0-100): {% if rating_badge %}<span class="rt" style="background: {{ rating_badge.color }}">{{ rating_badge.text }}</span>{% else %}—{% endif %}</p>
         <div class="poll-grid{% if not has_seats %} single{% endif %}">
           <div class="chart poll-bars" id="poll-bars" role="img" aria-label="Voto por partido según {{ house.name }}" style="height: {{ 34 * vote_rows|length + 60 }}px"></div>
           {% if has_seats %}

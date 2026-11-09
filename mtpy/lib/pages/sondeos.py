@@ -273,6 +273,29 @@ def weight_card(poll: dict, weights: Optional[dict]) -> dict:
     return card
 
 
+def rating_badge(poll: dict) -> Optional[dict]:
+    """
+    Rating badge of the house of a poll, for the head of its card: the one of the polls table of the event page.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``rating``).
+
+    Returns
+    -------
+    dict or None
+        ``{'text', 'color'}``: the rating at one decimal on its colour, from red at 0 through grey at 50 to green at 100
+        (``gradient`` over ``RATING_COLORS``); ``None`` without a rating (aggregators and online panels).
+    """
+    rating = poll.get('rating')
+
+    if not _has_value(rating):
+        return None
+
+    return {'text': fmt_num(rating, 1), 'color': gradient(rating, 0, 100, RATING_COLORS)}
+
+
 def poll_kpis(poll: dict) -> list:
     """
     Figures of a poll in the average, at the head of its weight card.
@@ -412,7 +435,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``poll``,
         ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``sample_text``
         (``sample_text``), ``poll_date``,
-        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``, at the head of the weight card),
+        ``event_label`` (the event and its date), ``rating_badge`` (``rating_badge``, under it in the card), ``kpis``
+        (``poll_kpis``, at the head of the weight card),
         ``vote_rows``, ``previous`` (``date``, ``href`` keeping the query, ``title``, ``fieldwork``
         (``fieldwork_text``, ``None`` without dates) and ``overlap`` (``fieldwork_overlaps``) of the previous delivery
         of the house and sponsor, ``None`` without one), ``has_seats``, ``weight``
@@ -480,6 +504,7 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'poll_date': fmt_date(date),
         'event_label': event_label,
         'kpis': poll_kpis(poll),
+        'rating_badge': rating_badge(poll),
         'vote_rows': vote_rows(poll, poll_parties, colors, prev),
         'previous': previous,
         'has_seats': bool(seats),
