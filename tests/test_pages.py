@@ -7482,7 +7482,8 @@ COLORS = {'PP': '#1d84ce', 'PSOE': '#ef1c27', 'VOX': '#63be21', 'ERC': '#ffb232'
 def test_vote_rows_order_the_parties_of_the_poll_and_compare_them_with_the_average():
     rows = pages.vote_rows(POLL, ['PSOE', 'PP', 'VOX', 'ERC'], AVERAGE, COLORS, effects={'PP': 0.6})
     assert [row['name'] for row in rows] == ['PP', 'PSOE', 'VOX']  # ERC has no value in the poll
-    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'avg': 31.9, 'diff': 0.7, 'effect': 0.6, 'seats': '136–138'}
+    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'avg': 31.9, 'diff': 0.7, 'effect': 0.6, 'seats': '136–138',
+                       'prev': None, 'change': None, 'seats_change': None}
     assert rows[1]['diff'] == -0.8 and rows[1]['effect'] is None
     bare = pages.vote_rows(POLL | {'seats': {'PP': [136, 136]}}, ['PP', 'PSOE'], {}, COLORS)
     assert bare[0]['avg'] is None and bare[0]['diff'] is None and bare[0]['seats'] == '136' and bare[1]['seats'] is None
@@ -7558,6 +7559,36 @@ def test_sheet_links_the_source_only_with_a_web_address():
     assert pages.sheet_rows(POLL | {'url': 'http://www.larazon.es/e'}, '/casas/x', 'E', 'R')[7]['href'] == 'http://www.larazon.es/e'
 
 
+PREV_POLLS = [
+    {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo', 'PP': 33.0},
+    {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 31.0},
+    {'date': '2026-09-20', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 30.0},
+    {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 30.5},
+    {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 30.8},
+    {'date': '2026-10-04', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'ABC', 'PP': 29.0},
+    {'date': '2026-10-04', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': None, 'PP': 28.0},
+]
+
+
+def test_previous_poll_is_the_last_earlier_delivery_of_the_same_house_and_sponsor():
+    poll = PREV_POLLS[1]
+    assert pages.previous_poll(PREV_POLLS, poll)['PP'] == 30.8  # same day of 28 sep: the later one in the part
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[0]) is None  # El Mundo: no earlier delivery for that sponsor
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[2]) is None  # the first of the cycle
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[4])['PP'] == 30.5  # same date earlier in the part
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[3])['PP'] == 30.0
+    assert pages.previous_poll([], poll) is None
+
+
+def test_vote_rows_compare_with_the_previous_delivery():
+    poll = {'PP': 32.6, 'PSOE': 25.6, 'UP': 1.2, 'seats': {'PP': [136, 138], 'PSOE': [99, 101]}}
+    previous = {'PP': 31.4, 'PSOE': 25.6, 'seats': {'PP': [130, 134]}}
+    rows = pages.vote_rows(poll, ['PP', 'PSOE', 'UP'], {}, {}, previous=previous)
+    assert [(r['name'], r['prev'], r['change'], r['seats_change']) for r in rows] == [
+        ('PP', 31.4, 1.2, 5), ('PSOE', 25.6, 0.0, None), ('UP', None, None, None)]
+    assert all(r['prev'] is None and r['change'] is None for r in pages.vote_rows(poll, ['PP'], {}, {}))
+
+
 DETAIL_POLLS = [
     {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'start_date': '2026-10-01', 'end_date': '2026-10-04',
      'sample_size': 2000, 'mtype': 'cati', 'rating': 71.2, 'weight': 1.265, 'weight_over': 1.0, 'weight_sample': 1.265,
@@ -7568,6 +7599,8 @@ DETAIL_POLLS = [
     {'date': '2026-10-01', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': 'El Mundo', 'sample_size': 1200, 'rating': 80.0, 'weight': 0.9, 'PP': 32.9},
     {'date': '2026-10-03', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'Tracking', 'sample_size': 500, 'rating': 71.2,
      'weight': 0.0, 'weight_over': 0.0, 'weight_sample': 0.6, 'weight_rating': 1.0, 'PP': 33.0},
+    {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'sample_size': 1500, 'rating': 71.2,
+     'weight': 1.0, 'PP': 32.1, 'seats': {'PP': [146, 148]}},
 ]
 
 
@@ -7612,8 +7645,8 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     kpis = page[page.index('id="poll-card"'):page.index('id="vote"')]
     assert '>Rating<' in kpis and '>71,2<' in kpis and '>Distancia al promedio<' in kpis and '>1,5<' in kpis  # 33.5 − 32.0
     # the marks are explained inside the card (so in its image too), before the figures; «Cómo leerlo» calls them dark
-    note = ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. En gris, los escaños de los '
-            'demás partidos.</p>')
+    note = ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. Flechas: frente al sondeo de '
+            'Sigma Dos del 28 sept 2026. En gris, los escaños de los demás partidos.</p>')
     assert note in kpis and kpis.index(note) < kpis.index('class="kpis"') and kpis.index('id="poll-hemi"') < kpis.index(note)
     assert 'la marca oscura sobre ella' in kpis and 'marca gris' not in page and 'El arco gris, «Otros», completa la cámara' in kpis
     assert '2.000 entrevistas · ' in kpis and '>2.000<small>entrevistas</small>' in kpis
@@ -7622,6 +7655,10 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
     assert '<th scope="col">Escaños</th>' in vote and '150–152' in vote and '>33,5<' in vote and '>32,0<' in vote
     assert 'Promedio del 5 oct 2026' in vote
+    # the comparison with the previous delivery of the same house and sponsor (28 sep, no sponsor)
+    assert '<th scope="col">Anterior</th>' in vote and '<th scope="col">Cambio</th>' in vote and '>32,1<' in vote
+    assert '▲ 1,4' in vote and '▲ 4' in vote and '150–152' in vote
+    assert 'href="/es/sondeos/2026-09-28/sigma-dos?mode=forecast"' in vote and '28 sept 2026' in vote
     weight = page[page.index('id="weight"'):page.index('id="house"')]
     assert '>Solape<' in weight and '>1,27<' in weight and 'En el promedio del 8 oct 2026' in weight
     sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
@@ -7632,11 +7669,12 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '/dist/js/pages/sondeo.js' in page  # the module that draws the charts
     assert_public_wording(page, 'sondeo')
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'average', 'seats',
-                         'n_seats', 'majority'}
-    assert [p['date'] for p in data['polls']['polls']] == ['2026-10-05', '2026-09-24', '2026-10-03']  # only the house's polls, in the order of the part
+    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'previous', 'average',
+                         'seats', 'n_seats', 'majority'}
+    assert [p['date'] for p in data['polls']['polls']] == ['2026-10-05', '2026-09-24', '2026-10-03', '2026-09-28']  # only the house's polls, in the order of the part
     assert data['poll']['PP'] == 33.5 and data['average'] == {'PP': 32.0} and data['seats'] == {'PP': [150, 152]}
     assert data['n_seats'] == 350 and data['majority'] == 176
+    assert data['previous'] == {'date': '2026-09-28', 'title': 'Sigma Dos', 'values': {'PP': 32.1}}
 
 
 def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
@@ -7644,7 +7682,10 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     page = html(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])
     assert 'Sigma Dos para El Mundo' in page and 'id="poll-hemi"' not in page and 'Sigma Dos no publicó escaños con este sondeo' in page
     # without seats, the note of the card only explains the mark of the bars and the description does not offer seats
-    assert '<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día.</p>' in page
+    assert ('<p class="muted pc-note">La marca sobre cada barra es el promedio de sondeos del día. Primer sondeo de Sigma Dos '
+            'para El Mundo en este ciclo.</p>') in page
+    assert '<th scope="col">Anterior</th>' not in page and '<th scope="col">Cambio</th>' not in page
+    assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['previous'] is None
     assert 'El arco gris' not in page
     description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
     assert description.endswith(': voto por partido frente al promedio, rating y peso en el promedio.') and 'escaños' not in description

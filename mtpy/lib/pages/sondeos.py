@@ -170,7 +170,62 @@ def _has_value(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and not _is_missing(value)
 
 
-def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: Optional[dict] = None) -> list:
+def previous_poll(polls: list, poll: dict) -> Optional[dict]:
+    """
+    Previous delivery of the same house and sponsor before a poll.
+
+    Parameters
+    ----------
+    polls : list
+        Records of the ``polls`` part of a scope, in its order.
+    poll : dict
+        One of the records of ``polls`` (found by identity; by date, house and sponsor otherwise).
+
+    Returns
+    -------
+    dict or None
+        Among the polls of the same house (``pollster_id``) and sponsor, ordered by date and then by position in the
+        part, the last one strictly before ``poll``; ``None`` when there is none.
+    """
+    def same_line(other: dict) -> bool:
+        return other.get('pollster_id') == poll.get('pollster_id') and (other.get('sponsor') or None) == (
+            poll.get('sponsor') or None)
+
+    keys = [(str(other.get('date'))[:10], index) for index, other in enumerate(polls) if same_line(other)]
+    own = [index for index, other in enumerate(polls) if other is poll]
+
+    if not own:
+        own = [index for index, other in enumerate(polls)
+               if same_line(other) and str(other.get('date'))[:10] == str(poll.get('date'))[:10]][:1]
+
+    key = (str(poll.get('date'))[:10], own[0] if own else len(polls))
+    earlier = [item for item in keys if item < key]
+
+    return polls[max(earlier)[1]] if earlier else None
+
+
+def _seats_mid(seats_range) -> Optional[int]:
+    """
+    Midpoint of a seats range.
+
+    Parameters
+    ----------
+    seats_range : list or None
+        ``[low, high]`` seats.
+
+    Returns
+    -------
+    int or None
+        ``round((low + high) / 2)``; ``None`` when there is no range.
+    """
+    if seats_text(seats_range) is None:
+        return None
+
+    return round((int(seats_range[0]) + int(seats_range[1])) / 2)
+
+
+def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: Optional[dict] = None,
+              previous: Optional[dict] = None) -> list:
     """
     Rows of the vote table of a poll: its parties against the average of the day.
 
@@ -186,15 +241,20 @@ def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: O
         ``{party: colour}``.
     effects : dict, optional
         ``{party: house effect}``.
+    previous : dict, optional
+        Previous delivery of the same house and sponsor.
 
     Returns
     -------
     list
         One dict per party with a number in the poll, by descending value: ``name``, ``color``, ``value``, ``avg``,
-        ``diff`` (value minus average, one decimal), ``effect`` and ``seats`` (``None`` when missing).
+        ``diff`` (value minus average, one decimal), ``effect``, ``seats`` (``None`` when missing), ``prev`` (its
+        figure in the previous delivery), ``change`` (value minus ``prev``, one decimal) and ``seats_change``
+        (difference of the midpoints of the two ranges); ``None`` when the previous delivery lacks the figure.
     """
     effects = effects or {}
     seats = poll.get('seats') or {}
+    prev_seats = (previous or {}).get('seats') or {}
     rows = []
 
     for name in parties:
@@ -205,9 +265,14 @@ def vote_rows(poll: dict, parties: list, average: dict, colors: dict, effects: O
 
         avg = average.get(name)
         avg = float(avg) if _has_value(avg) else None
+        prev = (previous or {}).get(name)
+        prev = float(prev) if _has_value(prev) else None
+        mid, prev_mid = _seats_mid(seats.get(name)), _seats_mid(prev_seats.get(name))
         rows.append({'name': name, 'color': colors.get(name), 'value': float(value), 'avg': avg,
                      'diff': None if avg is None else round(value - avg, 1), 'effect': effects.get(name),
-                     'seats': seats_text(seats.get(name))})
+                     'seats': seats_text(seats.get(name)), 'prev': prev,
+                     'change': None if prev is None else round(value - prev, 1),
+                     'seats_change': None if mid is None or prev_mid is None else mid - prev_mid})
 
     return sorted(rows, key=lambda row: -row['value'])
 
@@ -477,7 +542,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``poll``,
         ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``sample_text``
         (``sample_text``), ``poll_date``,
-        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``), ``vote_rows``, ``has_seats``,
+        ``event_label`` (the event and its date), ``kpis`` (``poll_kpis``), ``vote_rows``, ``previous`` (``date``, ``href`` keeping the query and ``title`` of the previous delivery of the
+        house and sponsor, ``None`` without one), ``has_seats``,
         ``has_effects``, ``average_date`` (the day of the series compared, ``None`` without one), ``weight``
         (``weight_card``, its ``factors`` with an empty ``unit`` and no ``color`` for ``m.kpis``), ``weights_date``
         (the day of the ``weights`` part, ``None`` without it), ``sheet`` (``sheet_rows``), ``back_href`` (the polls
@@ -486,7 +552,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``polls`` (``chart_polls`` with the polls of
         the house only), ``projection`` and ``vote`` (the parts of the mode), ``catalog`` (``parties`` and ``bmaps``,
         as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``, ``sponsor``, ``pollster`` and the
-        percentages), ``average``, ``seats`` (``None`` without them), ``n_seats`` and ``majority``.
+        percentages), ``previous`` (``date``, ``title`` and ``values`` of the previous delivery, or ``None``),
+        ``average``, ``seats`` (``None`` without them), ``n_seats`` and ``majority``.
 
     Raises
     ------
@@ -530,6 +597,9 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     house_polls = dict(polls, polls=[other for other in polls.get('polls') or [] if other.get(key) == poll.get(key)])
     run_parties = [entry['name'] for entry in meta.get('parties') or []]
     seats = poll.get('seats') or None
+    prev = previous_poll(polls.get('polls') or [], poll)
+    previous = None if prev is None else {'date': fmt_date(prev['date']), 'title': poll_title(prev),
+                                          'href': poll_detail_href(scope, prev) + query}
 
     context.update({
         'poll': poll,
@@ -540,7 +610,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'poll_date': fmt_date(date),
         'event_label': event_label,
         'kpis': poll_kpis(poll, distance_to_average(poll, poll_parties, average)),
-        'vote_rows': vote_rows(poll, poll_parties, average, colors, effects),
+        'vote_rows': vote_rows(poll, poll_parties, average, colors, effects, prev),
+        'previous': previous,
         'has_seats': bool(seats),
         'has_effects': effects is not None,
         'average_date': series_day(series, date),
@@ -569,6 +640,9 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
                  **{block: ink_color(block_color(block, meta, parties)) for block in blocks}},
         'poll': {'date': poll.get('date'), 'pollster_id': poll.get('pollster_id'), 'sponsor': poll.get('sponsor'),
                  'pollster': poll.get('pollster'), **{name: poll[name] for name in poll_parties if name in poll}},
+        'previous': None if prev is None else {
+            'date': str(prev['date'])[:10], 'title': poll_title(prev),
+            'values': {name: prev[name] for name in poll_parties if _has_value(prev.get(name))}},
         'average': average,
         'seats': seats,
         'n_seats': meta.get('n_seats'),
