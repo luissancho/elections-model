@@ -184,3 +184,27 @@ la parte nueva; la nueva sin la parte no pinta la tarjeta.
 
 Nombres internos, el tipo de serie del histograma, el formato del tooltip, el color de las barras dentro del sistema
 del sitio, si `pooled` se reescribe sobre `pooled_terms`.
+
+## Cierre (2026-11-09)
+
+Construido con subagentes en la rama `rebano-azar` (desde dev 0373fee): 6a96e21 + 65b14f0 + 7d3f4f4 (estadística:
+`pooled_terms`, `bootstrap_pooled`, `null_distribution`, `histogram`, parámetros), 13d5f05 (`HerdStudy.chance`),
+2429dc5 + d955785 (parte `chance`, CSV, contrato, fixture), febb1af (tarjeta 3, veredicto, textos, `chance.js`) y
+c15089e (ola de correcciones tras la revisión final). Con datos reales (2026-11-09): 34 elecciones, 25 bajan, 475
+parejas, R 1,58 → 1,17 (−26,3 %), intervalo [−38 %, −4 %], ninguna de 20.000 barajas llega (p = 1/20.001), nulo con
+desviación típica del 3,1 % y mínimo −11,9 %; cálculo 50,4 s (antes 41; la lectura de S3 manda).
+
+Decisiones tomadas en la ejecución: `count_two` con tolerancia aditiva en la escala del cambio (la multiplicativa
+daría p ≈ 0 con un cambio observado que fuese ruido en torno a 0); `count_one` sobre cocientes, igual que `pooled_p`;
+`histogram` ignora no finitos, amplía una caja si un extremo cae fuera y toma los decimales de `Decimal`; clave de
+contexto `chance_test` (la clave `chance` ya era la de las palabras de la prueba del signo); el resumen pasa a «Tres
+preguntas, tres respuestas» cuando hay parte; sin parte se oculta también su CSV; el borde del azar se redondea hacia
+fuera para que «ninguna bajó del −12 %» sea siempre cierto; espacios duros en las cifras de la tarjeta; la p a una
+cola de la nota sólo si el cambio es una bajada; `_chance` reutiliza las comparaciones del estudio reetiquetadas.
+Arreglado de paso: dos espacios que faltaban en el texto del método («en todas. El intervalo», «veces. La robustez»).
+Aparcado: el bucle de barajas duplicado entre `null_distribution` y `pooled_p`; `pooled()` como guarda; ruido de coma
+flotante en los extremos del eje para anchuras de caja no binarias; la celda por defecto de la rejilla de robustez
+recalcula las comparaciones (≈1 s); la píldora CSV se filtra por el texto del enlace; «(0 %)» para cambios mínimos.
+Recomendación del revisor final, para Luis: el «NO» se apoya en la permutación dentro de cada elección; el intervalo
+entre elecciones, que no sufre la dependencia de un sondeo en varias parejas, también excluye el cero pero por poco
+(−4 %); valorar que el veredicto baje a «DIFÍCILMENTE» si el intervalo cruza el cero.

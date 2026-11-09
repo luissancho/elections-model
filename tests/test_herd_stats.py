@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mtpy.lib.studies.herd.stats import (COMPARISON_COLUMNS, _blocks, bootstrap_median, bucket_of, by_buckets, compare,
-                                         comparisons, count, dispersion, period_of, permutation_p, pooled, pooled_p)
+from mtpy.lib.studies.herd.stats import (COMPARISON_COLUMNS, _blocks, bootstrap_median, bootstrap_pooled, bucket_of,
+                                         by_buckets, compare, comparisons, count, dispersion, histogram,
+                                         null_distribution, period_of, permutation_p, pooled, pooled_p, pooled_terms)
 
 PARAMS = {'pair_days': 7, 'periods': {'final': [0, 21], 'mid': [21, 56], 'far': [56, 365]}}
 
@@ -207,6 +208,72 @@ def test_pooled_p_matches_the_exact_enumeration():
     assert abs(pooled_p(frames, 'far', 'final', 3, 4000, 0) - exact) < 0.03
 
 
+def test_pooled_terms_are_the_weighted_sums_of_each_election():
+    e1, e2 = two_elections()
+    terms = pooled_terms([e1, e2], 'far', 'final', 3)
+    assert terms[0] == pytest.approx((6.0, 1.5)) and terms[1] == pytest.approx((24 / 7, 12 / 7))
+    assert pooled_terms([e1.iloc[:0]], 'far', 'final', 3) == []
+    # the pooled change follows from the terms: sqrt(ΣB/ΣA) − 1
+    assert (sum(b for _, b in terms) / sum(a for a, _ in terms)) ** 0.5 - 1 == pytest.approx(-0.4161, abs=1e-4)
+
+
+def test_bootstrap_pooled_interval_is_deterministic_and_brackets_the_change():
+    terms = [(6.0, 1.5), (24 / 7, 12 / 7), (4.0, 3.0), (2.0, 2.5)]
+    ci = bootstrap_pooled(terms, 2000, 0)
+    change = (sum(b for _, b in terms) / sum(a for a, _ in terms)) ** 0.5 - 1
+    assert ci['lo'] <= change <= ci['hi'] and bootstrap_pooled(terms, 2000, 0) == ci
+    assert bootstrap_pooled(terms[:2], 2000, 0) is None
+    assert bootstrap_pooled([(0.0, 0.0)] * 4, 50, 0) is None          # every resample divides by zero
+
+
+def test_null_distribution_matches_the_exact_enumeration():
+    # the two-election, four-block case of test_pooled_p_matches_the_exact_enumeration: enumerate the 36 arrangements
+    # (statistic Σw·r²_b / Σw·r²_a), p_one = share <= observed, p_two = share with |√ratio − 1| >= |observed change|
+    rows = [block_frame('A|B', [3.0, 5.0], [2.0, 4.0]), block_frame('C|D', [6.0, 2.0], [1.0, 7.0])]
+    blocks = [(np.array([3.0, 5.0, 2.0, 4.0]), np.array([2.0] * 4)),
+              (np.array([6.0, 2.0, 1.0, 7.0]), np.array([2.0] * 4))]
+
+    def terms(d2, v, in_a):
+        d2_a, v_a, d2_b, v_b = d2[in_a].sum(), v[in_a].sum(), d2[~in_a].sum(), v[~in_a].sum()
+        return v_a * v_b / (v_a + v_b) * np.array([d2_a / v_a, d2_b / v_b])
+
+    def change_of(choices):
+        total = sum(terms(d2, v, np.isin(np.arange(4), chosen)) for (d2, v), chosen in zip(blocks, choices))
+        return (total[1] / total[0]) ** 0.5 - 1
+
+    observed = change_of([(0, 1), (0, 1)])
+    options = list(combinations(range(4), 2))
+    changes = np.array([change_of([x, y]) for x in options for y in options])
+    exact_one = float(np.mean(changes <= observed + 1e-9))
+    exact_two = float(np.mean(np.abs(changes) >= abs(observed) - 1e-9))
+    assert 0 < exact_one < 1 and 0 < exact_two < 1
+    out = null_distribution(rows, 'far', 'final', 3, 4000, 0)
+    assert out['observed'] == pytest.approx(observed)
+    assert out['permuted'].shape == (4000,) and isinstance(out['count_one'], int)
+    assert abs(out['p_one'] - exact_one) < 0.03 and abs(out['p_two'] - exact_two) < 0.03
+    assert out['p_one'] == pytest.approx((out['count_one'] + 1) / 4001)
+    assert out['p_two'] == pytest.approx((out['count_two'] + 1) / 4001)
+    assert null_distribution([], 'far', 'final', 3, 100, 0) is None
+
+
+def test_null_distribution_with_a_zero_change_has_p_two_near_one():
+    # identical far and final rows: observed change 0, every arrangement gives |change| >= 0
+    rows = pd.DataFrame({'pair': ['A|B'] * 8, 'poll_i': ['a%d' % i for i in range(8)],
+                         'poll_j': ['b%d' % i for i in range(8)], 'period': ['far'] * 4 + ['final'] * 4,
+                         'd2': [2.0] * 8, 'v': [1.0] * 8})
+    out = null_distribution([rows], 'far', 'final', 3, 500, 0)
+    assert out['observed'] == pytest.approx(0.0) and out['p_two'] == pytest.approx(1.0)
+
+
+def test_histogram_bins_cover_the_values_with_fixed_width():
+    assert histogram([-0.012, 0.004, 0.031], 0.01) == [
+        {'lo': -0.02, 'hi': -0.01, 'count': 1}, {'lo': -0.01, 'hi': 0.0, 'count': 0},
+        {'lo': 0.0, 'hi': 0.01, 'count': 1}, {'lo': 0.01, 'hi': 0.02, 'count': 0},
+        {'lo': 0.02, 'hi': 0.03, 'count': 0}, {'lo': 0.03, 'hi': 0.04, 'count': 1}]
+    assert histogram([0.05, 0.05], 0.01) == [{'lo': 0.05, 'hi': 0.06, 'count': 2}]
+    assert histogram([], 0.01) == []
+
+
 def test_pooled_p_small_with_a_strong_fall_and_none_without_pairs():
     # each election: 4 far blocks with d2 10 and 4 final blocks with d2 1: the observed is the extreme of
     # 70 · 70 arrangements
@@ -252,3 +319,26 @@ def test_by_buckets_without_rows():
     empty = pd.DataFrame(columns=COMPARISON_COLUMNS)
     out = by_buckets(empty, BUCKETS, 2)
     assert len(out) == 7 and all((b['pairs'], b['comparisons'], b['ratio']) == (0, 0, None) for b in out)
+
+
+def test_histogram_bin_width_that_is_not_a_power_of_ten_is_exact():
+    assert histogram([0.001, 0.012], 0.005) == [{'lo': 0.0, 'hi': 0.005, 'count': 1},
+                                                {'lo': 0.005, 'hi': 0.01, 'count': 0},
+                                                {'lo': 0.01, 'hi': 0.015, 'count': 1}]
+    assert histogram([3, 27], 5) == [{'lo': 0.0, 'hi': 5.0, 'count': 1}, {'lo': 5.0, 'hi': 10.0, 'count': 0},
+                                     {'lo': 10.0, 'hi': 15.0, 'count': 0}, {'lo': 15.0, 'hi': 20.0, 'count': 0},
+                                     {'lo': 20.0, 'hi': 25.0, 'count': 0}, {'lo': 25.0, 'hi': 30.0, 'count': 1}]
+
+
+def test_histogram_counts_every_finite_value_even_at_the_rounded_edges():
+    for values in ([-1e-17, 0.004], [0.069999999999, 0.09], [0.01, 0.070000000001]):
+        assert sum(bin_['count'] for bin_ in histogram(values, 0.01)) == len(values)
+
+    assert histogram([float('nan'), 0.004, float('inf')], 0.01) == [{'lo': 0.0, 'hi': 0.01, 'count': 1}]
+    assert histogram([float('nan'), float('-inf')], 0.01) == []
+
+
+def test_null_distribution_count_one_matches_pooled_p():
+    rows = [block_frame('A|B', [3.0, 5.0], [2.0, 4.0]), block_frame('C|D', [6.0, 2.0], [1.0, 7.0])]
+    out = null_distribution(rows, 'far', 'final', 3, 3000, 7)
+    assert out['count_one'] / 3000 == pooled_p(rows, 'far', 'final', 3, 3000, 7)

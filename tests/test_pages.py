@@ -5804,7 +5804,8 @@ def test_herd_robustness_text_guards():
 
 
 def test_herd_verdicts_branches():
-    v = pages.herd.verdicts
+    # the first two questions, as before the third (``chance=None``)
+    v = lambda summary: {key: value for key, value in pages.herd.verdicts(summary).items() if key != 'q3'}  # noqa: E731
     sig = {'n': 23, 'k': 19, 'sign_p': 0.0013}
     flat = {'n': 17, 'k': 9, 'sign_p': 0.5}
     assert v({'comparisons': {'far_final': sig, 'far_mid': flat, 'mid_final': sig}}) == {
@@ -5819,6 +5820,45 @@ def test_herd_verdicts_branches():
     assert v({'comparisons': {'far_final': empty, 'far_mid': empty, 'mid_final': empty}}) == {
         'q1': {'label': 'SIN DATOS', 'tone': 'q2'}, 'q2': {'label': 'SIN DATOS', 'tone': 'q2'}}
     assert v(None)['q1']['label'] == 'SIN DATOS'
+    assert pages.herd.verdicts(None)['q3'] == {'label': 'SIN DATOS', 'tone': 'q2'}
+
+
+def test_herd_p_text_and_null_texts():
+    herd = pages.herd
+    assert herd.p_text(0.00005) == 'p < 0,0001' and herd.p_text(0.0004) == 'p < 0,001'
+    assert herd.p_text(0.047) == 'p = 0,047' and herd.p_text(None) is None
+    chance = fixture_data('rebano-chance')['chance']
+    assert herd.null_text(chance) == (
+        'Ninguna de las 20.000 barajas bajó del −12\u00a0%; lo observado es un −26\u00a0%, de 1,58 a 1,17 veces el '
+        'error de las muestras: p\u00a0<\u00a00,0001 a dos colas. Las separaciones de las tres últimas semanas son un '
+        '26\u00a0% menores que en el resto del ciclo (entre el 4 y el 38\u00a0%). En 25 de las 34 elecciones las '
+        'mismas casas se acercan.')
+    assert herd.null_sentences(chance)[0].endswith('a dos colas.')
+    assert herd.null_sentences(chance)[1].startswith('Las separaciones')
+    some = dict(chance, count_two=240, p_two=0.012, ci=None)
+    assert herd.null_text(some).startswith(
+        '240 de las 20.000 barajas llegaron tan lejos como lo observado (−26\u00a0%), que va de 1,58 a '
+        '1,17 veces el error de las muestras: p\u00a0=\u00a00,012 a dos colas. Las separaciones')
+    assert '(entre' not in herd.null_text(some)
+    rise = dict(chance, change=0.12, count_two=900, p_two=0.045, ci={'lo': 0.02, 'hi': 0.2})
+    assert ('son un 12\u00a0% mayores que en el resto del ciclo (entre el 2 y el 20\u00a0% de subida).'
+            in herd.null_text(rise))
+    assert herd.null_summary_text(chance) == (
+        'Barajando 20.000 veces, ninguna baraja llega a lo observado: p\u00a0<\u00a00,0001.')
+    assert herd.null_summary_text(some) == '240 de 20.000 barajas llegan a lo observado: p\u00a0=\u00a00,012.'
+    assert herd.null_summary_text(dict(some, count_two=1, p_two=0.0001)) == (
+        '1 de 20.000 barajas llega a lo observado: p\u00a0<\u00a00,001.')
+    assert herd.sigmas(chance) == 8 and herd.sigmas(dict(chance, null=dict(chance['null'], sd=0))) is None
+    assert herd.sigmas(dict(chance, null=None)) is None and herd.sigmas(None) is None
+    assert herd.null_text(None) is None and herd.null_summary_text({}) is None and herd.null_sentences(None) is None
+    assert herd.verdicts(fixture_data('rebano-summary'), chance)['q3'] == {'label': 'NO', 'tone': 'q1'}
+    assert herd.verdicts({}, dict(chance, p_two=0.03))['q3'] == {'label': 'DIFÍCILMENTE', 'tone': 'q2'}
+    assert herd.verdicts({}, dict(chance, p_two=0.3))['q3'] == {'label': 'SÍ, PODRÍA', 'tone': 'q3'}
+    assert herd.verdicts({}, None)['q3'] == {'label': 'SIN DATOS', 'tone': 'q2'}
+    # the first two verdicts do not read the third test
+    summary = fixture_data('rebano-summary')
+    assert {key: value for key, value in herd.verdicts(summary, chance).items() if key != 'q3'} == {
+        key: value for key, value in herd.verdicts(summary).items() if key != 'q3'}
 
 
 def test_herd_bars_sorted_and_clipped():
@@ -5933,14 +5973,15 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     status, page, text = herd_page(api)
     assert status == 200 and '<h1 class="study-title">¿Se comportan las encuestadoras como un rebaño?</h1>' in page
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == [
-        'SÍ, EN CONJUNTO', 'SÍ, EN LAS TRES ÚLTIMAS SEMANAS']
+        'SÍ, EN CONJUNTO', 'SÍ, EN LAS TRES ÚLTIMAS SEMANAS', 'NO']
     assert page.count('<div class="kpi">') == 3
     assert '19 de 23' in text and '23 de 29' in text and '9 de 17' in text and 'como una moneda' in text
     assert '1 entre 769' in text and 'sólo en 3 la bajada es clara por sí sola' in text
     assert 'El tramo de las tres últimas semanas empieza el 9 de noviembre.' in text
-    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 3  # elections + weeks + robustness CSVs
+    # elections + weeks + robustness + chance CSVs
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 4
     assert 'id="weeks-chart"' in page and 'matrix' not in page and 'id="initial-data"' in page
-    for slug in ('resumen', 'pregunta-1', 'pregunta-2', 'directo', 'como', 'datos'):
+    for slug in ('resumen', 'pregunta-1', 'pregunta-2', 'pregunta-3', 'directo', 'como', 'datos'):
         assert 'rebano-%s.png' % slug in page, slug
     assert_public_wording(page, '/analisis/rebano')
     low = text.lower()
@@ -5986,6 +6027,146 @@ def test_herd_page_without_pooled_ci_or_robustness(api, fresh_app, monkeypatch):
     for absent in ('prueba conjunta', 'intervalo (95 %)', 'La robustez repite', 'en la prueba conjunta sí pesa más'):
         assert absent not in text
     assert 'así una elección con muchos sondeos no pesa más que otra con pocos.' in text
+    assert_public_wording(page, '/analisis/rebano')
+
+
+def test_herd_page_third_card_tests_the_null_hypothesis(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano')
+    status, _, body = call(api, '/analisis/rebano')
+    page = html(body)
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert status == 200 and '<section class="card qcard shot q1" id="p3">' in page
+    # after card 2 and before the live card
+    assert page.index('id="p2"') < page.index('id="p3"') < page.index('id="directo"')
+    assert 'rebano-pregunta-3.png' in page and '<a href="#p3" class="q1">3 · ¿Podría ser azar?</a>' in page
+    # the visible text keeps the entities of the HTML: «p < 0,0001» is «p &lt; 0,0001»
+    lt = lambda value: value.replace('<', '&lt;')  # noqa: E731
+    # the index, the summary, the card and the label of its CSV
+    assert text.count('¿Podría ser azar?') == 4
+    assert 'PREGUNTA 3' in text
+    assert lt('Barajando 20.000 veces, ninguna baraja llega a lo observado: p < 0,0001.') in text
+    assert 'Tres preguntas, tres respuestas' in text and 'Dos preguntas' not in text
+    assert '<div class="three">' in page
+    assert ('Si en las tres últimas semanas las mismas casas se separasen igual que en el resto del ciclo, ¿qué bajada '
+            'veríamos por puro azar? Para saberlo barajamos 20.000 veces qué parejas de sondeos de cada pareja de '
+            'casas caen en las tres últimas semanas y cuáles en el resto, y medimos la bajada en cada baraja.') in text
+    assert '<p class="ctitle">Lo que daría el azar, frente a lo observado</p>' in page
+    assert ('20.000 barajas de las mismas 475 parejas de casas en 34 elecciones · cambio de la separación entre el '
+            'resto del ciclo (de 3 semanas a un año antes) y las tres últimas semanas') in text
+    sentence = pages.herd.null_text(fixture_data('rebano-chance')['chance'])
+    assert '<div class="chart" id="chance-chart" role="img" aria-label="%s"></div>' % lt(sentence) in page
+    sentence_text = sentence.replace('\u00a0', ' ')
+    assert 'Cada barra cuenta las barajas que dieron ese cambio; la línea marca el observado.' in text
+    assert lt(sentence_text) in text
+    assert ('<b>Ninguna de las 20.000 barajas bajó del −12\u00a0%; lo observado es un −26\u00a0%, de 1,58 a 1,17 veces '
+            'el error de las muestras: p\u00a0&lt;\u00a00,0001 a dos colas.</b> Las separaciones') in page
+    assert '<summary>Qué se baraja y qué p damos</summary>' in page
+    assert lt('Dentro de cada pareja de casas barajamos qué parejas de sondeos caen en las tres últimas semanas y '
+              'cuáles en el resto, manteniendo cuántas hay en cada tramo y con las cifras de los partidos de cada '
+              'pareja de sondeos juntas. La p es a dos colas: cuenta las barajas con un cambio tan grande como el '
+              'observado en cualquier dirección, y suma una a las barajas y al total para no dar nunca cero; con '
+              'ninguna de 20.000, p = 1/20.001. A una cola, p < 0,0001. Un sondeo que entra en varias parejas cuenta '
+              'en todas, lo que hace la p algo optimista; con lo observado a unas 8 desviaciones típicas del azar, '
+              'no cambia la conclusión. Las tarjetas 1 y 2 usan 2.000 barajas por elección.') in text
+    assert ('La prueba de la tarjeta 3 baraja 20.000 veces, dentro de cada pareja de casas de cada elección, qué '
+            'parejas de sondeos caen en las tres últimas semanas y cuáles en el resto del ciclo (21 a 365 días), y da '
+            'la p a dos colas con la corrección (k + 1)/(B + 1).') in text
+    slugs = re.findall(r'rebano-([a-z0-9-]+)\.png', page)
+    assert 'pregunta-3' in slugs
+    data = initial(body)
+    assert data['chance']['permutations'] == 20000 and len(data['chance']['null']['bins']) == 28
+    context = pages.herd_context(pages.parse_state({}))
+    assert context['chance_test']['pairs'] == 475 and context['sigmas'] == 8
+    assert context['null_summary'].startswith('Barajando') and context['null_text'] == sentence
+    assert_public_wording(page, '/analisis/rebano')
+    low = text.lower()
+    assert not re.search(r'\bcopi', low) and 'permite el azar' not in low
+    assert all(word not in low for word in ('vecino', 'empresa', 'none'))
+
+
+def test_herd_null_sentences_round_the_edge_away_from_zero():
+    herd = pages.herd
+    chance = fixture_data('rebano-chance')['chance']
+    assert chance['null']['min'] == -0.119 and 'bajó del −12\u00a0%' in herd.null_sentences(chance)[0]
+    deeper = dict(chance, null=dict(chance['null'], min=-0.1234))
+    assert 'bajó del −13\u00a0%' in herd.null_sentences(deeper)[0]
+    assert 'bajó del −12\u00a0%' in herd.null_sentences(dict(chance, null=dict(chance['null'], min=-0.12)))[0]
+    rise = dict(chance, change=0.12, null=dict(chance['null'], max=0.1234))
+    assert 'subió del +13\u00a0%' in herd.null_sentences(rise)[0]
+
+
+def test_herd_hard_spaces_hold_the_figures_together():
+    herd = pages.herd
+    assert herd.hard_spaces('un −12 % y p < 0,001, p = 0,02 en 3 p') == (
+        'un −12\u00a0% y p\u00a0<\u00a00,001, p\u00a0=\u00a00,02 en 3 p')
+    assert herd.hard_spaces(None) is None
+    assert herd.percent(-0.26) == '−26 %'      # the shared helper keeps its plain space
+
+
+def test_herd_page_note_has_the_one_sided_p_only_for_a_fall(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano')
+    _, page, text = herd_page(api)
+    assert 'A una cola, p &lt; 0,0001.' in text
+    assert 'A una cola, p\u00a0&lt;\u00a00,0001.' in page
+    chance = fixture_data('rebano-chance')['chance']
+    publish_study(fresh_app.fs, study='rebano', parts={'chance': {'chance': dict(chance, change=0.12)}})
+    status, page, text = herd_page(api)
+    assert status == 200 and 'A una cola' not in text and 'suma una a las barajas y al total' in text
+    assert pages.herd_context(pages.parse_state({}))['null_p_one'] is None
+
+
+def test_herd_method_text_keeps_the_space_between_sentences(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+
+    def tech(parts=None):
+        publish_study(fresh_app.fs, study='rebano', **({'parts': parts} if parts else {}))
+        _, page, _ = herd_page(api)
+        block = page.split('<div class="tech">')[1].split('</div>')[0]
+
+        return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', block))
+
+    with_chance = tech()
+    assert 'cuenta en todas. El intervalo' in with_chance and 'veces. La prueba de la tarjeta 3' in with_chance
+    assert '(k + 1)/(B + 1). La robustez' in with_chance
+    without = tech({'chance': {'chance': None}})
+    assert 'cuenta en todas. El intervalo' in without and 'veces. La robustez' in without
+    assert 'prueba de la tarjeta 3' not in without
+
+    for text in (with_chance, without):
+        assert not re.search(r'[a-z0-9)]\.[A-Z]', text)
+
+
+def test_herd_page_third_card_with_some_shuffles_and_no_interval_or_spread(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    chance = fixture_data('rebano-chance')['chance']
+    chance = dict(chance, count_two=240, count_one=120, p_two=0.012, p_one=0.006, ci=None,
+                  null=dict(chance['null'], sd=None))
+    publish_study(fresh_app.fs, study='rebano', parts={'chance': {'chance': chance}})
+    status, page, text = herd_page(api)
+    assert status == 200 and '<section class="card qcard shot q2" id="p3">' in page
+    assert 'DIFÍCILMENTE' in text and '240 de 20.000 barajas llegan a lo observado: p = 0,012.' in text
+    assert 'con 240 de 20.000, p = 241/20.001. A una cola, p = 0,006.' in text
+    assert 'desviaciones' not in text and 'lo que hace la p algo optimista. Las tarjetas 1 y 2' in text
+    assert '(entre' not in text.split('Las separaciones de las tres últimas semanas')[1].split('.')[0]
+    assert_public_wording(page, '/analisis/rebano')
+
+
+def test_herd_page_without_the_chance_part_is_as_before(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano', parts={'chance': {'chance': None}})
+    status, page, text = herd_page(api)
+    assert status == 200 and 'id="p3"' not in page and 'Podría ser azar' not in text
+    assert 'prueba de la tarjeta 3' not in text and 'chance-chart' not in page and 'PREGUNTA 3' not in text
+    assert 'Dos preguntas, dos respuestas' in text and '<div class="three two">' in page
+    # nor its CSV: the three of before
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 3 and '/rebano/chance' not in page
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == [
+        'SÍ, EN CONJUNTO', 'SÍ, EN LAS TRES ÚLTIMAS SEMANAS']
+    assert 'rebano-pregunta-3.png' not in page
+    context = pages.herd_context(pages.parse_state({}))
+    assert context['chance_test'] is None and context['null_text'] is None and context['initial']['chance'] is None
     assert_public_wording(page, '/analisis/rebano')
 
 

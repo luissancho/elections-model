@@ -15,8 +15,13 @@ between the periods: a change in the mix of pairs would read as a change in the 
 
 The rows of one pair of polls (one per series) are not independent, so the permutation tests shuffle the period labels
 of whole pairs of polls (blocks), never of single rows.
+
+The null test of the pooled change shuffles the same blocks and keeps every permuted change, whose distribution is the
+one expected if the period labels carried no information; the bootstrap over elections gives an interval for the
+observed change.
 """
 import math
+from decimal import Decimal
 from typing import Optional
 
 import numpy as np
@@ -375,6 +380,14 @@ def permutation_p(rows: pd.DataFrame, a: str, b: str, min_rows: int, permutation
     return _share_not_above(*terms)
 
 
+def _pair_terms(shared: pd.DataFrame, a: str, b: str) -> tuple:
+    """``_weighted_sums`` of every pair of houses of ``shared`` (rows of ``_shared_pairs``), as arrays."""
+    sums = shared.groupby(['pair', 'period'])[['d2', 'v']].sum().unstack('period')
+
+    return _weighted_sums(sums[('d2', a)].to_numpy(float), sums[('v', a)].to_numpy(float),
+                          sums[('d2', b)].to_numpy(float), sums[('v', b)].to_numpy(float))
+
+
 def pooled(rows_by_election: list, a: str, b: str, min_rows: int) -> Optional[dict]:
     """
     Dispersion of the same pairs of houses in two periods over several elections, each pair with one weight.
@@ -407,14 +420,12 @@ def pooled(rows_by_election: list, a: str, b: str, min_rows: int) -> Optional[di
         if len(shared) == 0:
             continue
 
-        sums = shared.groupby(['pair', 'period'])[['d2', 'v']].sum().unstack('period')
-        weight, term_a, term_b = _weighted_sums(sums[('d2', a)].to_numpy(float), sums[('v', a)].to_numpy(float),
-                                                sums[('d2', b)].to_numpy(float), sums[('v', b)].to_numpy(float))
+        weight, term_a, term_b = _pair_terms(shared, a, b)
         total_w += weight.sum()
         total_a += term_a.sum()
         total_b += term_b.sum()
         elections += 1
-        pairs += len(sums)
+        pairs += len(weight)
         rows_a += int((shared['period'] == a).sum())
         rows_b += int((shared['period'] == b).sum())
 
@@ -476,6 +487,178 @@ def pooled_p(rows_by_election: list, a: str, b: str, min_rows: int, permutations
         obs_b += terms[3]
 
     return _share_not_above(perm_a, perm_b, obs_a, obs_b)
+
+
+def pooled_terms(rows_by_election: list, a: str, b: str, min_rows: int) -> list[tuple[float, float]]:
+    """
+    The terms of each election in the pooled dispersion: ``(Σ w · r²_a, Σ w · r²_b)`` over its pairs of houses.
+
+    Parameters
+    ----------
+    rows_by_election : list of pandas.DataFrame
+        Rows of ``comparisons`` of each election.
+    a, b : str
+        The periods compared.
+    min_rows : int
+        As in ``compare``.
+
+    Returns
+    -------
+    list of tuple
+        ``(A_e, B_e)`` of each election with pairs of houses counted, in order; the pooled change is
+        ``sqrt(Σ B_e / Σ A_e) − 1``.
+    """
+    terms = []
+
+    for rows in rows_by_election:
+        shared = _shared_pairs(rows, a, b, min_rows)
+
+        if len(shared) == 0:
+            continue
+
+        _, term_a, term_b = _pair_terms(shared, a, b)
+        terms.append((float(term_a.sum()), float(term_b.sum())))
+
+    return terms
+
+
+def bootstrap_pooled(terms: list, resamples: int, seed: int) -> Optional[dict]:
+    """
+    Percentile bootstrap interval (95 %) of the pooled change, resampling elections with replacement.
+
+    Parameters
+    ----------
+    terms : list of tuple
+        ``(A_e, B_e)`` per election (see ``pooled_terms``).
+    resamples : int
+        Number of resamples.
+    seed : int
+        Seed of the generator.
+
+    Returns
+    -------
+    dict or None
+        ``lo`` and ``hi`` (percentiles 2.5 and 97.5 of ``sqrt(Σ B / Σ A) − 1`` over the resamples), unrounded;
+        resamples with ``Σ A`` 0 are discarded; ``None`` with fewer than 3 elections or 3 valid resamples.
+    """
+    if len(terms) < 3:
+        return None
+
+    values = np.asarray(terms, dtype=float)
+    picks = np.random.default_rng(seed).integers(0, len(values), size=(resamples, len(values)))
+    total_a, total_b = values[picks, 0].sum(axis=1), values[picks, 1].sum(axis=1)
+    valid = total_a > 0
+
+    if valid.sum() < 3:
+        return None
+
+    changes = np.sqrt(total_b[valid] / total_a[valid]) - 1
+
+    return {'lo': float(np.percentile(changes, 2.5)), 'hi': float(np.percentile(changes, 97.5))}
+
+
+def null_distribution(rows_by_election: list, a: str, b: str, min_rows: int, permutations: int,
+                      seed: int) -> Optional[dict]:
+    """
+    Distribution of the pooled change when the period labels of the pairs of polls are shuffled.
+
+    The shuffles are those of ``pooled_p``; each gives a change ``sqrt(R_b² / R_a²) − 1``.
+
+    Parameters
+    ----------
+    rows_by_election : list of pandas.DataFrame
+        Rows of ``comparisons`` of each election.
+    a, b : str
+        The periods compared.
+    min_rows : int
+        As in ``compare``.
+    permutations : int
+        Number of shuffles.
+    seed : int
+        Seed of the generator.
+
+    Returns
+    -------
+    dict or None
+        ``observed`` (the pooled change), ``permuted`` (array, one change per shuffle), ``count_one`` (shuffles whose
+        ratio ``R_b² / R_a²`` is not above the observed one, as in ``pooled_p``), ``count_two`` (shuffles with a
+        change at least as far from 0), ``p_one`` and ``p_two`` (``(count + 1) / (permutations + 1)``); ``None`` when
+        ``pooled`` is ``None``.
+    """
+    if pooled(rows_by_election, a, b, min_rows) is None:
+        return None
+
+    generator = np.random.default_rng(seed)
+    perm_a, perm_b = np.zeros(permutations), np.zeros(permutations)
+    obs_a = obs_b = 0.0
+
+    for rows in rows_by_election:
+        shared = _shared_pairs(rows, a, b, min_rows)
+
+        if len(shared) == 0:
+            continue
+
+        terms = _permuted_terms(shared, a, permutations, generator)
+        perm_a += terms[0]
+        perm_b += terms[1]
+        obs_a += terms[2]
+        obs_b += terms[3]
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        permuted = np.sqrt(perm_b / perm_a) - 1
+
+    observed = math.sqrt(obs_b / obs_a) - 1
+    with np.errstate(divide='ignore', invalid='ignore'):
+        count_one = int(np.sum(perm_b / perm_a <= obs_b / obs_a * (1 + PERMUTATION_TOLERANCE)))
+
+    # Additive tolerance on the change scale: an observed change that is floating noise around 0 must still count
+    # the zero shuffles
+    count_two = int(np.sum(np.abs(permuted) >= abs(observed) - PERMUTATION_TOLERANCE))
+
+    return {'observed': observed, 'permuted': permuted, 'count_one': count_one, 'count_two': count_two,
+            'p_one': (count_one + 1) / (permutations + 1), 'p_two': (count_two + 1) / (permutations + 1)}
+
+
+def histogram(values, bin_width: float) -> list[dict]:
+    """
+    Counts of ``values`` in bins of a fixed width whose edges are multiples of it.
+
+    Parameters
+    ----------
+    values : array-like of float
+        The values.
+    bin_width : float
+        Width of each bin.
+
+    Returns
+    -------
+    list of dict
+        ``lo``, ``hi`` (edges rounded to the decimals of ``bin_width``) and ``count`` of each bin, from the one with
+        the smallest value to the one with the largest (the last bin includes its upper edge); every finite value
+        is counted; one bin when all the values coincide; empty without finite values (NaN and infinities are
+        ignored).
+    """
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+
+    if len(values) == 0:
+        return []
+
+    decimals = max(0, -Decimal(str(bin_width)).normalize().as_tuple().exponent)
+    first = math.floor(round(values.min() / bin_width, 9))
+    last = max(math.ceil(round(values.max() / bin_width, 9)), first + 1)
+    edges = np.round(np.arange(first, last + 1) * bin_width, decimals)
+
+    # The rounded quotients may leave an extreme value just outside the edges: widen by one bin
+    if values.min() < edges[0]:
+        edges = np.round(np.arange(first - 1, last + 1) * bin_width, decimals)
+
+    if values.max() > edges[-1]:
+        edges = np.round(np.arange(edges[0] / bin_width, last + 2) * bin_width, decimals)
+
+    counts, _ = np.histogram(values, bins=edges)
+
+    return [{'lo': float(edges[k]), 'hi': float(edges[k + 1]), 'count': int(counts[k])} for k in range(len(counts))]
 
 
 def bootstrap_median(changes: list, resamples: int, seed: int) -> Optional[dict]:

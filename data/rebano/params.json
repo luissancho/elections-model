@@ -12,6 +12,7 @@
   "seed": 0,
   "resamples": 2000,
   "robustness": {"pair_days": [3, 5, 7, 10], "min_rows": [3, 6]},
+  "chance": {"periods": {"final": [0, 21], "rest": [21, 365]}, "permutations": 20000, "bin_width": 0.01, "resamples": 2000},
   "weeks": {"scope": "es", "since": "2008-01-01", "min_pairs": 2,
             "buckets": [[0, 2], [3, 4], [5, 7], [8, 11], [12, 17], [18, 26], [27, 52]]}
 }

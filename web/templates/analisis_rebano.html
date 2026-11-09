@@ -24,7 +24,9 @@
   <div class="herd-squares" role="img" aria-label="{{ sq.k|int }} de {{ sq.n|int }} elecciones en que las encuestadoras se acercan">{% for cell in sq.cells %}<span class="{{ 'sq on' if cell else 'sq' }}"></span>{% endfor %}</div>
 </div>
 {%- endmacro %}
-{% set v1, v2 = verdicts.q1, verdicts.q2 %}
+{% set v1, v2, v3 = verdicts.q1, verdicts.q2, verdicts.q3 %}
+{% set ct = chance_test or {} %}
+{% set ct_rest = (ct.get('periods') or {}).get('rest') or [21, 365] %}
 {% set comparisons = summary.get('comparisons') or {} %}
 {% set ff = comparisons.get('far_final') or {} %}
 {% set fm = comparisons.get('far_mid') or {} %}
@@ -59,20 +61,26 @@
         <a href="#resumen">Resumen</a>
         <a href="#p1" class="{{ v1.tone }}">1 · ¿Se comportan las encuestadoras como un rebaño?</a>
         <a href="#p2" class="{{ v2.tone }}">2 · ¿Es mayor según se acerca la elección?</a>
+        {% if chance_test %}<a href="#p3" class="{{ v3.tone }}">3 · ¿Podría ser azar?</a>{% endif %}
         {% if has_run %}<a href="#directo">{{ current.get('label') or 'Elección en curso' }}, en directo</a>{% endif %}
         <a href="#como">Cómo lo medimos</a>
         <a href="#datos">Datos y método</a>
       </nav>
       {{ m.kpis(kpis) }}
-      {{ m.card_start('resumen', 'Dos preguntas, dos respuestas', 'Cada campaña se repite la sospecha: las encuestadoras acaban dando las mismas cifras. Lo comprobamos con las mismas parejas de casas, lejos de la votación y al final, en cada elección en que hay sondeos de esas casas en los dos momentos.', classes='shot') }}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas' if chance_test else 'Dos preguntas, dos respuestas', 'Cada campaña se repite la sospecha: las encuestadoras acaban dando las mismas cifras. Lo comprobamos con las mismas parejas de casas, lejos de la votación y al final, en cada elección en que hay sondeos de esas casas en los dos momentos.', classes='shot') }}
         {{ shot('resumen') }}
-        <div class="three two">
+        <div class="three{% if not chance_test %} two{% endif %}">
           {% call answer(v1, 1, '¿Se comportan las encuestadoras como un rebaño?') -%}
             {% if ff.get('n') %}En {{ count(ff) }} elecciones, las mismas casas difieren menos al final que lejos de la votación{% if chance.far_final %}; {{ odds(chance.far_final) }}{% endif %}.{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
           {%- endcall %}
           {% call answer(v2, 2, '¿Es mayor según se acerca la elección?') -%}
             {% if mf.get('n') %}En las tres últimas semanas, {{ count(mf) }}{% if chance.mid_final %}; {{ odds(chance.mid_final) }}{% endif %}.{% if fm.get('n') %} Hasta tres semanas antes, {{ count(fm) }}{% if chance.far_mid %}: {{ chance.far_mid }}{% endif %}.{% endif %}{% else %}Aún no hay elecciones con datos para esta comparación.{% endif %}
           {%- endcall %}
+          {% if chance_test %}
+          {% call answer(v3, 3, '¿Podría ser azar?') -%}
+            {{ null_summary or 'Aún no hay datos para esta prueba.' }}
+          {%- endcall %}
+          {% endif %}
         </div>
         <p class="note blue">Medimos cuánto se acercan las cifras de las encuestadoras, no por qué.</p>
       {{ m.card_end() }}
@@ -125,6 +133,30 @@
         </div>
         {% endif %}
       </section>
+      {% if chance_test %}
+      <section class="card qcard shot {{ v3.tone }}" id="p3">
+        {{ shot('pregunta-3') }}
+        <div class="qh"><div class="qn">3</div><h2 class="qt">¿Podría ser azar?</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
+        <p class="lead">
+          Si en las tres últimas semanas las mismas casas se separasen igual que en el resto del ciclo, ¿qué bajada veríamos por puro azar? Para saberlo barajamos {{ ct.get('permutations')|int }} veces qué parejas de sondeos de cada pareja de casas caen en las tres últimas semanas y cuáles en el resto, y medimos la bajada en cada baraja.
+        </p>
+        <p class="ctitle">Lo que daría el azar, frente a lo observado</p>
+        <p class="csub">{{ ct.get('permutations')|int }} barajas de las mismas {{ ct.get('pairs')|int }} parejas de casas en {{ ct.get('elections')|int }} elecciones · cambio de la separación entre el resto del ciclo (de 3 semanas a un año antes) y las tres últimas semanas</p>
+        <div class="chart" id="chance-chart" role="img" aria-label="{{ null_text or 'Lo que daría el azar, frente a lo observado' }}"></div>
+        <p class="tnote">Cada barra cuenta las barajas que dieron ese cambio; la línea marca el observado.</p>
+        {% if null_sentences %}
+        <div class="sum"><b>{{ null_sentences[0] }}</b> {{ null_sentences[1] }}</div>
+        {% endif %}
+        <details class="how"><summary>Qué se baraja y qué p damos</summary><div class="how-body">
+          <p>
+            Dentro de cada pareja de casas barajamos qué parejas de sondeos caen en las tres últimas semanas y cuáles en el resto, manteniendo cuántas hay en cada tramo y con las cifras de los partidos de cada pareja de sondeos juntas.
+            La p es a dos colas: cuenta las barajas con un cambio tan grande como el observado en cualquier dirección, y suma una a las barajas y al total para no dar nunca cero; {% if ct.get('count_two') %}con {{ ct.count_two|int }} de {{ ct.get('permutations')|int }}, p = {{ (ct.count_two + 1)|int }}/{{ ((ct.get('permutations') or 0) + 1)|int }}{% else %}con ninguna de {{ ct.get('permutations')|int }}, p = 1/{{ ((ct.get('permutations') or 0) + 1)|int }}{% endif %}.{% if null_p_one %} A una cola, {{ null_p_one }}.{% endif %}
+            Un sondeo que entra en varias parejas cuenta en todas, lo que hace la p algo optimista{% if sigmas %}; con lo observado a unas {{ sigmas|int }} desviaciones típicas del azar, no cambia la conclusión{% endif %}.
+            Las tarjetas 1 y 2 usan {{ (params.get('permutations') or 2000)|int }} barajas por elección.
+          </p>
+        </div></details>
+      </section>
+      {% endif %}
       {% if has_run %}
       {{ m.card_start('directo', (current.get('label') or 'Elección en curso') ~ ', en directo', 'Las mismas comparaciones, con los sondeos de la elección que viene. Se recalculan con cada actualización.' if not held else 'Las mismas comparaciones, con los sondeos de la elección ya celebrada.', classes='shot') }}
         {{ shot('directo') }}
@@ -197,8 +229,10 @@
               Los tramos cuentan desde el fin de campo hasta la elección: {{ (periods.get('final') or [0, 21])[0] }} a {{ (periods.get('final') or [0, 21])[1] }} días, {{ (periods.get('mid') or [21, 56])[0] }} a {{ (periods.get('mid') or [21, 56])[1] }} y {{ (periods.get('far') or [56, 365])[0] }} a {{ (periods.get('far') or [56, 365])[1] }}.
               La <b>permutación</b> baraja {{ (params.get('permutations') or 2000)|int }} veces el tramo de cada pareja de sondeos, con sus partidos juntos, dentro de cada pareja de casas, y dice cuántas veces saldría una bajada tan grande sólo por azar: es lo que llamamos clara por sí sola.
               La <b>prueba del signo</b> cuenta en cuántas elecciones baja la separación y qué probabilidad tendría ese recuento con una moneda.
-              {% if pooled.far_final %}La <b>prueba conjunta</b> baraja a la vez las parejas de sondeos de todas las parejas de casas de todas las elecciones y mide cuánto baja la separación juntándolas: cada pareja de casas pesa según sus comparaciones, así que las elecciones con muchos sondeos pesan más que en la prueba del signo. Un sondeo que entra en varias parejas cuenta en todas.{% endif %}
-              {% if ci.far_final or ci.mid_final %}El <b>intervalo</b> (95 %) de la bajada mediana sale de remuestrear las elecciones {{ (params.get('resamples') or 2000)|int }} veces.{% endif %}
+              {% if pooled.far_final %}La <b>prueba conjunta</b> baraja a la vez las parejas de sondeos de todas las parejas de casas de todas las elecciones y mide cuánto baja la separación juntándolas: cada pareja de casas pesa según sus comparaciones, así que las elecciones con muchos sondeos pesan más que en la prueba del signo. Un sondeo que entra en varias parejas cuenta en todas. {% endif %}
+              {% if ci.far_final or ci.mid_final %}El <b>intervalo</b> (95 %) de la bajada mediana sale de remuestrear las elecciones {{ (params.get('resamples') or 2000)|int }} veces. {% endif %}
+              {#- spaced on both sides: the blocks of this list join their sentences without a space -#}
+              {% if chance_test %}La <b>prueba de la tarjeta 3</b> baraja {{ ct.get('permutations')|int }} veces, dentro de cada pareja de casas de cada elección, qué parejas de sondeos caen en las tres últimas semanas y cuáles en el resto del ciclo ({{ ct_rest[0] }} a {{ ct_rest[1] }} días), y da la p a dos colas con la corrección (k + 1)/(B + 1). {% endif %}
               {% if robustness_rows %}La <b>robustez</b> repite los recuentos y la prueba conjunta con {{ grid_days_text }} días entre sondeos y con un mínimo de {{ grid_min_rows }} comparaciones por pareja.{% endif %}
             </div>
           </div>

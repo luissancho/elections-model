@@ -8,13 +8,14 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 from ...bundle import BundleReader
 from ....core.io import FileSystem
 from .data import Election, MissingInput, load_params, read_current, read_elections
-from .stats import (_sig3, bootstrap_median, by_buckets, comparisons, compare, count, permutation_p, pooled,
-                    pooled_p)
+from .stats import (_sig3, bootstrap_median, bootstrap_pooled, by_buckets, comparisons, compare, count, histogram,
+                    null_distribution, period_of, permutation_p, pooled, pooled_p, pooled_terms)
 
 # Each comparison: the period taken as reference and the one expected to be closer
 COMPARISONS = {'far_final': ('far', 'final'), 'far_mid': ('far', 'mid'), 'mid_final': ('mid', 'final')}
@@ -48,6 +49,15 @@ class HerdStudy:
         the election in progress last: ``event_date``, ``label``, ``current``, ``lo``, ``hi``, ``pairs``,
         ``comparisons`` and ``ratio`` at two decimals) and ``mean`` (per bucket: ``lo``, ``hi``, ``k`` past
         elections with a ratio and their mean ``ratio``).
+    chance : dict or None
+        The null-hypothesis test of the last weeks against the rest of the cycle, over the past elections with
+        pairs counted in the ``chance`` periods (``final`` and ``rest``, replacing the study's): ``periods``,
+        ``permutations``, ``elections``, ``falls`` (elections where ``final`` is closer), ``pairs``, ``rows_a`` and
+        ``rows_b`` (``rest`` and ``final``), ``r_a``, ``r_b`` (two decimals), ``change`` and ``ci`` (``{lo, hi}`` of
+        the bootstrap, three decimals; ``None`` with fewer than 3 elections), ``count_one`` and ``count_two`` (shuffles
+        as extreme as the observed one, one and two sided), ``p_one`` and ``p_two`` (three significant figures) and
+        ``null`` (``mean``, ``sd``, ``min`` and ``max`` of the shuffled changes, four decimals, and the ``bins`` of
+        their ``histogram`` of ``bin_width``); ``None`` when no election has pairs counted.
     current : dict or None
         The election in progress: ``scope``, ``event_date``, ``label``, ``days_left``, ``as_of``, ``windows`` and
         ``far_mid`` and ``mid_final`` (a row without ``kind`` and ``comparison``, or ``None``).
@@ -59,6 +69,7 @@ class HerdStudy:
     summary: dict
     elections: list
     weeks: dict
+    chance: Optional[dict]
     current: Optional[dict]
     inputs: dict
 
@@ -197,6 +208,63 @@ def _robustness(elections: list, params: dict) -> dict:
     return {'pair_days': list(grid['pair_days']), 'min_rows': list(grid['min_rows']), 'rows': rows}
 
 
+def _chance(elections: list, all_rows: dict, params: dict) -> Optional[dict]:
+    """
+    The null-hypothesis test of the last weeks against the rest of the cycle.
+
+    Parameters
+    ----------
+    elections : list of Election
+        The past elections.
+    all_rows : dict
+        ``comparisons`` of each past election, by ``(event_date, scope)``; only their ``period`` is replaced.
+    params : dict
+        Parameters of the study; ``chance`` holds ``periods`` (``final`` and ``rest``, replacing the study's),
+        ``permutations``, ``bin_width`` and ``resamples``; also uses ``min_rows`` and ``seed``.
+
+    Returns
+    -------
+    dict or None
+        As described in ``HerdStudy.chance``; ``None`` when no election has pairs counted.
+    """
+    config = params['chance']
+    min_rows = params['min_rows']
+    used = []
+    falls = 0
+
+    for election in elections:
+        # The comparisons already computed, relabelled with the periods of the test
+        rows = all_rows[election.event_date, election.scope]
+        rows = rows.assign(period=[period_of(days, config['periods']) for days in rows['days']])
+        rows = rows[rows['period'].notna()]
+        result = compare(rows, 'rest', 'final', min_rows)
+
+        if result is not None:
+            used.append(rows)
+            falls += result['falls']
+
+    result = pooled(used, 'rest', 'final', min_rows)
+
+    if result is None:
+        return None
+
+    interval = bootstrap_pooled(pooled_terms(used, 'rest', 'final', min_rows), config['resamples'], params['seed'])
+    test = null_distribution(used, 'rest', 'final', min_rows, config['permutations'], params['seed'])
+    permuted = test['permuted']
+    finite = permuted[np.isfinite(permuted)]
+
+    return {'periods': {name: list(bounds) for name, bounds in config['periods'].items()},
+            'permutations': config['permutations'], 'elections': result['elections'], 'falls': falls,
+            'pairs': result['pairs'], 'rows_a': result['rows_a'], 'rows_b': result['rows_b'],
+            'r_a': round(result['r_a'], 2), 'r_b': round(result['r_b'], 2), 'change': round(result['change'], 3),
+            'ci': None if interval is None else {k: round(v, 3) for k, v in interval.items()},
+            'count_one': int(test['count_one']), 'count_two': int(test['count_two']),
+            'p_one': _sig3(test['p_one']), 'p_two': _sig3(test['p_two']),
+            'null': {'mean': round(float(finite.mean()), 4), 'sd': round(float(finite.std()), 4),
+                     'min': round(float(finite.min()), 4), 'max': round(float(finite.max()), 4),
+                     'bin_width': config['bin_width'], 'bins': histogram(permuted, config['bin_width'])}}
+
+
 def _since_year(dates: list) -> Optional[str]:
     """The year of the first of ``dates`` (ISO), ``None`` without dates."""
     return min(dates)[:4] if dates else None
@@ -270,7 +338,7 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
     weeks = _weeks(elections, all_rows, current, current_rows, params)
 
     return HerdStudy(params=params, election=None if current is None else _election(current), summary=summary,
-                     elections=rows, weeks=weeks,
+                     elections=rows, weeks=weeks, chance=_chance(elections, all_rows, params),
                      current=None if current is None else _current(current, params, current_rows),
                      inputs={'elections': inputs_elections, 'current': inputs_current})
 

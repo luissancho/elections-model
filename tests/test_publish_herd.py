@@ -7,7 +7,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from mtpy.lib.publish.herd import ROBUSTNESS_COLUMNS, WEEK_COLUMNS, _subtitle
+from mtpy.lib.publish.herd import CHANCE_COLUMNS, ROBUSTNESS_COLUMNS, WEEK_COLUMNS, _subtitle
 from mtpy.lib.studies.herd.study import compute_herd
 from tests.fakes import write_herd_bundle
 from tests.test_publish_unit import fake_prov, make_writer
@@ -122,6 +122,7 @@ def test_publish_study_rebano_writes_every_part(tmp_path):
         assert reader.read_json(bundle.path_study('rebano', part))['data'] is not None
     assert reader.read_json(bundle.path_study('rebano', 'summary'))['data']['n_elections'] == 2
     assert fs.exists(f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'elections')}")
+    assert fs.exists(f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'chance')}")
     assert reader.read_json(bundle.path_manifest())['data']['studies']['rebano'] == {
         'published_at': ANY, 'registered_at': None, 'checked': False}
     with pytest.raises(publish.PublishRefused, match='nothing to register'):
@@ -161,9 +162,28 @@ def test_publish_study_rebano_writes_weeks(tmp_path):
     write_herd_bundle(fs)
     publish.publish_study('rebano', make_writer(tmp_path, fs), prov=fake_prov)
     reader = bundle.BundleReader(fs)
-    assert bundle.STUDY_PARTS['rebano'][-1] == 'weeks'
+    assert 'weeks' in bundle.STUDY_PARTS['rebano']
     assert reader.read_json(bundle.path_study('rebano', 'weeks'))['data']['buckets']
     assert fs.exists(f"{bundle.PREFIX}/{bundle.path_study_csv('rebano', 'weeks')}")
+
+
+def test_export_herd_chance_validates_and_flattens_the_bins(study):
+    chance, frames = publish.export_herd_chance(study)
+    assert valid('rebano-chance', chance) and chance['chance']['permutations'] == 20000
+    frame = frames['chance']
+    assert list(frame.columns) == CHANCE_COLUMNS and str(frame['count'].dtype) == 'int64'
+    assert len(frame) == len(chance['chance']['null']['bins']) and int(frame['count'].sum()) == 20000
+
+
+def test_export_herd_chance_without_shared_pairs_is_null(tmp_path):
+    fs = FileSystem(str(tmp_path))
+    write_herd_bundle(fs)
+    params = {'chance': {'periods': {'final': [0, 1], 'rest': [1, 2]}, 'permutations': 100, 'bin_width': 0.01,
+                         'resamples': 100}}
+    empty = compute_herd(bundle.BundleReader(fs), FileSystem(os.path.join(ROOT, 'data')), params=params)
+    chance, frames = publish.export_herd_chance(empty)
+    assert valid('rebano-chance', chance) and chance['chance'] is None
+    assert list(frames['chance'].columns) == CHANCE_COLUMNS and frames['chance'].empty
 
 
 def test_export_herd_summary_validates_and_flattens_the_robustness_grid(study):

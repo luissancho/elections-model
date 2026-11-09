@@ -26,6 +26,8 @@ ELECTION_COLUMNS = ['scope', 'event_date', 'label', 'kind', 'comparison', 'pairs
 
 ROBUSTNESS_COLUMNS = ['pair_days', 'min_rows', 'default', 'comparison', 'n', 'k', 'median_change', 'change', 'p']
 
+CHANCE_COLUMNS = ['lo', 'hi', 'count']
+
 WEEK_COLUMNS = ['event_date', 'label', 'current', 'lo', 'hi', 'pairs', 'comparisons', 'ratio']
 
 
@@ -110,6 +112,23 @@ def export_herd_weeks(study) -> tuple:
     frame[['pairs', 'comparisons']] = frame[['pairs', 'comparisons']].astype('Int64')
 
     return data, {'weeks': frame}
+
+
+def export_herd_chance(study) -> tuple:
+    """Export the null-hypothesis test: the change of the separation of the last weeks against the shuffled ones.
+
+    Returns
+    -------
+    tuple
+        ``({'chance': dict or None}, {'chance': frame})``: ``data`` for ``rebano-chance`` (``None`` without pairs of
+        polls shared by the two periods); the frame has the bins of the null distribution (``lo``, ``hi`` and the
+        integer ``count`` of shuffles; empty without the block).
+    """
+    chance = _clean(study.chance)
+    bins = chance['null']['bins'] if chance else []
+    frame = pd.DataFrame(bins, columns=CHANCE_COLUMNS).astype({'count': 'int64'})
+
+    return {'chance': chance}, {'chance': frame}
 
 
 def _significant(comparison: dict) -> bool:
