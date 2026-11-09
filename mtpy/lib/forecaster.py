@@ -706,9 +706,40 @@ class Forecaster(Core):
             Fitted estimation of the percentage of votes for the party or block in the election event.
             If `ret_stat` is `True`, returns a tuple with the standard error and confidence interval of the forecast.
         """
-        # Polls with a value for the party and a positive weight (zero-weight polls do not enter the fit and
-        # would only break the bandwidth selection); a local linear fit needs at least three of them
-        df = self.fc_series[self.fc_series[name].notnull() & (self.fc_series['weight'] > 0)]
+        return self._fit_column(name, self.fc_series[name], max_fc=max_fc, ret_stat=ret_stat)
+
+    def _fit_column(
+        self,
+        name: str,
+        values: pd.Series,
+        max_fc: Optional[int] = 0,
+        ret_stat: bool = False
+    ) -> Optional[pd.Series | pd.DataFrame | tuple[pd.Series, pd.Series]]:
+        """
+        Fit the local kernel estimator on one value per poll of `fc_series` (a party, or the sum of a group).
+
+        Parameters
+        ----------
+        name : str
+            Name of what is fitted, for the warning when there are too few polls.
+        values : pd.Series
+            One value per row of `fc_series` (same index); null where the poll has none.
+        max_fc : int, optional
+            Maximum number of days to forecast after last poll date.
+        ret_stat : bool, optional
+            Return the standard error and confidence interval of the forecast for each estimation.
+
+        Returns
+        -------
+        pd.Series, pd.DataFrame, tuple or None
+            As `fit`; `None` (with a warning) with fewer than three usable polls.
+        """
+        # Polls with a value and a positive weight (zero-weight polls do not enter the fit and would only break
+        # the bandwidth selection); a local linear fit needs at least three of them
+        polls = self.fc_series
+        mask = values.notnull().to_numpy() & (polls['weight'] > 0).to_numpy()
+        df = polls[mask]
+        y = values[mask]
 
         if df.shape[0] < 3:
             warnings.warn('Fewer than three usable polls for `{}`: not fitted'.format(name))
@@ -723,7 +754,7 @@ class Forecaster(Core):
         groups = df['pollster_id'].to_numpy() if self.reg_params.get('cov_type') == 'cluster' else None
 
         reg = LocalKernelEstimator(
-            df[name],
+            y,
             weights=weights,
             groups=groups,
             **self.reg_params
@@ -805,6 +836,55 @@ class Forecaster(Core):
             self.fc_stat = self.fc_stat.apply(lambda col: col.ffill() if col.notnull().any() else col)
 
         return self.forecast
+
+    def fit_groups(
+        self,
+        groups: dict[str, list[str]],
+        max_fc: int = 0
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Fit each group of names on what its members add up to in every poll, not on the sum of their averages.
+
+        A poll enters a group with the sum of the members it lists (none listed: it does not enter), net of the
+        house effects and with the weight of the average, and the group is fitted with the same estimator, band and
+        grid as a party (`fit`). When pollsters start listing a new party halfway through the cycle the sum of the
+        party averages jumps (the new party starts at its smoothed level while the others still lean on polls that
+        do not list it); the sum per poll does not.
+
+        Parameters
+        ----------
+        groups : dict
+            `{group: [names]}`, names of `self.names` (the columns of the series, after grouping the polls).
+        max_fc : int, optional
+            Maximum number of days to forecast after last poll date (as `fit_forecast`).
+
+        Returns
+        -------
+        tuple of pd.DataFrame
+            `(forecast, fc_stat)` over `fc_index`, one column per fitted group: the daily mean and a dict of
+            statistics per day (as `fc_stat`, `None` where there is none). Groups with fewer than three usable
+            polls are left out, with a warning. `self.forecast` and `self.fc_stat` are not touched.
+        """
+        # The polls must be net of the house effects and weighted by the effective sample, as for the parties
+        if self.disp_enabled and self.dispersion is None:
+            self.fit_dispersion()
+        if self.he_enabled and self.house_effects is None:
+            self.fit_house_effects()
+
+        polls = self.fc_series
+        forecast, stat = {}, {}
+        for group, members in groups.items():
+            present = [n for n in members if n in polls.columns]
+            values = polls[present].sum(axis=1, min_count=1) if present else pd.Series(np.nan, index=polls.index)
+            res = self._fit_column(group, values, max_fc=max_fc, ret_stat=True)
+            if res is None:
+                continue
+            forecast[group], stat[group] = res
+
+        index = self.fc_index
+
+        return (pd.DataFrame(forecast, index=index, columns=list(forecast), dtype=float),
+                pd.DataFrame(stat, index=index, columns=list(stat)))
 
     def get_forecast(
         self,

@@ -733,3 +733,55 @@ def test_forecaster_drops_the_ban_and_exit_polls_by_default(monkeypatch):
     loaded(drop_ctypes=['exit'])
     assert seen['drop_contexts'] == ['exit']
     assert Forecaster('es', '2023-07-23', drop_ctypes=None).drop_ctypes == []
+
+
+def test_fit_groups_of_one_member_matches_the_fit_of_the_party():
+    """Un grupo de un solo partido da la misma línea y la misma banda que el ajuste del partido."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.fit_forecast(names=['PP'], max_fc=0)
+    forecast, stat = fc.fit_groups({'Solo': ['PP']}, max_fc=0)
+    np.testing.assert_allclose(forecast['Solo'].dropna().to_numpy(), fc.forecast['PP'].dropna().to_numpy(dtype=float))
+    day = forecast['Solo'].dropna().index[100]
+    assert stat.loc[day, 'Solo']['cmin'] == pytest.approx(fc.fc_stat.loc[day, 'PP']['cmin'])
+
+
+def test_fit_groups_does_not_touch_the_forecast_of_the_parties():
+    """Ajustar los grupos no cambia el promedio de los partidos ni su residuo."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.fit_forecast(names=['PP', 'PSOE'], max_fc=0)
+    before, stat_before = fc.forecast.copy(), fc.fc_stat.copy()
+    forecast, _ = fc.fit_groups({'Todos': ['PP', 'PSOE']}, max_fc=0)
+    pd.testing.assert_frame_equal(fc.forecast, before)
+    assert fc.fc_stat.equals(stat_before) and 'Todos' not in fc.forecast and 'Todos' in forecast
+
+
+def test_fit_groups_has_no_step_when_a_member_enters_mid_cycle():
+    """Un miembro que las casas empiezan a listar a mitad de ciclo, restando lo mismo a otro: la suma por sondeo no
+    cambia, así que el grupo no salta el día de la entrada (la suma de los ajustes sí)."""
+    fc, _, _ = _synthetic_forecaster(noise={1: 0.01, 2: 0.01, 3: 0.01, 4: 0.01})
+    born = (fc.series.index.get_level_values('date') >= pd.Timestamp('2026-08-01'))
+    series = fc.series.copy()
+    series['NEW'] = np.where(born, 4., np.nan)
+    series.loc[born, 'PP'] -= 4.
+    fc.names = ['PP', 'PSOE', 'NEW']
+    fc.he_enabled = False
+    fc.series_raw = None
+    fc._set_series(series)
+    fc.fit_forecast(names=['PP', 'NEW'], max_fc=0)
+    forecast, _ = fc.fit_groups({'Derecha': ['PP', 'NEW']}, max_fc=0)
+    first = series.index.get_level_values('date')[born].min()
+    prev = first - pd.Timedelta(days=1)
+    assert abs(forecast.loc[first, 'Derecha'] - forecast.loc[prev, 'Derecha']) < 0.3
+    summed = fc.forecast[['PP', 'NEW']].sum(axis=1, min_count=1)
+    assert summed.loc[first] - summed.loc[prev] > 1.          # el artefacto de hoy
+
+
+def test_fit_groups_skips_a_group_with_fewer_than_three_polls():
+    """Un grupo con menos de tres sondeos útiles no se ajusta: avisa y no tiene columna."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.series['RARE'] = np.nan
+    fc.series.iloc[:2, fc.series.columns.get_loc('RARE')] = 1.
+    fc.he_enabled = False
+    with pytest.warns(UserWarning):
+        forecast, stat = fc.fit_groups({'Raro': ['RARE'], 'Solo': ['PP']}, max_fc=0)
+    assert list(forecast.columns) == ['Solo'] and list(stat.columns) == ['Solo']
