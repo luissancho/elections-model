@@ -7355,6 +7355,7 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '<h2><a href="/casas/sigma-dos">Sigma Dos</a></h2>' in page  # the house in the heading of the card links its profile
     assert 'id="poll-house-chart"' in page and 'id="house-chart"' not in page  # not the square bullseye of the other pages
     assert 'data-file="demoscopio-encuestadora-es-sigma-dos-2026-10-05.png"' in page
+    assert '/dist/js/pages/sondeo.js' in page  # the module that draws the charts
     assert_public_wording(page, 'sondeo')
     data = initial(body)
     assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'average', 'seats',
