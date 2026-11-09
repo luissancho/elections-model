@@ -470,7 +470,11 @@ republica; `ban` desde la enmienda 2026-11-05, ver abajo):
   `backtest/results`, normalmente a 6 días), hasta el día en que se congeló el modelo: `horizon` y, con la forma de la
   parte `series` de un run, `dates`, `parties`, `mean`, `lo` y `hi` (2 decimales, `null` en los huecos de la banda).
   Solo existe si el backtest guardó la serie: una elección puede tener `model` y no `series` (la publicada antes de
-  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva.
+  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva. Enmienda
+  2026-11-09: también `blocks` y `first_polls`, como en la parte `series` de un run. `blocks` sale de las filas
+  `kind = block` del `series.csv` del backtest (vacío si el backtest es anterior y no las tiene: la web suma los
+  partidos); `first_polls` se calcula al publicar la elección con los partidos simulados (`parties.event`), sus
+  etiquetas del `smap` y los sondeos del ciclo. El CSV gana la columna `kind`.
 
 `meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
 `pollsters`, `polls`, `cycle` y `results`, los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los

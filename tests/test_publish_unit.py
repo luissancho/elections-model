@@ -1514,10 +1514,39 @@ def test_export_event_series_pivots_the_series_of_the_election(tmp_path):
     assert set(data) == set(bundle.SCHEMAS['event-series']) and data['horizon'] == 6
     assert data['dates'] == ['2023-07-15', '2023-07-16', '2023-07-17'] and data['parties'] == ['PP', 'PSOE']
     assert data['mean']['PP'] == [32.2, 32.3, 32.41] and data['lo']['PSOE'] == [None, 29.9, 29.89] and data['hi']['PSOE'][-1] == 32.09
-    assert list(frame.columns) == ['date', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 6 and pd.isna(frame['lo'].iloc[3])
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi'] and frame.shape[0] == 6 and pd.isna(frame['lo'].iloc[3])
+    assert set(frame['kind']) == {'party'} and data['blocks']['parties'] == [] and data['first_polls'] == {}
     assert publish.export_event_series(str(tmp_path), '2015-12-20') == (None, None)
     assert publish.export_event_series(str(tmp_path / 'none'), '2023-07-23') == (None, None)
     assert publish.export_event_series(None, '2023-07-23') == (None, None)
+
+
+def test_export_event_series_splits_parties_and_blocks_and_carries_the_entries(tmp_path):
+    """Las filas `block` del backtest van a `blocks`; las demás (también las de tablas sin `kind`) son partidos."""
+    write_series_source(str(tmp_path))
+    path = tmp_path / 'series.csv'
+    table = pd.read_csv(path)
+    table['kind'] = 'party'
+    blocks = table.loc[table['name'] == 'PP'].assign(name='Derecha', kind='block')
+    pd.concat([table, blocks]).to_csv(path, index=False)
+    data, frame = publish.export_event_series(str(tmp_path), '2023-07-23', first_polls={'SALF': '2023-03-01'})
+    assert data['parties'] == ['PP', 'PSOE'] and data['blocks']['parties'] == ['Derecha']
+    assert data['blocks']['mean']['Derecha'] == [32.2, 32.3, 32.41] and data['first_polls'] == {'SALF': '2023-03-01'}
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi'] and frame['kind'].iloc[-1] == 'block'
+    assert frame.shape[0] == 9 and list(frame['kind']) == ['party'] * 6 + ['block'] * 3
+
+
+def test_event_entries_reads_the_simulated_parties_and_their_labels():
+    """Los partidos de Izquierda/Derecha simulados en la elección, con las etiquetas que heredan por el `smap`."""
+    import types
+    polls = pd.DataFrame({'date': pd.to_datetime(['2023-01-01', '2023-06-01']), 'PP': [30., 31.], 'PSOE': [25., 26.],
+                          'SUMAR': [12., 11.], 'UP': [None, 2.]}).set_index('date')
+    comp = types.SimpleNamespace(event_params={'2023-07-23': {
+        'parties': {'event': ['PP', 'PSOE', 'FA', 'UP']}, 'smap': {'FA': {'type': 'agg', 'names': ['SUMAR']}},
+        'bmaps': {'vs': {'Izquierda': ['PSOE', 'FA', 'UP'], 'Derecha': ['PP']}}}})
+    assert publish.event_entries(comp, '2023-07-23', polls) == {'UP': '2023-06-01'}
+    bare = types.SimpleNamespace(event_params={'2023-07-23': {'bmaps': {'vs': {}}}})
+    assert publish.event_entries(bare, '2023-07-23', polls) == {}
 
 
 def test_publish_event_writes_the_series_and_removes_it_when_the_backtest_lacks_it(tmp_path):
@@ -1531,6 +1560,7 @@ def test_publish_event_writes_the_series_and_removes_it_when_the_backtest_lacks_
     part = writer.read_json(bundle.path_event('es', '2023-07-23', 'series'))
     assert out['has_series'] is True and 'series' in out['seconds']
     assert part['schema'] == 'event-series@1' and part['data']['horizon'] == 6 and part['data']['dates'][-1] == '2023-07-17'
+    assert part['data']['first_polls'] == {} and part['data']['blocks']['parties'] == []
     assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'series'))
     written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
     assert written[-1].endswith('/meta.json')
