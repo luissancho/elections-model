@@ -321,3 +321,15 @@ parties)` y `highlightSeries(poll, parties, colors)` (las series del anillo).
 - El anillo del sondeo en ese gráfico pasa de 16 a 11 px (borde de 2 px) para no tapar los puntos vecinos.
 - Se retiran `series_at`, `series_day`, `distance_to_average`, las opciones `intervalText` y `labelExtra` de
   `renderBars` y el `average`/`previous` de la isla de datos.
+
+## Segundo cambio de Luis, 2026-11-09
+
+- La tarjeta del sondeo vuelve a comparar, pero sólo con la entrega anterior de la misma casa y medio (nunca con el
+  promedio): barras **verticales** (`charts/columns.js`) con la cifra encima y, debajo, su cambio («▼ 0,1» en rojo,
+  «▲ 0,6» en verde, «–» si no cambia), como las tarjetas de partido de Promedios; el hemiciclo escribe bajo cada
+  horquilla el cambio de su punto medio (`deltas` de `hemicycleOption`, como en Promedios). La nota vuelve a decir con
+  qué entrega se compara, con su campo y el aviso de días en común.
+- En pantallas de menos de 560 px las columnas van compactas (cifra sin «%», letra de 9 px, nombres inclinados); la
+  imagen siempre usa la versión ancha (`__imageOption`), así que sale igual desde el móvil.
+- La tabla «Voto y escaños» y la tarjeta «Peso en el promedio» comparten fila a dos columnas (`.poll-pair`, 3:2),
+  apiladas en el móvil. El efecto de casa sale de la tabla.

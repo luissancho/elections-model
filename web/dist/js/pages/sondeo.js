@@ -1,17 +1,19 @@
-// Page of a poll (`/{scope}/sondeos/{date}/{pollster}[/{sponsor}]`): the card to share, only what the poll says (Luis,
-// 2026-11-09): the bars of its vote and, when the house published seats, the hemicycle of its seats (the midpoint of each range, its arc labelled with the range); the chart of the house in the cycle against the
+// Page of a poll (`/{scope}/sondeos/{date}/{pollster}[/{sponsor}]`): the card to share, the poll and its change against
+// the previous delivery of the house and sponsor, never the average (Luis, 2026-11-09): the columns of its vote, each
+// share with its change under it, and, when the house published seats, the hemicycle of its seats (the midpoint of each
+// range, its arc labelled with the range and its change); the chart of the house in the cycle against the
 // average, the house fixed, with this poll ringed, its own window and Partidos/Bloques view and its pill legend (as the
 // house chart of the event page, `promedios.js`, but its state never touches the URL); and the downloads of the chart
 // (`share.js`) and of the card (`card-image.js`). Everything is drawn from the data embedded by the server; the pure
 // logic of the card lives in `poll-card.js`.
 import {Catalog, OTHERS_COLOR} from '../catalog.js';
-import {renderBars} from '../charts/bars.js';
+import {renderColumns} from '../charts/columns.js';
 import {mountChart} from '../charts/base.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {chartZoom, seriesImageOption, seriesOption, setWindow} from '../charts/series.js';
 import {wireCardImages} from '../card-image.js';
-import {fmtPct} from '../format.js';
-import {highlightSeries, pollSeats, voteRows} from '../poll-card.js';
+import {fmtNum, fmtPct} from '../format.js';
+import {highlightSeries, pollSeats, seatChanges, voteRows} from '../poll-card.js';
 import {wireDownload} from '../share.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 import {markLegend} from './legend-dom.js';
@@ -21,11 +23,11 @@ import {chosenNames, fillLegend, seriesViews, viewCaption} from './series-wire.j
 const OTHERS_ROW = 'Otros';
 
 /**
- * Draw the bars of the vote of the poll (`#poll-bars`): one per party with a value, from the largest, the share
- * written after the bar and a grey «Otros» row with the rest up to 100 (`voteRows`). Nothing of the average nor of the
- * previous delivery: the card shows only the poll.
+ * Draw the columns of the vote of the poll (`#poll-bars`): one per party with a value, from the largest, and a grey
+ * «Otros» with the rest up to 100 (`voteRows`), the share over each column and, under it, its change against the
+ * previous delivery of the house and sponsor when there is one (`renderColumns`).
  *
- * @param {object} initial the page's initial data (`poll`, `polls.parties`)
+ * @param {object} initial the page's initial data (`poll`, `polls.parties`, `previous`)
  * @param {Catalog} catalog party catalogue of the page
  */
 function paintBars(initial, catalog) {
@@ -33,14 +35,14 @@ function paintBars(initial, catalog) {
   if (!el) {
     return;
   }
-  const rows = voteRows(initial.poll, initial.polls.parties || []);
+  const rows = voteRows(initial.poll, initial.polls.parties || [], initial.previous ? initial.previous.values : null);
   const names = rows.map((row) => row.name);
-  renderBars(el, rows, {
-    value: 'value',
+  renderColumns(el, rows, {
     colors: mapNames(names, (name) => (name === OTHERS_ROW ? OTHERS_COLOR : catalog.color(name))),
     fullnames: mapNames(names, (name) => catalog.fullname(name)),
     formatter: (x) => fmtPct(x),
     axisFormatter: (x) => fmtPct(x, 0),
+    shortFormatter: (x) => fmtNum(x, 1),
   });
 }
 
@@ -48,9 +50,11 @@ function paintBars(initial, catalog) {
  * Draw the hemicycle of the seats the house published with the poll (`#poll-hemi`, only rendered when it has them):
  * each party with the midpoint of its range, its arc labelled with the range, and a grey «Otros» arc with the seats
  * the midpoints leave out of the chamber (`pollSeats`): mostly the house's seats for the parties without their own
- * figure in the table, plus the rounding of the ranges. The majority and the total are those of the run.
+ * figure in the table, plus the rounding of the ranges. The majority and the total are those of the run. With a
+ * previous delivery that published seats too, each arc writes the change of its midpoint under the range
+ * (`seatChanges`), as the hemicycle of the event page writes the change against the last election.
  *
- * @param {object} initial the page's initial data (`seats`, `n_seats`, `majority`)
+ * @param {object} initial the page's initial data (`seats`, `n_seats`, `majority`, `previous`)
  * @param {Catalog} catalog party catalogue of the page
  */
 function paintSeats(initial, catalog) {
@@ -68,6 +72,8 @@ function paintSeats(initial, catalog) {
     fullnames: mapNames(names, (name) => catalog.fullname(name)),
     labels,
     rest,
+    deltas: initial.previous ? seatChanges(initial.seats, initial.previous.seats) : null,
+    year: 'la entrega anterior',
   });
 }
 

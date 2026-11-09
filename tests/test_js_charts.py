@@ -901,6 +901,30 @@ def test_chart_zoom_reads_the_window_given_and_the_drag():
     assert out['same'] is True
 
 
+def test_columns_write_the_share_and_its_change_under_it():
+    """Las columnas de la tarjeta de un sondeo: la cifra encima y, debajo, su cambio frente a la entrega anterior en el
+    color de las flechas de la web; «Otros» y los partidos sin cambio, sólo la cifra (Luis, 2026-11-09)."""
+    uri = pathlib.Path(DIST, 'js', 'charts', 'columns.js').as_uri()
+    got = run_js('await (async () => { const cl = await import("%s"); '
+                 'const o = cl.columnsOption([{name: "PP", value: 31, change: 1.2}, {name: "PSOE", value: 25.2, change: -0.6}, '
+                 '{name: "VOX", value: 19.4, change: 0}, {name: "Otros", value: 6.6, change: null}], '
+                 '{formatter: (x) => x.toFixed(1), colors: {PP: "#1d84ce"}}); const lb = o.series[0].label; '
+                 'return {labels: [0, 1, 2, 3].map((i) => lb.formatter({value: o.series[0].data[i].value, dataIndex: i})), '
+                 'colors: [0, 1, 2].map((i) => lb.rich["d" + i].color), x: o.xAxis.data, max: o.yAxis.max, '
+                 'tip: o.tooltip.formatter([{dataIndex: 0}]), bar: o.series[0].data[0].itemStyle.color}; })()' % uri)
+    assert got['labels'] == ['{v|31.0}\n{d0|▲ 1,2}', '{v|25.2}\n{d1|▼ 0,6}', '{v|19.4}\n{d2|–}', '{v|6.6}']
+    assert got['colors'] == ['#2ca02c', '#d62728', '#5a5f72'] and got['x'] == ['PP', 'PSOE', 'VOX', 'Otros']
+    assert got['max'] >= 31 * 1.25 and got['bar'] == '#1d84ce'
+    assert got['tip'] == '<strong>PP</strong><br>31.0<br>▲ 1,2 frente a la entrega anterior'
+    # on a phone (compact) the share is the short one, the labels smaller and the names of the parties tilted
+    compact = run_js('await (async () => { const cl = await import("%s"); '
+                     'const o = cl.columnsOption([{name: "PP", value: 31, change: 1.2}], {formatter: (x) => x.toFixed(1) + " %%", '
+                     'shortFormatter: (x) => x.toFixed(1), compact: true}); '
+                     'return {label: o.series[0].label.formatter({value: 31, dataIndex: 0}), size: o.series[0].label.rich.v.fontSize, '
+                     'rotate: o.xAxis.axisLabel.rotate, width: cl.COMPACT_WIDTH}; })()' % uri)
+    assert compact == {'label': '{v|31.0}\n{d0|▲ 1,2}', 'size': 9, 'rotate': 45, 'width': 560}
+
+
 def histogram_option(args):
     """Opción de `renderHistogram` con `args`, leída de un contenedor falso: `mountChart` reutiliza su `__chart`."""
     uri = pathlib.Path(DIST, 'js', 'charts', 'histogram.js').as_uri()

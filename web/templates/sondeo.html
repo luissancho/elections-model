@@ -11,7 +11,7 @@
 {% set lead = ('Trabajo de campo ' ~ fieldwork if fieldwork else 'Fecha ' ~ poll_date)
               ~ (' · ' ~ sample_text if sample_text else '') ~ ' · ' ~ house.type %}
 {% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
-{#- the fieldwork of the previous delivery, so that overlapping trackers show in the footer of the table -#}
+{#- the fieldwork of the previous delivery, so that overlapping trackers show in the card and in the table -#}
 {% if previous %}{% set previous_fieldwork = 'campo ' ~ previous.fieldwork if previous.fieldwork else 'campo hasta el ' ~ previous.date %}{% endif %}
     <div id="content" class="stack">
       <p class="back"><a href="{{ back_href }}">← Todas las encuestas</a></p>
@@ -20,7 +20,7 @@
         {{ m.card_image_button(image_file, image_sign) }}
         <p class="pc-event">{{ event_label }}</p>
         <div class="poll-grid{% if not has_seats %} single{% endif %}">
-          <div class="chart poll-bars" id="poll-bars" role="img" aria-label="Voto por partido según {{ house.name }}" style="height: {{ 34 * vote_rows|length + 60 }}px"></div>
+          <div class="chart poll-bars" id="poll-bars" role="img" aria-label="Voto por partido según {{ house.name }}"></div>
           {% if has_seats %}
           <div class="poll-seats">
             <p class="csub">Escaños según {{ house.name }}</p>
@@ -28,14 +28,17 @@
           </div>
           {% endif %}
         </div>
-        {#- only what the poll says (Luis, 2026-11-09): no average, no comparison, no figures of our model -#}
-        {% if has_seats %}
-        <p class="muted pc-note">En gris, los escaños de los demás partidos.</p>
-        {% else %}
-        <p class="muted pc-note">{{ house.name }} no publicó escaños con este sondeo.</p>
-        {% endif %}
+        {#- the poll and its change against the previous delivery of the house and sponsor, never the average (Luis,
+            2026-11-09); inside the card, so that the shared image says what the arrows compare with -#}
+        <p class="muted pc-note">{% if previous %}Flechas: frente al sondeo anterior de {{ previous.title }} ({{ previous_fieldwork }}){% if previous.overlap %}, con días de campo en común{% endif %}.{% else %}Primer sondeo de {{ poll_title }} en este ciclo.{% endif %}
+          {%- if has_seats %} En gris, los escaños de los demás partidos.{% else %} {{ house.name }} no publicó escaños con este sondeo.{% endif %}</p>
         {% call m.how() %}
-        <p>Cada barra es el voto que da el sondeo a un partido, tal como lo publicó {{ house.name }}.</p>
+        <p>
+          Cada barra es el voto que da el sondeo a un partido, tal como lo publicó {{ house.name }}.{% if previous %} Bajo
+          cada cifra, su cambio frente a la entrega anterior de la misma casa para el mismo medio en este ciclo: verde si
+          sube, roja si baja, un guion si no cambia; nada, si la entrega anterior no daba cifra para ese partido.{% if has_seats %}
+          En el hemiciclo, el cambio de los escaños compara el punto medio de las dos horquillas.{% endif %}{% endif %}
+        </p>
         {% if has_seats %}
         <p>
           El hemiciclo reparte los escaños que dio {{ house.name }} con el sondeo, no un reparto nuestro: cada partido
@@ -46,6 +49,8 @@
         {% endif %}
         {% endcall %}
       {{ m.card_end() }}
+      {#- the table of the vote and the weight of the poll share a row (Luis, 2026-11-09) -#}
+      <div class="poll-pair">
       {{ m.card_start('vote', 'Voto y escaños', 'El voto' ~ (' y los escaños' if has_seats else '') ~ ' de cada partido según el sondeo' ~ (', y cuánto cambian frente a la entrega anterior de ' ~ poll_title if previous else '') ~ '.') }}
         <div class="table-wrap">
           <table id="vote-table">
@@ -122,6 +127,7 @@
         <p>El cálculo completo, con un ejemplo vivo, está en <a href="{{ method_href('promedio') }}">cómo hacemos el promedio</a>.</p>
         {% endcall %}
       {{ m.card_end() }}
+      </div>
       {{ m.card_start('house', house.name ~ ' en este ciclo', 'Los sondeos de ' ~ house.name ~ ' en este ciclo frente al promedio de todas las encuestadoras, con este sondeo marcado.',
                       tools=m.download_button('house-download', house.name ~ ' · ' ~ event_label, 'frente al promedio · ' ~ title_suffix, image_sign, chart_file)) }}
         <div class="series-controls" id="house-controls" hidden>

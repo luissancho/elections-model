@@ -7,21 +7,27 @@ const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 
 /**
  * Las filas del voto de un sondeo: los partidos con valor, de mayor a menor (los empates conservan el orden de
- * `parties`), y al final «Otros» si el resto hasta 100 llega a 0,5 puntos. Sólo lo que dice el sondeo: ni promedio ni
- * entrega anterior (Luis, 2026-11-09).
+ * `parties`), con su cambio frente a la entrega anterior de la casa y medio, y al final «Otros» si el resto hasta 100
+ * llega a 0,5 puntos.
  * @param {Object} poll El sondeo, con el valor de cada partido por nombre.
  * @param {string[]} parties Los partidos, en su orden.
- * @returns {{name: string, value: number}[]} Las filas.
+ * @param {Object|null} [previous] La entrega anterior (voto por partido), si la hay.
+ * @returns {{name: string, value: number, change: number|null}[]} Las filas; `change` es la diferencia con la entrega
+ *   anterior a un decimal (null sin cifra en las dos entregas y en «Otros»).
  */
-export function voteRows(poll, parties) {
+export function voteRows(poll, parties, previous = null) {
     const rows = parties
         .filter((name) => isNumber(poll[name]))
-        .map((name) => ({name, value: poll[name]}));
+        .map((name) => ({
+            name,
+            value: poll[name],
+            change: previous && isNumber(previous[name]) ? Math.round((poll[name] - previous[name]) * 10) / 10 : null,
+        }));
     rows.sort((a, b) => b.value - a.value);
     const total = rows.reduce((sum, row) => sum + row.value, 0);
     const rest = Math.round((100 - total) * 10) / 10;
     if (rest >= 0.5) {
-        rows.push({name: 'Otros', value: rest});
+        rows.push({name: 'Otros', value: rest, change: null});
     }
 
     return rows;
@@ -51,6 +57,27 @@ export function pollSeats(seats, nSeats) {
         out.rest = nSeats - total;
     }
 
+    return out;
+}
+
+/**
+ * El cambio de los escaños de cada partido frente a la entrega anterior: la diferencia entre los puntos medios de sus
+ * dos horquillas (los mismos que dibuja el hemiciclo), sólo para los partidos con horquilla en las dos.
+ * @param {Object|null} seats Las horquillas `[lo, hi]` de este sondeo por partido.
+ * @param {Object|null} previous Las de la entrega anterior.
+ * @returns {Object} `{partido: diferencia}` (vacío sin escaños en alguna de las dos).
+ */
+export function seatChanges(seats, previous) {
+    const mid = (range) => (Array.isArray(range) && range.length === 2 && range.every(isNumber)
+        ? Math.round((range[0] + range[1]) / 2) : null);
+    const out = {};
+    for (const [name, range] of Object.entries(seats || {})) {
+        const now = mid(range);
+        const before = mid((previous || {})[name]);
+        if (now !== null && before !== null) {
+            out[name] = now - before;
+        }
+    }
     return out;
 }
 

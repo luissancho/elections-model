@@ -697,7 +697,10 @@ ol.notes > li:target { color: var(--color-text); }
 .poll-grid.single { grid-template-columns: 1fr; }
 .poll-card .pc-event { margin: -4px 0 var(--space-3); font-size: 13.5px; color: var(--color-muted); }
 .poll-card .pc-note { margin: var(--space-2) 0 var(--space-3); font-size: 12.5px; }
-.poll-card .poll-bars { height: auto; }
+.poll-card .poll-bars { height: 380px; }
+/* the table of the vote and the weight card side by side (Luis, 2026-11-09); stacked on phones */
+.poll-pair { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
+.poll-pair > * { min-width: 0; }
 .poll-seats .csub { margin: 0 0 4px; text-align: center; }
 .poll-card .card-head h2 a { color: inherit; text-decoration: none; }
 
@@ -1102,7 +1105,8 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
   .chart, .qcard .chart { height: 250px; }
   .chart.chart-tall { height: 280px; min-height: 0; max-height: none; aspect-ratio: auto; }
   .chart.hemi { height: auto; }
-  .poll-card .poll-grid { grid-template-columns: 1fr; }
+  .poll-card .poll-grid, .poll-pair { grid-template-columns: 1fr; }
+  .poll-card .poll-bars { height: 320px; }
   .cmp, .tests { grid-template-columns: 1fr; }
   #coalition-chart { height: 298px; }
   table { font-size: 12.5px; }

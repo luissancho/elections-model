@@ -33,13 +33,24 @@ POLL = {'date': '2026-11-09', 'PP': 32.6, 'PSOE': 25.6, 'VOX': 19.3, 'ERC': None
 
 
 def test_vote_rows_sort_the_parties_and_add_the_rest():
-    """Only what the poll says (Luis, 2026-11-09): the value of each party and the rest, no average nor change."""
+    """The value of each party, from the largest, and the rest; without a previous delivery, no change."""
     rows = run_js('pc.voteRows(%s, ["PSOE", "PP", "VOX", "ERC"])' % json.dumps(POLL))
-    assert rows == [{'name': 'PP', 'value': 32.6}, {'name': 'PSOE', 'value': 25.6}, {'name': 'VOX', 'value': 19.3},
-                    {'name': 'Otros', 'value': 22.5}]
+    assert rows == [{'name': 'PP', 'value': 32.6, 'change': None}, {'name': 'PSOE', 'value': 25.6, 'change': None},
+                    {'name': 'VOX', 'value': 19.3, 'change': None}, {'name': 'Otros', 'value': 22.5, 'change': None}]
     full = run_js('pc.voteRows({PP: 60.0, PSOE: 39.7}, ["PP", "PSOE"])')
     assert [row['name'] for row in full] == ['PP', 'PSOE']  # a rest under 0.5 is not shown
     assert run_js('pc.voteRows({PP: 30, PSOE: 30}, ["PSOE", "PP"])')[0]['name'] == 'PSOE'  # ties keep the party order
+
+
+def test_vote_rows_carry_the_change_against_the_previous_delivery():
+    rows = run_js('pc.voteRows({PP: 32.6, PSOE: 25.6, UP: 1.2}, ["PP", "PSOE", "UP"], {PP: 31.4, PSOE: 25.6})')
+    assert [(r['name'], r['change']) for r in rows] == [('PP', 1.2), ('PSOE', 0), ('UP', None), ('Otros', None)]
+
+
+def test_seat_changes_compare_the_midpoints_of_the_ranges():
+    changes = run_js('pc.seatChanges({PP: [136, 138], PSOE: [99, 101], VOX: [60, 60]}, {PP: [130, 134], VOX: [62, 64], BNG: [2, 2]})')
+    assert changes == {'PP': 5, 'VOX': -3}  # 137 − 132, 60 − 63; PSOE has no range before
+    assert run_js('pc.seatChanges({PP: [136, 138]}, null)') == {} and run_js('pc.seatChanges(null, {PP: [1, 2]})') == {}
 
 
 def test_poll_seats_take_the_midpoints_label_the_ranges_and_count_the_rest():

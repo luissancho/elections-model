@@ -7646,10 +7646,15 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert 'id="poll-bars"' in page and 'id="poll-hemi"' in page and 'Escaños según Sigma Dos' in page
     assert 'Trabajo de campo 1 oct 2026 – 4 oct 2026' in page and '2.000' in page and 'ublicad' not in page  # the date is the last fieldwork day
     assert pages.mtype_label('cati') in page
-    # the card shows only the poll (Luis, 2026-11-09): no average, no comparison, no figures of our model
+    # the card: the poll and its change against the previous delivery, never the average (Luis, 2026-11-09); the previous
+    # delivery has no fieldwork dates: its date, as the last day of its fieldwork
     card = page[page.index('id="poll-card"'):page.index('id="vote"')]
-    assert '<p class="muted pc-note">En gris, los escaños de los demás partidos.</p>' in card
-    assert 'class="kpis"' not in card and 'promedio' not in card and 'Flechas' not in card and 'Distancia' not in card
+    assert ('<p class="muted pc-note">Flechas: frente al sondeo anterior de Sigma Dos (campo hasta el 28 sept 2026). En gris, '
+            'los escaños de los demás partidos.</p>') in card
+    assert 'class="kpis"' not in card and 'promedio' not in card and 'Distancia' not in card
+    assert 'En el hemiciclo, el cambio de los escaños compara el punto medio de las dos horquillas.' in ' '.join(card.split())
+    # the table of the vote and the weight card share a row
+    assert page.index('<div class="poll-pair">') < page.index('id="vote"') < page.index('id="weight"') < page.index('id="house"')
     assert '2.000 entrevistas · ' in card and 'El arco gris, «Otros», completa la cámara' in card
     assert ('<meta name="description" content="Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: '
             'voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio.">') in page
@@ -7681,8 +7686,9 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '/dist/js/pages/sondeo.js' in page  # the module that draws the charts
     assert_public_wording(page, 'sondeo')
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'seats', 'n_seats',
-                         'majority'}
+    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'previous', 'seats',
+                         'n_seats', 'majority'}
+    assert data['previous'] == {'values': {'PP': 32.1}, 'seats': {'PP': [146, 148]}}
     assert [p['date'] for p in data['polls']['polls']] == ['2026-10-05', '2026-09-24', '2026-10-03', '2026-09-28']  # only the house's polls, in the order of the part
     assert data['poll']['PP'] == 33.5 and data['seats'] == {'PP': [150, 152]}
     assert data['n_seats'] == 350 and data['majority'] == 176
@@ -7693,7 +7699,9 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     page = html(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])
     assert 'Sigma Dos para El Mundo' in page and 'id="poll-hemi"' not in page and 'Sigma Dos no publicó escaños con este sondeo' in page
     # without seats nor a previous delivery: the note says so, and the table has only the vote (and the house effect)
-    assert '<p class="muted pc-note">Sigma Dos no publicó escaños con este sondeo.</p>' in page
+    assert ('<p class="muted pc-note">Primer sondeo de Sigma Dos para El Mundo en este ciclo. Sigma Dos no publicó escaños con '
+            'este sondeo.</p>') in page
+    assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['previous'] is None
     assert 'vs Anterior' not in page and 'Las columnas «vs Anterior»' not in page and 'El arco gris' not in page
     assert 'Primer sondeo de Sigma Dos para El Mundo en este ciclo: no hay entrega anterior con la que comparar.' in page
     description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
@@ -7724,7 +7732,8 @@ def test_sondeo_page_names_the_fieldwork_of_the_previous_delivery_and_its_overla
     assert 'parte de las entrevistas pueden ser las mismas' in ' '.join(vote.split())
     assert '<td>150–152</td>' in vote and '▲ 4' not in vote and '<td><span class="dlt flat">–</span></td>' in vote  # 151 → 151
     assert '▲ 1,4' in vote  # 32,1 → 33,5
-    assert 'Flechas' not in page
+    assert ('Flechas: frente al sondeo anterior de Sigma Dos (campo 28 sept 2026 – 2 oct 2026), con días de campo en común. '
+            'En gris') in page
     assert_public_wording(page, 'sondeo con anterior solapada')
 
     # a previous delivery whose fieldwork ends before this one starts, and without a figure for the PP

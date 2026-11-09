@@ -440,8 +440,9 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``polls`` (``chart_polls`` with the polls of
         the house only), ``projection`` and ``vote`` (the parts of the mode), ``catalog`` (``parties`` and ``bmaps``,
         as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``, ``sponsor``, ``pollster`` and the
-        percentages), ``seats`` (``None`` without them), ``n_seats`` and ``majority``. The card of the poll shows only
-        what the poll says (Luis, 2026-11-09): no average, no comparison; those are in the table and the chart.
+        percentages), ``previous`` (``values``, the shares, and ``seats``, the ranges, of the previous delivery, or
+        ``None``), ``seats`` (``None`` without them), ``n_seats`` and ``majority``. The card of the poll draws the poll
+        and its change against the previous delivery, never the average (Luis, 2026-11-09).
 
     Raises
     ------
@@ -525,6 +526,9 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
                  **{block: ink_color(block_color(block, meta, parties)) for block in blocks}},
         'poll': {'date': poll.get('date'), 'pollster_id': poll.get('pollster_id'), 'sponsor': poll.get('sponsor'),
                  'pollster': poll.get('pollster'), **{name: poll[name] for name in poll_parties if name in poll}},
+        'previous': None if prev is None else {
+            'values': {name: prev[name] for name in poll_parties if _has_value(prev.get(name))},
+            'seats': prev.get('seats') or None},
         'seats': seats,
         'n_seats': meta.get('n_seats'),
         'majority': meta.get('majority'),
