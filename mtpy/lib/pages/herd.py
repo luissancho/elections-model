@@ -7,6 +7,8 @@ live card and the sentences of the null-hypothesis test of question 3.
 ``weeks``, ``chance``); each function takes the data it reads and returns what the template renders, with ``None`` or
 an empty structure for what the parts do not have, never an error.
 """
+import math
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -781,6 +783,51 @@ def p_text(p: Optional[float]) -> Optional[str]:
     return 'p = {}'.format(fmt_num(p, 3))
 
 
+def hard_spaces(text: Optional[str]) -> Optional[str]:
+    """
+    The text with a non-breaking space before «%» and between «p» and its «<» or «=», so a figure never wraps.
+
+    Parameters
+    ----------
+    text : str or None
+        The text.
+
+    Returns
+    -------
+    str or None
+        ``text`` with «−12 %» and «p < 0,0001» held together by U+00A0; ``None`` for ``None``.
+    """
+    if text is None:
+        return None
+
+    return re.sub(r'\bp ([<=]) ', 'p\u00a0\\1\u00a0', text).replace(' %', '\u00a0%')
+
+
+def _edge_percent(edge, change: float) -> str:
+    """
+    The edge of the null distribution as a percentage rounded away from zero, so that «no shuffle went beyond it»
+    stays true: down for a fall, up for a rise.
+
+    Parameters
+    ----------
+    edge : float
+        The smallest (for a fall) or largest (for a rise) change of the shuffles, as a fraction.
+    change : float
+        The observed change; its sign says which edge is meant.
+
+    Returns
+    -------
+    str
+        «−13 %» for ``-0.1234`` with a fall; a dash when ``edge`` is missing.
+    """
+    if not _is_num(edge):
+        return DASH
+
+    points = round(edge * 100, 6)
+
+    return percent((math.floor(points) if change < 0 else math.ceil(points)) / 100)
+
+
 def _chance_figures(chance: Optional[dict]) -> Optional[dict]:
     """
     The figures of the null-hypothesis test that the sentences of the third card share.
@@ -831,7 +878,8 @@ def null_sentences(chance: Optional[dict]) -> Optional[tuple]:
     if not figures['count']:
         edge = _get(chance, 'null', 'min' if change < 0 else 'max')
         first = 'Ninguna de las {} barajas {} del {}; lo observado es un {}, {}'.format(
-            figures['shuffles'], 'bajó' if change < 0 else 'subió', percent(edge), figures['observed'], spread)
+            figures['shuffles'], 'bajó' if change < 0 else 'subió', _edge_percent(edge, change), figures['observed'],
+            spread)
     else:
         first = '{} de las {} barajas {} tan lejos como lo observado ({}), que va {}'.format(
             fmt_int(figures['count']), figures['shuffles'], 'llegó' if figures['count'] == 1 else 'llegaron',
@@ -852,7 +900,7 @@ def null_sentences(chance: Optional[dict]) -> Optional[tuple]:
         rest += ' En {} de las {} elecciones las mismas casas se acercan.'.format(fmt_int(chance['falls']),
                                                                                 fmt_int(chance['elections']))
 
-    return first, rest
+    return hard_spaces(first), hard_spaces(rest)
 
 
 def null_text(chance: Optional[dict]) -> Optional[str]:
@@ -895,11 +943,11 @@ def null_summary_text(chance: Optional[dict]) -> Optional[str]:
         return None
 
     if not figures['count']:
-        return 'Barajando {} veces, ninguna baraja llega a lo observado: {}.'.format(figures['shuffles'], figures['p'])
+        return hard_spaces('Barajando {} veces, ninguna baraja llega a lo observado: {}.'.format(
+            figures['shuffles'], figures['p']))
 
-    return '{} de {} {} a lo observado: {}.'.format(
-        fmt_int(figures['count']), figures['shuffles'], 'baraja llega' if figures['count'] == 1 else 'barajas llegan',
-        figures['p'])
+    return hard_spaces('{} de {} barajas {} a lo observado: {}.'.format(
+        fmt_int(figures['count']), figures['shuffles'], 'llega' if figures['count'] == 1 else 'llegan', figures['p']))
 
 
 def sigmas(chance: Optional[dict]) -> Optional[int]:

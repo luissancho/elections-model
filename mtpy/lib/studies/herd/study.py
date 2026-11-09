@@ -15,7 +15,7 @@ from ...bundle import BundleReader
 from ....core.io import FileSystem
 from .data import Election, MissingInput, load_params, read_current, read_elections
 from .stats import (_sig3, bootstrap_median, bootstrap_pooled, by_buckets, comparisons, compare, count, histogram,
-                    null_distribution, permutation_p, pooled, pooled_p, pooled_terms)
+                    null_distribution, period_of, permutation_p, pooled, pooled_p, pooled_terms)
 
 # Each comparison: the period taken as reference and the one expected to be closer
 COMPARISONS = {'far_final': ('far', 'final'), 'far_mid': ('far', 'mid'), 'mid_final': ('mid', 'final')}
@@ -208,7 +208,7 @@ def _robustness(elections: list, params: dict) -> dict:
     return {'pair_days': list(grid['pair_days']), 'min_rows': list(grid['min_rows']), 'rows': rows}
 
 
-def _chance(elections: list, params: dict) -> Optional[dict]:
+def _chance(elections: list, all_rows: dict, params: dict) -> Optional[dict]:
     """
     The null-hypothesis test of the last weeks against the rest of the cycle.
 
@@ -216,6 +216,8 @@ def _chance(elections: list, params: dict) -> Optional[dict]:
     ----------
     elections : list of Election
         The past elections.
+    all_rows : dict
+        ``comparisons`` of each past election, by ``(event_date, scope)``; only their ``period`` is replaced.
     params : dict
         Parameters of the study; ``chance`` holds ``periods`` (``final`` and ``rest``, replacing the study's),
         ``permutations``, ``bin_width`` and ``resamples``; also uses ``min_rows`` and ``seed``.
@@ -226,13 +228,15 @@ def _chance(elections: list, params: dict) -> Optional[dict]:
         As described in ``HerdStudy.chance``; ``None`` when no election has pairs counted.
     """
     config = params['chance']
-    chance_params = params | {'periods': config['periods']}
     min_rows = params['min_rows']
     used = []
     falls = 0
 
     for election in elections:
-        rows = comparisons(election.polls, election.names, chance_params)
+        # The comparisons already computed, relabelled with the periods of the test
+        rows = all_rows[election.event_date, election.scope]
+        rows = rows.assign(period=[period_of(days, config['periods']) for days in rows['days']])
+        rows = rows[rows['period'].notna()]
         result = compare(rows, 'rest', 'final', min_rows)
 
         if result is not None:
@@ -334,7 +338,7 @@ def compute_herd(reader: BundleReader, data: FileSystem, params: Optional[dict] 
     weeks = _weeks(elections, all_rows, current, current_rows, params)
 
     return HerdStudy(params=params, election=None if current is None else _election(current), summary=summary,
-                     elections=rows, weeks=weeks, chance=_chance(elections, params),
+                     elections=rows, weeks=weeks, chance=_chance(elections, all_rows, params),
                      current=None if current is None else _current(current, params, current_rows),
                      inputs={'elections': inputs_elections, 'current': inputs_current})
 

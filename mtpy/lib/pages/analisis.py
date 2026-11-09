@@ -699,7 +699,7 @@ def herd_context(state: dict) -> dict:
         null-hypothesis test of question 3: ``None`` without it, and then the page leaves out card 3, its answer, its
         sentence of the method and its CSV), ``null_text`` and ``null_sentences`` (``herd.null_text`` and
         ``herd.null_sentences``), ``null_summary`` (``herd.null_summary_text``), ``null_p_one`` (the one-sided p of the
-        expert note, ``herd.p_text``), ``sigmas`` (``herd.sigmas``),
+        expert note, ``herd.p_text``; ``None`` unless the observed change is a fall), ``sigmas`` (``herd.sigmas``),
         ``csv_links``, ``sources``, ``published_at`` and the flags of ``herd.flags`` (``has_run``, ``held``,
         ``days_left``, ``year``, ``election_day``, ``veda_date``, ``after_veda``, ``final_start``, ``final_started``).
         The island ``initial`` also carries ``chance`` (the block, ``None`` without it).
@@ -744,7 +744,8 @@ def herd_context(state: dict) -> dict:
         null_text=herd.null_text(chance),
         null_sentences=herd.null_sentences(chance),
         null_summary=herd.null_summary_text(chance),
-        null_p_one=herd.p_text(_get(chance, 'p_one')),
+        null_p_one=herd.hard_spaces(herd.p_text(_get(chance, 'p_one')))
+        if (_get(chance, 'change') or 0) < 0 else None,
         sigmas=herd.sigmas(chance),
         csv_links=csv_links,
         sources=meta.get('sources') or [],

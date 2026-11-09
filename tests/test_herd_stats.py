@@ -321,6 +321,15 @@ def test_by_buckets_without_rows():
     assert len(out) == 7 and all((b['pairs'], b['comparisons'], b['ratio']) == (0, 0, None) for b in out)
 
 
+def test_histogram_bin_width_that_is_not_a_power_of_ten_is_exact():
+    assert histogram([0.001, 0.012], 0.005) == [{'lo': 0.0, 'hi': 0.005, 'count': 1},
+                                                {'lo': 0.005, 'hi': 0.01, 'count': 0},
+                                                {'lo': 0.01, 'hi': 0.015, 'count': 1}]
+    assert histogram([3, 27], 5) == [{'lo': 0.0, 'hi': 5.0, 'count': 1}, {'lo': 5.0, 'hi': 10.0, 'count': 0},
+                                     {'lo': 10.0, 'hi': 15.0, 'count': 0}, {'lo': 15.0, 'hi': 20.0, 'count': 0},
+                                     {'lo': 20.0, 'hi': 25.0, 'count': 0}, {'lo': 25.0, 'hi': 30.0, 'count': 1}]
+
+
 def test_histogram_counts_every_finite_value_even_at_the_rounded_edges():
     for values in ([-1e-17, 0.004], [0.069999999999, 0.09], [0.01, 0.070000000001]):
         assert sum(bin_['count'] for bin_ in histogram(values, 0.01)) == len(values)

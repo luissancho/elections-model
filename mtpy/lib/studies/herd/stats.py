@@ -21,6 +21,7 @@ one expected if the period labels carried no information; the bootstrap over ele
 observed change.
 """
 import math
+from decimal import Decimal
 from typing import Optional
 
 import numpy as np
@@ -579,9 +580,10 @@ def null_distribution(rows_by_election: list, a: str, b: str, min_rows: int, per
     Returns
     -------
     dict or None
-        ``observed`` (the pooled change), ``permuted`` (array, one change per shuffle), ``count_one`` (shuffles whose ratio
-        ``R_b² / R_a²`` is not above the observed one, as in ``pooled_p``), ``count_two`` (shuffles with a change at least as far from 0),
-        ``p_one`` and ``p_two`` (``(count + 1) / (permutations + 1)``); ``None`` when ``pooled`` is ``None``.
+        ``observed`` (the pooled change), ``permuted`` (array, one change per shuffle), ``count_one`` (shuffles whose
+        ratio ``R_b² / R_a²`` is not above the observed one, as in ``pooled_p``), ``count_two`` (shuffles with a
+        change at least as far from 0), ``p_one`` and ``p_two`` (``(count + 1) / (permutations + 1)``); ``None`` when
+        ``pooled`` is ``None``.
     """
     if pooled(rows_by_election, a, b, min_rows) is None:
         return None
@@ -642,7 +644,7 @@ def histogram(values, bin_width: float) -> list[dict]:
     if len(values) == 0:
         return []
 
-    decimals = max(0, int(round(-math.log10(bin_width))))
+    decimals = max(0, -Decimal(str(bin_width)).normalize().as_tuple().exponent)
     first = math.floor(round(values.min() / bin_width, 9))
     last = max(math.ceil(round(values.max() / bin_width, 9)), first + 1)
     edges = np.round(np.arange(first, last + 1) * bin_width, decimals)
