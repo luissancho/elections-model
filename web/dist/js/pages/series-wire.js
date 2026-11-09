@@ -1,7 +1,7 @@
 // Wiring of the poll average shared by Promedios and the detail of a past election: the party and block views
 // of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window, view and layers
 // controls (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
-import {SERIES_KEYS, blockMembersText, blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
+import {REST_BLOCK, SERIES_KEYS, blockMembersText, blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
 import {chartZoom, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
 import {mergeHash} from '../url-state.js';
@@ -23,7 +23,8 @@ export const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
  * @returns {object} `partidos` and `bloques` (null without blocks): `series`, `polls`, `projection`, `result`
  *   (null without one), `parties`, `colors`, `defaults` (names shown by default, null for all) and `toPolls`
  *   (polls of the view from polls by party) and `marks` (`[{date, label}]`, dashed lines of the chart: none in
- *   `partidos`, the entry of each party of `series.first_polls` in `bloques`, by date); `bloques` also `members`
+ *   `partidos`, the entry of each party of `series.first_polls` in `bloques`, by date); in `bloques` the defaults
+ *   leave `REST_BLOCK` out (when the map has other blocks); `bloques` also `members`
  *   (the map of the blocks, for the line naming their parties) and `breakdown` (`{members, values, colors}`: the
  *   series and colour of each party, which break a day of a block down in the tooltip)
  */
@@ -58,7 +59,9 @@ export function seriesViews(initial, catalog) {
       // the colour the page already uses for the block (`block_colors`, the hemicycle of a past election), else
       // the catalogue's
       colors: mapNames(names, (name) => (initial.block_colors && initial.block_colors[name]) || catalog.blockColor(name)),
-      defaults: null,
+      // Izquierda and Derecha on, Otros off until its pill is lit (Luis, 2026-11-09)
+      defaults: names.includes(REST_BLOCK) && names.length > 1
+        ? names.filter((name) => name !== REST_BLOCK) : null,
       toPolls: (chosen) => blockPolls(chosen, blocks),
       members: blocks,
       breakdown: {members: blocks, values: series.mean, colors: mapNames(parties, (name) => catalog.color(name))},

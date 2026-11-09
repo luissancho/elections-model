@@ -240,13 +240,13 @@ def block_result_rows(summary: dict, meta: dict, parties: Catalog, results: Opti
     -------
     list of dict
         ``{'name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_majority', 'color'}`` per block with parties
-        (``seats`` not ``None``), unformatted: the blocks of ``BLOCK_ORDER`` first, in that order, and then the others
-        in the order of the summary; ``p_majority`` is ``None`` for ``REST_BLOCK``, which is no side that could govern
-        on its own; plus ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None``
+        (``seats`` not ``None``), unformatted, by seats and then by vote, both descending, as the parties of
+        ``result_rows`` and the block ridges of the browser (Luis, 2026-11-09; until then in ``BLOCK_ORDER``; a missing
+        vote counts as 0); ``p_majority`` is ``None`` for ``REST_BLOCK``, which is no side that could govern on its own; plus ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None``
         without results or for a block that had no party then).
     """
     blocks = [row for row in (summary or {}).get('blocks') or [] if row.get('seats') is not None]
-    blocks.sort(key=lambda row: BLOCK_ORDER.index(row['name']) if row['name'] in BLOCK_ORDER else len(BLOCK_ORDER))
+    blocks.sort(key=lambda row: (-row['seats'], -(row.get('pct') or 0)))
     previous = (results or {}).get('blocks') or {}
 
     return [

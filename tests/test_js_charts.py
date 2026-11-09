@@ -537,6 +537,12 @@ def test_series_views_of_blocks_carry_their_members_and_the_breakdown():
                            'bmaps': {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE'], 'Otros': []}}}}
     views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
     assert views['bloques']['members'] == {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE'], 'Otros': []}
+    # Luis, 2026-11-09: la vista Bloques sale con Izquierda y Derecha encendidos y Otros apagado; sin Otros, todos
+    assert views['bloques']['defaults'] == ['Derecha', 'Izquierda']
+    assert run_js('sw.chosenNames(sw.seriesViews(%s, new c.Catalog(%s.catalog)).bloques, {Otros: false})'
+                  % (json.dumps(initial), json.dumps(initial))) is None
+    bare = {**initial, 'catalog': {**initial['catalog'], 'bmaps': {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}}}}
+    assert run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog)).bloques' % (json.dumps(bare), json.dumps(bare)))['defaults'] is None
     assert views['bloques']['breakdown'] == {'members': views['bloques']['members'], 'values': initial['series']['mean'],
                                              'colors': {'PP': '#0000ff', 'VOX': '#00ff00', 'PSOE': '#ff0000'}}
     assert views['partidos'].get('members') is None and views['partidos'].get('breakdown') is None
