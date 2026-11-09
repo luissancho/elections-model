@@ -11,17 +11,24 @@ const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
  * @param {Object} poll El sondeo, con el valor de cada partido por nombre.
  * @param {string[]} parties Los partidos, en su orden.
  * @param {Object} [average] El promedio por partido.
- * @returns {{name: string, value: number, avg: number|null}[]} Las filas.
+ * @param {Object|null} [previous] La entrega anterior de la casa y medio (voto por partido), si la hay.
+ * @returns {{name: string, value: number, avg: number|null, change: number|null}[]} Las filas; `change` es la
+ *   diferencia con la entrega anterior a un decimal (null sin cifra en las dos entregas y en «Otros»).
  */
-export function voteRows(poll, parties, average = {}) {
+export function voteRows(poll, parties, average = {}, previous = null) {
     const rows = parties
         .filter((name) => isNumber(poll[name]))
-        .map((name) => ({name, value: poll[name], avg: isNumber(average[name]) ? average[name] : null}));
+        .map((name) => ({
+            name,
+            value: poll[name],
+            avg: isNumber(average[name]) ? average[name] : null,
+            change: previous && isNumber(previous[name]) ? Math.round((poll[name] - previous[name]) * 10) / 10 : null,
+        }));
     rows.sort((a, b) => b.value - a.value);
     const total = rows.reduce((sum, row) => sum + row.value, 0);
     const rest = Math.round((100 - total) * 10) / 10;
     if (rest >= 0.5) {
-        rows.push({name: 'Otros', value: rest, avg: null});
+        rows.push({name: 'Otros', value: rest, avg: null, change: null});
     }
 
     return rows;

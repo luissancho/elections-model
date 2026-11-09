@@ -33,24 +33,19 @@ export function barRows(rows, {value, lo, hi}) {
 }
 
 /**
- * Render horizontal bars, one per row and in the order of `rows`, with the interval `[lo, hi]` drawn as
- * a capped line and the value label after the end of the bar (past the interval cap so they never
- * overlap).
+ * Build the ECharts option of `renderBars` (exported so it can be tested without a DOM); see `renderBars` for
+ * the arguments.
  *
- * @param {HTMLElement} el chart container
  * @param {object[]} rows rows with a `name` and the value/interval fields
- * @param {object} opts `value`, `lo`, `hi` (field names), `colors` ({name: colour}; a name without one gets
- *   `THEME.barColor`),
- *   `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `axisFormatter` (axis ticks, default `formatter`), `majority` (vertical mark),
- *   `intervalText` (`(row) => string|null`, the tooltip line of the interval of a normalised row `{name, value, lo,
- *   hi}`, null for no line; without it the line is «Intervalo: lo – hi» when the row has both ends)
- * @returns {object} the ECharts instance
+ * @param {object} opts the options of `renderBars`
+ * @returns {object} the ECharts option
  */
-export function renderBars(el, rows, {
+export function barsOption(rows, {
   value = 'pct', lo = 'lo', hi = 'hi', colors = {}, fullnames = {}, formatter = String, axisFormatter = formatter, majority = null,
-  intervalText = null,
+  intervalText = null, labelExtra = null,
 } = {}) {
   const data = barRows(rows, {value, lo, hi});
+  const extras = rows.map((row, i) => (labelExtra ? labelExtra(row, i) : null));
   const top = Math.max(0, ...data.map((row) => Math.max(row.value ?? 0, row.hi ?? 0)), majority ?? 0);
 
   const bar = {
@@ -94,7 +89,8 @@ export function renderBars(el, rows, {
       }
       if (Number.isFinite(val)) {
         const point = api.coord([labelAt, index]);
-        children.push({
+        const extra = extras[index];
+        const text = {
           type: 'text',
           x: point[0] + 6,
           y: point[1],
@@ -105,7 +101,17 @@ export function renderBars(el, rows, {
             fill: THEME.textColor,
             font: `12px ${THEME.fontFamily}`,
           },
-        });
+        };
+        if (extra && extra.text) {
+          // One rich text so the change follows the value wherever the label is.
+          const base = {fontSize: 12, fontFamily: THEME.fontFamily};
+          text.style.text = `{v|${text.style.text}}  {d|${extra.text}}`;
+          text.style.rich = {
+            v: {...base, fill: THEME.textColor},
+            d: {...base, fill: extra.color, fontWeight: 700},
+          };
+        }
+        children.push(text);
       }
       return {type: 'group', children};
     },
@@ -117,7 +123,7 @@ export function renderBars(el, rows, {
     xAxis: {
       type: 'value',
       min: 0,
-      max: niceMax(top * 1.15),
+      max: niceMax(top * (labelExtra ? 1.3 : 1.15)),
       splitLine: {lineStyle: {color: THEME.gridColor}},
       axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x)},
     },
@@ -150,5 +156,25 @@ export function renderBars(el, rows, {
     },
     series: [bar, interval],
   };
-  return mountChart(el, option);
+  return option;
+}
+
+/**
+ * Render horizontal bars, one per row and in the order of `rows`, with the interval `[lo, hi]` drawn as
+ * a capped line and the value label after the end of the bar (past the interval cap so they never
+ * overlap).
+ *
+ * @param {HTMLElement} el chart container
+ * @param {object[]} rows rows with a `name` and the value/interval fields
+ * @param {object} opts `value`, `lo`, `hi` (field names), `colors` ({name: colour}; a name without one gets
+ *   `THEME.barColor`), `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `axisFormatter`
+ *   (axis ticks, default `formatter`), `majority` (vertical mark), `intervalText` (`(row) => string|null`, the
+ *   tooltip line of the interval of a normalised row `{name, value, lo, hi}`, null for no line; without it the
+ *   line is «Intervalo: lo – hi» when the row has both ends), `labelExtra` (`(row, index) => {text, color}|null`
+ *   on the input row: a coloured bold text after the value label, e.g. a change «▲ 1,2»; it also widens the axis
+ *   by 30 % instead of 15 % to leave room)
+ * @returns {object} the ECharts instance
+ */
+export function renderBars(el, rows, opts = {}) {
+  return mountChart(el, barsOption(rows, opts));
 }
