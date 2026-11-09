@@ -30,7 +30,7 @@ SEATS_COLS = ('seats_mean', 'seats_median', 'seats_lo', 'seats_hi', 'seats_min',
 
 
 POLL_COLUMNS = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'sample_size', 'mtype',
-                'rating', 'weight']
+                'rating', 'weight', 'weight_over', 'weight_sample', 'weight_rating', 'url']
 
 
 HE_COLUMNS = ['pollster_id', 'name', 'pollster', 'n', 'w', 'level', 'dev', 'dev_err', 'prior', 'prior_err',
@@ -312,8 +312,28 @@ def _stat_bound(cell, key):
     return round(cell[key], PCT_DECIMALS) if isinstance(cell, dict) else None
 
 
-def export_series(fc, names, end=None):
-    """Export the fitted daily series of each party with its confidence bounds.
+SERIES_COLUMNS = ['date', 'name', 'kind', 'mean', 'lo', 'hi']
+
+
+def series_blocks(sim) -> Optional[dict]:
+    """Return the blocks whose line the ``series`` part fits (Izquierda and Derecha, without Otros), or ``None``.
+
+    Parameters
+    ----------
+    sim : Simulator
+        Simulator of the run or of the backtest case.
+
+    Returns
+    -------
+    dict or None
+        ``{block: [names]}`` from ``web_blocks`` without ``REST_BLOCK``; ``None`` when the scope has no blocks.
+    """
+    bmap = _web_bmap(sim)
+    return {block: names for block, names in bmap.items() if block != REST_BLOCK} if bmap else None
+
+
+def export_series(fc, names, end=None, blocks: Optional[dict] = None):
+    """Export the fitted daily series of each party with its confidence bounds, and of each block.
 
     Parameters
     ----------
@@ -326,26 +346,59 @@ def export_series(fc, names, end=None):
         series without it); an ``end`` beyond it changes nothing, an earlier one cuts the series there (the
         backtest cuts at the anchor of each case, so the series stops where the model was frozen, and since
         2026-10-26 the publish cuts at ``sim.as_of`` too, where the projection starts).
+    blocks : dict, optional
+        ``{block: [names]}`` (``series_blocks``; a ``REST_BLOCK`` entry is ignored). Each block is fitted on what its
+        parties add up to in every poll (``Forecaster.fit_groups``, with the reach of the parties, ``fc.max_fc``),
+        not summed from their series, so that a party listed halfway through the cycle does not make it jump
+        (2026-11-09). Without it, the part has no block.
 
     Returns
     -------
     tuple of (dict, pandas.DataFrame)
-        Data for the ``series`` schema and its long-format CSV twin.
+        Data for the ``series`` schema (``blocks``: ``parties``, ``mean``, ``lo``, ``hi`` aligned to ``dates``;
+        ``first_polls``: ``Forecaster.cycle_births`` of the blocks) and its long-format CSV twin, the parties then
+        the blocks, told apart by ``kind`` (``party``, ``block``).
     """
     last = fc.date_fit_last if fc.date_fit_last is not None else fc.forecast.index.max()
     end = last if end is None else min(pd.Timestamp(end), pd.Timestamp(last))
     table = fc.forecast.loc[:end, names].dropna(how='all')
     dates = [d.strftime('%Y-%m-%d') for d in table.index]
+
+    def columns(forecast, stat, keys):
+        """Mean, low and high bounds of each key, aligned to the dates of the parties."""
+        mean, lo, hi = {}, {}, {}
+        for key in keys:
+            values = forecast[key].reindex(table.index)
+            cells = stat[key].reindex(table.index)
+            mean[key] = [None if pd.isna(v) else round(float(v), PCT_DECIMALS) for v in values]
+            lo[key] = [_stat_bound(c, 'cmin') for c in cells]
+            hi[key] = [_stat_bound(c, 'cmax') for c in cells]
+        return mean, lo, hi
+
     mean, lo, hi = {}, {}, {}
     for name in names:
         cells = [fc.fc_stat.loc[d, name] for d in table.index]
         mean[name] = list(table[name].round(PCT_DECIMALS))
         lo[name] = [_stat_bound(c, 'cmin') for c in cells]
         hi[name] = [_stat_bound(c, 'cmax') for c in cells]
-    data = {'dates': dates, 'parties': list(names), 'mean': mean, 'lo': lo, 'hi': hi}
-    rows = [{'date': d, 'name': name, 'mean': mean[name][i], 'lo': lo[name][i], 'hi': hi[name][i]}
+    groups = {block: list(members) for block, members in (blocks or {}).items() if block != REST_BLOCK}
+    fitted, entries = {'parties': [], 'mean': {}, 'lo': {}, 'hi': {}}, {}
+    if groups:
+        forecast, stat = fc.fit_groups(groups, max_fc=fc.max_fc)
+        keys = [block for block in groups if block in forecast.columns]
+        b_mean, b_lo, b_hi = columns(forecast, stat, keys)
+        fitted = {'parties': keys, 'mean': b_mean, 'lo': b_lo, 'hi': b_hi}
+        # a party without a line (fewer than three polls) has no legend entry either: its entry is not marked
+        entries = {name: day for name, day in fc.cycle_births(groups).items()
+                   if name in fc.forecast.columns and fc.forecast[name].loc[:end].notnull().any()}
+    data = {'dates': dates, 'parties': list(names), 'mean': mean, 'lo': lo, 'hi': hi, 'blocks': fitted,
+            'first_polls': entries}
+    rows = [{'date': d, 'name': name, 'kind': 'party', 'mean': mean[name][i], 'lo': lo[name][i], 'hi': hi[name][i]}
             for name in names for i, d in enumerate(dates)]
-    return data, pd.DataFrame(rows, columns=['date', 'name', 'mean', 'lo', 'hi'])
+    rows += [{'date': d, 'name': block, 'kind': 'block', 'mean': fitted['mean'][block][i],
+              'lo': fitted['lo'][block][i], 'hi': fitted['hi'][block][i]}
+             for block in fitted['parties'] for i, d in enumerate(dates)]
+    return data, pd.DataFrame(rows, columns=SERIES_COLUMNS)
 
 
 def poll_seats(fc) -> dict:
@@ -383,7 +436,8 @@ def export_poll_rows(polls, names, seats=None):
     -------
     tuple of (list of dict, pandas.DataFrame)
         The records of the ``polls`` member of the ``polls`` and ``event-cycle`` schemas and the table of their
-        CSV twin. A poll with projections carries ``seats`` (``{party: [min, max]}``, only the parties that have
+        CSV twin. The weight and its three factors (``weight_over``, ``weight_sample``, ``weight_rating``) are
+        rounded to ``PROB_DECIMALS``; ``url`` is the source of the poll. A poll with projections carries ``seats`` (``{party: [min, max]}``, only the parties that have
         one); the table adds ``seats_min_{party}`` and ``seats_max_{party}`` columns (nullable integers).
     """
     polls = polls.copy()
@@ -400,7 +454,8 @@ def export_poll_rows(polls, names, seats=None):
     # one block per party and, past a hundred of them, every seat column inserted afterwards would warn about
     # fragmentation (pandas ``PerformanceWarning``).
     polls = pd.concat([polls[POLL_COLUMNS], polls[names].round(PCT_DECIMALS)], axis=1)
-    polls['weight'] = polls['weight'].astype(float).round(PROB_DECIMALS)
+    for column in ('weight', 'weight_over', 'weight_sample', 'weight_rating'):
+        polls[column] = polls[column].astype(float).round(PROB_DECIMALS)
     records = polls.to_dict(orient='records')
     for key, record in zip(keys, records):
         found = {name: seats[key][name] for name in names if name in seats.get(key, {})}
@@ -917,7 +972,7 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     heads['forecast'] = publish_mode(sim, writer, scope, run_id, communities)
     fc = sim.model
     # the published series ends at the anchor, where the projection starts (the fit may reach further)
-    cycle = (('series', export_series(fc, names, end=sim.as_of)), ('polls', export_polls(fc, names, seats=poll_seats(fc))),
+    cycle = (('series', export_series(fc, names, end=sim.as_of, blocks=series_blocks(sim))), ('polls', export_polls(fc, names, seats=poll_seats(fc))),
              ('fan', export_fan(sim)),
              ('house-effects', export_house_effects(fc)), ('dispersion', export_dispersion(fc)),
              ('weights', export_weights(fc, names, sim.as_of)))

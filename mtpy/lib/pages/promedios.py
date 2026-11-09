@@ -12,7 +12,7 @@ from ..webapi import site
 from .common import OTHERS_COLOR, REST_BLOCK, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
                       fmt_prob, fmt_range, gradient)
-from .slugs import pollster_href
+from .slugs import poll_detail_href, pollster_href
 
 PAGE_SIZE = 15
 MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
@@ -198,6 +198,29 @@ def result_rows(summary: dict, results: Optional[dict] = None) -> list:
     ]
 
 
+def block_members(blocks: Optional[dict]) -> dict:
+    """
+    The parties of each block, for the caption of the table of results by block: the same text as ``blockMembers``
+    of ``web/dist/js/blocks.js``, which names them under the legend of the block views of the charts.
+
+    Parameters
+    ----------
+    blocks : dict, optional
+        ``meta.bmaps.blocks``: block → party names.
+
+    Returns
+    -------
+    dict
+        ``{block: parties}`` in the order of the map, the parties joined with « + » («PSOE + FA + UP», Luis
+        2026-11-09); ``REST_BLOCK`` is left out (it goes without saying), and so is any block without parties.
+        Empty without a map.
+    """
+    if not isinstance(blocks, dict):
+        return {}
+
+    return {block: ' + '.join(members) for block, members in blocks.items() if block != REST_BLOCK and members}
+
+
 def block_result_rows(summary: dict, meta: dict, parties: Catalog, results: Optional[dict] = None) -> list:
     """
     Rows of the table of results by block.
@@ -310,7 +333,7 @@ def poll_name(poll: dict) -> str:
     return pollster + ' / ' + sponsor if sponsor else pollster
 
 
-def chart_polls(polls: dict) -> dict:
+def chart_polls(polls: dict, scope: Optional[str] = None) -> dict:
     """
     Polls part reduced to the columns the charts draw.
 
@@ -318,6 +341,8 @@ def chart_polls(polls: dict) -> dict:
     ----------
     polls : dict
         Data of the polls part (``parties``, ``columns``, ``polls``, ``results``).
+    scope : str, optional
+        Scope of the polls, for the link to the page of each one; without it the polls have no page (past elections).
 
     Returns
     -------
@@ -325,8 +350,8 @@ def chart_polls(polls: dict) -> dict:
         ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``, ``seats``
         (the pollster's projections, when it has them), ``rating`` (the pollster's rating the run used),
         ``pollster``, ``sponsor``, ``start_date``, ``end_date`` and one value per party (the keys it has),
-        plus ``name`` (``poll_name``), ``sample_size`` (``None`` when missing) and ``href`` (``poll_href``): the
-        box of each poll of the charts and the table of all the polls are drawn from them.
+        plus ``name`` (``poll_name``), ``sample_size`` (``None`` when missing) and ``href`` (``poll_href``) and ``detail_href``
+        (``poll_detail_href``, ``None`` without ``scope``): the box of each poll of the charts and the table of all the polls are drawn from them.
     """
     parties = list(polls.get('parties') or [])
     keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats', 'rating'] + parties
@@ -335,7 +360,8 @@ def chart_polls(polls: dict) -> dict:
         'parties': parties,
         'polls': [
             {key: poll.get(key) for key in keys if key in poll}
-            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size'), 'href': poll_href(poll)}
+            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size'), 'href': poll_href(poll),
+               'detail_href': poll_detail_href(scope, poll) if scope else None}
             for poll in polls.get('polls') or []
         ],
     }
@@ -428,7 +454,8 @@ def _leaders(values: list) -> list:
     return [not _is_missing(value) and value == max(present) for value in values]
 
 
-def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAGE_SIZE) -> dict:
+def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAGE_SIZE,
+                scope: Optional[str] = None) -> dict:
     """
     Formatted rows of the polls table, the most recent first, with the simple mean of all the polls.
 
@@ -443,6 +470,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
         Colour by party name; a party without one gets ``OTHERS_COLOR``.
     n : int, optional
         Maximum number of rows; ``None`` for all of them. The mean always covers every poll.
+    scope : str, optional
+        Scope of the polls, for the link to the page of each one; without it the rows do not link (past elections).
 
     Returns
     -------
@@ -451,7 +480,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
         (ties keep the later published first) is ``{'pollster', 'href' (``poll_href``), 'rating' (at one decimal,
         or the dash), 'rating_color' (``gradient`` over ``RATING_COLORS``, ``None`` without rating), 'sponsor',
         'date' (the days of the fieldwork, ``fieldwork_label``), 'fieldwork' (the tooltip with the full dates,
-        ``None`` without fieldwork dates), 'sample', 'cells'}`` with a
+        ``None`` without fieldwork dates), 'detail_href' (``poll_detail_href``, ``None`` without ``scope``),
+        'sample', 'cells'}`` with a
         ``{'value', 'leader', 'color'}`` cell per party (``leader``: the highest of the row, every tied one);
         ``mean`` is ``{'n', 'cells'}``, the
         unweighted mean of all the polls (``n`` is ``total``) at one decimal in the same cells, the figure the
@@ -477,6 +507,7 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
             'sponsor': poll.get('sponsor') or None,
             'date': fieldwork_label(start, end, poll.get('date')),
             'fieldwork': fieldwork,
+            'detail_href': poll_detail_href(scope, poll) if scope else None,
             'sample': fmt_int(poll.get('sample_size')),
             'cells': [
                 {'value': fmt_num(value, 1), 'leader': leader, 'color': colors.get(name, OTHERS_COLOR)}
@@ -540,17 +571,41 @@ def round_series(series: dict, digits: int = 2) -> dict:
     -------
     dict
         A copy of ``series`` with every number of ``mean``, ``lo`` and ``hi`` rounded to ``digits``
-        decimals; missing values stay ``None`` and the other members are kept as they are.
+        decimals, those of the fitted ``blocks`` too; missing values stay ``None`` and the other members are kept
+        as they are.
     """
     def rounded(values):
         return [None if _is_missing(value) else round(value, digits) for value in values]
 
-    out = dict(series)
+    def rounded_part(part):
+        out = dict(part)
+        for key in ('mean', 'lo', 'hi'):
+            out[key] = {name: rounded(values) for name, values in (part.get(key) or {}).items()}
+        return out
 
-    for key in ('mean', 'lo', 'hi'):
-        out[key] = {name: rounded(values) for name, values in (series.get(key) or {}).items()}
+    out = rounded_part(series)
+    if series.get('blocks'):
+        out['blocks'] = rounded_part(series['blocks'])
 
     return out
+
+
+def fitted_blocks(series: Optional[dict]) -> bool:
+    """
+    Whether a series part carries the blocks fitted on the sum per poll (runs and elections published since
+    2026-11-09), so that the page says how its block view is drawn.
+
+    Parameters
+    ----------
+    series : dict or None
+        Data of the series part.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``series.blocks.parties`` is not empty.
+    """
+    return bool(((series or {}).get('blocks') or {}).get('parties'))
 
 
 def poll_sample(poll: dict):
@@ -765,6 +820,7 @@ def promedios_context(state: dict, region=None) -> dict:
     previous = inherited_results(results, meta)
     context['result_rows'] = result_rows(summary, previous)
     context['block_result_rows'] = block_result_rows(summary, meta, parties, previous)
+    context['block_members'] = block_members(blocks)
     context['n_seats'] = summary.get('n_seats') or meta.get('n_seats')
     context['majority'] = summary.get('majority') or meta.get('majority')
     context['kpis'] = kpi_rows(summary, meta, parties, poll_rows)
@@ -773,7 +829,7 @@ def promedios_context(state: dict, region=None) -> dict:
     context['results_date'] = results['date'] if results else None
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
-    context['table'] = polls_table(poll_rows, context['table_parties'], colors)
+    context['table'] = polls_table(poll_rows, context['table_parties'], colors, scope=scope)
     context['fixed_rows'] = []  # only the detail of a past election pins the model and the result to the foot
     context['table_total'] = len(poll_rows)
     context['has_seats'] = any(poll.get('seats') for poll in poll_rows)  # the % de voto / Escaños switch
@@ -787,12 +843,13 @@ def promedios_context(state: dict, region=None) -> dict:
     context['event_bar'] = dict(context['event_bar'], sections=[
         entry for entry in context['event_bar']['sections'] if entry['id'] not in missing])
     run_parties = [party['name'] for party in meta.get('parties') or []]
+    context['fitted_blocks'] = fitted_blocks(series)
     context['initial'] = {
         'state': full,
         'meta': meta,
         'headline': headline,
         'series': round_series(series),
-        'polls': chart_polls(polls),
+        'polls': chart_polls(polls, scope),
         'projection': part(scope, run, 'projection', mode=mode),
         'vote': part(scope, run, 'vote', mode=mode),
         'summary': summary,

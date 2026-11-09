@@ -713,26 +713,31 @@
         </p>
       {{ m.card_end() }}
       {% if example %}
-      {{ m.card_start('ejemplo', 'Un cálculo completo, con datos publicados', 'Los sondeos que pesan en el promedio del ' ~ example.name ~ ' en la última actualización, la del ' ~ (example.published|date) ~ ', y la recta que se ajusta a ellos.') }}
+      {#- The figures in `data-w` spans are those of the national leader; the browser rewrites them (`weights-example.js`)
+          when the reader picks another scope or party. -#}
+      {{ m.card_start('ejemplo', 'Un cálculo completo, con datos publicados', 'Los sondeos que pesan en el promedio de un partido en la última actualización y la recta que se ajusta a ellos.') }}
         <p>
-          En la actualización del {{ example.published|date }}, el promedio del {{ example.name }} leído en el
-          {{ example.date|date }} era del {{ example.stats.mean|pct }}, con una banda del {{ example.stats.lo|pct }} al
-          {{ example.stats.hi|pct }}.
+          En la actualización del <span data-w="published">{{ example.published|date }}</span>, el promedio del
+          <span data-w="subject">{{ example.name }}</span> leído en el <span data-w="date">{{ example.date|date }}</span>
+          era del <span data-w="mean">{{ example.stats.mean|pct }}</span>, con una banda del
+          <span data-w="lo">{{ example.stats.lo|pct }}</span> al <span data-w="hi">{{ example.stats.hi|pct }}</span>.
         </p>
-        {% if example.date > example.published %}
-        <p>
-          Las fechas describen dos cosas distintas: el modelo se ejecutó el {{ example.published|date }} y prolongó la
-          estimación hasta el {{ example.date|date }} con la información disponible. No incorporaba encuestas futuras.
+        <p id="weights-dates"{% if not example.date > example.published %} hidden{% endif %}>
+          Las fechas describen dos cosas distintas: el modelo se ejecutó el
+          <span data-w="published">{{ example.published|date }}</span> y prolongó la estimación hasta el
+          <span data-w="date">{{ example.date|date }}</span> con la información disponible. No incorporaba encuestas
+          futuras.
         </p>
-        {% endif %}
         <p>
-          En ese ajuste participaban {{ example.stats.nobs|int }} sondeos y la campana tenía una anchura de
-          {{ example.stats.bandwidth|num(0) }} días. El tamaño efectivo de los pesos era {{ example.stats.neff|num(1) }}.
+          En ese ajuste participaban <span data-w="nobs">{{ example.stats.nobs|int }}</span> sondeos y la campana tenía
+          una anchura de <span data-w="bandwidth">{{ example.stats.bandwidth|num(0) }}</span> días. El tamaño efectivo
+          de los pesos era <span data-w="neff">{{ example.stats.neff|num(1) }}</span>.
           Esta última cifra resume cuánto se concentra el peso: cuando unas encuestas cuentan mucho más que otras, la
           información queda menos repartida.
         </p>
         <p>
-          No significa que tuviéramos exactamente {{ example.stats.neff|num(1) }} sondeos independientes. La dependencia
+          No significa que tuviéramos exactamente <span data-w="neff">{{ example.stats.neff|num(1) }}</span> sondeos
+          independientes. La dependencia
           entre encuestas es otro problema, que tratamos agrupándolas por encuestadora al estimar el error.
         </p>
         <h3>Dos cifras para cada sondeo</h3>
@@ -752,19 +757,32 @@
           inclinación de cada encuestadora. La corrección no acerca los sondeos al resultado electoral: sólo pone a todas
           las encuestadoras en la misma referencia, el consenso.
         </p>
-        <div class="series-controls">
+        <div class="series-controls" id="weights-controls">
+          <form id="weights-pick" class="filters-bar" hidden>
+            <label>Ámbito
+              <select name="scope">
+                {% for scope in example_scopes %}
+                <option value="{{ scope.code }}"{% if loop.first %} selected{% endif %}>{{ scope.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Partido
+              <select name="party"></select>
+            </label>
+          </form>
+          <p class="status" id="weights-status" hidden></p>
           <fieldset id="weights-field" class="seg" hidden>
             <legend>Cifra de los puntos</legend>
             <label><input type="radio" name="weights-field" value="pct" checked> Publicada</label>
             <label><input type="radio" name="weights-field" value="pct_adj"> Corregida</label>
           </fieldset>
         </div>
-        <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} leído el {{ example.date|date }}, con la recta local, su banda y la campana del kernel"></div>
-        <details class="weights-list" id="weights-list">
-          <summary>Ver los {{ example.n_rows }} sondeos</summary>
+        <div class="chart chart-tall" id="weights-chart" hidden role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} leído el {{ example.date|date }}, con la recta local, su banda y la campana del kernel"></div>
+        <details class="weights-list" id="weights-list" hidden>
+          <summary><span>Ver los <span data-w="n_rows">{{ example.n_rows }}</span> sondeos</span></summary>
           <div class="table-wrap">
             <table class="et et-fit" id="weights-table">
-              <caption>Sondeos que entran en la recta del promedio leído el {{ example.date|date }} y sus pesos, los más recientes primero.</caption>
+              <caption>Sondeos que entran en la recta del promedio leído el <span data-w="date">{{ example.date|date }}</span> y sus pesos, los más recientes primero.</caption>
               <thead>
                 <tr>
                   <th scope="col" class="f l">Fecha</th>
@@ -779,22 +797,7 @@
                   <th scope="col" title="El factor del rating de la encuestadora">Rating</th>
                 </tr>
               </thead>
-              <tbody>
-                {% for row in example.rows %}
-                <tr>
-                  <td class="f l">{{ row.date|date_short }}</td>
-                  <td><b>{{ row.pollster }}</b>{% if row.sponsor %} / {{ row.sponsor }}{% endif %}</td>
-                  <td>{{ row.sample_size|int }}</td>
-                  <td>{{ row.pct|pct }}</td>
-                  <td>{{ row.pct_adj|pct }}</td>
-                  <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight|bar(0, 3) }}%"></i><span>{{ row.weight|num(2) }}</span></td>
-                  <td>{{ row.weight_kernel|num(2) }}</td>
-                  <td>{{ row.weight_over|num(2) }}</td>
-                  <td>{{ row.weight_sample|num(2) }}</td>
-                  <td>{{ row.weight_rating|num(2) }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
+              <tbody></tbody>
             </table>
           </div>
           <p class="scroll-hint">Desliza para ver más →</p>
@@ -809,12 +812,12 @@
         <p>
           La tabla recoge las fechas, las muestras, las dos versiones de cada porcentaje y los factores de peso: Cercanía
           es el factor temporal, que vale 1 el día leído; Solape, el de frecuencia; Muestra, la raíz de la muestra entre la
-          mediana con el factor de dispersión de la encuestadora dentro; y Rating, el del rating.
+          mediana con el factor de dispersión de la encuestadora dentro; y Rating, el del rating.<span data-w="top">
           {%- if example.top %} El sondeo que más pesa es el de {{ example.top.pollster }} del
-          {{ example.top.date|date_short }}, con {{ example.top.weight|num(2) }}.{% endif %} También se pueden descargar
+          {{ example.top.date|date_short }}, con {{ example.top.weight|num(2) }}.{% endif %}</span> También se pueden descargar
           los pesos de todos los partidos para examinar el cálculo.
         </p>
-        <p class="notice"><a href="{{ example_csv }}">Descargar los pesos de todos los partidos (CSV)</a></p>
+        <p class="notice"><a id="weights-csv" href="{{ example_csv }}">Descargar los pesos de todos los partidos (CSV)</a></p>
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('voto-estimado', 'Del promedio a la estimación del voto', 'El promedio es el punto de partida de la estimación electoral; su intervalo suma tres fuentes de incertidumbre.') }}

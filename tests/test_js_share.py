@@ -174,3 +174,29 @@ def test_image_layout_puts_a_bottom_panel_under_the_charts_centred():
     wide = run_js('s.imageLayout({chartHeight: 120, bottom: {width: 900, height: 60, items: []}})')
     assert wide['width'] == 956 and wide['chart']['width'] == 900 and wide['bottom']['x'] == 28
     assert run_js('s.imageLayout({}).bottom') is None
+
+
+def test_wrap_lines_breaks_at_the_separators_and_then_between_words():
+    """El pie de la imagen salta de línea entre bloques (« · ») mientras quepan; un bloque más ancho que la línea se
+    parte entre palabras."""
+    measure = '(text) => text.length'
+    assert run_js('s.wrapLines("Izquierda: A y B · Derecha: C · Otros: el resto", 30, %s)' % measure) == [
+        'Izquierda: A y B · Derecha: C', 'Otros: el resto']
+    assert run_js('s.wrapLines("Otros: PNV, ERC, EH Bildu y el resto", 16, %s)' % measure) == [
+        'Otros: PNV, ERC,', 'EH Bildu y el', 'resto']
+    assert run_js('s.wrapLines("corto", 30, %s)' % measure) == ['corto']
+    assert run_js('s.wrapLines("", 30, %s)' % measure) == []
+
+
+def test_image_layout_puts_the_caption_lines_under_the_charts_and_over_the_signature():
+    """Las líneas del pie (la composición de los bloques) van bajo los gráficos, a la izquierda, pequeñas y apagadas,
+    y la firma baja con ellas."""
+    layout = run_js('s.imageLayout({title: "T", sign: "F", chartHeight: 120, caption: ["uno", "dos"]})')
+    assert [text['role'] for text in layout['texts']] == ['title', 'caption', 'caption', 'sign']
+    captions = [text for text in layout['texts'] if text['role'] == 'caption']
+    assert captions[0] == {'role': 'caption', 'text': 'uno', 'x': 28, 'y': 200, 'align': 'left',
+                           'font': "500 12px 'DM Sans', system-ui, sans-serif", 'color': '#5a5f72'}
+    assert captions[1]['y'] == 216
+    assert layout['texts'][-1]['y'] == 240 and layout['height'] == 276
+    plain = run_js('s.imageLayout({title: "T", sign: "F", chartHeight: 120, caption: []})')
+    assert plain['texts'][-1]['y'] == 196 and plain['height'] == 232

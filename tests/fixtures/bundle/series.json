@@ -26,6 +26,13 @@
       "PP": [
         null
       ]
-    }
+    },
+    "blocks": {
+      "parties": [],
+      "mean": {},
+      "lo": {},
+      "hi": {}
+    },
+    "first_polls": {}
   }
 }

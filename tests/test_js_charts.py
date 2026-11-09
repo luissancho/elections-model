@@ -32,6 +32,7 @@ MATRIX_JS = pathlib.Path(DIST, 'js', 'charts', 'matrix.js').as_uri()
 RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
 DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 WEEKS_JS = pathlib.Path(DIST, 'js', 'charts', 'weeks.js').as_uri()
+CHANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'chance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 ERRORS_JS = pathlib.Path(DIST, 'js', 'charts', 'errors.js').as_uri()
 DUMBBELL_JS = pathlib.Path(DIST, 'js', 'charts', 'dumbbell.js').as_uri()
@@ -52,9 +53,9 @@ def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
     dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
-    ranking, `ds` distancia), el del estudio del rebaño (`wk` semanas), el del voto oculto (`er` errores), el de
-    Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las funciones de la opción se pierden en la
-    serialización, como en `JSON.stringify`)."""
+    ranking, `ds` distancia), los del estudio del rebaño (`wk` semanas, `ch` azar), el del voto oculto (`er`
+    errores), el de Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las funciones de la opción se
+    pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
@@ -65,14 +66,14 @@ def run_js(expr, rows=ROWS):
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
         'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
-        'const er = await import("{}"); '
+        'const ch = await import("{}"); const er = await import("{}"); '
         'const db = await import("{}"); const bw = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS, json.dumps(rows),
-             expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, CHANCE_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS,
+             json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -183,6 +184,50 @@ def test_hemicycle_writes_the_seat_delta_under_the_seats():
     assert pie['label']['rich']['delta'] == {'fontFamily': pie['label']['rich']['seats']['fontFamily'], 'fontWeight': 700, 'fontSize': 12, 'color': '#fff',
                                              'align': 'center', 'padding': [3, 0, 0, 0]}
     assert pie['data'][0]['delta'] == -25 and 'formatter' not in pie['label']  # la función no sobrevive al JSON
+
+
+def test_hemicycle_labels_the_arcs_with_a_range_and_fills_the_chamber_with_others():
+    """La tarjeta de un sondeo: los arcos se rotulan con la horquilla de la casa y un arco gris «Otros» completa la
+    cámara (los escaños de los partidos sin cifra propia y el redondeo de las horquillas; revisión final 2026-11-09)."""
+    assert run_js('h.hemicycleLabel({name: "PP", value: 137, data: {text: "136–138", delta: null}})') == '{name|PP}\n{seats|136–138}'
+    assert run_js('h.hemicycleLabel({name: "PP", value: 137, data: {text: null}})') == '{name|PP}\n{seats|137}'
+    data = run_js('h.hemicycleData({PP: 137, PSOE: 100}, {nSeats: 350, labels: {PP: "136–138"}})')
+    assert [item['text'] for item in data] == ['136–138', None]
+    option = run_js('h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, height: 330, '
+                    'labels: {PP: "136–138", PSOE: "99–101"}, rest: 113})')
+    items = option['series'][0]['data']
+    assert [(item['name'], item['value']) for item in items] == [('PP', 137), ('PSOE', 100), ('Otros', 113)]
+    # named «Otros» in the arc when it is big enough (113 of 350), in a dark ink
+    assert items[2]['itemStyle']['color'] == '#d8dbe3' and items[2]['rest'] is True
+    assert items[2]['label'] == {'show': True, 'formatter': '{other|Otros}'}
+    assert option['series'][0]['label']['rich']['other']['color'] == '#5a5f72'
+    small = run_js('h.hemicycleOption({PP: 340}, {nSeats: 350, width: 600, height: 330, rest: 10})')
+    assert small['series'][0]['data'][-1]['label']['show'] is False  # 10 of 350: too small for a name
+    assert any(g.get('style', {}).get('text') == '350' for g in option['graphic'])
+    # the tooltip of the grey arc says what it holds; a party arc keeps its own; the majority ring still adds up to
+    # the chamber with the rest
+    probe = run_js('(() => { const o = h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, '
+                   'height: 330, rest: 113}); const items = o.series[0].data; '
+                   'return {rest: o.tooltip.formatter({name: items[2].name, value: items[2].value, data: items[2]}), '
+                   'party: o.tooltip.formatter({name: "PP", value: 137, data: items[0]}), '
+                   'ring: o.series[1].data.reduce((sum, d) => sum + d.value, 0), '
+                   'pie: items.reduce((sum, d) => sum + d.value, 0)}; })()')
+    assert probe['rest'] == 'Otros: 113 escaños (partidos sin cifra propia en esta tabla y redondeo de las horquillas)'
+    assert probe['party'].startswith('PP: 137 escaños (39,1') and 'Otros' not in probe['party']
+    assert probe['ring'] == pytest.approx(350) and probe['pie'] == 350
+    plain = run_js('h.hemicycleOption({PP: 137, PSOE: 100}, {nSeats: 350, majority: 176, width: 600, height: 330})')
+    assert len(plain['series'][0]['data']) == 2 and 'text' in plain['series'][0]['data'][0] and plain['series'][0]['data'][0]['text'] is None
+
+
+def test_hemicycle_shrinks_the_ranges_with_the_radius():
+    """Los rótulos de horquilla («115–123») encogen con el radio para caber en su arco en un móvil (revisión final
+    2026-11-09); sin horquillas, o con radio de sobra, los escaños siguen a 24 px."""
+    sizes = run_js(
+        '[[324, 178, true], [120, 80, true], [600, 330, true], [324, 178, false]].map(([width, height, ranged]) => '
+        'h.hemicycleOption({PP: 130, PSOE: 119}, {nSeats: 350, majority: 176, width, height, '
+        'labels: ranged ? {PP: "124–137", PSOE: "115–123"} : null}).series[0].label.rich.seats.fontSize)')
+    # a phone (radius 142), a tiny box (the floor), the desktop (radius 290) and a phone without ranges
+    assert sizes == [17, 13, 24, 24]
 
 
 def test_stacked_bar_labels_each_segment_with_its_seats_and_delta():
@@ -478,6 +523,79 @@ def test_series_views_carry_the_result_of_each_view():
         'blocks': {'mean': {'Derecha': [40, 40]}, 'lo': {'Derecha': [37, 36]}, 'hi': {'Derecha': [43, 44]}}}}}
     bloques = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog)).bloques' % (json.dumps(with_projection), json.dumps(initial)))
     assert bloques['projection']['groups']['parties']['lo'] == {'Derecha': [37, 36]}
+
+
+def test_series_views_of_blocks_carry_their_members_and_the_breakdown():
+    """La vista Bloques lleva el mapa de bloques (la línea de la composición) y el desglose del tooltip: las medias de
+    los partidos y sus colores; la vista Partidos no lleva ninguno."""
+    initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'VOX', 'PSOE'], 'mean': {'PP': [30], 'VOX': [10], 'PSOE': [28]},
+                          'lo': {'PP': [29], 'VOX': [9], 'PSOE': [27]}, 'hi': {'PP': [31], 'VOX': [11], 'PSOE': [29]}},
+               'polls': {'parties': ['PP', 'VOX', 'PSOE'], 'polls': []}, 'projection': None,
+               'catalog': {'parties': [{'name': 'PP', 'color': '#0000ff', 'fullname': 'PP', 'block': None},
+                                       {'name': 'VOX', 'color': '#00ff00', 'fullname': 'VOX', 'block': None},
+                                       {'name': 'PSOE', 'color': '#ff0000', 'fullname': 'PSOE', 'block': None}],
+                           'bmaps': {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE'], 'Otros': []}}}}
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
+    assert views['bloques']['members'] == {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE'], 'Otros': []}
+    assert views['bloques']['breakdown'] == {'members': views['bloques']['members'], 'values': initial['series']['mean'],
+                                             'colors': {'PP': '#0000ff', 'VOX': '#00ff00', 'PSOE': '#ff0000'}}
+    assert views['partidos'].get('members') is None and views['partidos'].get('breakdown') is None
+
+
+BREAKDOWN_ARGS = ("{series: {dates: ['2026-10-01', '2026-10-02'], parties: ['Derecha', 'Otros'], "
+                  "mean: {Derecha: [40, 41], Otros: [12, 12]}, lo: {}, hi: {}}, polls: {parties: [], polls: []}, "
+                  "projection: null, parties: ['Derecha', 'Otros'], selected: null, colors: {}, asOf: '2026-10-02', "
+                  "when: '2026-10-02', window: 'all', legend: 'hidden', layers: 'promedio', breakdown: {members: "
+                  "{Derecha: ['PP', 'VOX'], Otros: ['PNV']}, values: {PP: [30, 31.04], VOX: [10, 9.96], PNV: [2, 2]}, "
+                  "colors: {PP: '#0000ff', VOX: '#00ff00', PNV: '#00aa00'}}}")
+
+
+def test_series_tooltip_of_a_block_breaks_it_down_into_its_parties():
+    """Al pasar por un día de la línea de un bloque, el tooltip da el bloque y debajo cada partido con su media de ese
+    día, de mayor a menor; en Otros, lo que no suman sus partidos va como «Resto»."""
+    tip = ("(() => { const o = s.seriesOption(%s); const i = o.series.findIndex((x) => x.name === '%s'); "
+           "return o.tooltip.formatter({seriesIndex: i, seriesName: '%s', dataIndex: 1}); })()")
+    lines = run_js(tip % (BREAKDOWN_ARGS, 'Derecha', 'Derecha')).split('<br>')
+    assert lines[0].endswith('Derecha: 41,0% · 2 oct 2026')
+    assert lines[1].endswith('PP 31,0') and '#0000ff' in lines[1]
+    assert lines[2].endswith('VOX 10,0') and len(lines) == 3
+    rest = run_js(tip % (BREAKDOWN_ARGS, 'Otros', 'Otros')).split('<br>')
+    assert rest[1].endswith('PNV 2,0') and rest[2].endswith('Resto 10,0') and len(rest) == 3
+    # a fitted block line can differ from the sum of its parties: that is not a missing party, no «Resto» outside Otros
+    fitted = BREAKDOWN_ARGS.replace('mean: {Derecha: [40, 41]', 'mean: {Derecha: [40, 42.5]')
+    lines = run_js(tip % (fitted, 'Derecha', 'Derecha')).split('<br>')
+    assert len(lines) == 3 and not any('Resto' in line for line in lines)
+    # without a breakdown the box is the line of the day alone
+    plain = run_js(tip % (BREAKDOWN_ARGS.replace("breakdown: {", "nobreakdown: {"), 'Derecha', 'Derecha'))
+    assert '<br>' not in plain
+
+
+def test_series_draws_the_entries_as_dashed_marks_at_the_foot():
+    """Cada entrada de un partido es una línea discontinua más de la serie de marcas, con su rótulo al pie para no
+    pisar los de «Estimación» y «Elección»."""
+    args = BREAKDOWN_ARGS.replace("breakdown: {", "marks: [{date: '2026-10-01', label: 'Entra SALF'}], breakdown: {")
+    option = run_js('s.seriesOption(%s)' % args)
+    marks = next(x for x in option['series'] if x['name'] == 'marks')['markLine']['data']
+    entry = next(m for m in marks if m['label']['formatter'] == 'Entra SALF')
+    # dentro del gráfico, en vertical junto a su línea: ni sobre las fechas del eje ni encima de otra entrada cercana
+    assert entry['label']['position'] == 'insideEndTop' and len(marks) == 2      # «Estimación» y la entrada
+    plain = run_js('s.seriesOption(%s)' % BREAKDOWN_ARGS)
+    assert len(next(x for x in plain['series'] if x['name'] == 'marks')['markLine']['data']) == 1
+
+
+def test_series_views_mark_the_entries_only_in_the_blocks_view():
+    """La vista Bloques lleva las entradas de `first_polls` ordenadas por fecha; la de Partidos, ninguna."""
+    initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'PSOE'], 'mean': {'PP': [30], 'PSOE': [28]},
+                          'lo': {}, 'hi': {}, 'first_polls': {'SALF': '2024-06-06', 'UP': '2023-12-15'}},
+               'polls': {'parties': [], 'polls': []}, 'projection': None,
+               'catalog': {'parties': [{'name': n, 'color': '#000000', 'fullname': n, 'block': None} for n in ('PP', 'PSOE')],
+                           'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}}}
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
+    assert views['bloques']['marks'] == [{'date': '2023-12-15', 'label': 'Entra UP'},
+                                         {'date': '2024-06-06', 'label': 'Entra SALF'}]
+    assert views['partidos']['marks'] == []
+    bare = {**initial, 'series': {k: v for k, v in initial['series'].items() if k != 'first_polls'}}
+    assert run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(bare), json.dumps(initial)))['bloques']['marks'] == []
 
 
 def test_ridge_rows_are_taller_on_desktop():
@@ -788,6 +906,27 @@ def test_chart_zoom_reads_the_window_given_and_the_drag():
     assert out['same'] is True
 
 
+def test_bars_label_extra_writes_a_coloured_change_after_the_value():
+    """Las barras de la tarjeta de un sondeo: tras la cifra, su cambio frente a la entrega anterior en negrita y en su
+    color, también en el tooltip; el eje deja sitio y su final no lleva línea ni rótulo. Sin `labelExtra`, la opción de
+    siempre (Luis, 2026-11-09)."""
+    uri = pathlib.Path(DIST, 'js', 'charts', 'bars.js').as_uri()
+    got = run_js('await (async () => { const bs = await import("%s"); '
+                 'const rows = [{name: "PP", value: 31, change: -0.1}, {name: "VOX", value: 19.4, change: null}]; '
+                 'const extra = (row) => (row.change === null ? null : {text: "▼ 0,1", color: "#d62728", tooltip: "▼ 0,1 frente a la entrega anterior"}); '
+                 'const o = bs.barsOption(rows, {value: "value", formatter: (x) => x.toFixed(1), labelExtra: extra}); '
+                 'const plain = bs.barsOption(rows, {value: "value", formatter: (x) => x.toFixed(1)}); '
+                 'const api = (i) => ({value: (k) => o.series[1].data[i][k], coord: ([x, y]) => [x * 10, y * 30], size: () => [0, 30]}); '
+                 'const text = (i) => o.series[1].renderItem({}, api(i)).children.find((c) => c.type === "text").style; '
+                 'return {pp: [text(0).text, text(0).rich.d.fill, text(0).rich.d.fontWeight], vox: [text(1).text, text(1).rich === undefined], '
+                 'max: [o.xAxis.max, plain.xAxis.max], end: [o.xAxis.splitLine.showMaxLine, o.xAxis.axisLabel.showMaxLabel, '
+                 'plain.xAxis.splitLine.showMaxLine, plain.xAxis.axisLabel.showMaxLabel], '
+                 'tip: o.tooltip.formatter([{dataIndex: 0}])}; })()' % uri)
+    assert got['pp'] == ['{v|31.0}  {d|▼ 0,1}', '#d62728', 700] and got['vox'] == ['19.4', True]
+    assert got['max'][0] > got['max'][1] and got['end'] == [False, False, None, None]
+    assert got['tip'] == '<strong>PP</strong><br>31.0<br>▼ 0,1 frente a la entrega anterior'
+
+
 def histogram_option(args):
     """Opción de `renderHistogram` con `args`, leída de un contenedor falso: `mountChart` reutiliza su `__chart`."""
     uri = pathlib.Path(DIST, 'js', 'charts', 'histogram.js').as_uri()
@@ -1070,3 +1209,44 @@ def test_dumbbell_draws_one_custom_series_with_a_colour_per_row():
 def test_dumbbell_axis_grows_with_the_errors():
     option = run_js('db.dumbbellOption(rows)', rows=[{'label': 'A', 'error_legal': 4.2, 'error_ban': 3.9}])
     assert option['xAxis']['max'] == 4.5
+
+
+CHANCE = json.load(open(os.path.join(ROOT, 'tests', 'fixtures', 'bundle', 'rebano-chance.json'),
+                        encoding='utf-8'))['data']['chance']
+
+
+def test_chance_option_draws_the_null_histogram_and_marks_the_observed():
+    option = run_js('ch.chanceOption(%s)' % json.dumps(CHANCE))
+    bars = option['series'][0]
+    assert len(bars['data']) == 28 and option['xAxis']['type'] == 'value'
+    # the axis covers the bins and the observed value with a margin of two bins
+    assert option['xAxis']['min'] <= -26.3 - 2 and option['xAxis']['max'] >= 16 + 2
+    assert option['xAxis']['min'] >= -30 and option['xAxis']['max'] <= 20
+    # every bar spans exactly its bin, in %
+    assert [bar['value'][:3] for bar in bars['data'][:2]] == [[-12, -11, 2], [-11, -10, 8]]
+    assert sum(bar['value'][2] for bar in bars['data']) == 20000
+    marked = [series for series in option['series'] if 'markLine' in series]
+    line = marked[0]['markLine']
+    assert line['data'][0]['xAxis'] == pytest.approx(-26.3) and line['lineStyle']['color'] == '#1d4f86'
+    assert 'observado −26 %' in json.dumps(option, ensure_ascii=False)
+    assert option['xAxis']['name'] == 'cambio de la separación entre el resto del ciclo y las tres últimas semanas'
+    assert option['yAxis']['name'] == 'barajas'
+
+
+def test_chance_option_labels_the_axis_and_the_tooltip():
+    texts = run_js('(() => { const o = ch.chanceOption(%s); return {axis: [-20, 0, 10].map((x) => '
+                   'o.xAxis.axisLabel.formatter(x)), tip: o.tooltip.formatter({value: o.series[0].data[0].value}), '
+                   'mark: o.series[0].markLine.label.formatter}; })()' % json.dumps(CHANCE))
+    assert texts['axis'] == ['−20 %', '0 %', '+10 %']
+    assert texts['tip'] == 'de −12 a −11 %: 2 barajas'
+    assert texts['mark'] == 'observado −26 %'
+
+
+def test_chance_option_keeps_an_observed_value_beyond_the_bins_in_sight():
+    rise = dict(CHANCE, change=0.4)
+    option = run_js('ch.chanceOption(%s)' % json.dumps(rise))
+    assert option['xAxis']['max'] >= 42 and option['xAxis']['min'] <= -14
+    assert run_js('ch.chanceOption({null: {bins: []}, change: null}).series.length') >= 1
+    # over a phone the name of the axis goes in two lines (ECharts cuts a long axis name instead of wrapping it)
+    narrow = run_js('ch.chanceOption(%s, {narrow: true}).xAxis.name' % json.dumps(CHANCE))
+    assert narrow == 'cambio de la separación entre el resto del ciclo\ny las tres últimas semanas'

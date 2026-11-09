@@ -22,9 +22,6 @@ from .slugs import PROFILE_PATH, slugify
 
 # Scope whose figures the method texts quote ("en las generales"): the texts have no scope filter.
 NATIONAL_SCOPE = 'es'
-# Keys of a row of the example that the chart needs (the island carries no more).
-ISLAND_ROW_KEYS = ('date', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight', 'weight_kernel',
-                   'weight_over', 'weight_sample', 'weight_rating')
 # The live example of the house effects: the last poll of this pollster before every analysed election since this
 # date (the CIS from September 2018, when its vote estimate changed), against the result, in these two blocks
 # (``left`` is counted as overestimated, ``right`` as underestimated).
@@ -251,11 +248,11 @@ def weights_example() -> Optional[dict]:
     dict or None
         ``name``, ``fullname``, ``color`` (from ``meta``), ``date`` (the day the average is read, the centre of
         the kernel), ``published`` (the day of the run, ``run_at``, the date the texts show), ``run``, ``stats``
-        (those of the leader), ``rows`` (the rows of the leader, newest first), ``n_rows``, ``line``, ``kernel``
-        and ``top`` (``pollster``, ``sponsor``, ``date`` and ``weight`` of its heaviest poll, the newest on a tie;
+        (those of the leader), ``n_rows`` (its polls) and ``top`` (``pollster``, ``sponsor``, ``date`` and ``weight`` of its heaviest poll, the newest on a tie;
         ``None`` without rows). ``None`` without a national run, when the run
         has no ``weights`` part (published before the part existed), when the headline has no parties or when the
-        leader has no fit in the part.
+        leader has no fit in the part. The rows, the line and the kernel are not returned: the browser loads the
+        part to draw the chart and the table (``example_scopes``).
 
     Raises
     ------
@@ -295,12 +292,44 @@ def weights_example() -> Optional[dict]:
         'published': (headline.get('run_at') or '')[:10] or weights['date'],
         'run': run,
         'stats': weights['stats'][leader],
-        'rows': rows,
         'n_rows': len(rows),
-        'line': weights['line'][leader],
-        'kernel': weights['kernel'][leader],
         'top': top,
     }
+
+
+def example_scopes() -> list:
+    """
+    The scopes the weights example can show: those with a published run, read from the manifest (no part is read),
+    the general elections first and then in the order of the catalogue.
+
+    Returns
+    -------
+    list of dict
+        One row per simulable scope: ``code``, ``label`` (``'Generales'`` for the national scope, the name of the
+        scope otherwise), ``name``, ``run`` (its latest run), ``published`` (the day of that run, ``run_at``) and
+        the routes the browser loads, pinned to that run so the chart and the texts read the same one:
+        ``weights_href``, ``meta_href`` and ``csv_href`` (the CSV of the ``weights`` part).
+    """
+    rows = []
+
+    for scope in site().scopes()['scopes']:
+        if not scope['simulable']:
+            continue
+
+        code, run = scope['code'], scope['latest']
+        rows.append({
+            'code': code,
+            'label': 'Generales' if code == NATIONAL_SCOPE else scope['name'],
+            'name': scope['name'],
+            'run': run,
+            'published': (scope.get('run_at') or '')[:10] or None,
+            'weights_href': api_url(code, 'weights', run=run),
+            'meta_href': api_url(code, 'meta', run=run),
+            'csv_href': api_url(code, 'weights', run=run, fmt='csv'),
+        })
+
+    # stable: the regional scopes keep the order of the catalogue
+    return sorted(rows, key=lambda row: row['code'] != NATIONAL_SCOPE)
 
 
 def cycle_counts() -> Optional[dict]:
@@ -777,12 +806,13 @@ def metodo_section_context(state: dict, section: str) -> dict:
         ``rating_check`` (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island
         (``state`` and the ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
         ``errors`` (``error_example``, ``None`` without one). The ``promedio`` subpage adds
-        ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
+        ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the national ``weights``
+        part, pinned to its run),
         ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``), ``lean_published`` (whether the ``sesgo-cis`` study is published, so
         the card links to it), ``shy_published`` (the same for ``voto-oculto``) and, with either example, the
-        ``initial`` island (``state``, the ``example`` slice the weights chart draws: ``name``, ``color``, ``date``,
-        ``stats``, ``rows`` with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``; and the ``house`` slice its bullseye
-        draws: ``blocks`` and ``rows`` with ``HOUSE_ROW_KEYS`` plus the blocks).
+        ``initial`` island (``state``, the ``example`` slice the weights example starts from: ``scope`` (the
+        national one), ``party`` (the leader) and ``scopes`` (``example_scopes``), the browser loading the parts;
+        and the ``house`` slice its bullseye draws: ``blocks`` and ``rows`` with ``HOUSE_ROW_KEYS`` plus the blocks).
 
     Raises
     ------
@@ -817,8 +847,11 @@ def metodo_section_context(state: dict, section: str) -> dict:
     if section == 'promedio':
         example = weights_example()
         house = house_effects_example()
+        scopes = example_scopes() if example is not None else []
         context['example'] = example
-        context['example_csv'] = api_url(NATIONAL_SCOPE, 'weights', fmt='csv')
+        context['example_scopes'] = scopes
+        context['example_csv'] = next((row['csv_href'] for row in scopes if row['code'] == NATIONAL_SCOPE),
+                                      api_url(NATIONAL_SCOPE, 'weights', fmt='csv'))
         context['house_example'] = house
         context['cycle'] = cycle_counts()
         context['lean_published'] = bundle_part(site().study, 'sesgo-cis', 'meta') is not None
@@ -826,12 +859,7 @@ def metodo_section_context(state: dict, section: str) -> dict:
         initial = {'state': context['state']}
 
         if example is not None:
-            initial['example'] = {
-                'name': example['name'], 'color': example['color'], 'date': example['date'],
-                'stats': example['stats'],
-                'rows': [{key: row.get(key) for key in ISLAND_ROW_KEYS} for row in example['rows']],
-                'line': example['line'], 'kernel': example['kernel'],
-            }
+            initial['example'] = {'scope': NATIONAL_SCOPE, 'party': example['name'], 'scopes': scopes}
 
         if house is not None:
             keys = HOUSE_ROW_KEYS + tuple(house['blocks'])

@@ -61,7 +61,17 @@
           rating de la casa); la línea es el promedio ponderado del modelo. El selector Sondeos / Promedio / Ambos
           deja a la vista sólo los puntos, sólo la línea, o las dos cosas, para leer mejor cada una en el móvil. En el modo Elección, la línea discontinua
           lleva el voto estimado hasta el día de la votación y la barra del final es el rango del 95% de cada partido
-          ese día: pasa por el punto para ver las cifras. En la vista Bloques, cada bloque suma sus partidos y Otros es lo que falta hasta 100.
+          ese día: pasa por el punto para ver las cifras.
+          {% if fitted_blocks %}
+          En la vista Bloques, la línea de cada bloque es el promedio de lo que suman sus partidos en cada sondeo, no
+          la suma de sus promedios: cuando un partido entra en las encuestas a mitad de ciclo, una línea discontinua lo
+          marca, y durante unos meses lo que pone cada partido al pasar por la línea de un bloque puede no cuadrar con
+          ella. Los partidos de cada bloque se leen bajo la leyenda, y Otros es lo que falta hasta 100.
+          {% else %}
+          En la vista Bloques, cada bloque suma sus partidos, que se
+          leen bajo la leyenda, y Otros es lo que falta hasta 100; al pasar por la línea de un bloque se ve cuánto pone
+          cada partido ese día.
+          {% endif %}
           Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
         </p>
         <p>
@@ -98,7 +108,7 @@
             En cada simulación el reparto cambia: la tabla de resultados da el rango de cada partido y «Ver las
             distribuciones», sus curvas.
           </p>
-          <p>Con la vista Bloques, cada sector es un bloque y la tabla de resultados y sus distribuciones pasan a los bloques.</p>
+          <p>Con la vista Bloques, cada sector es un bloque y la tabla de resultados y sus distribuciones pasan a los bloques; la cabecera de la tabla dice qué partidos entran en cada uno.</p>
           {% if results_year %}<p>Junto a los escaños de cada sector, la flecha dice cuánto cambia frente a {{ results_year }}.</p>{% endif %}
           {% endcall %}
         {{ m.card_end() }}
@@ -145,7 +155,10 @@
           <div id="seats-blocks" hidden>
             <div class="table-wrap">
               <table id="blocks-table">
-                <caption>Izquierda y Derecha, con todos sus partidos; Otros es el resto de la cámara.</caption>
+                {#- the parties of each block, as the line under the legend of the block views of the charts (Luis,
+                    2026-11-09: here, not under the switch of the hemicycle) -#}
+                {% set named = block_result_rows|selectattr('name', 'in', block_members)|list %}
+                <caption{% if named %} class="bm-caption"{% endif %}>{% if named %}{% for row in named %}<span><i class="dot" style="background-color: {{ row.color }}"></i><strong>{{ row.name }}:</strong> {{ block_members[row.name] }}</span>{% endfor %}{% else %}Izquierda y Derecha, con todos sus partidos; Otros es el resto de la cámara.{% endif %}</caption>
                 <thead>
                   <tr>
                     <th scope="col">Bloque</th>
@@ -187,7 +200,7 @@
           </p>
           <p>
             Con la vista Bloques del hemiciclo, la tabla pasa a los bloques: Izquierda y Derecha suman el voto y los
-            escaños de sus partidos, y su P(mayoría) es la de llegar a la mayoría sumándolos; Otros es el resto hasta
+            escaños de los partidos que nombra su cabecera, y su P(mayoría) es la de llegar a la mayoría sumándolos; Otros es el resto hasta
             100 y hasta la cámara, y no tiene («–»). Los pactos entre bloques no cuentan aquí.
           </p>
           {% if results_year %}
@@ -296,8 +309,8 @@
           Los puntos se mueven de un día a otro porque entran sondeos nuevos, no porque cambie el modelo: mira la
           tendencia, no cada salto. Pulsa un partido de la leyenda para ocultarlo o mostrarlo; el eje vertical se
           ajusta a lo que queda a la vista, así que con pocos partidos marcados se ven mejor los cambios pequeños.
-          En la vista Bloques, cada bloque suma sus partidos y Otros es lo que falta hasta 100 en el voto, o hasta
-          completar la cámara en los escaños.
+          En la vista Bloques, cada bloque suma sus partidos, que se leen bajo la leyenda, y Otros es lo que falta
+          hasta 100 en el voto, o hasta completar la cámara en los escaños.
         </p>
         {% endcall %}
       {{ m.card_end() }}

@@ -20,6 +20,11 @@ def without_weights(tmp_path):
     os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'weights')))
 
 
+def plain(page):
+    """El texto de la página sin las marcas `data-w` de las cifras que reescribe el navegador, en una línea."""
+    return re.sub(r'\s+', ' ', re.sub(r'<span data-w="[a-z_]+">([^<]*)</span>', r'\1', page))
+
+
 def test_weights_example_picks_the_leader_and_its_slice(api):
     example = metodo.weights_example()
     assert example['name'] == 'PP' and example['fullname'] == fixture_data('meta')['parties'][0]['fullname']
@@ -27,8 +32,7 @@ def test_weights_example_picks_the_leader_and_its_slice(api):
     assert example['published'] == fixture_data('headline')['run_at'][:10] == '2026-10-08'
     assert example['n_rows'] == 3 == example['stats']['nobs']
     assert 'weight_max' not in example and 'rating_max' not in example and 'sample_max' not in example
-    assert [row['date'] for row in example['rows']] == ['2026-10-05', '2026-10-01', '2026-09-24']   # los más nuevos arriba
-    assert example['line']['dates'][-1] == '2026-10-08' and len(example['kernel']['values']) == 15
+    assert not {'rows', 'line', 'kernel'} & set(example)   # el gráfico y la tabla los carga el navegador
 
 
 def test_weights_example_names_the_heaviest_poll(api):
@@ -81,15 +85,30 @@ def test_weights_example_lets_other_errors_through(api, monkeypatch):
     assert error.value.status == 503
 
 
+def test_example_scopes_lists_the_live_scopes_pinned_to_their_run(api, monkeypatch):
+    rows = [
+        {'code': 'es-an', 'name': 'Andalucía', 'simulable': True, 'latest': '20261101-090000', 'run_at': '2026-11-01T09:00:00'},
+        {'code': 'es-xx', 'name': 'Ninguna', 'simulable': False, 'latest': None, 'run_at': None},
+        {'code': 'es', 'name': 'España', 'simulable': True, 'latest': RUN, 'run_at': '2026-10-08T20:11:00Z'},
+    ]
+    monkeypatch.setattr(type(metodo.site()), 'scopes', lambda self: {'contract': 1, 'scopes': rows})
+    scopes = metodo.example_scopes()
+    assert [row['code'] for row in scopes] == ['es', 'es-an']            # las generales primero, sin los no simulables
+    assert scopes[0]['label'] == 'Generales' and scopes[1]['label'] == scopes[1]['name'] == 'Andalucía'
+    assert scopes[0]['run'] == RUN and scopes[0]['published'] == '2026-10-08' and scopes[1]['published'] == '2026-11-01'
+    assert scopes[1]['weights_href'] == '/api/v1/forecast/es-an/weights?run=20261101-090000'
+    assert scopes[1]['meta_href'] == '/api/v1/forecast/es-an?run=20261101-090000'
+    assert scopes[1]['csv_href'] == '/api/v1/forecast/es-an/weights?run=20261101-090000&format=csv'
+
+
 def test_promedio_context_carries_the_example_and_its_island(api):
     context = pages.metodo_section_context(STATE, 'promedio')
     assert context['example']['name'] == 'PP' and 'example_shown' not in context and 'example_hidden' not in context
-    assert context['example_csv'] == '/api/v1/forecast/es/weights?format=csv'
+    assert context['example_csv'] == '/api/v1/forecast/es/weights?run={}&format=csv'.format(RUN)
     assert set(context['initial']) == {'state', 'example'}
     island = context['initial']['example']
-    assert set(island) == {'name', 'color', 'date', 'stats', 'rows', 'line', 'kernel'}
-    assert set(island['rows'][0]) == {'date', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight',
-                                      'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating'}
+    assert set(island) == {'scope', 'party', 'scopes'}                    # sin filas: las carga el navegador
+    assert island['scope'] == 'es' and island['party'] == 'PP' and island['scopes'][0]['code'] == 'es'
     other = pages.metodo_section_context(STATE, 'escanos')
     assert 'example' not in other and 'example_csv' not in other and 'initial' not in other
 
@@ -107,38 +126,49 @@ def test_promedio_page_shows_the_example_block(api):
     assert 'href="#ejemplo"' in page and page.index('id="banda"') < page.index('id="ejemplo"') < page.index('id="voto-estimado"')
     assert 'id="weights-table"' in page and 'id="weights-chart"' in page and 'id="weights-more"' not in page
     assert page.index('id="weights-chart"') < page.index('id="weights-list"') < page.index('id="weights-table"')
-    assert 'class="chart chart-tall"' in page and '<details class="weights-list" id="weights-list">' in page   # plegado
-    assert re.search(r'<summary[^>]*>\s*Ver los 3 sondeos', page)
+    # sin JS no hay gráfico ni tabla: el navegador los carga y los revela
+    assert 'class="chart chart-tall" id="weights-chart" hidden' in page
+    assert '<details class="weights-list" id="weights-list" hidden>' in page   # plegado
+    # one span for the whole label: the summary is a flex box and would eat the spaces around the figure
+    assert re.search(r'<summary[^>]*><span>Ver los <span data-w="n_rows">3</span> sondeos</span></summary>', page)
     table = page[page.index('id="weights-table"'):]
     table = table[:table.index('</table>')]
-    assert len(re.findall(r'<tr>\s*<td class="f l">', table)) == 3 and '<tr hidden>' not in page
+    assert '<tbody></tbody>' in table and '<td' not in table
     headers = re.findall(r'<th scope="col"[^>]*>([^<]+)</th>', table)
     assert headers == ['Fecha', 'Casa', 'Entrevistas', 'Publicada', 'Corregida', 'Peso', 'Cercanía', 'Solape', 'Muestra',
                        'Rating']
-    rows = re.findall(r'<tr>\s*<td class="f l">([^<]+)</td>', table)
-    assert rows == ['5 oct', '1 oct', '24 sept']                                   # los más nuevos arriba
-    assert '<td>32,4%</td>' in table and '<td>32,9%</td>' in table                  # publicada y corregida (GAD3)
+    page = re.sub(r'<span data-w="[a-z_]+">([^<]*)</span>', r'\1', raw := page)   # el texto, sin las marcas
     text = re.sub(r'\s+', ' ', page)
     assert ('En la actualización del 8 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%, con '
             'una banda del 32,4% al 33,8%.') in text
-    assert 'Las fechas describen dos cosas distintas' not in text              # mismo día en la fixture
+    assert '<p id="weights-dates" hidden>' in raw                              # mismo día en la fixture: oculto
     assert 'En ese ajuste participaban 3 sondeos y la campana tenía una anchura de 42 días.' in text
     assert 'El tamaño efectivo de los pesos era 2,6.' in text and 'No significa que tuviéramos exactamente 2,6 sondeos independientes' in text
     assert 'El sondeo que más pesa es el de Sigma Dos del 1 oct, con 1,14.' in text
-    assert '<b>GAD3</b> / ABC' in text and '>–<' in page                             # muestra ausente → guion
-    assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
-    assert 'cell-shade' not in table and table.count('class="cell-bar"') == 3       # sólo el peso lleva formato
-    assert '<td>0,64</td>' in table and '<td>0,80</td>' in table                      # los factores, a secas
-    assert 'Descargar los pesos de todos los partidos (CSV)' in page and '/api/v1/forecast/es/weights?format=csv' in page
+    # las cifras que reescribe el navegador al cambiar de ámbito o de partido
+    assert 'data-w="mean">33,1%</span>' in raw and raw.count('data-w="neff"') == 2
+    assert '<span data-w="top"> El sondeo que más pesa es el de Sigma Dos del 1 oct, con 1,14.</span>' in re.sub(r'\s+', ' ', raw)
+    assert 'id="weights-dates" hidden' in raw and 'id="weights-csv"' in raw
+    assert 'Los sondeos que pesan en el promedio de un partido en la última actualización' in text
+    assert 'Descargar los pesos de todos los partidos (CSV)' in page
+    assert '/api/v1/forecast/es/weights?run={}&amp;format=csv'.format(RUN) in page
     data = initial(body)
-    assert data['example']['name'] == 'PP' and len(data['example']['rows']) == 3 and 'fullname' not in data['example']
+    assert set(data['example']) == {'scope', 'party', 'scopes'} and data['example']['party'] == 'PP'
     # el texto va a la vista: el conmutador Publicada/Corregida (oculto sin JS) y la lista plegada junto al gráfico, luego
     # la lectura del gráfico y la de la tabla
     card = page[page.index('id="ejemplo"'):page.index('id="voto-estimado"')]
+    assert '<form id="weights-pick" class="filters-bar" hidden>' in card
+    # the notice of a scope that cannot be loaded goes in the card, where the reader is, not at the top of the page
+    assert '<p class="status" id="weights-status" hidden></p>' in card
+    assert card.index('id="weights-pick"') < card.index('id="weights-status"') < card.index('id="weights-chart"')
+    # the caption follows the scope: its reading day is the one of the scope picked
+    assert re.search(r'<caption>Sondeos que entran en la recta del promedio leído el <span data-w="date">8 oct 2026</span>', raw)
+    assert '<option value="es" selected>Generales</option>' in card and '<select name="party"></select>' in card
+    assert card.index('id="weights-pick"') < card.index('id="weights-field"')
     assert '<details class="how"' not in card and 'Cómo leerlo' not in card
     assert '<fieldset id="weights-field" class="seg" hidden>' in card and 'name="weights-field" value="pct_adj"' in card
     assert card.index('id="weights-field"') < card.index('id="weights-chart"')
-    assert re.search(r'id="weights-chart"[^>]*></div>\s*<details class="weights-list" id="weights-list">', card)
+    assert re.search(r'id="weights-chart"[^>]*></div>\s*<details class="weights-list" id="weights-list" hidden>', card)
     assert card.index('</details>') < card.index('Cada punto es un sondeo') < card.index('La tabla recoge las fechas')
     # the two figures of a poll are explained before the chart, with the CIS as the example, in plain words
     assert card.index('Dos cifras para cada sondeo') < card.index('id="weights-field"') < card.index('id="weights-chart"')
@@ -150,8 +180,9 @@ def test_promedio_page_shows_the_example_block(api):
 def test_promedio_example_says_why_the_reading_day_is_later(api, monkeypatch):
     example = metodo.weights_example
     monkeypatch.setattr(metodo, 'weights_example', lambda: dict(example(), date='2026-10-18'))
-    text = re.sub(r'\s+', ' ', html(call(api, '/metodo/promedio')[2]))
-    assert 'leído en el 18 oct 2026' in text
+    page = html(call(api, '/metodo/promedio')[2])
+    text = plain(page)
+    assert 'leído en el 18 oct 2026' in text and '<p id="weights-dates">' in page
     assert 'Las fechas describen dos cosas distintas: el modelo se ejecutó el 8 oct 2026 y prolongó la estimación hasta el 18 oct 2026' in text
 
 
@@ -183,12 +214,12 @@ def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
     headline = {**fixture_data('headline'), 'run_at': '2026-10-09T08:00:00Z'}
     monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: headline if name == 'headline' else fixture_data(name))
     status, _, body = call(api, '/metodo/promedio')
-    text = re.sub(r'\s+', ' ', html(body))
+    text = plain(html(body))
     card = text[text.index('id="ejemplo"'):text.index('id="voto-estimado"')]
     # the run and the reading day are two dates: the figure is the one of the reading day
     assert status == 200 and 'En la actualización del 9 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%' in card
-    assert 'Las fechas describen dos cosas distintas' not in card     # leído antes que el cálculo: nada que explicar
-    assert initial(body)['example']['date'] == '2026-10-08'    # el gráfico sigue centrado en el día leído
+    assert '<p id="weights-dates" hidden>' in card     # leído antes que el cálculo: nada que explicar
+    assert 'leído en el 8 oct 2026' in card    # el gráfico sigue centrado en el día leído
 
 
 def test_promedio_page_lists_every_poll_without_a_load_more(api, monkeypatch):
@@ -198,10 +229,8 @@ def test_promedio_page_lists_every_poll_without_a_load_more(api, monkeypatch):
     weights['stats']['PP']['nobs'] = 27
     monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: weights if name == 'weights' else fixture_data(name))
     page = html(call(api, '/metodo/promedio')[2])
-    table = page[page.index('id="weights-table"'):]
-    table = table[:table.index('</table>')]
-    assert len(re.findall(r'<tr>\s*<td class="f l">', table)) == 27 and '<tr hidden>' not in page
-    assert 'id="weights-more"' not in page and 'Cargar más' not in page and 'Ver los 27 sondeos' in page
+    assert 'id="weights-more"' not in page and 'Cargar más' not in page
+    assert 'Ver los <span data-w="n_rows">27</span> sondeos' in page
 
 
 def test_promedio_page_without_the_part_renders_as_before(api, tmp_path):

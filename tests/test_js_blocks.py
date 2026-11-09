@@ -118,6 +118,18 @@ def test_series_hash_carries_the_layers_only_when_one_is_left():
 
 
 REST = {'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX'], 'Otros': ['PNV']}
+FITTED = dict(SERIES, blocks={'parties': ['Derecha'], 'mean': {'Derecha': [39, 39.5]},
+                              'lo': {'Derecha': [38, 38.5]}, 'hi': {'Derecha': [40, None]}})
+
+
+def test_block_series_reads_the_fitted_blocks_and_sums_the_rest():
+    """Un bloque ajustado en el run se lee tal cual; el que no viene se suma; Otros es el complemento de los dos."""
+    out = run_js('b.blockSeries(%s, %s)' % (json.dumps(FITTED), json.dumps(REST)))
+    assert out['mean']['Derecha'] == [39, 39.5] and out['hi']['Derecha'] == [40, None]
+    assert out['lo']['Derecha'] == [38, 38.5]
+    assert out['mean']['Izquierda'] == [28, 28]                      # sin ajuste publicado: la suma
+    assert out['mean']['Otros'] == [100 - 28 - 39, 100 - 28 - 39.5]
+    assert run_js('b.blockSeries(series, blocks)')['mean']['Derecha'] == [40, 31]   # run antiguo
 
 
 def test_rest_block_series_is_the_complement_with_the_band_of_the_others():
@@ -167,3 +179,23 @@ def test_block_runs_without_rest_block_and_with_an_empty_block():
     assert rows[0] == [{'name': 'Derecha', 'pct': pytest.approx(50.6)}]  # Sep has no party in the run: no row, no rest
     with_rest = run_js('b.blockRuns(runs, %s, "pct").map((run) => run.nowcast.parties)' % json.dumps({'Derecha': ['PP'], 'Sep': ['ERC'], 'Otros': []}))
     assert with_rest[0] == [{'name': 'Derecha', 'pct': 32.7}]  # a block without row: no rest either
+
+
+WEB_BLOCKS = {'Izquierda': ['PSOE', 'FA', 'UP'], 'Derecha': ['PP', 'VOX', 'SALF'], 'Otros': ['PNV', 'ERC']}
+
+
+def test_block_members_name_the_parties_of_each_block_but_the_rest():
+    """Cada bloque con sus partidos en el orden del mapa, sumados con « + » (Luis, 2026-11-09); Otros no sale, se sobreentiende
+    (Luis, 2026-11-09)."""
+    assert run_js('b.blockMembers(%s)' % json.dumps(WEB_BLOCKS)) == [
+        {'block': 'Izquierda', 'text': 'PSOE + FA + UP'}, {'block': 'Derecha', 'text': 'PP + VOX + SALF'}]
+    assert run_js('b.blockMembersText(%s)' % json.dumps(WEB_BLOCKS)) == 'Izquierda: PSOE + FA + UP · Derecha: PP + VOX + SALF'
+
+
+def test_block_members_with_one_party_an_empty_block_and_no_rest():
+    """Un partido solo va sin «+»; un bloque sin partidos no sale, y un mapa sin Otros (los runs antiguos de cuatro
+    bloques) va como viene."""
+    out = run_js('b.blockMembers({Izquierda: ["PSOE"], Nadie: [], Otros: ["PNV"]})')
+    assert out == [{'block': 'Izquierda', 'text': 'PSOE'}]
+    assert run_js('b.blockMembersText(blocks)') == 'Derecha: PP + VOX · Izquierda: PSOE'
+    assert run_js('b.blockMembers({})') == [] and run_js('b.blockMembersText(null)') == ''

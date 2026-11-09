@@ -36,15 +36,17 @@ function restOf(others, total = 100) {
 }
 
 /**
- * Poll average of every block: the sum of the means of its parties and a band that adds their half-widths in
- * quadrature (independent draws, as the notebook does: the blocks add the variances of their parties).
+ * Poll average of every block: the line the run fitted for it, else the sum of the means of its parties.
  *
- * Per date and block, `mean` is the sum of the non-null means of its parties (null when none has one) and
- * `lo`/`hi` are `mean ∓ sqrt(Σ((hi_i − lo_i) / 2)²)` over the parties with a band on that date. The `REST_BLOCK`,
- * if the map has one, is `100 − Σ` of the other blocks' means (null on a date when any of them is null) with
- * a half-width of `sqrt(Σ half²)` over them.
+ * A block of `series.blocks` (Izquierda and Derecha of the runs published since 2026-11-09) is read as it comes:
+ * fitted on what its parties add up to in every poll, so that it does not jump when pollsters start listing a new
+ * party. Any other block (older runs, or a block the run could not fit) is summed: per date, `mean` is the sum of
+ * the non-null means of its parties (null when none has one) and `lo`/`hi` are `mean ∓ sqrt(Σ((hi_i − lo_i) / 2)²)`
+ * over the parties with a band on that date (independent draws: the blocks add the variances of their parties).
+ * The `REST_BLOCK`, if the map has one, is `100 − Σ` of the other blocks' means (null on a date when any of them
+ * is null) with a half-width of `sqrt(Σ half²)` over them.
  *
- * @param {{dates: string[], mean: object, lo: object, hi: object}} series `data` of the series part
+ * @param {{dates: string[], mean: object, lo: object, hi: object, blocks?: object}} series `data` of the series part
  * @param {Object<string, string[]>} blocks block → party names (`meta.bmaps.blocks`)
  * @returns {{dates: string[], parties: string[], mean: object, lo: object, hi: object}} the block series, with
  *   the block names as `parties`, ready for `renderSeries`
@@ -53,7 +55,15 @@ export function blockSeries(series, blocks) {
   const names = Object.keys(blocks);
   const out = {dates: series.dates, parties: names, mean: {}, lo: {}, hi: {}};
   const others = names.filter((block) => block !== REST_BLOCK);
+  const fitted = series.blocks || {};
   for (const block of others) {
+    if (fitted.mean && fitted.mean[block]) {
+      const at = (key) => series.dates.map((date, i) => ((fitted[key] || {})[block] || [])[i] ?? null);
+      out.mean[block] = at('mean');
+      out.lo[block] = at('lo');
+      out.hi[block] = at('hi');
+      continue;
+    }
     const members = blocks[block];
     out.mean[block] = [];
     out.lo[block] = [];
@@ -206,6 +216,31 @@ export function blockResult(result, blocks) {
     }
   }
   return {date: result.date, values};
+}
+
+/**
+ * The parties of each block, for the line under the legend of a block view and the caption of its image: one
+ * entry per block in the order of the map, its parties joined with « + » («PSOE + FA + UP», Luis 2026-11-09). The
+ * `REST_BLOCK` is left out (it goes without saying), and so is any block without parties.
+ *
+ * @param {Object<string, string[]>|null} blocks block → party names (`meta.bmaps.blocks`)
+ * @returns {Array<{block: string, text: string}>} the blocks with the list of their parties
+ */
+export function blockMembers(blocks) {
+  return Object.entries(blocks || {})
+    .filter(([block, members]) => block !== REST_BLOCK && members.length)
+    .map(([block, members]) => ({block, text: members.join(' + ')}));
+}
+
+/**
+ * The parties of each block in one line: `{block}: {parties}` joined with « · » («Izquierda: PSOE + FA + UP ·
+ * Derecha: PP + VOX + SALF»), as the caption of the image of a block view.
+ *
+ * @param {Object<string, string[]>|null} blocks block → party names (`meta.bmaps.blocks`)
+ * @returns {string} the line, empty without blocks
+ */
+export function blockMembersText(blocks) {
+  return blockMembers(blocks).map(({block, text}) => `${block}: ${text}`).join(' · ');
 }
 
 /**

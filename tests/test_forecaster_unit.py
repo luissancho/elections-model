@@ -524,6 +524,7 @@ def _weights_builder(monkeypatch):
         'pollster_id': [1, 2, 1], 'sponsor_id': 0, 'pollster': ['A', 'B', 'A'], 'computed': True,
         'weight_over': [1.0, 1.0, 2.0], 'weight_sample': [0.5, 0.5, 1.5], 'weight_rating': [9.0, 9.0, 9.0],
         'PP': [33.0, 32.0, 34.0], 'PSOE': [30.0, 31.0, 29.0],
+        'url': ['https://a.test/1', 'https://a.test/2', 'https://a.test/1'],
     }).set_index(['date', 'pollster_id', 'sponsor_id'])
     events = pd.DataFrame({
         'date': pd.to_datetime(['2019-11-10', '2023-07-23']), 'pollster_id': np.nan, 'sponsor_id': np.nan,
@@ -571,6 +572,14 @@ def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
     # Sin la serie, el valor guardado manda
     stored = build(None).series_raw
     assert (stored.loc[stored.pollster.notnull(), 'weight_rating'] == 9.0).all()
+
+
+def test_build_series_keeps_the_source_url_of_the_polls(monkeypatch):
+    """La serie conserva la fuente de cada sondeo (`url`) para publicarla; los resultados oficiales no tienen."""
+    build, _ = _weights_builder(monkeypatch)
+    series = build(None).series_raw
+    assert series.loc[series.pollster == 'A', 'url'].eq('https://a.test/1').all()
+    assert series.loc[series.pollster.isnull(), 'url'].isnull().all()
 
 
 def test_rating_exponent_raises_every_poll_weight(monkeypatch):
@@ -733,3 +742,94 @@ def test_forecaster_drops_the_ban_and_exit_polls_by_default(monkeypatch):
     loaded(drop_ctypes=['exit'])
     assert seen['drop_contexts'] == ['exit']
     assert Forecaster('es', '2023-07-23', drop_ctypes=None).drop_ctypes == []
+
+
+def test_fit_groups_of_one_member_matches_the_fit_of_the_party():
+    """Un grupo de un solo partido da la misma línea y la misma banda que el ajuste del partido."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.fit_forecast(names=['PP'], max_fc=0)
+    forecast, stat = fc.fit_groups({'Solo': ['PP']}, max_fc=0)
+    np.testing.assert_allclose(forecast['Solo'].dropna().to_numpy(), fc.forecast['PP'].dropna().to_numpy(dtype=float))
+    day = forecast['Solo'].dropna().index[100]
+    assert stat.loc[day, 'Solo']['cmin'] == pytest.approx(fc.fc_stat.loc[day, 'PP']['cmin'])
+
+
+def test_fit_groups_does_not_touch_the_forecast_of_the_parties():
+    """Ajustar los grupos no cambia el promedio de los partidos ni su residuo."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.fit_forecast(names=['PP', 'PSOE'], max_fc=0)
+    before, stat_before = fc.forecast.copy(), fc.fc_stat.copy()
+    forecast, _ = fc.fit_groups({'Todos': ['PP', 'PSOE']}, max_fc=0)
+    pd.testing.assert_frame_equal(fc.forecast, before)
+    assert fc.fc_stat.equals(stat_before) and 'Todos' not in fc.forecast and 'Todos' in forecast
+
+
+def test_fit_groups_has_no_step_when_a_member_enters_mid_cycle():
+    """Un miembro que las casas empiezan a listar a mitad de ciclo, restando lo mismo a otro: la suma por sondeo no
+    cambia, así que el grupo no salta el día de la entrada (la suma de los ajustes sí)."""
+    fc, _, _ = _synthetic_forecaster(noise={1: 0.01, 2: 0.01, 3: 0.01, 4: 0.01})
+    born = (fc.series.index.get_level_values('date') >= pd.Timestamp('2026-08-01'))
+    series = fc.series.copy()
+    series['NEW'] = np.where(born, 4., np.nan)
+    series.loc[born, 'PP'] -= 4.
+    fc.names = ['PP', 'PSOE', 'NEW']
+    fc.he_enabled = False
+    fc.series_raw = None
+    fc._set_series(series)
+    fc.fit_forecast(names=['PP', 'NEW'], max_fc=0)
+    forecast, _ = fc.fit_groups({'Derecha': ['PP', 'NEW']}, max_fc=0)
+    first = series.index.get_level_values('date')[born].min()
+    prev = first - pd.Timedelta(days=1)
+    assert abs(forecast.loc[first, 'Derecha'] - forecast.loc[prev, 'Derecha']) < 0.3
+    summed = fc.forecast[['PP', 'NEW']].sum(axis=1, min_count=1)
+    assert summed.loc[first] - summed.loc[prev] > 1.          # el artefacto de hoy
+
+
+def test_fit_groups_fills_a_member_a_house_does_not_list_with_its_average():
+    """Una casa que, tras la entrada de un partido, sigue sin listarlo (sus votantes se le van a «otros») hundiría el
+    bloque: el sondeo lleva el promedio de ese día del miembro que no lista, y el grupo coincide con la suma de los
+    ajustes una vez pasada la entrada. Antes de la entrada no se completa nada."""
+    fc, _, _ = _synthetic_forecaster(noise={1: 0.01, 2: 0.01, 3: 0.01, 4: 0.01})
+    dates = fc.series.index.get_level_values('date')
+    houses = fc.series.index.get_level_values('pollster_id')
+    born = dates >= pd.Timestamp('2026-03-01')
+    listed = born & (houses != 3)                        # la casa 3 nunca lista al nuevo
+    series = fc.series.copy()
+    series['NEW'] = np.where(listed, 4., np.nan)
+    series.loc[born, 'PP'] -= 4.                          # todas las casas le quitan al PP lo que se lleva
+    fc.names = ['PP', 'PSOE', 'NEW']
+    fc.he_enabled = False
+    fc.series_raw = None
+    fc._set_series(series)
+    fc.fit_forecast(names=['PP', 'NEW'], max_fc=0)
+    forecast, _ = fc.fit_groups({'Derecha': ['PP', 'NEW']}, max_fc=0)
+    summed = fc.forecast[['PP', 'NEW']].sum(axis=1, min_count=1)
+    late = pd.Timestamp('2026-08-01')
+    assert forecast.loc[late, 'Derecha'] == pytest.approx(summed.loc[late], abs=0.15)
+    early = pd.Timestamp('2026-02-01')
+    assert forecast.loc[early, 'Derecha'] == pytest.approx(fc.forecast.loc[early, 'PP'], abs=0.6)
+
+
+def test_fit_groups_skips_a_group_with_fewer_than_three_polls():
+    """Un grupo con menos de tres sondeos útiles no se ajusta: avisa y no tiene columna."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.series['RARE'] = np.nan
+    fc.series.iloc[:2, fc.series.columns.get_loc('RARE')] = 1.
+    fc.he_enabled = False
+    with pytest.warns(UserWarning):
+        forecast, stat = fc.fit_groups({'Raro': ['RARE'], 'Solo': ['PP']}, max_fc=0)
+    assert list(forecast.columns) == ['Solo'] and list(stat.columns) == ['Solo']
+
+
+def test_cycle_births_uses_the_poll_labels_of_each_simulated_name():
+    """FA lleva los sondeos de SUMAR, así que no entra a mitad de ciclo; UP sí."""
+    fc = Forecaster.__new__(Forecaster)
+    fc.party_first_polls = pd.to_datetime(pd.Series({'PSOE': '2023-08-07', 'SUMAR': '2023-08-07', 'FA': '2025-05-01',
+                                                     'UP': '2023-12-15'}))
+    fc.blocks = pd.DataFrame({'parties': pd.Series([['PSOE'], ['FA', 'SUMAR'], ['UP']], index=['PSOE', 'FA', 'UP'])})
+    assert fc.cycle_births({'Izquierda': ['PSOE', 'FA', 'UP']}) == {'UP': '2023-12-15'}
+    # with the previous result in the series, a party that ran then is not new (Cs listed late in a regional cycle)
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-07-23'), np.nan, np.nan)],
+                                      names=['date', 'pollster_id', 'sponsor_id'])
+    fc.series = pd.DataFrame({'pollster': [None], 'PSOE': [31.7], 'FA': [12.3], 'UP': [2.0]}, index=index)
+    assert fc.cycle_births({'Izquierda': ['PSOE', 'FA', 'UP']}) == {}

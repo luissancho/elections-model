@@ -9,6 +9,18 @@ import {fmtDelta, fmtPct} from '../format.js';
 const LABEL_SHARE = 0.05;
 /** Width of the majority wedge, in seats. */
 const MARK_SEATS = 0.7;
+/**
+ * Name, colour and tooltip note of the arc that completes the chamber when the seats given do not add up to it (on
+ * the card of a poll: the pollster's seats for the parties without their own figure in the table, plus the rounding
+ * of the midpoints of its ranges). Its light grey is of the family of the «Otros» bar.
+ */
+const REST_NAME = 'Otros';
+const REST_COLOR = '#d8dbe3';
+const REST_NOTE = 'partidos sin cifra propia en esta tabla y redondeo de las horquillas';
+/** Size of the seats written in an arc: fixed, or scaled with the radius (down to a floor) when they are ranges. */
+const SEATS_FONT = 24;
+const SEATS_FONT_MIN = 13;
+const SEATS_FONT_RADIUS = 8.5;
 /** Outer radius from which the hole holds the majority line under «ESCAÑOS». */
 const SUBTITLE_RADIUS = 190;
 
@@ -18,10 +30,11 @@ const SUBTITLE_RADIUS = 190;
  *
  * @param {object} seats `{name: seats}`
  * @param {object} opts `colors` ({name: colour}), `order` (names → ordered names; object order when
- *   missing), `nSeats` (seats of the chamber, for the label threshold), `deltas` ({name: seats difference})
- * @returns {object[]} `{name, value, itemStyle, label, delta}` items (`delta` null when unknown)
+ *   missing), `nSeats` (seats of the chamber, for the label threshold), `deltas` ({name: seats difference}),
+ *   `labels` ({name: text written in the arc instead of the seats, e.g. a range «136–138»})
+ * @returns {object[]} `{name, value, itemStyle, label, text, delta}` items (`text` and `delta` null when unknown)
  */
-export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0, deltas = null} = {}) {
+export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0, deltas = null, labels = null} = {}) {
   const names = Object.keys(seats).filter((name) => seats[name] > 0);
   const ordered = order ? order(names) : names;
   const total = nSeats || names.reduce((sum, name) => sum + seats[name], 0);
@@ -30,6 +43,7 @@ export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0, del
     value: seats[name],
     itemStyle: {color: colors[name] || OTHERS_COLOR},
     label: {show: seats[name] >= total * LABEL_SHARE},
+    text: labels && labels[name] !== undefined ? labels[name] : null,
     delta: deltas && Number.isFinite(deltas[name]) ? deltas[name] : null,
   }));
 }
@@ -38,11 +52,13 @@ export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0, del
  * Rich-text label of an arc: the name over the seats and, when the item knows its difference against the last
  * election, the arrow and magnitude under the seats (`{delta|▼ 25}`).
  *
- * @param {object} params ECharts label params (`name`, `value`, `data.delta`)
+ * @param {object} params ECharts label params (`name`, `value`, `data.text` (written instead of the seats when it
+ *   is a string), `data.delta`)
  * @returns {string} the formatter text
  */
 export function hemicycleLabel(params) {
-  const base = `{name|${params.name}}\n{seats|${params.value}}`;
+  const text = params.data ? params.data.text : null;
+  const base = `{name|${params.name}}\n{seats|${typeof text === 'string' ? text : params.value}}`;
   const delta = params.data ? params.data.delta : null;
   return Number.isFinite(delta) ? `${base}\n{delta|${fmtDelta(delta)}}` : base;
 }
@@ -54,15 +70,30 @@ export function hemicycleLabel(params) {
  * @param {object} seats `{name: seats}`
  * @param {object} opts `colors`, `order`, `nSeats`, `majority` (null for none), `fullnames` ({name: full name},
  *   tooltip), `deltas` ({name: seats difference against the last election, written after the seats) and `year`
- *   (of that election, for the tooltip), `width` and `height` of the container
+ *   (of that election, for the tooltip), `labels` ({name: text written in the arc instead of the seats, e.g. the
+ *   range a pollster published; the seats in the arcs then shrink with the radius so that a range fits on a
+ *   phone), `rest` (seats that complete the chamber: a light grey «Otros» arc, outside `order`, named in the arc when it
+ *   is big enough, with its own
+ *   tooltip; it needs `nSeats`, the chamber it completes), `width` and `height` of the container
  * @returns {object} the option
  */
 export function hemicycleOption(seats, {
   colors = {}, order = null, nSeats = 0, majority = null, fullnames = {}, deltas = null, year = null, width = 600, height = 330,
+  labels = null, rest = null,
 } = {}) {
-  const data = hemicycleData(seats, {colors, order, nSeats, deltas});
+  const data = hemicycleData(seats, {colors, order, nSeats, deltas, labels});
   const total = nSeats || data.reduce((sum, item) => sum + item.value, 0);
+  if (rest > 0) {
+    data.push({
+      // named «Otros» in the arc when it is big enough, in a dark ink over its light grey (Luis, 2026-11-09)
+      name: REST_NAME, value: rest, itemStyle: {color: REST_COLOR}, label: {show: rest >= total * LABEL_SHARE, formatter: `{other|${REST_NAME}}`},
+      text: null, delta: null, rest: true,
+    });
+  }
   const radius = Math.max(40, Math.min(width / 2 - 10, height - 36));
+  // a range («115–123») is wider than a number: it shrinks with the radius so that it stays in its arc on a phone
+  const ranged = data.some((item) => typeof item.text === 'string');
+  const seatsFont = ranged ? Math.max(SEATS_FONT_MIN, Math.min(SEATS_FONT, Math.round(radius / SEATS_FONT_RADIUS))) : SEATS_FONT;
   const center = [width / 2, height - 12];
   const withMajority = majority !== null && majority !== undefined;
   const series = [{
@@ -77,9 +108,10 @@ export function hemicycleOption(seats, {
       formatter: hemicycleLabel,
       rich: {
         name: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 15, color: '#fff', align: 'center'},
-        seats: {fontFamily: THEME.headFamily, fontWeight: 800, fontSize: 24, color: '#fff', align: 'center'},
+        seats: {fontFamily: THEME.headFamily, fontWeight: 800, fontSize: seatsFont, color: '#fff', align: 'center'},
         // a little air between the seats and the arrow under them
         delta: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 12, color: '#fff', align: 'center', padding: [3, 0, 0, 0]},
+        other: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 15, color: THEME.mutedColor, align: 'center'},
       },
     },
     labelLine: {show: false},
@@ -143,6 +175,9 @@ export function hemicycleOption(seats, {
       ...tooltipStyle(),
       trigger: 'item',
       formatter(params) {
+        if (params.data && params.data.rest) {
+          return escapeHtml(`${REST_NAME}: ${params.value} escaños (${REST_NOTE})`);
+        }
         const share = total ? fmtPct((params.value / total) * 100) : '';
         const name = fullnames[params.name] || params.name;
         const delta = params.data ? params.data.delta : null;
@@ -161,10 +196,13 @@ export function hemicycleOption(seats, {
  *
  * @param {HTMLElement} el chart container
  * @param {object} seats `{name: seats}`
- * @param {object} opts `colors`, `order`, `nSeats`, `majority`, `fullnames`, `deltas`, `year` (see `hemicycleOption`)
+ * @param {object} opts `colors`, `order`, `nSeats`, `majority`, `fullnames`, `deltas`, `year`, `labels`, `rest`
+ *   (see `hemicycleOption`). Leaves `el.__imageOption(width, height)` on the container: the same option drawn in
+ *   a box of that size, for the card image (the radius and the centre are in pixels of the container).
  * @returns {object} the ECharts instance
  */
 export function renderHemicycle(el, seats, opts = {}) {
+  el.__imageOption = (width, height) => hemicycleOption(seats, {...opts, width, height});
   const draw = () => mountChart(el, hemicycleOption(seats, {
     ...opts, width: el.clientWidth || 600, height: el.clientHeight || 330,
   }));

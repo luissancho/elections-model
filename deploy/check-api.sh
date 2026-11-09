@@ -132,6 +132,8 @@ check "/es/escanos?mode=forecast" 301 none
 check "/es?region=abc" 400 html
 check /promedio 301 none
 check /es-zz 404 html
+check "/es/sondeos/abc/nadie" 400 html
+check "/es/sondeos/2020-01-01/nadie" 404 html
 check_db_only "/casas?scope=es" 200 html
 check "/casas?id=abc" 400 html
 check "/elecciones?scope=es" 200 html

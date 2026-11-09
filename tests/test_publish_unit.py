@@ -175,7 +175,37 @@ def test_export_series_stops_at_the_last_fitted_day():
     assert data['dates'][0] == '2026-09-01' and data['dates'][-1] == '2026-10-05'
     assert data['parties'] == NAMES and len(data['mean']['PP']) == len(data['dates'])
     assert data['lo']['PP'][0] == 38.0 and data['hi']['PP'][0] == 42.0
-    assert list(frame.columns) == ['date', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 35 * 3
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi'] and frame.shape[0] == 35 * 3
+
+
+def test_export_series_publishes_the_fitted_blocks_and_the_entries():
+    """Con bloques, la serie lleva Izquierda y Derecha ajustados (Otros no: lo calcula la web), alineados a las fechas
+    de los partidos y ajustados con el mismo alcance (`max_fc`), y las entradas de partidos a mitad de ciclo."""
+    sim = synthetic_simulator()
+    blocks = {'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX'], 'Otros': []}
+    data, frame = publish.export_series(sim.model, NAMES, end='2026-10-03', blocks=blocks)
+    data = valid('series', data, mode=None)
+    assert data['blocks']['parties'] == ['Izquierda', 'Derecha']
+    assert data['blocks']['mean']['Derecha'] == [55.0] * 33 and data['blocks']['lo']['Derecha'][0] == 54.0
+    assert len(data['blocks']['mean']['Izquierda']) == len(data['dates'])
+    assert data['first_polls'] == {'VOX': '2026-09-19'} and sim.model.calls[-1] == ('fit_groups', 10)
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi']
+    assert frame.shape[0] == 33 * 3 + 33 * 2 and list(frame['kind'].unique()) == ['party', 'block']
+
+
+def test_export_series_does_not_mark_a_party_without_a_line():
+    """Un partido sin línea (menos de tres sondeos) no tiene leyenda: su entrada no se marca."""
+    sim = synthetic_simulator()
+    sim.model.forecast['VOX'] = np.nan
+    data, _ = publish.export_series(sim.model, NAMES, blocks={'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX']})
+    assert data['first_polls'] == {}
+
+
+def test_export_series_without_blocks_has_empty_blocks_and_no_entries():
+    data, frame = publish.export_series(synthetic_simulator().model, NAMES)
+    data = valid('series', data, mode=None)
+    assert data['blocks'] == {'parties': [], 'mean': {}, 'lo': {}, 'hi': {}} and data['first_polls'] == {}
+    assert set(frame['kind']) == {'party'}
 
 
 def test_export_series_without_statistics_gives_null_bounds():
@@ -240,6 +270,23 @@ def test_export_poll_rows_builds_the_table_at_once_without_fragmenting_it():
     assert str(frame['seats_min_P0'].dtype) == 'Int64' and frame.loc[1, 'weight'] == 0.25
 
 
+def test_export_poll_rows_publishes_the_weight_factors_and_the_source():
+    """Enmienda 2026-11-09: `polls` lleva los tres factores del peso (a 3 decimales) y la fuente; lo que la serie no
+    trae sale nulo, así que un sondeo sin `url` ni factores se publica igual."""
+    polls = pd.DataFrame({'date': pd.to_datetime(['2026-10-01', '2026-10-02']), 'pollster_id': [1, 2], 'sponsor_id': [None, 3],
+                          'weight': [0.5, 0.25], 'weight_over': [1.0, 0.5], 'weight_sample': [0.51234, 0.5],
+                          'weight_rating': [1.0, 1.0], 'url': ['https://x.test/a', None], 'PP': [30.0, 31.0]})
+    records, frame = publish.forecast.export_poll_rows(polls, ['PP'])
+    assert publish.POLL_COLUMNS == ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'sample_size',
+                                    'mtype', 'rating', 'weight', 'weight_over', 'weight_sample', 'weight_rating', 'url']
+    assert records[0]['weight_over'] == 1.0 and records[0]['weight_sample'] == 0.512 and records[0]['url'] == 'https://x.test/a'
+    assert records[1]['url'] is None and records[1]['weight_rating'] == 1.0
+    assert list(frame.columns)[:14] == publish.POLL_COLUMNS
+    bare = pd.DataFrame({'date': pd.to_datetime(['2026-10-01']), 'pollster_id': [1], 'sponsor_id': [None], 'weight': [0.5], 'PP': [30.0]})
+    records, _ = publish.forecast.export_poll_rows(bare, ['PP'])
+    assert pd.isna(records[0]['weight_over']) and pd.isna(records[0]['weight_rating']) and records[0]['url'] is None
+
+
 def test_forecaster_load_poll_seats_pairs_min_and_max_by_poll(monkeypatch):
     import types
     from mtpy.lib import forecaster as fc_module
@@ -263,6 +310,32 @@ def test_forecaster_load_poll_seats_pairs_min_and_max_by_poll(monkeypatch):
     assert [c['metric'] for c in calls] == ['seats_min', 'seats_max']
     assert calls[0]['scope'] == 'es' and calls[0]['event_dates'] == ['2026-11-29'] and calls[0]['drange'] == (6, None)
     assert calls[0]['drop_mtypes'] == ['exit']
+
+
+def test_forecaster_load_poll_seats_sums_the_labels_of_each_block(monkeypatch):
+    # Los escaños se publican por serie, como el porcentaje (`group_results`): FA suma las etiquetas que hereda
+    # por el smap (SUMAR antes de existir FA, FV cuando la casa da Compromís aparte: 40dB 4-11, FA 4-8 + FV 3)
+    import types
+    from mtpy.lib import forecaster as fc_module
+    dates = pd.to_datetime(['2026-10-11', '2026-11-04', '2026-11-05'])
+    frames = {
+        'seats_min': pd.DataFrame({'date': dates, 'pollster_id': [10, 15, 2], 'sponsor_id': [6, 11, 62],
+                                   'FA': [np.nan, 4, 12], 'SUMAR': [8, np.nan, np.nan], 'FV': [np.nan, 3, np.nan],
+                                   'UP': [2, 0, 1]}),
+        'seats_max': pd.DataFrame({'date': dates, 'pollster_id': [10, 15, 2], 'sponsor_id': [6, 11, 62],
+                                   'FA': [np.nan, 8, 12], 'SUMAR': [8, np.nan, np.nan], 'FV': [np.nan, 3, np.nan],
+                                   'UP': [2, 0, 1]}),
+    }
+    monkeypatch.setattr(fc_module, 'get_poll_series', lambda **kwargs: frames[kwargs['metric']].copy())
+    blocks = pd.DataFrame({'parties': [['FA', 'SUMAR', 'FV'], ['UP']]}, index=['FA', 'UP'])
+    fake = types.SimpleNamespace(scope='es', date_end=pd.Timestamp('2026-11-29'), drange=None, drop_mtypes=None,
+                                 parties=pd.DataFrame({'name': ['FA', 'SUMAR', 'FV', 'UP']}), blocks=blocks)
+    out = fc_module.Forecaster.load_poll_seats(fake)
+    assert out == {
+        ('2026-10-11', 10, 6): {'FA': [8, 8], 'UP': [2, 2]},
+        ('2026-11-04', 15, 11): {'FA': [7, 11], 'UP': [0, 0]},
+        ('2026-11-05', 2, 62): {'FA': [12, 12], 'UP': [1, 1]},
+    }
 
 
 def test_export_fan_house_effects_and_dispersion():
@@ -554,6 +627,8 @@ def test_publish_forecast_reads_the_average_today_and_cuts_the_series_at_the_anc
     assert factory.calls[0][3]['today'] == '2026-10-03'
     series = writer.read_json(bundle.path_part('es', RUN, 'series'))['data']
     assert series['dates'][-1] == '2026-10-03'
+    assert series['blocks']['parties'] == ['Izquierda', 'Derecha']
+    assert len(series['blocks']['mean']['Derecha']) == len(series['dates'])
     assert writer.read_json(bundle.path_part('es', RUN, 'weights'))['data']['date'] == '2026-10-03'
     meta = writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']
     assert meta['as_of'] == '2026-10-03' and meta['date_fit_last'] == '2026-10-05'
@@ -1490,10 +1565,40 @@ def test_export_event_series_pivots_the_series_of_the_election(tmp_path):
     assert set(data) == set(bundle.SCHEMAS['event-series']) and data['horizon'] == 6
     assert data['dates'] == ['2023-07-15', '2023-07-16', '2023-07-17'] and data['parties'] == ['PP', 'PSOE']
     assert data['mean']['PP'] == [32.2, 32.3, 32.41] and data['lo']['PSOE'] == [None, 29.9, 29.89] and data['hi']['PSOE'][-1] == 32.09
-    assert list(frame.columns) == ['date', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 6 and pd.isna(frame['lo'].iloc[3])
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi'] and frame.shape[0] == 6 and pd.isna(frame['lo'].iloc[3])
+    assert set(frame['kind']) == {'party'} and data['blocks']['parties'] == [] and data['first_polls'] == {}
     assert publish.export_event_series(str(tmp_path), '2015-12-20') == (None, None)
     assert publish.export_event_series(str(tmp_path / 'none'), '2023-07-23') == (None, None)
     assert publish.export_event_series(None, '2023-07-23') == (None, None)
+
+
+def test_export_event_series_splits_parties_and_blocks_and_carries_the_entries(tmp_path):
+    """Las filas `block` del backtest van a `blocks`; las demás (también las de tablas sin `kind`) son partidos."""
+    write_series_source(str(tmp_path))
+    path = tmp_path / 'series.csv'
+    table = pd.read_csv(path)
+    table['kind'] = 'party'
+    blocks = table.loc[table['name'] == 'PP'].assign(name='Derecha', kind='block')
+    pd.concat([table, blocks]).to_csv(path, index=False)
+    data, frame = publish.export_event_series(str(tmp_path), '2023-07-23', first_polls={'SALF': '2023-03-01'})
+    assert data['parties'] == ['PP', 'PSOE'] and data['blocks']['parties'] == ['Derecha']
+    assert data['blocks']['mean']['Derecha'] == [32.2, 32.3, 32.41] and data['first_polls'] == {'SALF': '2023-03-01'}
+    assert list(frame.columns) == ['date', 'name', 'kind', 'mean', 'lo', 'hi'] and frame['kind'].iloc[-1] == 'block'
+    assert frame.shape[0] == 9 and list(frame['kind']) == ['party'] * 6 + ['block'] * 3
+
+
+def test_event_entries_reads_the_simulated_parties_and_their_labels():
+    """Los partidos de Izquierda/Derecha simulados en la elección, con las etiquetas que heredan por el `smap`."""
+    import types
+    polls = pd.DataFrame({'date': pd.to_datetime(['2023-01-01', '2023-06-01']), 'PP': [30., 31.], 'PSOE': [25., 26.],
+                          'SUMAR': [12., 11.], 'UP': [None, 2.]}).set_index('date')
+    comp = types.SimpleNamespace(event_params={'2023-07-23': {
+        'parties': {'event': ['PP', 'PSOE', 'FA', 'UP']}, 'smap': {'FA': {'type': 'agg', 'names': ['SUMAR']}},
+        'bmaps': {'vs': {'Izquierda': ['PSOE', 'FA', 'UP'], 'Derecha': ['PP']}}}})
+    assert publish.event_entries(comp, '2023-07-23', polls) == {'UP': '2023-06-01'}
+    assert publish.event_entries(comp, '2023-07-23', polls, known={'UP'}) == {}
+    bare = types.SimpleNamespace(event_params={'2023-07-23': {'bmaps': {'vs': {}}}})
+    assert publish.event_entries(bare, '2023-07-23', polls) == {}
 
 
 def test_publish_event_writes_the_series_and_removes_it_when_the_backtest_lacks_it(tmp_path):
@@ -1507,6 +1612,7 @@ def test_publish_event_writes_the_series_and_removes_it_when_the_backtest_lacks_
     part = writer.read_json(bundle.path_event('es', '2023-07-23', 'series'))
     assert out['has_series'] is True and 'series' in out['seconds']
     assert part['schema'] == 'event-series@1' and part['data']['horizon'] == 6 and part['data']['dates'][-1] == '2023-07-17'
+    assert part['data']['first_polls'] == {} and part['data']['blocks']['parties'] == []
     assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'series'))
     written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
     assert written[-1].endswith('/meta.json')

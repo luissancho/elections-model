@@ -158,3 +158,31 @@ def test_compute_herd_without_elections_raises(fresh_app, tmp_path):
 
 def test_since_year_is_the_first_year_of_the_dates():
     assert _since_year(['2023-07-23', '1986-06-22', '2019-04-28']) == '1986' and _since_year([]) is None
+
+
+def test_compute_herd_chance(fresh_app, tmp_path):
+    c = compute(tmp_path).chance
+    assert c['periods'] == {'final': [0, 21], 'rest': [21, 365]} and c['permutations'] == 20000
+    assert (c['elections'], c['falls'], c['pairs'], c['rows_a'], c['rows_b'], c['r_a'], c['r_b']) == (
+        2, 1, 2, 12, 10, 0.94, 0.77)
+    assert c['change'] == pytest.approx(-0.1775, abs=6e-4) and c['ci'] is None
+    assert abs(c['p_one'] - 22 / 150) < 0.01 and abs(c['p_two'] - 65 / 150) < 0.015      # exact: 150 arrangements
+    null = c['null']
+    assert abs(null['min'] - (-0.542)) < 0.01 and abs(null['max'] - 1.015) < 0.01 and null['bin_width'] == 0.01
+    assert sum(b['count'] for b in null['bins']) == 20000
+    assert null['bins'][0]['lo'] <= null['min'] < null['bins'][0]['hi']
+    assert set(c) == {'periods', 'permutations', 'elections', 'falls', 'pairs', 'rows_a', 'rows_b', 'r_a', 'r_b',
+                      'change', 'ci', 'count_one', 'count_two', 'p_one', 'p_two', 'null'}
+    assert isinstance(c['count_one'], int) and isinstance(c['count_two'], int)
+    assert c['count_one'] >= 0 and c['count_two'] >= 0
+    assert c['p_one'] == pytest.approx((c['count_one'] + 1) / 20001, rel=1e-2)
+    assert c['p_two'] == pytest.approx((c['count_two'] + 1) / 20001, rel=1e-2)
+    # The comparisons of the study relabelled with the periods of the test: the figures are those of recomputing them
+    assert (c['count_one'], c['count_two'], c['p_one'], c['p_two']) == (2856, 8696, 0.143, 0.435)
+    assert (c['null']['mean'], c['null']['sd'], c['null']['min'], c['null']['max']) == (0.0257, 0.2655, -0.542, 1.015)
+
+
+def test_compute_herd_chance_is_none_without_shared_pairs(fresh_app, tmp_path):
+    params = {'chance': {'periods': {'final': [0, 1], 'rest': [1, 2]}, 'permutations': 100, 'bin_width': 0.01,
+                         'resamples': 100}}
+    assert compute(tmp_path, params=params).chance is None

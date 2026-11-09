@@ -152,7 +152,13 @@ export function renderBody(tbody, polls, parties, catalog, mode = 'pct') {
     return;
   }
   tbody.replaceChildren(...polls.map((poll) => {
-    const date = el('td', fieldworkLabel(poll.start_date, poll.end_date, poll.date));
+    const label = fieldworkLabel(poll.start_date, poll.end_date, poll.date);
+    const date = el('td', poll.detail_href ? '' : label);
+    if (poll.detail_href) {
+      const link = el('a', label);
+      link.href = poll.detail_href;
+      date.appendChild(link);
+    }
     if (poll.start_date || poll.end_date) {
       date.title = `Trabajo de campo: ${fmtDate(poll.start_date || poll.end_date)} – ${fmtDate(poll.end_date || poll.start_date)}`;
     }

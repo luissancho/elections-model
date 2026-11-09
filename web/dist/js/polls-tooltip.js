@@ -2,6 +2,7 @@
 // descending order), one
 // point of the average or of its projection and the official result of a past election. Pure functions, without
 // ECharts or the DOM, testable in node.
+import {REST_BLOCK} from './blocks.js';
 import {fmtDate, fmtInt, fmtNum, fmtPct, fmtRange} from './format.js';
 
 const DASH = '–';
@@ -97,4 +98,38 @@ export function meanTooltipLine(name, mean, lo, hi, date, color, header = null) 
  */
 export function resultTooltipLine(name, value, date, color) {
   return `Resultado oficial · ${escapeText(fmtDate(date))}<br>${tooltipMarker(color)}${escapeText(`${name} ${fmtPct(value)}`)}`;
+}
+
+/** Least remainder of a block over its parties shown as «Resto», in points (below it, rounding). */
+const REST_MIN = 0.05;
+
+/**
+ * Lines of the breakdown of a block on one day of the average, under its box: one per party of the block with a
+ * value that day, in descending order, with its colour marker and `{party} {value}`, and, for Otros (the rest up to
+ * 100) when it holds more than its parties add up to, a grey «Resto» line with the difference. Izquierda and
+ * Derecha never get one: their line, fitted on the sum per poll since 2026-11-09, can differ from the sum of their
+ * parties for a few months after a party enters, and that is no missing party.
+ *
+ * @param {string} block the block
+ * @param {number|null} total the value of the block that day
+ * @param {number} i index of the day in the series
+ * @param {{members: Object<string, string[]>, values: Object<string, Array<number|null>>, colors: Object<string, string>}} breakdown
+ *   the parties of each block, the series of each party and its colour
+ * @returns {string[]} HTML lines, escaped; none for a name that is not a block of `breakdown`
+ */
+export function breakdownTooltipLines(block, total, i, breakdown) {
+  const members = (breakdown.members || {})[block];
+  if (!members) {
+    return [];
+  }
+  const rows = members
+    .map((party) => ({party, value: ((breakdown.values || {})[party] || [])[i]}))
+    .filter((row) => present(row.value))
+    .sort((a, b) => b.value - a.value);
+  const lines = rows.map(({party, value}) => `${tooltipMarker((breakdown.colors || {})[party] || '#999')}${escapeText(`${party} ${fmtNum(value, 1)}`)}`);
+  const rest = present(total) ? total - rows.reduce((sum, row) => sum + row.value, 0) : 0;
+  if (block === REST_BLOCK && rest >= REST_MIN) {
+    lines.push(`${tooltipMarker('#999')}${escapeText(`Resto ${fmtNum(rest, 1)}`)}`);
+  }
+  return lines;
 }

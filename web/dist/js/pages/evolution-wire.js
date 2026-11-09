@@ -10,7 +10,7 @@ import {fmtPct} from '../format.js';
 import {tableImage, wireDownload} from '../share.js';
 import {mapNames, markSegments, showError, tryDraw} from './common.js';
 import {markLegend} from './legend-dom.js';
-import {chosenNames, fillLegend} from './series-wire.js';
+import {chosenNames, fillLegend, viewCaption} from './series-wire.js';
 
 /** Whether a value of a headline is a number (the parts write missing values as null). */
 const present = (value) => value !== null && value !== undefined;
@@ -65,7 +65,8 @@ export function evolutionLabel(key) {
  * @param {object} [options] `parties` (party names, legend order), `field` (party field drawn: `pct` or
  *   `seats`) and `total` (what the blocks add up to: 100 for shares, the chamber for seats)
  * @returns {object} `partidos` and `bloques` (null without blocks): `runs` (daily), `parties`, `colors`,
- *   `fullnames` and `defaults` (names shown by default, null for all), as `fillLegend` and `chosenNames` read them
+ *   `fullnames` and `defaults` (names shown by default, null for all), as `fillLegend` and `chosenNames` read them,
+ *   and, in `bloques`, `members` (the map of the blocks, for the line naming their parties)
  */
 export function evolutionViews(runs, catalog, {parties = null, field = 'pct', total = 100} = {}) {
   const daily = dailyRuns(runs);
@@ -90,6 +91,7 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
       colors: mapNames(blockNames, (name) => catalog.blockColor(name)),
       fullnames: mapNames(blockNames, (name) => name),
       defaults: null,
+      members: blocks,
     } : null,
   };
 }
@@ -195,6 +197,7 @@ export function wireEvolution(initial, catalog, {parties = null, metrics = VOTE_
   wireDownload(document.getElementById('evolution-download'), () => evolutionImageOption(dataOf(state), chartZoom(chart)), showError, {
     bottom: changesEl ? () => (changesEl.hidden ? null : tableImage(changesEl.querySelector('table'))) : null,
     texts: keys.length > 1 ? ({file}) => ({file: evolutionFile(file, state.metric)}) : null,
+    caption: () => viewCaption(viewsOf(state.metric)[state.view]),
   });
 
   if (toggleEl && changesEl) {

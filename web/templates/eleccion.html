@@ -164,7 +164,13 @@
         <p>
           El hueco entre el final de la línea y el resultado es la veda: la línea se congeló a {{ series_horizon|int }}
           días de votar, el último día con sondeos. Pulsa un partido de la leyenda para ocultarlo o mostrarlo; en la
-          vista Bloques, cada bloque suma sus partidos y Otros es lo que falta hasta 100.
+          {% if fitted_blocks %}
+          vista Bloques, la línea de cada bloque es el promedio de lo que suman sus partidos en cada sondeo, no la suma
+          de sus promedios, y una línea discontinua marca la entrada de un partido en las encuestas a mitad de ciclo.
+          Los partidos de cada bloque se leen bajo la leyenda, y Otros es lo que falta hasta 100.
+          {% else %}
+          vista Bloques, cada bloque suma sus partidos, que se leen bajo la leyenda, y Otros es lo que falta hasta 100.
+          {% endif %}
         </p>
         <p>
           La línea dice dónde estaba el consenso de las encuestadoras, no la incertidumbre del resultado; y no recoge

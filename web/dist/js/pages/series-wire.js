@@ -1,13 +1,13 @@
 // Wiring of the poll average shared by Promedios and the detail of a past election: the party and block views
 // of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window, view and layers
 // controls (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
-import {SERIES_KEYS, blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
+import {SERIES_KEYS, blockMembersText, blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
 import {chartZoom, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
 import {mergeHash} from '../url-state.js';
 import {wireDownload} from '../share.js';
 import {mapNames, markSegments, showError, tryDraw} from './common.js';
-import {markLegend, renderLegend} from './legend-dom.js';
+import {markLegend, renderLegend, renderMembers} from './legend-dom.js';
 
 /** Choices of the window control, in the order of `WINDOW_DAYS` plus the whole cycle. */
 export const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
@@ -22,7 +22,10 @@ export const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
  * @param {Catalog} catalog party catalogue of the run
  * @returns {object} `partidos` and `bloques` (null without blocks): `series`, `polls`, `projection`, `result`
  *   (null without one), `parties`, `colors`, `defaults` (names shown by default, null for all) and `toPolls`
- *   (polls of the view from polls by party)
+ *   (polls of the view from polls by party) and `marks` (`[{date, label}]`, dashed lines of the chart: none in
+ *   `partidos`, the entry of each party of `series.first_polls` in `bloques`, by date); `bloques` also `members`
+ *   (the map of the blocks, for the line naming their parties) and `breakdown` (`{members, values, colors}`: the
+ *   series and colour of each party, which break a day of a block down in the tooltip)
  */
 export function seriesViews(initial, catalog) {
   const {series, polls, projection, result = null} = initial;
@@ -30,6 +33,10 @@ export function seriesViews(initial, catalog) {
   const main = (catalog.bmaps.main || []).filter((name) => parties.includes(name));
   const blocks = catalog.bmaps.blocks && !Array.isArray(catalog.bmaps.blocks) ? catalog.bmaps.blocks : {};
   const names = Object.keys(blocks);
+  // the entry of each party born halfway through the cycle, a dashed line of the block view (runs since 2026-11-09)
+  const entries = Object.entries(series.first_polls || {})
+    .sort(([, a], [, b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, date]) => ({date, label: `Entra ${name}`}));
   return {
     partidos: {
       series,
@@ -40,6 +47,7 @@ export function seriesViews(initial, catalog) {
       colors: mapNames(parties, (name) => catalog.color(name)),
       defaults: main.length ? main : null,
       toPolls: (chosen) => chosen,
+      marks: [],
     },
     bloques: names.length ? {
       series: blockSeries(series, blocks),
@@ -52,6 +60,9 @@ export function seriesViews(initial, catalog) {
       colors: mapNames(names, (name) => (initial.block_colors && initial.block_colors[name]) || catalog.blockColor(name)),
       defaults: null,
       toPolls: (chosen) => blockPolls(chosen, blocks),
+      members: blocks,
+      breakdown: {members: blocks, values: series.mean, colors: mapNames(parties, (name) => catalog.color(name))},
+      marks: entries,
     } : null,
   };
 }
@@ -73,10 +84,10 @@ export function chosenNames(current, legendSelected) {
 
 /**
  * Fill the HTML legend of a chart with the names of its view, lit as its selection says, each pill toggling the
- * ECharts legend of `chart`.
+ * ECharts legend of `chart`, and, under it, the parties of each block when the view is of blocks (`members`).
  *
  * @param {HTMLElement|null} legendEl the `.legend` container (nothing without it)
- * @param {object} current the view (`parties`, `colors`, `defaults`)
+ * @param {object} current the view (`parties`, `colors`, `defaults` and, in a block view, `members`)
  * @param {string[]|null} selected names shown (null: the defaults of the view, or all)
  * @param {object} chart the ECharts instance
  * @param {object} inks `{name: ink colour}` of the island (`initial.inks`)
@@ -89,6 +100,17 @@ export function fillLegend(legendEl, current, selected, chart, inks = {}) {
   renderLegend(legendEl, current.parties.map((name) => ({
     name, color: current.colors[name], ink: inks[name], on: shown.includes(name),
   })), (name) => chart.dispatchAction({type: 'legendToggleSelect', name}));
+  renderMembers(legendEl, current.members || null, current.colors);
+}
+
+/**
+ * The caption of the image of a view: the parties of each block in a block view, none in the party view.
+ *
+ * @param {object} current the view (`members` in a block view)
+ * @returns {string|null} the caption (`blockMembersText`), null for none
+ */
+export function viewCaption(current) {
+  return current && current.members ? blockMembersText(current.members) || null : null;
 }
 
 /**
@@ -146,7 +168,9 @@ export function wireAverage(views, state, render, {anchor, inks = {}, imageOf = 
   markSegments();
   tryDraw(draw, 'the poll average');
   if (imageOf) {
-    wireDownload(document.getElementById('series-download'), () => imageOf(views[state.view].polls, state, chartZoom(chart)), showError);
+    wireDownload(document.getElementById('series-download'), () => imageOf(views[state.view].polls, state, chartZoom(chart)), showError, {
+      caption: () => viewCaption(views[state.view]),
+    });
   }
 
   // The controls only work with JavaScript, so the server renders them hidden.

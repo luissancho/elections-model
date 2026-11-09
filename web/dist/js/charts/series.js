@@ -7,7 +7,7 @@
 import {axisLabelStyle, baseOption, mountChart, THEME, timeAxisLabel, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtPct} from '../format.js';
-import {meanTooltipLine, pollTooltipLines, resultTooltipLine} from '../polls-tooltip.js';
+import {breakdownTooltipLines, meanTooltipLine, pollTooltipLines, resultTooltipLine} from '../polls-tooltip.js';
 import {DEFAULT_WINDOW, seriesWindow} from '../range.js';
 
 export {meanTooltipLine, pollTooltipLines, resultTooltipLine};
@@ -265,8 +265,9 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  * changes the scale.
  * The Promedios page also draws the blocks with it, passing the block series, polls and projection as parties.
  * The tooltip follows the item under the pointer: a poll shows its box (`pollTooltipLines`), a day of the
- * average its value, a day of the projection or the range bar its value and range (`meanTooltipLine`), the
- * official result its share (`resultTooltipLine`).
+ * average its value (`meanTooltipLine`) and, for a block with a `breakdown`, the value of each of its parties that day
+ * (`breakdownTooltipLines`), a day of the projection or the range bar its value and range, the official result its
+ * share (`resultTooltipLine`).
  *
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
  *   (names, legend order), `selected` (names shown at first; all when null), `colors` ({name: colour}),
@@ -279,12 +280,17 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   closes the axis; null for none), `asOfLabel` (label of the mark line at `asOf`, «Estimación» by default) and
  *   `layers` (what is drawn: `ambos`, the default, the poll points and the average; `sondeos`, the points alone,
  *   with the result and the mark lines; `promedio`, the lines, projection and range bars alone, without the points)
+ *   and `breakdown` (the block view: `{members, values, colors}`, the parties of each block, the series of each
+ *   party and its colour, which break a day of a block line down into its parties; null for none) and `marks`
+ *   (`[{date, label}]`: more dashed mark lines, the entry of a party in the polls in the block view, with their
+ *   label inside the plot along the line, so that it covers neither the axis dates nor another entry; none by
+ *   default)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
   series, polls, projection, parties, selected = null, colors = {}, asOf, when,
   window: windowChoice = DEFAULT_WINDOW, anchor = null, legend = true, result = null, asOfLabel = 'Estimación',
-  layers = 'ambos',
+  layers = 'ambos', breakdown = null, marks: entries = [],
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
@@ -386,6 +392,12 @@ export function seriesOption({
   } else if (withProjection && when) {
     marks.push(markAt(dayTime(when), 'Elección', 'left'));
   }
+  for (const entry of entries || []) {
+    const mark = markAt(dayTime(entry.date), entry.label);
+    // inside the plot, written along its line from the top: never over the dates of the axis, and two entries a
+    // few weeks apart (UP and SALF on a phone) do not cover each other
+    marks.push({...mark, label: {...mark.label, position: 'insideEndTop', align: undefined}});
+  }
   // Mark lines on their own empty series, so hiding a party never hides them.
   const markSeries = {
     type: 'line',
@@ -425,7 +437,9 @@ export function seriesOption({
     }
     if (role === 'mean') {
       // the band of the average is not drawn any more, so its interval is not shown either
-      return meanTooltipLine(name, (series.mean[name] || [])[i] ?? null, null, null, series.dates[i], color(name));
+      const mean = (series.mean[name] || [])[i] ?? null;
+      const line = meanTooltipLine(name, mean, null, null, series.dates[i], color(name));
+      return [line, ...(breakdown ? breakdownTooltipLines(name, mean, i, breakdown) : [])].join('<br>');
     }
     if (role === 'projection') {
       const at = (values) => (values || [])[i] ?? null;

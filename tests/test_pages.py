@@ -533,10 +533,11 @@ def test_promedios_initial_polls_carry_the_chart_and_table_columns(api):
     parties = set(data['polls']['parties'])
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
-        assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | parties <= set(poll)
+        assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href', 'detail_href'} | parties <= set(poll)
         extra = {'sponsor', 'start_date', 'end_date', 'seats', 'rating'}
-        assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | extra | parties
+        assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href', 'detail_href'} | extra | parties
         assert poll['href'] == pages.pollster_href(poll['pollster'], poll['pollster_id'])
+        assert poll['detail_href'] == pages.poll_detail_href('es', poll)
 
 
 def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, tmp_path):
@@ -699,6 +700,21 @@ def test_promedios_polls_table_renders_fifteen_of_many_polls_and_the_island_carr
     assert len(data) == 20 and {'sponsor', 'start_date', 'end_date'} <= set(data[0])
 
 
+def test_promedios_polls_table_links_each_poll_to_its_page(api, fresh_app, events_site):
+    polls = fixture_data('polls')
+    base = polls['polls'][0]
+    polls['polls'] = [base | {'date': '2026-08-02', 'sponsor': 'M1', 'start_date': '2026-08-01', 'end_date': '2026-08-02'}]
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
+    webapi.site().files.clear()
+    tbody = polls_tbody(html(call(api, '/es')[2]).replace('\n', ' '))
+    assert ('<td title="Trabajo de campo: 1 ago 2026 – 2 ago 2026"><a href="/es/sondeos/2026-08-02/sigma-dos/m1">1–2 Ago</a></td>'
+            in tbody)
+    # the polls of a past election have no page: their date cell is plain text
+    past = polls_tbody(html(call(events_site, '/elecciones/es/generales/2023-07')[2]).replace('\n', ' '))
+    assert '/sondeos/' not in past and '<td>' in past
+
+
 def test_event_page_seats_table_histograms_blocks_and_pills(api):
     page = html(call(api, '/es')[2])
     assert '<th scope="col" class="l">Rango 95%</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
@@ -710,7 +726,8 @@ def test_event_page_seats_table_histograms_blocks_and_pills(api):
     assert 'id="blocks-chart"' not in page and 'id="blocks"' not in page and 'id="seats"' in page
     assert '<fieldset class="pills" id="coalition-parties">' in page
     assert 'class="pill"' in page and 'name="coalition"' in page
-    assert re.search(r'Izquierda y Derecha, con todos sus\s+partidos; Otros es el resto de la cámara\.', page)
+    # the caption names the parties of each block of the map (Luis, 2026-11-09), not the old generic sentence
+    assert '<caption class="bm-caption">' in page and '<strong>Derecha:</strong> PP</span>' in page
     assert 'Bloques ideológicos' not in page
 
 
@@ -1296,6 +1313,62 @@ def test_promedios_hides_the_blocks_view_without_blocks(api, fresh_app):
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es-md')[2])
     assert 'name="view"' not in page and 'name="pview"' not in page and 'id="series-window"' in page
+
+
+def test_round_series_rounds_the_fitted_blocks_and_keeps_the_entries():
+    series = {'dates': ['d'], 'parties': ['PP'], 'mean': {'PP': [30.123]}, 'lo': {}, 'hi': {},
+              'blocks': {'parties': ['Derecha'], 'mean': {'Derecha': [45.678]}, 'lo': {'Derecha': [None]},
+                         'hi': {'Derecha': [46.111]}},
+              'first_polls': {'SALF': '2024-06-06'}}
+    out = pages.promedios.round_series(series)
+    assert out['blocks']['mean']['Derecha'] == [45.68] and out['blocks']['lo']['Derecha'] == [None]
+    assert out['blocks']['parties'] == ['Derecha'] and out['blocks']['hi']['Derecha'] == [46.11]
+    assert out['first_polls'] == {'SALF': '2024-06-06'} and series['blocks']['mean']['Derecha'] == [45.678]
+    assert 'blocks' not in pages.promedios.round_series({'dates': [], 'parties': [], 'mean': {}, 'lo': {}, 'hi': {}})
+
+
+def test_blocks_paragraph_of_a_run_without_fitted_blocks_keeps_the_sum(api):
+    """Un run sin bloques ajustados (anterior al 2026-11-09) se sigue describiendo como se dibuja: la suma."""
+    page = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
+    assert page.count('cada bloque suma sus partidos') == 2 and 'no la suma de sus promedios' not in page
+
+
+def test_blocks_paragraph_follows_the_published_series(api, fresh_app):
+    """Luis, 2026-11-09: el párrafo de la vista Bloques dice cómo se dibuja la línea del run que se ve: ajustada sobre
+    la suma por sondeo cuando la serie trae los bloques, la suma de los partidos cuando no (runs anteriores). La
+    tarjeta de la Evolución sigue sumando los partidos de cada run y conserva su frase. Las partes de un run se
+    guardan en caché al leerlas: la serie se reescribe antes de la primera visita."""
+    series = fixture_data('series')
+    series['blocks'] = {'parties': ['Derecha'], 'mean': {'Derecha': [40.]}, 'lo': {'Derecha': [39.]},
+                        'hi': {'Derecha': [41.]}}
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'series'), 'series', series, 'es',
+                                                 run_id=RUN)
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/es')[2])
+    text = re.sub(r'\s+', ' ', page)
+    assert 'no la suma de sus promedios' in text and 'una línea discontinua lo marca' in text
+    assert text.count('cada bloque suma sus partidos') == 1          # la de la Evolución sigue
+    assert_public_wording(page, '/es')
+
+
+def test_event_blocks_paragraph_without_fitted_blocks_keeps_the_sum(events_site):
+    text = re.sub(r'\s+', ' ', html(call(events_site, '/elecciones/es/generales/2023-07')[2]))
+    assert 'cada bloque suma sus partidos' in text and 'no la suma de sus promedios' not in text
+
+
+def test_event_blocks_paragraph_follows_the_published_series(events_site, fresh_app):
+    """El mismo párrafo en el promedio del detalle de una elección, cuando su serie trae los bloques."""
+    path = '/elecciones/es/generales/2023-07'
+    writer = bundle.BundleWriter(fresh_app.fs)
+    part = writer.read_json(bundle.path_event('es', '2023-07-23', 'series'))['data']
+    part['blocks'] = {'parties': ['Derecha'], 'mean': {'Derecha': [40.] * len(part['dates'])},
+                      'lo': {'Derecha': [None] * len(part['dates'])}, 'hi': {'Derecha': [None] * len(part['dates'])}}
+    writer.write_json(bundle.path_event('es', '2023-07-23', 'series'), 'event-series', part, 'es')
+    page = html(call(events_site, path)[2])
+    text = re.sub(r'\s+', ' ', page)
+    assert 'no la suma de sus promedios' in text and 'cada bloque suma sus partidos' not in text
+    assert_public_wording(page, path)
+
 
 def test_pollster_options_and_round_series():
     polls = [{'pollster': 'GAD3'}, {'pollster': 'CIS'}, {'pollster': 'GAD3'}, {'pollster': 'Sigma Dos'},
@@ -1940,7 +2013,7 @@ def test_pages_package_layout():
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
     assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters',
-                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'shy', 'slugs']
+                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'shy', 'slugs', 'sondeos']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -4161,6 +4234,28 @@ def test_event_page_blocks_table_lists_the_three_blocks_and_dashes_the_majority_
     assert re.findall(r'<td>([^<]*)</td>\s*$', rows[1].strip(), re.S) == ['41,0%']
 
 
+def test_event_page_blocks_table_caption_names_the_parties_of_each_block(api, fresh_app):
+    """La cabecera de la tabla de bloques dice qué partidos entran en cada uno, con el punto de su color (Luis,
+    2026-11-09: en la tabla de Resultados, no bajo el selector del hemiciclo); Otros no sale, se sobreentiende."""
+    write_summary(fresh_app.fs, three_block_summary())
+    meta = fixture_data('meta')
+    meta['bmaps'] = dict(meta['bmaps'], blocks={'Izquierda': ['PSOE', 'SUMAR'], 'Derecha': ['PP', 'VOX', 'SALF'], 'Otros': ['PNV']})
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
+    webapi.site().manifest_cache_clear()
+    table = re.search(r'<table id="blocks-table">(.*?)</table>', html(call(api, '/es')[2]), re.S).group(1)
+    caption = re.search(r'<caption[^>]*>(.*?)</caption>', table, re.S).group(1)
+    items = re.findall(r'<strong>([^<]*)</strong>([^<]*)</span>', caption)
+    assert items == [('Izquierda:', ' PSOE + SUMAR'), ('Derecha:', ' PP + VOX + SALF')]
+    assert caption.count('class="dot"') == 2 and 'Otros' not in caption
+
+
+def test_block_members_joins_the_parties_with_plus_signs():
+    from mtpy.lib.pages.promedios import block_members
+    assert block_members({'Izquierda': ['PSOE', 'FA', 'UP'], 'Nadie': [], 'Otros': []}) == {'Izquierda': 'PSOE + FA + UP'}
+    assert block_members({'Derecha': ['PP'], 'Otros': ['PNV', 'ERC']}) == {'Derecha': 'PP'}
+    assert block_members(None) == {} and block_members([]) == {}
+
+
 def test_promedios_majority_kpi_keeps_the_vs_block_when_otros_has_the_most_seats(api, fresh_app):
     write_summary(fresh_app.fs, three_block_summary(otros_seats=250))
     page = html(call(api, '/es')[2]).replace('\n', ' ')
@@ -4415,7 +4510,10 @@ def test_polls_csv_link_survives_a_single_page_and_the_legend_is_accessible(api)
     assert data['inks'] == {'PP': pages.ink_color('#1d84ce'), 'Derecha': pages.ink_color('#1d84ce')}
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert '.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr));' in css
-    assert '.kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }' in css
+    # the last odd figure spans the row on a phone, without the divider of the odd ones (a background since the final
+    # review of 2026-11-09, so that the card image does not copy the phone's dividers)
+    assert '.kpi:last-child:nth-child(odd) { grid-column: 1 / -1; background: none; }' in css
+    assert '::before' not in css[css.index('.kpi {'):css.index('.kpi .l {')] and '.kpi:nth-child(odd)::after' not in css
     assert '.mut { color: var(--color-muted); font-size: 12px; }' in css and '.evbar .run small { font-size: 11.5px; color: var(--color-muted); }' in css
     for gone in ('.event-title', '.brand-tagline', '.event-run,'):
         assert gone not in css, gone
@@ -5458,7 +5556,7 @@ def test_promedios_polls_table_shows_the_rating_badge_between_the_house_and_the_
     assert '<td><span class="rt" style="background: {}">73,1</span></td>'.format(pages.gradient(73.08, 0, 100, pages.RATING_COLORS)) in rows[0]
     assert rows[0].index('</a>') < rows[0].index('class="rt"') < rows[0].index('1 Oct')
     assert '<td><span class="rt" style="background: #cd3031">5,0</span></td>' in rows[1]
-    assert '<b>Sin casa</b>' in rows[2] and '<a href' not in rows[2] and '<td class="na">—</td>' in rows[2]
+    assert '<b>Sin casa</b>' in rows[2] and '<a href="/casas' not in rows[2] and '<td class="na">—</td>' in rows[2]
     foot = page[page.index('<tfoot>', start):page.index('</tfoot>', start)]
     assert foot.count('<td></td>') == 3  # rating, fecha y muestra vacías bajo la media simple
     assert 'El rating (0-100)' in page and 'rojo (0)' in page and 'su perfil' in page
@@ -5781,7 +5879,8 @@ def test_herd_robustness_text_guards():
 
 
 def test_herd_verdicts_branches():
-    v = pages.herd.verdicts
+    # the first two questions, as before the third (``chance=None``)
+    v = lambda summary: {key: value for key, value in pages.herd.verdicts(summary).items() if key != 'q3'}  # noqa: E731
     sig = {'n': 23, 'k': 19, 'sign_p': 0.0013}
     flat = {'n': 17, 'k': 9, 'sign_p': 0.5}
     assert v({'comparisons': {'far_final': sig, 'far_mid': flat, 'mid_final': sig}}) == {
@@ -5796,6 +5895,45 @@ def test_herd_verdicts_branches():
     assert v({'comparisons': {'far_final': empty, 'far_mid': empty, 'mid_final': empty}}) == {
         'q1': {'label': 'SIN DATOS', 'tone': 'q2'}, 'q2': {'label': 'SIN DATOS', 'tone': 'q2'}}
     assert v(None)['q1']['label'] == 'SIN DATOS'
+    assert pages.herd.verdicts(None)['q3'] == {'label': 'SIN DATOS', 'tone': 'q2'}
+
+
+def test_herd_p_text_and_null_texts():
+    herd = pages.herd
+    assert herd.p_text(0.00005) == 'p < 0,0001' and herd.p_text(0.0004) == 'p < 0,001'
+    assert herd.p_text(0.047) == 'p = 0,047' and herd.p_text(None) is None
+    chance = fixture_data('rebano-chance')['chance']
+    assert herd.null_text(chance) == (
+        'Ninguna de las 20.000 barajas bajó del −12\u00a0%; lo observado es un −26\u00a0%, de 1,58 a 1,17 veces el '
+        'error de las muestras: p\u00a0<\u00a00,0001 a dos colas. Las separaciones de las tres últimas semanas son un '
+        '26\u00a0% menores que en el resto del ciclo (entre el 4 y el 38\u00a0%). En 25 de las 34 elecciones las '
+        'mismas casas se acercan.')
+    assert herd.null_sentences(chance)[0].endswith('a dos colas.')
+    assert herd.null_sentences(chance)[1].startswith('Las separaciones')
+    some = dict(chance, count_two=240, p_two=0.012, ci=None)
+    assert herd.null_text(some).startswith(
+        '240 de las 20.000 barajas llegaron tan lejos como lo observado (−26\u00a0%), que va de 1,58 a '
+        '1,17 veces el error de las muestras: p\u00a0=\u00a00,012 a dos colas. Las separaciones')
+    assert '(entre' not in herd.null_text(some)
+    rise = dict(chance, change=0.12, count_two=900, p_two=0.045, ci={'lo': 0.02, 'hi': 0.2})
+    assert ('son un 12\u00a0% mayores que en el resto del ciclo (entre el 2 y el 20\u00a0% de subida).'
+            in herd.null_text(rise))
+    assert herd.null_summary_text(chance) == (
+        'Barajando 20.000 veces, ninguna baraja llega a lo observado: p\u00a0<\u00a00,0001.')
+    assert herd.null_summary_text(some) == '240 de 20.000 barajas llegan a lo observado: p\u00a0=\u00a00,012.'
+    assert herd.null_summary_text(dict(some, count_two=1, p_two=0.0001)) == (
+        '1 de 20.000 barajas llega a lo observado: p\u00a0<\u00a00,001.')
+    assert herd.sigmas(chance) == 8 and herd.sigmas(dict(chance, null=dict(chance['null'], sd=0))) is None
+    assert herd.sigmas(dict(chance, null=None)) is None and herd.sigmas(None) is None
+    assert herd.null_text(None) is None and herd.null_summary_text({}) is None and herd.null_sentences(None) is None
+    assert herd.verdicts(fixture_data('rebano-summary'), chance)['q3'] == {'label': 'NO', 'tone': 'q1'}
+    assert herd.verdicts({}, dict(chance, p_two=0.03))['q3'] == {'label': 'DIFÍCILMENTE', 'tone': 'q2'}
+    assert herd.verdicts({}, dict(chance, p_two=0.3))['q3'] == {'label': 'SÍ, PODRÍA', 'tone': 'q3'}
+    assert herd.verdicts({}, None)['q3'] == {'label': 'SIN DATOS', 'tone': 'q2'}
+    # the first two verdicts do not read the third test
+    summary = fixture_data('rebano-summary')
+    assert {key: value for key, value in herd.verdicts(summary, chance).items() if key != 'q3'} == {
+        key: value for key, value in herd.verdicts(summary).items() if key != 'q3'}
 
 
 def test_herd_bars_sorted_and_clipped():
@@ -5910,14 +6048,15 @@ def test_herd_page_structure_and_wording(api, fresh_app, monkeypatch):
     status, page, text = herd_page(api)
     assert status == 200 and '<h1 class="study-title">¿Se comportan las encuestadoras como un rebaño?</h1>' in page
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == [
-        'SÍ, EN CONJUNTO', 'SÍ, EN LAS TRES ÚLTIMAS SEMANAS']
+        'SÍ, EN CONJUNTO', 'SÍ, EN LAS TRES ÚLTIMAS SEMANAS', 'NO']
     assert page.count('<div class="kpi">') == 3
     assert '19 de 23' in text and '23 de 29' in text and '9 de 17' in text and 'como una moneda' in text
     assert '1 entre 769' in text and 'sólo en 3 la bajada es clara por sí sola' in text
     assert 'El tramo de las tres últimas semanas empieza el 9 de noviembre.' in text
-    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 3  # elections + weeks + robustness CSVs
+    # elections + weeks + robustness + chance CSVs
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 4
     assert 'id="weeks-chart"' in page and 'matrix' not in page and 'id="initial-data"' in page
-    for slug in ('resumen', 'pregunta-1', 'pregunta-2', 'directo', 'como', 'datos'):
+    for slug in ('resumen', 'pregunta-1', 'pregunta-2', 'pregunta-3', 'directo', 'como', 'datos'):
         assert 'rebano-%s.png' % slug in page, slug
     assert_public_wording(page, '/analisis/rebano')
     low = text.lower()
@@ -5963,6 +6102,146 @@ def test_herd_page_without_pooled_ci_or_robustness(api, fresh_app, monkeypatch):
     for absent in ('prueba conjunta', 'intervalo (95 %)', 'La robustez repite', 'en la prueba conjunta sí pesa más'):
         assert absent not in text
     assert 'así una elección con muchos sondeos no pesa más que otra con pocos.' in text
+    assert_public_wording(page, '/analisis/rebano')
+
+
+def test_herd_page_third_card_tests_the_null_hypothesis(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano')
+    status, _, body = call(api, '/analisis/rebano')
+    page = html(body)
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert status == 200 and '<section class="card qcard shot q1" id="p3">' in page
+    # after card 2 and before the live card
+    assert page.index('id="p2"') < page.index('id="p3"') < page.index('id="directo"')
+    assert 'rebano-pregunta-3.png' in page and '<a href="#p3" class="q1">3 · ¿Podría ser azar?</a>' in page
+    # the visible text keeps the entities of the HTML: «p < 0,0001» is «p &lt; 0,0001»
+    lt = lambda value: value.replace('<', '&lt;')  # noqa: E731
+    # the index, the summary, the card and the label of its CSV
+    assert text.count('¿Podría ser azar?') == 4
+    assert 'PREGUNTA 3' in text
+    assert lt('Barajando 20.000 veces, ninguna baraja llega a lo observado: p < 0,0001.') in text
+    assert 'Tres preguntas, tres respuestas' in text and 'Dos preguntas' not in text
+    assert '<div class="three">' in page
+    assert ('Si en las tres últimas semanas las mismas casas se separasen igual que en el resto del ciclo, ¿qué bajada '
+            'veríamos por puro azar? Para saberlo barajamos 20.000 veces qué parejas de sondeos de cada pareja de '
+            'casas caen en las tres últimas semanas y cuáles en el resto, y medimos la bajada en cada baraja.') in text
+    assert '<p class="ctitle">Lo que daría el azar, frente a lo observado</p>' in page
+    assert ('20.000 barajas de las mismas 475 parejas de casas en 34 elecciones · cambio de la separación entre el '
+            'resto del ciclo (de 3 semanas a un año antes) y las tres últimas semanas') in text
+    sentence = pages.herd.null_text(fixture_data('rebano-chance')['chance'])
+    assert '<div class="chart" id="chance-chart" role="img" aria-label="%s"></div>' % lt(sentence) in page
+    sentence_text = sentence.replace('\u00a0', ' ')
+    assert 'Cada barra cuenta las barajas que dieron ese cambio; la línea marca el observado.' in text
+    assert lt(sentence_text) in text
+    assert ('<b>Ninguna de las 20.000 barajas bajó del −12\u00a0%; lo observado es un −26\u00a0%, de 1,58 a 1,17 veces '
+            'el error de las muestras: p\u00a0&lt;\u00a00,0001 a dos colas.</b> Las separaciones') in page
+    assert '<summary>Qué se baraja y qué p damos</summary>' in page
+    assert lt('Dentro de cada pareja de casas barajamos qué parejas de sondeos caen en las tres últimas semanas y '
+              'cuáles en el resto, manteniendo cuántas hay en cada tramo y con las cifras de los partidos de cada '
+              'pareja de sondeos juntas. La p es a dos colas: cuenta las barajas con un cambio tan grande como el '
+              'observado en cualquier dirección, y suma una a las barajas y al total para no dar nunca cero; con '
+              'ninguna de 20.000, p = 1/20.001. A una cola, p < 0,0001. Un sondeo que entra en varias parejas cuenta '
+              'en todas, lo que hace la p algo optimista; con lo observado a unas 8 desviaciones típicas del azar, '
+              'no cambia la conclusión. Las tarjetas 1 y 2 usan 2.000 barajas por elección.') in text
+    assert ('La prueba de la tarjeta 3 baraja 20.000 veces, dentro de cada pareja de casas de cada elección, qué '
+            'parejas de sondeos caen en las tres últimas semanas y cuáles en el resto del ciclo (21 a 365 días), y da '
+            'la p a dos colas con la corrección (k + 1)/(B + 1).') in text
+    slugs = re.findall(r'rebano-([a-z0-9-]+)\.png', page)
+    assert 'pregunta-3' in slugs
+    data = initial(body)
+    assert data['chance']['permutations'] == 20000 and len(data['chance']['null']['bins']) == 28
+    context = pages.herd_context(pages.parse_state({}))
+    assert context['chance_test']['pairs'] == 475 and context['sigmas'] == 8
+    assert context['null_summary'].startswith('Barajando') and context['null_text'] == sentence
+    assert_public_wording(page, '/analisis/rebano')
+    low = text.lower()
+    assert not re.search(r'\bcopi', low) and 'permite el azar' not in low
+    assert all(word not in low for word in ('vecino', 'empresa', 'none'))
+
+
+def test_herd_null_sentences_round_the_edge_away_from_zero():
+    herd = pages.herd
+    chance = fixture_data('rebano-chance')['chance']
+    assert chance['null']['min'] == -0.119 and 'bajó del −12\u00a0%' in herd.null_sentences(chance)[0]
+    deeper = dict(chance, null=dict(chance['null'], min=-0.1234))
+    assert 'bajó del −13\u00a0%' in herd.null_sentences(deeper)[0]
+    assert 'bajó del −12\u00a0%' in herd.null_sentences(dict(chance, null=dict(chance['null'], min=-0.12)))[0]
+    rise = dict(chance, change=0.12, null=dict(chance['null'], max=0.1234))
+    assert 'subió del +13\u00a0%' in herd.null_sentences(rise)[0]
+
+
+def test_herd_hard_spaces_hold_the_figures_together():
+    herd = pages.herd
+    assert herd.hard_spaces('un −12 % y p < 0,001, p = 0,02 en 3 p') == (
+        'un −12\u00a0% y p\u00a0<\u00a00,001, p\u00a0=\u00a00,02 en 3 p')
+    assert herd.hard_spaces(None) is None
+    assert herd.percent(-0.26) == '−26 %'      # the shared helper keeps its plain space
+
+
+def test_herd_page_note_has_the_one_sided_p_only_for_a_fall(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano')
+    _, page, text = herd_page(api)
+    assert 'A una cola, p &lt; 0,0001.' in text
+    assert 'A una cola, p\u00a0&lt;\u00a00,0001.' in page
+    chance = fixture_data('rebano-chance')['chance']
+    publish_study(fresh_app.fs, study='rebano', parts={'chance': {'chance': dict(chance, change=0.12)}})
+    status, page, text = herd_page(api)
+    assert status == 200 and 'A una cola' not in text and 'suma una a las barajas y al total' in text
+    assert pages.herd_context(pages.parse_state({}))['null_p_one'] is None
+
+
+def test_herd_method_text_keeps_the_space_between_sentences(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+
+    def tech(parts=None):
+        publish_study(fresh_app.fs, study='rebano', **({'parts': parts} if parts else {}))
+        _, page, _ = herd_page(api)
+        block = page.split('<div class="tech">')[1].split('</div>')[0]
+
+        return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', block))
+
+    with_chance = tech()
+    assert 'cuenta en todas. El intervalo' in with_chance and 'veces. La prueba de la tarjeta 3' in with_chance
+    assert '(k + 1)/(B + 1). La robustez' in with_chance
+    without = tech({'chance': {'chance': None}})
+    assert 'cuenta en todas. El intervalo' in without and 'veces. La robustez' in without
+    assert 'prueba de la tarjeta 3' not in without
+
+    for text in (with_chance, without):
+        assert not re.search(r'[a-z0-9)]\.[A-Z]', text)
+
+
+def test_herd_page_third_card_with_some_shuffles_and_no_interval_or_spread(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    chance = fixture_data('rebano-chance')['chance']
+    chance = dict(chance, count_two=240, count_one=120, p_two=0.012, p_one=0.006, ci=None,
+                  null=dict(chance['null'], sd=None))
+    publish_study(fresh_app.fs, study='rebano', parts={'chance': {'chance': chance}})
+    status, page, text = herd_page(api)
+    assert status == 200 and '<section class="card qcard shot q2" id="p3">' in page
+    assert 'DIFÍCILMENTE' in text and '240 de 20.000 barajas llegan a lo observado: p = 0,012.' in text
+    assert 'con 240 de 20.000, p = 241/20.001. A una cola, p = 0,006.' in text
+    assert 'desviaciones' not in text and 'lo que hace la p algo optimista. Las tarjetas 1 y 2' in text
+    assert '(entre' not in text.split('Las separaciones de las tres últimas semanas')[1].split('.')[0]
+    assert_public_wording(page, '/analisis/rebano')
+
+
+def test_herd_page_without_the_chance_part_is_as_before(api, fresh_app, monkeypatch):
+    herd_today(monkeypatch, date(2026, 11, 6))
+    publish_study(fresh_app.fs, study='rebano', parts={'chance': {'chance': None}})
+    status, page, text = herd_page(api)
+    assert status == 200 and 'id="p3"' not in page and 'Podría ser azar' not in text
+    assert 'prueba de la tarjeta 3' not in text and 'chance-chart' not in page and 'PREGUNTA 3' not in text
+    assert 'Dos preguntas, dos respuestas' in text and '<div class="three two">' in page
+    # nor its CSV: the three of before
+    assert page.count('class="pill brand" href="/api/v1/studies/rebano/') == 3 and '/rebano/chance' not in page
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == [
+        'SÍ, EN CONJUNTO', 'SÍ, EN LAS TRES ÚLTIMAS SEMANAS']
+    assert 'rebano-pregunta-3.png' not in page
+    context = pages.herd_context(pages.parse_state({}))
+    assert context['chance_test'] is None and context['null_text'] is None and context['initial']['chance'] is None
     assert_public_wording(page, '/analisis/rebano')
 
 
@@ -7141,3 +7420,390 @@ def test_run_less_colours_take_the_colours_from_the_vs_of_the_election():
     assert pages.block_color('Derecha', out, catalog) == '#1d84ce'
     assert pages.block_color('Izquierda', out, catalog) == '#ef1c27'
     assert pages.block_color('Otros', out, catalog) == pages.OTHERS_COLOR
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Detalle de un sondeo
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def test_poll_detail_href_builds_the_route_from_the_poll():
+    poll = {'date': '2026-11-09', 'pollster_id': 12, 'pollster': 'NC Report', 'sponsor': 'La Razón'}
+    assert pages.poll_detail_href('es', poll) == '/es/sondeos/2026-11-09/nc-report/la-razon'
+    assert pages.poll_detail_href('es-md', poll | {'sponsor': None}) == '/es-md/sondeos/2026-11-09/nc-report'
+    assert pages.poll_detail_href('es', poll | {'sponsor': '—'}) == '/es/sondeos/2026-11-09/nc-report'  # a sponsor without a slug
+    assert pages.poll_detail_href('es', poll | {'pollster': '???'}) == '/es/sondeos/2026-11-09/12/la-razon'
+    assert pages.poll_detail_href('es', poll | {'date': '2026-11-09T00:00:00'}) == '/es/sondeos/2026-11-09/nc-report/la-razon'
+    assert pages.poll_detail_href('es', poll | {'date': None}) is None
+    assert pages.poll_detail_href('es', {'date': '2026-11-09', 'pollster': None, 'pollster_id': None}) is None
+
+
+POLLS_OF_A_DAY = [
+    {'date': '2026-10-01', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': 'ABC', 'PP': 33.0},
+    {'date': '2026-10-01', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': 'El Mundo', 'PP': 34.0},
+    {'date': '2026-10-01', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 32.0},
+    {'date': '2026-10-02', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo', 'PP': 31.0},
+    {'date': '2026-10-03', 'pollster_id': 9, 'pollster': 'Casa', 'sponsor': '—', 'PP': 30.0},
+]
+
+
+def test_find_poll_matches_the_date_the_house_and_the_sponsor():
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-01', 'gad3', 'abc')['PP'] == 33.0
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-01', 'sigma-dos')['PP'] == 32.0
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-02', 'sigma-dos')['PP'] == 31.0  # the only one of the house that day
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-03', 'casa')['PP'] == 30.0  # a sponsor without a slug
+    assert pages.find_poll(POLLS_OF_A_DAY, '2026-10-01', '1')['PP'] == 32.0  # the id stands for a house without a slug
+    assert pages.MESSAGES['poll not found'] == 'Sondeo no encontrado.'
+    for args in (('2026-10-01', 'gad3'), ('2026-10-01', 'gad3', 'la-razon'), ('2026-10-03', 'gad3'), ('2026-10-01', 'nadie'),
+                 ('2026-10-02', 'sigma-dos', 'el-pais')):
+        with pytest.raises(HttpError) as err:
+            pages.find_poll(POLLS_OF_A_DAY, *args)
+        assert (err.value.status, err.value.message) == (404, 'poll not found')
+
+
+POLL = {'date': '2026-11-09', 'pollster_id': 12, 'pollster': 'NC Report', 'sponsor': 'La Razón', 'start_date': '2026-11-05',
+        'end_date': '2026-11-07', 'sample_size': 1000, 'mtype': 'cati', 'rating': 64.23, 'weight': 0.8412, 'weight_over': 1.0,
+        'weight_sample': 0.8412, 'weight_rating': 1.0, 'url': 'https://www.larazon.es/encuesta', 'PP': 32.6, 'PSOE': 25.6,
+        'VOX': 19.3, 'ERC': None, 'seats': {'PP': [136, 138], 'PSOE': [99, 101], 'VOX': [67, 69]}}
+COLORS = {'PP': '#1d84ce', 'PSOE': '#ef1c27', 'VOX': '#63be21', 'ERC': '#ffb232'}
+
+
+def test_vote_rows_order_the_parties_of_the_poll_with_their_seats():
+    rows = pages.vote_rows(POLL, ['PSOE', 'PP', 'VOX', 'ERC'], COLORS)
+    assert [row['name'] for row in rows] == ['PP', 'PSOE', 'VOX']  # ERC has no value in the poll
+    assert rows[0] == {'name': 'PP', 'color': '#1d84ce', 'value': 32.6, 'seats': '136–138', 'change': None,
+                       'seats_change': None}
+    bare = pages.vote_rows(POLL | {'seats': {'PP': [136, 136]}}, ['PP', 'PSOE'], COLORS)
+    assert bare[0]['seats'] == '136' and bare[1]['seats'] is None
+    assert pages.seats_text([]) is None and pages.seats_text(None) is None
+
+
+def test_weight_card_shows_the_factors_and_the_kernel_of_the_day():
+    weights = {'date': '2026-11-09', 'parties': ['PP', 'PSOE'], 'rows': [
+        {'name': 'PSOE', 'date': '2026-11-09', 'pollster_id': 12, 'sponsor': 'La Razón', 'weight_kernel': 0.97, 'weight': 0.816},
+        {'name': 'PP', 'date': '2026-11-09', 'pollster_id': 12, 'sponsor': 'La Razón', 'weight_kernel': 0.98, 'weight': 0.824},
+        {'name': 'PP', 'date': '2026-11-09', 'pollster_id': 12, 'sponsor': None, 'weight_kernel': 0.5, 'weight': 0.4},
+    ], 'line': {'PP': {'dates': ['2026-09-20', '2026-11-09'], 'mean': [30.0, 32.0], 'lo': [29.0, 31.0], 'hi': [31.0, 33.0]}},
+        'kernel': {}, 'stats': {}}
+    card = pages.weight_card(POLL, weights)
+    assert [(f['label'], f['value']) for f in card['factors']] == [('F(solape)', '1,00'), ('F(muestra)', '0,84'), ('F(rating)', '1,00')]
+    assert card['has_part'] and card['status'] == 'today' and not card['overlap']
+    assert card['today'] == {'date': '2026-11-09', 'kernel': '0,98', 'weight': '0,82', 'party': 'PP'}
+    old = pages.weight_card({k: v for k, v in POLL.items() if not k.startswith('weight_')} | {'date': '2026-08-01'}, weights)
+    assert [f['value'] for f in old['factors']] == ['–', '–', '–'] and old['today'] is None and old['status'] == 'outside'
+    inside = pages.weight_card(POLL | {'date': '2026-10-20'}, weights)
+    assert inside['today'] is None and inside['status'] == 'absent'
+    zero = pages.weight_card(POLL | {'date': '2026-11-09', 'weight': 0.0, 'weight_over': 0.0}, weights)
+    assert zero['status'] == 'zero' and zero['overlap'] and zero['today'] is None  # the rows of a poll of weight 0 are not looked up
+    assert pages.weight_card(POLL | {'weight': 0.0, 'weight_over': 1.0}, weights)['overlap'] is False
+    assert pages.weight_card(POLL, None) == {'factors': card['factors'], 'has_part': False, 'today': None, 'status': None, 'overlap': False}
+
+
+def test_poll_kpis_title_fieldwork_and_sheet():
+    # the rating and the weight of the poll, at the head of the weight card (Luis, 2026-11-09)
+    kpis = pages.poll_kpis(POLL)
+    assert [(k['label'], k['value'], k['unit']) for k in kpis] == [('Rating', '64,2', ''), ('Peso en el promedio', '0,84', '')]
+    assert kpis[0]['color'] == pages.gradient(64.23, 0, 100, pages.RATING_COLORS)
+    assert pages.poll_kpis(POLL | {'rating': None, 'weight': None})[0]['color'] is None
+    assert [k['value'] for k in pages.poll_kpis(POLL | {'rating': None, 'weight': None})] == ['–', '–']
+    assert pages.poll_title(POLL) == 'NC Report para La Razón' and pages.poll_title(POLL | {'sponsor': None}) == 'NC Report'
+    assert pages.fieldwork_text(POLL) == '5 nov 2026 – 7 nov 2026'
+    assert pages.fieldwork_text(POLL | {'end_date': None}) == '5 nov 2026' and pages.fieldwork_text({'date': '2026-11-09'}) is None
+    sheet = pages.sheet_rows(POLL, '/casas/nc-report', 'Elecciones generales · 29 nov 2026')
+    assert [row['label'] for row in sheet] == ['Encuestadora', 'Medio', 'Tipo', 'Trabajo de campo', 'Muestra', 'Rating', 'Peso',
+                                               'Elección']  # neither the source nor the model update (Luis, 2026-11-09)
+    assert sheet[0] == {'label': 'Encuestadora', 'text': 'NC Report', 'href': '/casas/nc-report'}
+    assert sheet[3]['text'] == '5 nov 2026 – 7 nov 2026'
+    assert all(row['label'] != 'Fuente' for row in sheet)  # no source row (Luis, 2026-11-09)
+    assert pages.sheet_rows({'date': '2026-11-09', 'pollster': 'X'}, '/casas/x', 'E')[3]['text'] == '9 nov 2026'  # the poll's date is its last fieldwork day
+
+
+def test_rating_badge_colours_the_rating_of_the_house():
+    assert pages.rating_badge(POLL) == {'text': '64,2', 'color': pages.gradient(64.23, 0, 100, pages.RATING_COLORS), 'width': 64.2}
+    assert pages.rating_badge(POLL | {'rating': 104.0})['width'] == 100.0
+    assert pages.rating_badge(POLL | {'rating': None}) is None and pages.rating_badge(POLL | {'rating': float('nan')}) is None
+
+
+def test_lead_drops_a_missing_sample():
+    """Sin muestra, la entradilla de la tarjeta no la nombra (nunca «– entrevistas», revisión final 2026-11-09)."""
+    for sample in (None, float('nan'), 0):
+        assert pages.sample_text(POLL | {'sample_size': sample}) is None
+    assert pages.sample_text(POLL | {'sample_size': 1200}) == '1.200 entrevistas'
+
+
+PREV_POLLS = [
+    {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo', 'PP': 33.0},
+    {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 31.0},
+    {'date': '2026-09-20', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 30.0},
+    {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 30.5},
+    {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'PP': 30.8},
+    {'date': '2026-10-04', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'ABC', 'PP': 29.0},
+    {'date': '2026-10-04', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': None, 'PP': 28.0},
+]
+
+
+def test_previous_poll_is_the_last_earlier_delivery_of_the_same_house_and_sponsor():
+    poll = PREV_POLLS[1]
+    assert pages.previous_poll(PREV_POLLS, poll)['PP'] == 30.8  # same day of 28 sep: the later one in the part
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[0]) is None  # El Mundo: no earlier delivery for that sponsor
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[2]) is None  # the first of the cycle
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[4])['PP'] == 30.5  # same date earlier in the part
+    assert pages.previous_poll(PREV_POLLS, PREV_POLLS[3])['PP'] == 30.0
+    assert pages.previous_poll([], poll) is None
+
+
+def test_previous_poll_keys_the_house_like_its_chart_and_the_sponsor_by_its_slug():
+    """La casa, como el gráfico de la casa: por `pollster_id` y, si el sondeo no lo tiene, por el nombre (dos casas sin id
+    con el mismo medio no se mezclan); el medio, por su slug, como `find_poll` y las URL (revisión final 2026-11-09)."""
+    polls = [
+        {'date': '2026-09-20', 'pollster_id': None, 'pollster': 'Hamalgama', 'sponsor': 'OKDiario', 'PP': 30.0},
+        {'date': '2026-09-25', 'pollster_id': None, 'pollster': 'Data10', 'sponsor': 'OKDiario', 'PP': 31.0},
+        {'date': '2026-10-02', 'pollster_id': None, 'pollster': 'Hamalgama', 'sponsor': 'OKDiario', 'PP': 32.0},
+        {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El mundo', 'PP': 33.0},
+        {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo', 'PP': 34.0},
+        {'date': '2026-10-06', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo Hoy', 'PP': 35.0},
+    ]
+    assert pages.previous_poll(polls, polls[2])['PP'] == 30.0  # not Data10's delivery of 25 sep for the same outlet
+    assert pages.previous_poll(polls, polls[1]) is None
+    assert pages.previous_poll(polls, polls[4])['PP'] == 33.0  # «El Mundo» and «El mundo» are the same outlet
+    assert pages.previous_poll(polls, polls[5]) is None
+
+
+def test_fieldwork_overlaps_compares_the_last_day_of_the_previous_with_the_first_of_the_poll():
+    poll = {'date': '2026-10-14', 'start_date': '2026-10-01', 'end_date': '2026-10-14'}
+    assert pages.fieldwork_overlaps({'date': '2026-10-08', 'start_date': '2026-10-01', 'end_date': '2026-10-08'}, poll)
+    assert pages.fieldwork_overlaps({'date': '2026-10-01'}, poll)  # without end_date, its date; the same day counts
+    assert not pages.fieldwork_overlaps({'date': '2026-09-30', 'end_date': '2026-09-30'}, poll)
+    assert not pages.fieldwork_overlaps({'date': '2026-10-08'}, {'date': '2026-10-14'})  # without start_date: unknown
+    assert not pages.fieldwork_overlaps({'date': None, 'end_date': float('nan')}, poll)
+
+
+def test_vote_rows_compare_with_the_previous_delivery():
+    poll = {'PP': 32.6, 'PSOE': 25.6, 'UP': 1.2, 'seats': {'PP': [136, 138], 'PSOE': [99, 101]}}
+    previous = {'PP': 31.4, 'PSOE': 25.6, 'seats': {'PP': [130, 134]}}
+    rows = pages.vote_rows(poll, ['PP', 'PSOE', 'UP'], {}, previous=previous)
+    assert [(r['name'], r['change'], r['seats_change']) for r in rows] == [('PP', 1.2, 5), ('PSOE', 0.0, None), ('UP', None, None)]
+    assert all(r['change'] is None for r in pages.vote_rows(poll, ['PP'], {}))
+
+
+DETAIL_POLLS = [
+    {'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'start_date': '2026-10-01', 'end_date': '2026-10-04',
+     'sample_size': 2000, 'mtype': 'cati', 'rating': 71.2, 'weight': 1.265, 'weight_over': 1.0, 'weight_sample': 1.265,
+     'weight_rating': 1.0, 'url': 'https://www.elmundo.es/sondeo', 'PP': 33.5, 'seats': {'PP': [150, 152]}},
+    {'date': '2026-09-24', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'El Mundo', 'sample_size': 1000, 'rating': 71.2,
+     'weight': 0.8, 'PP': 32.0},
+    {'date': '2026-10-01', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': 1200, 'rating': 80.0, 'weight': 0.9, 'PP': 32.4},
+    {'date': '2026-10-01', 'pollster_id': 3, 'pollster': 'GAD3', 'sponsor': 'El Mundo', 'sample_size': 1200, 'rating': 80.0, 'weight': 0.9, 'PP': 32.9},
+    {'date': '2026-10-03', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': 'Tracking', 'sample_size': 500, 'rating': 71.2,
+     'weight': 0.0, 'weight_over': 0.0, 'weight_sample': 0.6, 'weight_rating': 1.0, 'PP': 33.0},
+    {'date': '2026-09-28', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'sample_size': 1500, 'rating': 71.2,
+     'weight': 1.0, 'PP': 32.1, 'seats': {'PP': [146, 148]}},
+]
+
+
+def write_detail_polls(fs, polls=DETAIL_POLLS, scope='es', run_id=RUN):
+    """La parte `polls` del run con `polls` (sólo el PP, como el fixture), una serie de tres días alrededor de ellos y una
+    parte `weights` leída el 8 de octubre cuya recta empieza el 26 de septiembre, con la fila del sondeo del día 5."""
+    writer = bundle.BundleWriter(fs)
+    part = fixture_data('polls') | {'polls': polls}
+    writer.write_json(bundle.path_part(scope, run_id, 'polls'), 'polls', part, scope, run_id=run_id)
+    # from the fixture's series, so the part keeps every key of its schema (`blocks`, `first_polls` since 2026-11-09)
+    series = fixture_data('series') | {
+        'dates': ['2026-09-20', '2026-10-01', '2026-10-05'], 'parties': ['PP'], 'mean': {'PP': [31.0, 31.5, 32.0]},
+        'lo': {'PP': [30.0, 30.5, 31.0]}, 'hi': {'PP': [32.0, 32.5, 33.0]}}
+    writer.write_json(bundle.path_part(scope, run_id, 'series'), 'series', series, scope, run_id=run_id)
+    weights = fixture_data('weights') | {
+        'date': '2026-10-08', 'parties': ['PP'],
+        'rows': [{'name': 'PP', 'date': '2026-10-05', 'pollster_id': 1, 'pollster': 'Sigma Dos', 'sponsor': None, 'sample_size': 2000,
+                  'pct': 33.5, 'pct_adj': 33.2, 'weight': 1.24, 'weight_kernel': 0.98, 'weight_over': 1.0, 'weight_sample': 1.265,
+                  'weight_rating': 1.0}],
+        'line': {'PP': {'dates': ['2026-09-26', '2026-10-08'], 'mean': [31.2, 32.0], 'lo': [30.2, 31.0], 'hi': [32.2, 33.0]}},
+    }
+    writer.write_json(bundle.path_part(scope, run_id, 'weights'), 'weights', weights, scope, run_id=run_id)
+    webapi.site().files.clear()
+    return writer
+
+
+def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
+    write_detail_polls(fresh_app.fs)
+    status, headers, body = call(api, '/es/sondeos/2026-10-05/sigma-dos')
+    page = html(body)
+    assert status == 200 and headers['cache-control'] == 'public, max-age=60'
+    assert '<title>Demoscopio · Sigma Dos · 5 oct 2026 · Elecciones generales 2026</title>' in page
+    assert '<link rel="canonical" href="https://demoscopio.es/es/sondeos/2026-10-05/sigma-dos">' in page
+    assert 'id="event-bar"' in page and 'href="/es?mode=forecast#promedio"' in page  # the index goes back to the event page
+    assert '<a href="/es?mode=forecast#tabla">← Todas las encuestas</a>' in page
+    for card in ('poll-card', 'vote', 'weight', 'house', 'sheet', 'closing'):
+        assert 'id="%s"' % card in page
+    assert 'class="card shot poll-card"' in page and 'data-file="demoscopio-sondeo-es-2026-10-05-sigma-dos.png"' in page
+    assert 'id="poll-bars"' in page and 'id="poll-hemi"' in page and 'Escaños según Sigma Dos' in page
+    assert 'Trabajo de campo 1 oct 2026 – 4 oct 2026' in page and '2.000' in page and 'ublicad' not in page  # the date is the last fieldwork day
+    assert pages.mtype_label('cati') in page
+    # the card: the poll and its change against the previous delivery, never the average (Luis, 2026-11-09); the previous
+    # delivery has no fieldwork dates: its date, as the last day of its fieldwork
+    card = page[page.index('id="poll-card"'):page.index('id="vote"')]
+    assert '<p class="muted pc-note">Flechas: frente al sondeo anterior de Sigma Dos (campo hasta el 28 sept 2026).</p>' in card
+    assert 'En gris' not in card
+    assert 'class="kpis"' not in card and 'promedio' not in card and 'Distancia' not in card
+    # under the election, the rating of the house: its figure in the colour of the badge of the polls table and a 0-100
+    # bar, the label linking the path of the rating in its profile (Luis, 2026-11-09)
+    color = pages.gradient(71.2, 0, 100, pages.RATING_COLORS)
+    gauge = ' '.join(card[card.index('<p class="pc-gauge">'):card.index('</p>', card.index('<p class="pc-gauge">'))].split())
+    assert gauge == ('<p class="pc-gauge"><a class="lbl" href="/casas/sigma-dos#path" title="Cómo ha llegado Sigma Dos a este rating">Rating '
+                     'de Sigma Dos:</a> <span class="val"><b style="color: %s">71,2</b>/100</span> <span class="bar" aria-hidden="true"><i style="width: 71.2%%; '
+                     'background: %s"></i></span>' % (color, color))
+    assert card.index('class="pc-event"') < card.index('class="pc-gauge"') < card.index('id="poll-bars"')
+    assert 'En el hemiciclo, el cambio de los escaños compara el punto medio de las dos horquillas.' in ' '.join(card.split())
+    # the table of the vote and the weight card share a row
+    assert page.index('<div class="poll-pair">') < page.index('id="vote"') < page.index('id="weight"') < page.index('id="house"')
+    assert '2.000 entrevistas · ' in card and 'El arco gris, «Otros», completa la cámara' in card
+    assert ('<meta name="description" content="Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: '
+            'voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio.">') in page
+    # the table: % Voto, vs Anterior, Escaños and vs Anterior (midpoints of the ranges); nothing of the average nor of the
+    # house effect (Luis, 2026-11-09)
+    vote = page[page.index('id="vote"'):page.index('id="weight"')]
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', vote)
+    assert heads == ['Partido', '% Voto', 'vs Anterior', 'Escaños', 'vs Anterior']
+    row = re.search(r'<tr>\s*<td title="[^"]*"><span class="pn">.*?</tr>', vote, re.S).group(0)
+    cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
+    assert cells[1:4] == ['33,5', '<span class="dlt up">▲ 1,4</span>', '150–152'] and '▲ 4' in cells[4] and len(cells) == 5
+    assert 'Promedio' not in vote and 'Diferencia' not in vote
+    assert ('Anterior: <a href="/es/sondeos/2026-09-28/sigma-dos?mode=forecast">sondeo de Sigma Dos, campo hasta el '
+            '28 sept 2026</a>.') in vote
+    vote_flat = ' '.join(vote.split())
+    assert 'Las columnas «vs Anterior» comparan con la entrega anterior de la misma casa para el mismo medio' in vote_flat
+    assert 'En los escaños se compara el punto medio de cada horquilla.' in vote_flat
+    assert 'Efecto de casa' not in vote and 'efecto de casa' not in vote_flat
+    # the rating and the weight, at the head of the weight card, over the three factors
+    weight = page[page.index('id="weight"'):page.index('id="house"')]
+    assert '>Rating<' in weight and '>71,2<' in weight and '>Peso en el promedio<' in weight and '>1,27<' in weight
+    assert '>F(solape)<' in weight and '>F(muestra)<' in weight and '>F(rating)<' in weight
+    assert weight.index('>Rating<') < weight.index('>F(solape)<') and 'En el promedio del 8 oct 2026' in weight
+    sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
+    assert '<a href="/casas/sigma-dos">Sigma Dos</a>' in sheet and 'elmundo.es' not in page and 'Fuente' not in sheet
+    assert '<h2><a href="/casas/sigma-dos">Sigma Dos</a></h2>' in page  # the house in the heading of the card links its profile
+    assert 'id="poll-house-chart"' in page and 'id="house-chart"' not in page  # not the square bullseye of the other pages
+    assert 'data-file="demoscopio-encuestadora-es-sigma-dos-2026-10-05.png"' in page
+    assert '/dist/js/pages/sondeo.js' in page  # the module that draws the charts
+    assert_public_wording(page, 'sondeo')
+    data = initial(body)
+    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'previous', 'seats',
+                         'n_seats', 'majority'}
+    assert data['previous'] == {'values': {'PP': 32.1}, 'seats': {'PP': [146, 148]}}
+    assert [p['date'] for p in data['polls']['polls']] == ['2026-10-05', '2026-09-24', '2026-10-03', '2026-09-28']  # only the house's polls, in the order of the part
+    assert data['poll']['PP'] == 33.5 and data['seats'] == {'PP': [150, 152]}
+    assert data['n_seats'] == 350 and data['majority'] == 176
+
+
+def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
+    write_detail_polls(fresh_app.fs)
+    page = html(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])
+    assert 'Sigma Dos para El Mundo' in page and 'id="poll-hemi"' not in page and 'Sigma Dos no publicó escaños con este sondeo' in page
+    # without seats nor a previous delivery: the note says so, and the table has only the vote (and the house effect)
+    # without a previous delivery the card has no note of the arrows; the missing seats are said apart
+    card = page[page.index('id="poll-card"'):page.index('id="vote"')]
+    assert 'Flechas' not in card and 'Primer sondeo' not in card
+    assert '<p class="muted pc-note">Sigma Dos no publicó escaños con este sondeo.</p>' in card
+    # without a previous delivery the charts write no change at all, not even a dash: the island carries none
+    assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['previous'] is None
+    assert 'vs Anterior' not in page and 'Las columnas «vs Anterior»' not in page and 'El arco gris' not in page
+    assert 'Primer sondeo de Sigma Dos para El Mundo en este ciclo: no hay entrega anterior con la que comparar.' in page
+    description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
+    assert description.endswith(': voto por partido, rating y peso en el promedio.') and 'escaños' not in description
+    vote = page[page.index('id="vote"'):page.index('id="weight"')]
+    assert '<th scope="col">Escaños</th>' not in vote and 'Promedio' not in vote
+    weight = page[page.index('id="weight"'):page.index('id="house"')]
+    assert weight.count('>–<') >= 3 and 'ya no pesa en el promedio del 8 oct 2026' in weight  # before the line starts (26 sep)
+    assert initial(call(api, '/es/sondeos/2026-09-24/sigma-dos/el-mundo')[2])['seats'] is None
+    # inside the window but without a row: no claim about the window
+    inside = html(call(api, '/es/sondeos/2026-10-01/gad3/abc')[2])
+    assert 'no entra en la recta del promedio del 8 oct 2026' in inside and 'ventana' not in inside[inside.index('id="weight"'):inside.index('id="house"')]
+    # a poll of weight 0 (an overlapping wave): never «fuera de la ventana»
+    zero = html(call(api, '/es/sondeos/2026-10-03/sigma-dos/tracking')[2])
+    assert 'no entra en el promedio: su peso es 0' in zero and 'se solapa con otro sondeo de la misma casa' in zero and 'ventana' not in zero[zero.index('id="weight"'):zero.index('id="house"')]
+
+
+def test_sondeo_page_names_the_fieldwork_of_the_previous_delivery_and_its_overlap(api, fresh_app):
+    """El pie de la tabla da el campo de la entrega anterior y avisa cuando comparte días de campo con este sondeo, como
+    las oleadas de un tracking; sin cambio de escaños, un guion; sin cifra en la anterior, la columna vacía (revisión
+    final 2026-11-09; la tarjeta ya no compara, Luis 2026-11-09)."""
+    overlap = dict(DETAIL_POLLS[5], date='2026-10-02', start_date='2026-09-28', end_date='2026-10-02', seats={'PP': [150, 152]})
+    write_detail_polls(fresh_app.fs, polls=DETAIL_POLLS[:5] + [overlap])
+    page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
+    vote = page[page.index('id="vote"'):page.index('id="weight"')]
+    assert ('Anterior: <a href="/es/sondeos/2026-10-02/sigma-dos?mode=forecast">sondeo de Sigma Dos, campo 28 sept 2026 – '
+            '2 oct 2026</a>, con días de campo en común.') in vote
+    assert 'parte de las entrevistas pueden ser las mismas' in ' '.join(vote.split())
+    assert '<td>150–152</td>' in vote and '▲ 4' not in vote and '<td><span class="dlt flat">–</span></td>' in vote  # 151 → 151
+    assert '▲ 1,4' in vote  # 32,1 → 33,5
+    assert ('<p class="muted pc-note">Flechas: frente al sondeo anterior de Sigma Dos (campo 28 sept 2026 – 2 oct 2026), con días '
+            'de campo en común.</p>') in page
+    assert_public_wording(page, 'sondeo con anterior solapada')
+
+    # a previous delivery whose fieldwork ends before this one starts, and without a figure for the PP
+    before = {key: value for key, value in DETAIL_POLLS[5].items() if key != 'PP'} | {
+        'start_date': '2026-09-25', 'end_date': '2026-09-28'}
+    write_detail_polls(fresh_app.fs, polls=DETAIL_POLLS[:5] + [before])
+    page = html(call(api, '/es/sondeos/2026-10-05/sigma-dos')[2])
+    vote = page[page.index('id="vote"'):page.index('id="weight"')]
+    assert 'sondeo de Sigma Dos, campo 25 sept 2026 – 28 sept 2026</a>.' in vote and 'en común' not in page
+    row = re.search(r'<tr>\s*<td title="[^"]*"><span class="pn">.*?</tr>', vote, re.S).group(0)
+    cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
+    assert cells[2] == '' and cells[3] == '150–152' and '▲ 4' in cells[4]  # no vote figure before; the seats compare: 147 → 151
+
+
+def test_sondeo_page_of_a_run_without_weights_nor_house_effects(api, fresh_app):
+    """Un run sin las partes `weights` ni `house-effects` (anterior a ellas): la página sale sin la línea del peso del
+    día; la página ya no usa el efecto de casa (Luis, 2026-11-09)."""
+    other = '20261007-120000'
+    write_bundle(fresh_app.fs, run_id=other, manifest=False)
+    write_detail_polls(fresh_app.fs, run_id=other)
+    for name in ('weights', 'house-effects'):
+        fresh_app.fs.remove(os.path.join(bundle.PREFIX, bundle.path_part('es', other, name)))
+    webapi.site().files.clear()
+    for path in ('/es/sondeos/2026-10-05/sigma-dos', '/es/sondeos/2026-09-24/sigma-dos/el-mundo', '/es/sondeos/2026-10-01/gad3/abc'):
+        status, _, body = call(api, path, query='run=' + other)
+        page = html(body)
+        assert status == 200, path
+        weight = page[page.index('id="weight"'):page.index('id="house"')]
+        assert 'En el promedio del' not in weight and 'ya no pesa' not in weight and 'no entra en' not in weight, path
+        assert 'Efecto de casa' not in page, path
+
+
+def test_sondeo_page_without_sample_nor_source(api, fresh_app):
+    """Un sondeo sin muestra: ni «– entrevistas» en la entradilla (revisión final 2026-11-09); y su `url`, sea la que sea,
+    no sale en la página: la ficha no tiene fuente (Luis, 2026-11-09)."""
+    polls = [dict(DETAIL_POLLS[0], sample_size=None, url='javascript:alert(1)')] + DETAIL_POLLS[1:]
+    write_detail_polls(fresh_app.fs, polls=polls)
+    status, _, body = call(api, '/es/sondeos/2026-10-05/sigma-dos')
+    page = html(body)
+    assert status == 200 and 'entrevistas' not in page[page.index('id="poll-card"'):page.index('id="vote"')]
+    assert 'Trabajo de campo 1 oct 2026 – 4 oct 2026 · ' + pages.mtype_label('cati') in page
+    sheet = page[page.index('id="sheet"'):page.index('id="closing"')]
+    assert 'javascript:' not in page and 'Fuente' not in sheet
+
+
+def test_sondeo_page_of_a_run_without_polls_is_not_found(api, fresh_app):
+    """Un run sin la parte `polls`: la página de cualquier sondeo es un 404 «Sondeo no encontrado.»."""
+    other = '20261007-120000'
+    write_bundle(fresh_app.fs, run_id=other, manifest=False)
+    write_detail_polls(fresh_app.fs)
+    fresh_app.fs.remove(os.path.join(bundle.PREFIX, bundle.path_part('es', other, 'polls')))
+    webapi.site().files.clear()
+    status, _, body = call(api, '/es/sondeos/2026-10-05/sigma-dos', query='run=' + other)
+    assert status == 404 and 'Sondeo no encontrado.' in html(body)
+    assert call(api, '/es/sondeos/2026-10-05/sigma-dos')[0] == 200  # the run with the part has the page
+
+
+def test_sondeo_page_errors_and_pinned_run(api, fresh_app):
+    write_detail_polls(fresh_app.fs)
+    assert call(api, '/es/sondeos/2026-10-01/gad3')[0] == 404  # two sponsors that day
+    status, _, body = call(api, '/es/sondeos/2020-01-01/nadie')
+    assert status == 404 and 'Sondeo no encontrado.' in html(body)
+    assert call(api, '/es/sondeos/abc/gad3')[0] == 400 and call(api, '/es-zz/sondeos/2026-10-01/gad3')[0] == 404
+    status, _, body = call(api, '/es/sondeos/2026-10-01/gad3/abc', query='mode=nowcast&run=' + RUN)
+    page = html(body)
+    assert status == 200 and 'GAD3 para ABC' in page
+    assert 'href="/es?mode=nowcast&amp;run=%s#tabla"' % RUN in page and 'href="/es?mode=nowcast&amp;run=%s#escanos"' % RUN in page
+    assert '<link rel="canonical" href="https://demoscopio.es/es/sondeos/2026-10-01/gad3/abc">' in page
+    assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}

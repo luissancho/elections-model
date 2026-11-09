@@ -132,7 +132,20 @@ Serie diaria ajustada de cada partido con sus cotas, hasta `meta.as_of`, el día
 Orientación columnar. Fuente: `Forecaster.forecast` y `Forecaster.fc_stat` (`cmin`, `cmax`).
 
 `data`: `dates`, `parties`, y `mean`, `lo`, `hi` (cada uno `{partido: [valor por fecha]}`; `lo`/`hi` son
-`null` donde no hay estadística). CSV `csv/series.csv`: `date, name, mean, lo, hi` (largo).
+`null` donde no hay estadística), `blocks` y `first_polls`. CSV `csv/series.csv`: `date, name, kind, mean, lo, hi`
+(largo; `kind` es `party` o `block`, los partidos primero).
+
+Enmienda 2026-11-09 (claves adicionales, el contrato sigue en 1):
+
+- `blocks`: `{parties, mean, lo, hi}` con la misma forma y las mismas fechas que los partidos, para Izquierda y
+  Derecha (`meta.bmaps.blocks` sin Otros). Cada bloque se ajusta con el mismo estimador sobre **lo que suman sus
+  partidos en cada sondeo** (`Forecaster.fit_groups`), no sumando las series de los partidos: cuando las
+  encuestadoras empiezan a listar un partido a mitad de ciclo, la suma de las series salta durante meses y la suma
+  por sondeo no. Otros lo sigue calculando la web (100 menos los dos). Un ámbito sin Izquierda o Derecha lleva
+  `parties` vacío; un run anterior no lleva la clave y la web suma los partidos.
+- `first_polls`: `{partido: 'YYYY-MM-DD'}`, los partidos de Izquierda o Derecha cuyo primer sondeo llega al menos
+  90 días después del primero del ciclo, contando las etiquetas que heredan por el `smap` (FA lleva los sondeos de
+  SUMAR, así que no entra). La web marca su entrada en la vista Bloques.
 
 ### `polls`
 
@@ -141,8 +154,11 @@ Sondeos publicados y resultado anterior. Fuente: `Forecaster.fc_series_raw` y `F
 `data`: `parties`, `columns` (`POLL_COLUMNS`), `polls` y `results`.
 
 - `polls`: registros con `date, pollster_id, pollster, sponsor, start_date, end_date, sample_size, mtype,
-  rating, weight` (10 columnas) más una columna por partido en puntos porcentuales. `weight` a 3
-  decimales. Enmienda 2026-10-14 (fase 7c): el sondeo que publica escaños lleva además `seats`,
+  rating, weight, weight_over, weight_sample, weight_rating, url` (14 columnas) más una columna por
+  partido en puntos porcentuales. `weight` a 3 decimales. Enmienda 2026-11-09: `weight_over`, `weight_sample` y
+  `weight_rating` (a 3 decimales; `weight` es su producto) y `url`, la fuente del sondeo tal como la guarda la
+  tabla `polls` (`null` sin ella); los runs anteriores no las traen y la página de un sondeo enseña entonces
+  sólo el peso total. Enmienda 2026-10-14 (fase 7c): el sondeo que publica escaños lleva además `seats`,
   `{partido: [mín, máx]}` (enteros; la encuestadora da un número, `mín = máx`, o una horquilla), solo con los
   partidos que los tienen; los sondeos sin escaños no llevan la clave. Son las cifras de la encuestadora
   (`polls_results.seats_min/seats_max`), no del modelo. Los runs anteriores no las tienen.
@@ -457,7 +473,11 @@ republica; `ban` desde la enmienda 2026-11-05, ver abajo):
   `backtest/results`, normalmente a 6 días), hasta el día en que se congeló el modelo: `horizon` y, con la forma de la
   parte `series` de un run, `dates`, `parties`, `mean`, `lo` y `hi` (2 decimales, `null` en los huecos de la banda).
   Solo existe si el backtest guardó la serie: una elección puede tener `model` y no `series` (la publicada antes de
-  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva.
+  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva. Enmienda
+  2026-11-09: también `blocks` y `first_polls`, como en la parte `series` de un run. `blocks` sale de las filas
+  `kind = block` del `series.csv` del backtest (vacío si el backtest es anterior y no las tiene: la web suma los
+  partidos); `first_polls` se calcula al publicar la elección con los partidos simulados (`parties.event`), sus
+  etiquetas del `smap` y los sondeos del ciclo. El CSV gana la columna `kind`.
 
 `meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
 `pollsters`, `polls`, `cycle` y `results`, los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
@@ -544,7 +564,7 @@ Gemelos CSV:
 
 ### `rebano`
 
-«¿Se comportan las encuestadoras como un rebaño?». Cinco partes, sin `slug`; se calcula con las partes ya publicadas
+«¿Se comportan las encuestadoras como un rebaño?». Seis partes, sin `slug`; se calcula con las partes ya publicadas
 del paquete (los sondeos de cada elección con resultado y el run en vivo de la elección en curso) y no se registra.
 Los estudios con `live` en `publish.STUDY_RUNNERS` (`sesgo-cis`, `rebano`, `voto-oculto` y `andorra`) los
 republica la acción `studies` del publicador y, como último paso, `update`:
@@ -556,6 +576,7 @@ republica la acción `studies` del publicador y, como último paso, `update`:
 | `elections` | `rebano-elections@1` | `rows` (lista) |
 | `current` | `rebano-current@1` | `current` (dict o `null`) |
 | `weeks` | `rebano-weeks@1` | `buckets` (lista de `{lo, hi, label}`, del más lejano al más cercano), `rows` (una por elección y tramo: `{event_date, label, current, lo, hi, pairs, comparisons, ratio}`, `ratio` o `null`), `mean` (lista de `{lo, hi, k, ratio}`) |
+| `chance` | `rebano-chance@1` | `chance` (dict o `null`: sin parejas de sondeos compartidas por los dos tramos) |
 
 - `summary.comparisons` tiene `far_final`, `far_mid` y `mid_final`, cada una `{n, k, sign_p, clear, median_change,
   since_year, pooled, ci}`: elecciones con resultado, las que bajan, la prueba del signo, las que bajan con permutación por debajo
@@ -576,7 +597,19 @@ republica la acción `studies` del publicador y, como último paso, `update`:
   `windows` (`{mid, final}`, el primer día de cada tramo) y `far_mid` y `mid_final` (una fila como las de
   `elections`, sin `kind` ni `comparison`, o `null`).
 
-Gemelos CSV: `elections` y `weeks`, con el nombre de la parte, y `robustness` (de `summary`: una fila por
+- `chance.chance` es la prueba de la hipótesis nula (¿podría ser azar?) del cambio de la separación entre casas: `periods`
+  (`{final, rest}`, cada uno `[desde, hasta]` en días a la elección), `permutations` (barajas), `elections`, `falls`
+  (elecciones que bajan), `pairs`, `rows_a`, `rows_b`, `r_a` y `r_b` (la separación del resto del ciclo y la de las tres
+  últimas semanas, en veces el error de las muestras), `change` (el cambio conjunto de la separación de las mismas
+  parejas de casas entre el resto del ciclo y las tres últimas semanas, `r_b / r_a − 1`), `ci` (el intervalo del 95 %
+  del cambio por bootstrap de las elecciones, `{lo, hi}` o `null`), `count_one` (barajas cuya separación al final, en
+  proporción a la del resto, es igual o menor que la observada: una bajada al menos tan grande, a una cola),
+  `count_two` (barajas con un cambio tan grande como el observado en valor absoluto, en cualquier dirección: a dos
+  colas), `p_one` y `p_two` (`(recuento + 1) / (permutations + 1)`: con recuento 0 son 1 / 20.001 = 0,00005) y `null`
+  (`mean`, `sd`, `min`, `max`, `bin_width` y `bins`: lista de `{lo, hi, count}` que suma `permutations`). Es `null`
+  sin parejas compartidas.
+
+Gemelos CSV: `elections`, `weeks` y `chance` (las cajas `lo`, `hi` y `count` entero de la distribución nula), con el nombre de la parte, y `robustness` (de `summary`: una fila por
 combinación y comparación, con `n` y `k` enteros). `weeks` es largo: una fila por elección y tramo más
 las filas «Media» (`label` «Media», con `event_date`, `pairs` y `comparisons` vacíos).
 
@@ -897,7 +930,7 @@ sobrescriben en cada publicación.
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
-| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`, `voto-oculto`, `andorra`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `elections`, `current`, `weeks`; `voto-oculto`: `meta`, `summary`, `elections`, `groups`; `andorra`: `meta`, `summary`, `pairs`, `elections`, `cells`, `houses`, `latest`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `elections`, `weeks`, `robustness` (`summary`); de `voto-oculto`: `elections`, `groups`; de `andorra`: `pairs`, `elections`, `cells`, `houses`, `latest-polls` (`latest`) |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`, `voto-oculto`, `andorra`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `elections`, `current`, `weeks`, `chance`; `voto-oculto`: `meta`, `summary`, `elections`, `groups`; `andorra`: `meta`, `summary`, `pairs`, `elections`, `cells`, `houses`, `latest`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `elections`, `weeks`, `chance`, `robustness` (`summary`); de `voto-oculto`: `elections`, `groups`; de `andorra`: `pairs`, `elections`, `cells`, `houses`, `latest-polls` (`latest`) |
 
 - `meta`, `placement` y `summary` (salvo el de `rebano`, que tiene `robustness`) no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
   no pertenece a la parte.
