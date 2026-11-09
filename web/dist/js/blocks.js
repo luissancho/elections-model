@@ -36,15 +36,17 @@ function restOf(others, total = 100) {
 }
 
 /**
- * Poll average of every block: the sum of the means of its parties and a band that adds their half-widths in
- * quadrature (independent draws, as the notebook does: the blocks add the variances of their parties).
+ * Poll average of every block: the line the run fitted for it, else the sum of the means of its parties.
  *
- * Per date and block, `mean` is the sum of the non-null means of its parties (null when none has one) and
- * `lo`/`hi` are `mean ∓ sqrt(Σ((hi_i − lo_i) / 2)²)` over the parties with a band on that date. The `REST_BLOCK`,
- * if the map has one, is `100 − Σ` of the other blocks' means (null on a date when any of them is null) with
- * a half-width of `sqrt(Σ half²)` over them.
+ * A block of `series.blocks` (Izquierda and Derecha of the runs published since 2026-11-09) is read as it comes:
+ * fitted on what its parties add up to in every poll, so that it does not jump when pollsters start listing a new
+ * party. Any other block (older runs, or a block the run could not fit) is summed: per date, `mean` is the sum of
+ * the non-null means of its parties (null when none has one) and `lo`/`hi` are `mean ∓ sqrt(Σ((hi_i − lo_i) / 2)²)`
+ * over the parties with a band on that date (independent draws: the blocks add the variances of their parties).
+ * The `REST_BLOCK`, if the map has one, is `100 − Σ` of the other blocks' means (null on a date when any of them
+ * is null) with a half-width of `sqrt(Σ half²)` over them.
  *
- * @param {{dates: string[], mean: object, lo: object, hi: object}} series `data` of the series part
+ * @param {{dates: string[], mean: object, lo: object, hi: object, blocks?: object}} series `data` of the series part
  * @param {Object<string, string[]>} blocks block → party names (`meta.bmaps.blocks`)
  * @returns {{dates: string[], parties: string[], mean: object, lo: object, hi: object}} the block series, with
  *   the block names as `parties`, ready for `renderSeries`
@@ -53,7 +55,15 @@ export function blockSeries(series, blocks) {
   const names = Object.keys(blocks);
   const out = {dates: series.dates, parties: names, mean: {}, lo: {}, hi: {}};
   const others = names.filter((block) => block !== REST_BLOCK);
+  const fitted = series.blocks || {};
   for (const block of others) {
+    if (fitted.mean && fitted.mean[block]) {
+      const at = (key) => series.dates.map((date, i) => ((fitted[key] || {})[block] || [])[i] ?? null);
+      out.mean[block] = at('mean');
+      out.lo[block] = at('lo');
+      out.hi[block] = at('hi');
+      continue;
+    }
     const members = blocks[block];
     out.mean[block] = [];
     out.lo[block] = [];

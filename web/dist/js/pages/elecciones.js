@@ -497,7 +497,7 @@ function wireAverageCard(initial, catalog) {
       parties: current.parties, selected: chartState.selected ?? current.defaults, colors: current.colors,
       asOf: dates[dates.length - 1], asOfLabel: `A ${initial.series.horizon} días`, when,
       window: chartState.window, anchor: when, legend: 'hidden', layers: chartState.layers,
-      breakdown: current.breakdown || null,
+      breakdown: current.breakdown || null, marks: current.marks || [],
     };
   };
   const render = (el, pollsOfChart, chartState) => renderSeries(el, dataOf(pollsOfChart, chartState));
