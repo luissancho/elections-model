@@ -250,6 +250,7 @@ function wireSeries(initial, catalog) {
       legend: 'hidden',
       layers: chartState.layers,
       breakdown: current.breakdown || null,
+      marks: current.marks || [],
     };
   }
 

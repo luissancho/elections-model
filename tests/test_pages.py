@@ -1298,6 +1298,62 @@ def test_promedios_hides_the_blocks_view_without_blocks(api, fresh_app):
     page = html(call(api, '/es-md')[2])
     assert 'name="view"' not in page and 'name="pview"' not in page and 'id="series-window"' in page
 
+
+def test_round_series_rounds_the_fitted_blocks_and_keeps_the_entries():
+    series = {'dates': ['d'], 'parties': ['PP'], 'mean': {'PP': [30.123]}, 'lo': {}, 'hi': {},
+              'blocks': {'parties': ['Derecha'], 'mean': {'Derecha': [45.678]}, 'lo': {'Derecha': [None]},
+                         'hi': {'Derecha': [46.111]}},
+              'first_polls': {'SALF': '2024-06-06'}}
+    out = pages.promedios.round_series(series)
+    assert out['blocks']['mean']['Derecha'] == [45.68] and out['blocks']['lo']['Derecha'] == [None]
+    assert out['blocks']['parties'] == ['Derecha'] and out['blocks']['hi']['Derecha'] == [46.11]
+    assert out['first_polls'] == {'SALF': '2024-06-06'} and series['blocks']['mean']['Derecha'] == [45.678]
+    assert 'blocks' not in pages.promedios.round_series({'dates': [], 'parties': [], 'mean': {}, 'lo': {}, 'hi': {}})
+
+
+def test_blocks_paragraph_of_a_run_without_fitted_blocks_keeps_the_sum(api):
+    """Un run sin bloques ajustados (anterior al 2026-11-09) se sigue describiendo como se dibuja: la suma."""
+    page = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
+    assert page.count('cada bloque suma sus partidos') == 2 and 'no la suma de sus promedios' not in page
+
+
+def test_blocks_paragraph_follows_the_published_series(api, fresh_app):
+    """Luis, 2026-11-09: el párrafo de la vista Bloques dice cómo se dibuja la línea del run que se ve: ajustada sobre
+    la suma por sondeo cuando la serie trae los bloques, la suma de los partidos cuando no (runs anteriores). La
+    tarjeta de la Evolución sigue sumando los partidos de cada run y conserva su frase. Las partes de un run se
+    guardan en caché al leerlas: la serie se reescribe antes de la primera visita."""
+    series = fixture_data('series')
+    series['blocks'] = {'parties': ['Derecha'], 'mean': {'Derecha': [40.]}, 'lo': {'Derecha': [39.]},
+                        'hi': {'Derecha': [41.]}}
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'series'), 'series', series, 'es',
+                                                 run_id=RUN)
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/es')[2])
+    text = re.sub(r'\s+', ' ', page)
+    assert 'no la suma de sus promedios' in text and 'una línea discontinua lo marca' in text
+    assert text.count('cada bloque suma sus partidos') == 1          # la de la Evolución sigue
+    assert_public_wording(page, '/es')
+
+
+def test_event_blocks_paragraph_without_fitted_blocks_keeps_the_sum(events_site):
+    text = re.sub(r'\s+', ' ', html(call(events_site, '/elecciones/es/generales/2023-07')[2]))
+    assert 'cada bloque suma sus partidos' in text and 'no la suma de sus promedios' not in text
+
+
+def test_event_blocks_paragraph_follows_the_published_series(events_site, fresh_app):
+    """El mismo párrafo en el promedio del detalle de una elección, cuando su serie trae los bloques."""
+    path = '/elecciones/es/generales/2023-07'
+    writer = bundle.BundleWriter(fresh_app.fs)
+    part = writer.read_json(bundle.path_event('es', '2023-07-23', 'series'))['data']
+    part['blocks'] = {'parties': ['Derecha'], 'mean': {'Derecha': [40.] * len(part['dates'])},
+                      'lo': {'Derecha': [None] * len(part['dates'])}, 'hi': {'Derecha': [None] * len(part['dates'])}}
+    writer.write_json(bundle.path_event('es', '2023-07-23', 'series'), 'event-series', part, 'es')
+    page = html(call(events_site, path)[2])
+    text = re.sub(r'\s+', ' ', page)
+    assert 'no la suma de sus promedios' in text and 'cada bloque suma sus partidos' not in text
+    assert_public_wording(page, path)
+
+
 def test_pollster_options_and_round_series():
     polls = [{'pollster': 'GAD3'}, {'pollster': 'CIS'}, {'pollster': 'GAD3'}, {'pollster': 'Sigma Dos'},
              {'pollster': 'CIS'}, {'pollster': 'Arce'}, {'pollster': None}]

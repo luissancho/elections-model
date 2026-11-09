@@ -16,6 +16,7 @@ from .analysis import export_poll_errors
 from .backtest import BACKTEST_FILES, backtest_source, export_backtest_table
 from .common import NothingToPublish, PCT_DECIMALS, provenance, PublishRefused, REPO_ROOT, round_cols, _iso_dates, _iso_day, _today, _weighted_mean
 from .forecast import export_poll_rows, POLL_COLUMNS
+from ..utils import first_poll_dates, party_entries, REST_BLOCK, web_blocks
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -287,7 +288,7 @@ def export_event_model(source: Optional[str], event_date: str) -> tuple:
     return data, frames
 
 
-def export_event_series(source: Optional[str], event_date: str) -> tuple:
+def export_event_series(source: Optional[str], event_date: str, first_polls: Optional[dict] = None) -> tuple:
     """Slice the daily series of the model backtest (``series.csv``) to one election.
 
     Parameters
@@ -297,14 +298,18 @@ def export_event_series(source: Optional[str], event_date: str) -> tuple:
         of the election there is nothing to publish.
     event_date : str
         Election date, ``YYYY-MM-DD``.
+    first_polls : dict, optional
+        Entries of parties halfway through the cycle (``event_entries``), published as they come.
 
     Returns
     -------
     tuple
         ``(data, frame)``: the data for the ``event-series`` schema (``horizon``, the shortest horizon found,
         ``dates`` ascending, ``parties`` by first appearance and ``mean``, ``lo`` and ``hi`` by party, aligned
-        to ``dates`` with ``None`` in the gaps, rounded to ``PCT_DECIMALS``) and its long-format CSV twin
-        (``date``, ``name``, ``mean``, ``lo``, ``hi``, by party then date); ``(None, None)`` without a series.
+        to ``dates`` with ``None`` in the gaps, rounded to ``PCT_DECIMALS``; ``blocks``, the same for the rows of
+        ``kind`` ``block``, empty when the backtest has none; ``first_polls``) and its long-format CSV twin
+        (``date``, ``name``, ``kind``, ``mean``, ``lo``, ``hi``, by party then date, then the blocks); ``(None,
+        None)`` without a series. A row without ``kind`` (tables written before 2026-11-09) is a party.
     """
     source = _source(source)
     path = _results_path(source[1], 'series.csv') if source else None
@@ -316,21 +321,99 @@ def export_event_series(source: Optional[str], event_date: str) -> tuple:
         return None, None
 
     horizon = int(table['horizon'].min())
-    table = table.loc[table['horizon'] == horizon, ['date', 'name', 'mean', 'lo', 'hi']]
+    kind = table['kind'].fillna('party') if 'kind' in table.columns else 'party'
+    table = table.assign(kind=kind)
+    table = table.loc[table['horizon'] == horizon, ['date', 'name', 'kind', 'mean', 'lo', 'hi']]
     table = round_cols(table.assign(date=table['date'].astype(str)), pct=['mean', 'lo', 'hi'])
-    dates = sorted(table['date'].unique())
-    parties = list(dict.fromkeys(table['name']))
-    frame = pd.concat([table.loc[table['name'] == name].sort_values('date') for name in parties], ignore_index=True)
+    is_party = table['kind'] != 'block'
+    dates = sorted(table.loc[is_party, 'date'].unique())
+    parties = list(dict.fromkeys(table.loc[is_party, 'name']))
+    blocks = list(dict.fromkeys(table.loc[~is_party, 'name']))
+    frame = pd.concat([table.loc[is_party & (table['name'] == name)].sort_values('date') for name in parties]
+                      + [table.loc[~is_party & (table['name'] == name)].sort_values('date') for name in blocks],
+                      ignore_index=True)
 
-    def column(name, col):
-        """Values of ``col`` of a party aligned to ``dates`` (``None`` where the party has no row)."""
-        values = frame.loc[frame['name'] == name].set_index('date')[col].reindex(dates)
+    def column(name, col, kind):
+        """Values of ``col`` of a party or block aligned to ``dates`` (``None`` where it has no row)."""
+        rows = frame.loc[(frame['name'] == name) & (frame['kind'] == kind)]
+        values = rows.set_index('date')[col].reindex(dates)
         return [None if pd.isna(value) else float(value) for value in values]
 
     data = {'horizon': horizon, 'dates': dates, 'parties': parties,
-            **{col: {name: column(name, col) for name in parties} for col in ('mean', 'lo', 'hi')}}
+            **{col: {name: column(name, col, 'party') for name in parties} for col in ('mean', 'lo', 'hi')},
+            'blocks': {'parties': blocks,
+                       **{col: {name: column(name, col, 'block') for name in blocks} for col in ('mean', 'lo', 'hi')}},
+            'first_polls': dict(first_polls or {})}
 
     return data, frame
+
+
+def event_entries(comp, event_date: str, polls: pd.DataFrame, known: Optional[Sequence] = None) -> dict:
+    """Parties of Izquierda or Derecha that pollsters started listing halfway through the cycle of a past election.
+
+    The same rule as the ``first_polls`` of a run (``utils.party_entries``): the simulated parties of the election
+    (``parties.event``, the ones the backtest fits the blocks with), each with the poll labels it inherits through
+    the source map (``Simulator.poll_blocks``), over the polls of the cycle.
+
+    Parameters
+    ----------
+    comp : Computer
+        Computer of the election, with its ``event_params``.
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+    polls : pandas.DataFrame
+        Polls of the cycle (``Computer.filter_polls``), with a ``date`` level and the poll labels as columns.
+    known : sequence, optional
+        Parties with a result in the previous election (``previous_parties``): never new.
+
+    Returns
+    -------
+    dict
+        ``{party: 'YYYY-MM-DD'}``, ascending by date; empty when the election lacks parties, blocks or polls.
+    """
+    from ..simulator import Simulator  # lazy, as elsewhere in the package
+
+    params = (getattr(comp, 'event_params', None) or {}).get(event_date) or {}
+    names = list((params.get('parties') or {}).get('event') or [])
+    bmap = web_blocks((params.get('bmaps') or {}).get('vs') or {}, names) if names else None
+    if not bmap or polls is None or polls.empty:
+        return {}
+    members = [name for block, group in bmap.items() if block != REST_BLOCK for name in group]
+    labels = Simulator.poll_blocks(names, params.get('smap') or {})
+    every = list(dict.fromkeys(label for name in members for label in labels.get(name, [name])))
+
+    return party_entries(first_poll_dates(polls, every), members, labels, known=known)
+
+
+def previous_parties(table: pd.DataFrame, event_date: str, results: Callable, scope: str) -> list:
+    """Parties with votes in the election before ``event_date`` (``table`` of ``get_events``; none without one).
+
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Elections of the scope (``date``, ``has_results``).
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+    results : callable
+        ``get_event_results(scope, date, region)``.
+    scope : str
+        Scope of the election.
+
+    Returns
+    -------
+    list
+        Names of the parties of the previous election with votes, nationwide (region 0).
+    """
+    dates = _iso_dates(table['date'])
+    before = sorted(d for d, has in zip(dates, table['has_results'].astype(bool)) if has and d < event_date)
+    if not before:
+        return []
+    previous = results(scope, before[-1], 0)
+    if previous is None or previous.empty or 'party' not in previous.columns:
+        return []
+    votes = previous['votes'] if 'votes' in previous.columns else pd.Series(1, index=previous.index)
+
+    return [str(p) for p in previous.loc[votes.fillna(0).to_numpy() > 0, 'party']]
 
 
 def event_summary(frame: pd.DataFrame, blocks: Sequence[str]) -> dict:
@@ -540,7 +623,8 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     src = backtest_source(scope, source)
     model, model_frames = export_event_model(src, event_date)
     seconds['model'] = lap()
-    series_data, series_frame = export_event_series(src, event_date)
+    known = previous_parties(table, event_date, results or get_event_results, scope)
+    series_data, series_frame = export_event_series(src, event_date, event_entries(comp, event_date, cycle, known))
     seconds['series'] = lap()
     live_meta = bundle.path_event(scope, event_date, 'meta')
     live_model = writer.exists(live_meta) and bool(writer.read_json(live_meta)['data'].get('has_model'))

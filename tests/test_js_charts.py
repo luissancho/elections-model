@@ -517,9 +517,41 @@ def test_series_tooltip_of_a_block_breaks_it_down_into_its_parties():
     assert lines[2].endswith('VOX 10,0') and len(lines) == 3
     rest = run_js(tip % (BREAKDOWN_ARGS, 'Otros', 'Otros')).split('<br>')
     assert rest[1].endswith('PNV 2,0') and rest[2].endswith('Resto 10,0') and len(rest) == 3
+    # a fitted block line can differ from the sum of its parties: that is not a missing party, no «Resto» outside Otros
+    fitted = BREAKDOWN_ARGS.replace('mean: {Derecha: [40, 41]', 'mean: {Derecha: [40, 42.5]')
+    lines = run_js(tip % (fitted, 'Derecha', 'Derecha')).split('<br>')
+    assert len(lines) == 3 and not any('Resto' in line for line in lines)
     # without a breakdown the box is the line of the day alone
     plain = run_js(tip % (BREAKDOWN_ARGS.replace("breakdown: {", "nobreakdown: {"), 'Derecha', 'Derecha'))
     assert '<br>' not in plain
+
+
+def test_series_draws_the_entries_as_dashed_marks_at_the_foot():
+    """Cada entrada de un partido es una línea discontinua más de la serie de marcas, con su rótulo al pie para no
+    pisar los de «Estimación» y «Elección»."""
+    args = BREAKDOWN_ARGS.replace("breakdown: {", "marks: [{date: '2026-10-01', label: 'Entra SALF'}], breakdown: {")
+    option = run_js('s.seriesOption(%s)' % args)
+    marks = next(x for x in option['series'] if x['name'] == 'marks')['markLine']['data']
+    entry = next(m for m in marks if m['label']['formatter'] == 'Entra SALF')
+    # dentro del gráfico, en vertical junto a su línea: ni sobre las fechas del eje ni encima de otra entrada cercana
+    assert entry['label']['position'] == 'insideEndTop' and len(marks) == 2      # «Estimación» y la entrada
+    plain = run_js('s.seriesOption(%s)' % BREAKDOWN_ARGS)
+    assert len(next(x for x in plain['series'] if x['name'] == 'marks')['markLine']['data']) == 1
+
+
+def test_series_views_mark_the_entries_only_in_the_blocks_view():
+    """La vista Bloques lleva las entradas de `first_polls` ordenadas por fecha; la de Partidos, ninguna."""
+    initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'PSOE'], 'mean': {'PP': [30], 'PSOE': [28]},
+                          'lo': {}, 'hi': {}, 'first_polls': {'SALF': '2024-06-06', 'UP': '2023-12-15'}},
+               'polls': {'parties': [], 'polls': []}, 'projection': None,
+               'catalog': {'parties': [{'name': n, 'color': '#000000', 'fullname': n, 'block': None} for n in ('PP', 'PSOE')],
+                           'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}}}
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
+    assert views['bloques']['marks'] == [{'date': '2023-12-15', 'label': 'Entra UP'},
+                                         {'date': '2024-06-06', 'label': 'Entra SALF'}]
+    assert views['partidos']['marks'] == []
+    bare = {**initial, 'series': {k: v for k, v in initial['series'].items() if k != 'first_polls'}}
+    assert run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(bare), json.dumps(initial)))['bloques']['marks'] == []
 
 
 def test_ridge_rows_are_taller_on_desktop():

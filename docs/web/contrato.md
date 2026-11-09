@@ -132,7 +132,20 @@ Serie diaria ajustada de cada partido con sus cotas, hasta `meta.as_of`, el día
 Orientación columnar. Fuente: `Forecaster.forecast` y `Forecaster.fc_stat` (`cmin`, `cmax`).
 
 `data`: `dates`, `parties`, y `mean`, `lo`, `hi` (cada uno `{partido: [valor por fecha]}`; `lo`/`hi` son
-`null` donde no hay estadística). CSV `csv/series.csv`: `date, name, mean, lo, hi` (largo).
+`null` donde no hay estadística), `blocks` y `first_polls`. CSV `csv/series.csv`: `date, name, kind, mean, lo, hi`
+(largo; `kind` es `party` o `block`, los partidos primero).
+
+Enmienda 2026-11-09 (claves adicionales, el contrato sigue en 1):
+
+- `blocks`: `{parties, mean, lo, hi}` con la misma forma y las mismas fechas que los partidos, para Izquierda y
+  Derecha (`meta.bmaps.blocks` sin Otros). Cada bloque se ajusta con el mismo estimador sobre **lo que suman sus
+  partidos en cada sondeo** (`Forecaster.fit_groups`), no sumando las series de los partidos: cuando las
+  encuestadoras empiezan a listar un partido a mitad de ciclo, la suma de las series salta durante meses y la suma
+  por sondeo no. Otros lo sigue calculando la web (100 menos los dos). Un ámbito sin Izquierda o Derecha lleva
+  `parties` vacío; un run anterior no lleva la clave y la web suma los partidos.
+- `first_polls`: `{partido: 'YYYY-MM-DD'}`, los partidos de Izquierda o Derecha cuyo primer sondeo llega al menos
+  90 días después del primero del ciclo, contando las etiquetas que heredan por el `smap` (FA lleva los sondeos de
+  SUMAR, así que no entra). La web marca su entrada en la vista Bloques.
 
 ### `polls`
 
@@ -457,7 +470,11 @@ republica; `ban` desde la enmienda 2026-11-05, ver abajo):
   `backtest/results`, normalmente a 6 días), hasta el día en que se congeló el modelo: `horizon` y, con la forma de la
   parte `series` de un run, `dates`, `parties`, `mean`, `lo` y `hi` (2 decimales, `null` en los huecos de la banda).
   Solo existe si el backtest guardó la serie: una elección puede tener `model` y no `series` (la publicada antes de
-  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva.
+  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva. Enmienda
+  2026-11-09: también `blocks` y `first_polls`, como en la parte `series` de un run. `blocks` sale de las filas
+  `kind = block` del `series.csv` del backtest (vacío si el backtest es anterior y no las tiene: la web suma los
+  partidos); `first_polls` se calcula al publicar la elección con los partidos simulados (`parties.event`), sus
+  etiquetas del `smap` y los sondeos del ciclo. El CSV gana la columna `kind`.
 
 `meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
 `pollsters`, `polls`, `cycle` y `results`, los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los

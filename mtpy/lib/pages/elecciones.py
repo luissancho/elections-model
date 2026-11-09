@@ -10,7 +10,7 @@ from ..webapi import check_date, event_params, site
 from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color,
                      bundle_part, common_context, ink_color)
 from .filters import _madrid_tz, fmt_date, fmt_num
-from .promedios import (BLOCK_ORDER, _leaders, chart_polls, poll_months, polls_table,
+from .promedios import (BLOCK_ORDER, _leaders, chart_polls, fitted_blocks, poll_months, polls_table,
                         pollster_options, round_series)
 from .slugs import event_href
 
@@ -1204,6 +1204,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['has_model'] = has_model
     context['analysed'] = bool(meta.get('featured', True))
     context['has_series'] = has_series
+    context['fitted_blocks'] = fitted_blocks(series)
     context['series_horizon'] = series_horizon
     context['series_blocks'] = list(blocks_map)
     context['model_last'] = last

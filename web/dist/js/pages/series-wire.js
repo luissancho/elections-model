@@ -22,9 +22,10 @@ export const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
  * @param {Catalog} catalog party catalogue of the run
  * @returns {object} `partidos` and `bloques` (null without blocks): `series`, `polls`, `projection`, `result`
  *   (null without one), `parties`, `colors`, `defaults` (names shown by default, null for all) and `toPolls`
- *   (polls of the view from polls by party); `bloques` also `members` (the map of the blocks, for the line naming
- *   their parties) and `breakdown` (`{members, values, colors}`: the series and colour of each party, which break a
- *   day of a block down in the tooltip)
+ *   (polls of the view from polls by party) and `marks` (`[{date, label}]`, dashed lines of the chart: none in
+ *   `partidos`, the entry of each party of `series.first_polls` in `bloques`, by date); `bloques` also `members`
+ *   (the map of the blocks, for the line naming their parties) and `breakdown` (`{members, values, colors}`: the
+ *   series and colour of each party, which break a day of a block down in the tooltip)
  */
 export function seriesViews(initial, catalog) {
   const {series, polls, projection, result = null} = initial;
@@ -32,6 +33,10 @@ export function seriesViews(initial, catalog) {
   const main = (catalog.bmaps.main || []).filter((name) => parties.includes(name));
   const blocks = catalog.bmaps.blocks && !Array.isArray(catalog.bmaps.blocks) ? catalog.bmaps.blocks : {};
   const names = Object.keys(blocks);
+  // the entry of each party born halfway through the cycle, a dashed line of the block view (runs since 2026-11-09)
+  const entries = Object.entries(series.first_polls || {})
+    .sort(([, a], [, b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, date]) => ({date, label: `Entra ${name}`}));
   return {
     partidos: {
       series,
@@ -42,6 +47,7 @@ export function seriesViews(initial, catalog) {
       colors: mapNames(parties, (name) => catalog.color(name)),
       defaults: main.length ? main : null,
       toPolls: (chosen) => chosen,
+      marks: [],
     },
     bloques: names.length ? {
       series: blockSeries(series, blocks),
@@ -56,6 +62,7 @@ export function seriesViews(initial, catalog) {
       toPolls: (chosen) => blockPolls(chosen, blocks),
       members: blocks,
       breakdown: {members: blocks, values: series.mean, colors: mapNames(parties, (name) => catalog.color(name))},
+      marks: entries,
     } : null,
   };
 }

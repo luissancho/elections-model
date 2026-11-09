@@ -29,7 +29,7 @@ from .data import (
     get_house_effects, get_scopes
 )
 from .utils import (
-    build_blocks, group_results, norm_range
+    build_blocks, group_results, norm_range, party_entries
 )
 
 def published_seats(
@@ -706,9 +706,40 @@ class Forecaster(Core):
             Fitted estimation of the percentage of votes for the party or block in the election event.
             If `ret_stat` is `True`, returns a tuple with the standard error and confidence interval of the forecast.
         """
-        # Polls with a value for the party and a positive weight (zero-weight polls do not enter the fit and
-        # would only break the bandwidth selection); a local linear fit needs at least three of them
-        df = self.fc_series[self.fc_series[name].notnull() & (self.fc_series['weight'] > 0)]
+        return self._fit_column(name, self.fc_series[name], max_fc=max_fc, ret_stat=ret_stat)
+
+    def _fit_column(
+        self,
+        name: str,
+        values: pd.Series,
+        max_fc: Optional[int] = 0,
+        ret_stat: bool = False
+    ) -> Optional[pd.Series | pd.DataFrame | tuple[pd.Series, pd.Series]]:
+        """
+        Fit the local kernel estimator on one value per poll of `fc_series` (a party, or the sum of a group).
+
+        Parameters
+        ----------
+        name : str
+            Name of what is fitted, for the warning when there are too few polls.
+        values : pd.Series
+            One value per row of `fc_series` (same index); null where the poll has none.
+        max_fc : int, optional
+            Maximum number of days to forecast after last poll date.
+        ret_stat : bool, optional
+            Return the standard error and confidence interval of the forecast for each estimation.
+
+        Returns
+        -------
+        pd.Series, pd.DataFrame, tuple or None
+            As `fit`; `None` (with a warning) with fewer than three usable polls.
+        """
+        # Polls with a value and a positive weight (zero-weight polls do not enter the fit and would only break
+        # the bandwidth selection); a local linear fit needs at least three of them
+        polls = self.fc_series
+        mask = values.notnull().to_numpy() & (polls['weight'] > 0).to_numpy()
+        df = polls[mask]
+        y = values[mask]
 
         if df.shape[0] < 3:
             warnings.warn('Fewer than three usable polls for `{}`: not fitted'.format(name))
@@ -723,7 +754,7 @@ class Forecaster(Core):
         groups = df['pollster_id'].to_numpy() if self.reg_params.get('cov_type') == 'cluster' else None
 
         reg = LocalKernelEstimator(
-            df[name],
+            y,
             weights=weights,
             groups=groups,
             **self.reg_params
@@ -805,6 +836,104 @@ class Forecaster(Core):
             self.fc_stat = self.fc_stat.apply(lambda col: col.ffill() if col.notnull().any() else col)
 
         return self.forecast
+
+    def fit_groups(
+        self,
+        groups: dict[str, list[str]],
+        max_fc: int = 0
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Fit each group of names on what its members add up to in every poll, not on the sum of their averages.
+
+        A poll enters a group with the sum of the members it lists (none listed: it does not enter), net of the
+        house effects and with the weight of the average, and the group is fitted with the same estimator, band and
+        grid as a party (`fit`). When pollsters start listing a new party halfway through the cycle the sum of the
+        party averages jumps (the new party starts at its smoothed level while the others still lean on polls that
+        do not list it); the sum per poll does not. From the first poll listing a member on, a poll that still does
+        not list it adds the average of that member that day (`self.forecast`, so `fit_forecast` must have fitted
+        it): otherwise a house that keeps leaving out a small party (25 of 84 polls without SALF in the six months
+        to 2026-11-09) would sink the group, 0.8 points below the sum of the parties on the day of the headline.
+
+        Parameters
+        ----------
+        groups : dict
+            `{group: [names]}`, names of `self.names` (the columns of the series, after grouping the polls).
+        max_fc : int, optional
+            Maximum number of days to forecast after last poll date (as `fit_forecast`).
+
+        Returns
+        -------
+        tuple of pd.DataFrame
+            `(forecast, fc_stat)` over `fc_index`, one column per fitted group: the daily mean and a dict of
+            statistics per day (as `fc_stat`, `None` where there is none). Groups with fewer than three usable
+            polls are left out, with a warning. `self.forecast` and `self.fc_stat` are not touched.
+        """
+        # The polls must be net of the house effects and weighted by the effective sample, as for the parties
+        if self.disp_enabled and self.dispersion is None:
+            self.fit_dispersion()
+        if self.he_enabled and self.house_effects is None:
+            self.fit_house_effects()
+
+        polls = self.fc_series
+        days = pd.DatetimeIndex(polls.index)
+        forecast, stat = {}, {}
+        for group, members in groups.items():
+            present = [n for n in members if n in polls.columns]
+            values = polls[present].sum(axis=1, min_count=1) if present else pd.Series(np.nan, index=polls.index)
+            # A poll that does not list a member once pollsters list it (its voters go to the rest) would sink the
+            # group: it takes the average of that member that day, as the sum of the party averages does
+            for name in present:
+                listed = polls[name].notnull().to_numpy()
+                if not listed.any() or self.forecast is None or name not in self.forecast.columns:
+                    continue
+                level = self.forecast[name].astype(float).reindex(days).to_numpy()
+                fill = ~listed & (days >= days[listed].min()) & values.notnull().to_numpy() & ~np.isnan(level)
+                values = values.where(~fill, values + np.where(fill, level, 0.))
+            res = self._fit_column(group, values, max_fc=max_fc, ret_stat=True)
+            if res is None:
+                continue
+            forecast[group], stat[group] = res
+
+        index = self.fc_index
+
+        return (pd.DataFrame(forecast, index=index, columns=list(forecast), dtype=float),
+                pd.DataFrame(stat, index=index, columns=list(stat)))
+
+    def cycle_births(
+        self,
+        groups: dict[str, list[str]],
+        min_days: int = 90
+    ) -> dict[str, str]:
+        """
+        Members of the groups that pollsters start listing halfway through the cycle (`party_entries`).
+
+        The first poll of each name is the earliest of the poll labels its series gathers (`self.blocks`: FA with
+        the polls of SUMAR), over the polls that enter the average (`party_first_polls`). A name with a result in
+        the previous election (the result rows of `self.series`, before the first poll) is not new.
+
+        Parameters
+        ----------
+        groups : dict
+            `{group: [names]}`, names of `self.names`.
+        min_days : int, optional
+            Days after the first poll of the cycle from which a name counts as new.
+
+        Returns
+        -------
+        dict
+            `{name: 'YYYY-MM-DD'}`, ascending by date.
+        """
+        first = self.party_first_polls if self.party_first_polls is not None else pd.Series(dtype='datetime64[ns]')
+        members = list(dict.fromkeys(n for names in groups.values() for n in names))
+        labels = {n: list(self.blocks.loc[n, 'parties']) for n in members if n in self.blocks.index}
+        known = set()
+        series = getattr(self, 'series', None)
+        if series is not None and first.shape[0] > 0:
+            results = series.loc[series['pollster'].isnull().to_numpy()]
+            results = results.loc[results.index.get_level_values('date') < first.min()]
+            known = {n for n in members if n in results.columns and results[n].notnull().any()}
+
+        return party_entries(first, members, labels, min_days=min_days, known=known)
 
     def get_forecast(
         self,

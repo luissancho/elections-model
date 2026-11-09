@@ -181,8 +181,10 @@ def test_case_series_is_the_fitted_series_up_to_the_anchor():
     sim = synthetic_simulator()
     sim.as_of = pd.Timestamp('2026-10-03')
     frame = backtest.case_series(sim, '2026-11-29', 57)
-    assert list(frame.columns) == ['event_date', 'horizon', 'date', 'name', 'mean', 'lo', 'hi']
-    assert frame.shape[0] == 33 * 3 and frame['date'].max() == '2026-10-03' and set(frame['name']) == set(NAMES)
+    assert list(frame.columns) == ['event_date', 'horizon', 'date', 'name', 'kind', 'mean', 'lo', 'hi']
+    assert frame.shape[0] == 33 * 3 + 33 * 2 and frame['date'].max() == '2026-10-03'
+    assert set(frame.loc[frame['kind'] == 'party', 'name']) == set(NAMES)
+    assert set(frame.loc[frame['kind'] == 'block', 'name']) == {'Izquierda', 'Derecha'}
     assert (frame['event_date'] == '2026-11-29').all() and (frame['horizon'] == 57).all()
 
 
@@ -193,7 +195,7 @@ def fake_results():
     from tests.fakes import synthetic_backtest
     tables = synthetic_backtest()
     return {'shares': tables.shares, 'seats': tables.seats, 'blocks': tables.blocks, 'provinces': pd.DataFrame(),
-            'series': pd.DataFrame(columns=['event_date', 'horizon', 'date', 'name', 'mean', 'lo', 'hi']),
+            'series': pd.DataFrame(columns=['event_date', 'horizon', 'date', 'name', 'kind', 'mean', 'lo', 'hi']),
             'meta': pd.DataFrame(), 'metrics': tables.metrics, 'by_horizon': tables.by_horizon}
 
 

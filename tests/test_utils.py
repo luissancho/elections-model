@@ -6,6 +6,33 @@ import pytest
 from mtpy.lib.utils import build_blocks, group_results
 
 
+def test_party_entries_marks_only_the_parties_born_mid_cycle_with_their_inherited_labels():
+    """UP y SALF entran a mitad de ciclo; FA hereda la fecha de SUMAR y PSOE entra a las dos semanas: no se marcan."""
+    from mtpy.lib.utils import party_entries
+    first = pd.to_datetime(pd.Series({'PP': '2023-08-07', 'VOX': '2023-08-07', 'SUMAR': '2023-08-07',
+                                      'FA': '2025-05-01', 'UP': '2023-12-15', 'SALF': '2024-06-06',
+                                      'PSOE': '2023-08-20'}))
+    labels = {'FA': ['FA', 'SUMAR'], 'PP': ['PP', 'UPN']}
+    out = party_entries(first, ['PSOE', 'FA', 'UP', 'PP', 'VOX', 'SALF'], labels)
+    assert out == {'UP': '2023-12-15', 'SALF': '2024-06-06'} and list(out) == ['UP', 'SALF']
+    assert party_entries(first, ['UP'], {}, min_days=200) == {}
+    assert party_entries(pd.Series(dtype='datetime64[ns]'), ['UP'], {}) == {}
+    # a party with a result in the previous election is not new, however late the cycle's polls list it
+    assert party_entries(first, ['UP', 'SALF'], {}, known={'UP'}) == {'SALF': '2024-06-06'}
+    assert party_entries(first, ['FA'], labels, known={'SUMAR'}, min_days=0) == {}
+
+
+def test_first_poll_dates_reads_the_first_non_null_of_each_label():
+    """La primera fecha con valor de cada etiqueta; la que nunca aparece no sale."""
+    from mtpy.lib.utils import first_poll_dates
+    polls = pd.DataFrame({'date': pd.to_datetime(['2024-01-02', '2024-01-01', '2024-03-01']),
+                          'UP': [None, None, 2.], 'PP': [30., 31., 32.]}).set_index('date')
+    out = first_poll_dates(polls, ['UP', 'PP', 'CUP'])
+    assert out.to_dict() == {'UP': pd.Timestamp('2024-03-01'), 'PP': pd.Timestamp('2024-01-01')}
+    flat = polls.reset_index()
+    assert first_poll_dates(flat, ['UP']).to_dict() == {'UP': pd.Timestamp('2024-03-01')}
+
+
 def test_group_results_sums_blocks_and_ignores_non_party_columns():
     df = pd.DataFrame({
         'date': pd.to_datetime(['2024-01-01', '2024-01-02']),

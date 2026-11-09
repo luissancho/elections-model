@@ -579,17 +579,41 @@ def round_series(series: dict, digits: int = 2) -> dict:
     -------
     dict
         A copy of ``series`` with every number of ``mean``, ``lo`` and ``hi`` rounded to ``digits``
-        decimals; missing values stay ``None`` and the other members are kept as they are.
+        decimals, those of the fitted ``blocks`` too; missing values stay ``None`` and the other members are kept
+        as they are.
     """
     def rounded(values):
         return [None if _is_missing(value) else round(value, digits) for value in values]
 
-    out = dict(series)
+    def rounded_part(part):
+        out = dict(part)
+        for key in ('mean', 'lo', 'hi'):
+            out[key] = {name: rounded(values) for name, values in (part.get(key) or {}).items()}
+        return out
 
-    for key in ('mean', 'lo', 'hi'):
-        out[key] = {name: rounded(values) for name, values in (series.get(key) or {}).items()}
+    out = rounded_part(series)
+    if series.get('blocks'):
+        out['blocks'] = rounded_part(series['blocks'])
 
     return out
+
+
+def fitted_blocks(series: Optional[dict]) -> bool:
+    """
+    Whether a series part carries the blocks fitted on the sum per poll (runs and elections published since
+    2026-11-09), so that the page says how its block view is drawn.
+
+    Parameters
+    ----------
+    series : dict or None
+        Data of the series part.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``series.blocks.parties`` is not empty.
+    """
+    return bool(((series or {}).get('blocks') or {}).get('parties'))
 
 
 def poll_sample(poll: dict):
@@ -827,6 +851,7 @@ def promedios_context(state: dict, region=None) -> dict:
     context['event_bar'] = dict(context['event_bar'], sections=[
         entry for entry in context['event_bar']['sections'] if entry['id'] not in missing])
     run_parties = [party['name'] for party in meta.get('parties') or []]
+    context['fitted_blocks'] = fitted_blocks(series)
     context['initial'] = {
         'state': full,
         'meta': meta,

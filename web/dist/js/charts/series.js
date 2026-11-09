@@ -281,13 +281,16 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   `layers` (what is drawn: `ambos`, the default, the poll points and the average; `sondeos`, the points alone,
  *   with the result and the mark lines; `promedio`, the lines, projection and range bars alone, without the points)
  *   and `breakdown` (the block view: `{members, values, colors}`, the parties of each block, the series of each
- *   party and its colour, which break a day of a block line down into its parties; null for none)
+ *   party and its colour, which break a day of a block line down into its parties; null for none) and `marks`
+ *   (`[{date, label}]`: more dashed mark lines, the entry of a party in the polls in the block view, with their
+ *   label inside the plot along the line, so that it covers neither the axis dates nor another entry; none by
+ *   default)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
   series, polls, projection, parties, selected = null, colors = {}, asOf, when,
   window: windowChoice = DEFAULT_WINDOW, anchor = null, legend = true, result = null, asOfLabel = 'Estimación',
-  layers = 'ambos', breakdown = null,
+  layers = 'ambos', breakdown = null, marks: entries = [],
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
@@ -388,6 +391,12 @@ export function seriesOption({
     marks.push(markAt(dayTime(result.date), 'Elección', 'left'));
   } else if (withProjection && when) {
     marks.push(markAt(dayTime(when), 'Elección', 'left'));
+  }
+  for (const entry of entries || []) {
+    const mark = markAt(dayTime(entry.date), entry.label);
+    // inside the plot, written along its line from the top: never over the dates of the axis, and two entries a
+    // few weeks apart (UP and SALF on a phone) do not cover each other
+    marks.push({...mark, label: {...mark.label, position: 'insideEndTop', align: undefined}});
   }
   // Mark lines on their own empty series, so hiding a party never hides them.
   const markSeries = {

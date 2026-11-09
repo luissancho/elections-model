@@ -2,6 +2,7 @@
 // descending order), one
 // point of the average or of its projection and the official result of a past election. Pure functions, without
 // ECharts or the DOM, testable in node.
+import {REST_BLOCK} from './blocks.js';
 import {fmtDate, fmtInt, fmtNum, fmtPct, fmtRange} from './format.js';
 
 const DASH = '–';
@@ -104,8 +105,10 @@ const REST_MIN = 0.05;
 
 /**
  * Lines of the breakdown of a block on one day of the average, under its box: one per party of the block with a
- * value that day, in descending order, with its colour marker and `{party} {value}`, and, when the block holds
- * more than its parties add up to (Otros, the rest up to 100), a grey «Resto» line with the difference.
+ * value that day, in descending order, with its colour marker and `{party} {value}`, and, for Otros (the rest up to
+ * 100) when it holds more than its parties add up to, a grey «Resto» line with the difference. Izquierda and
+ * Derecha never get one: their line, fitted on the sum per poll since 2026-11-09, can differ from the sum of their
+ * parties for a few months after a party enters, and that is no missing party.
  *
  * @param {string} block the block
  * @param {number|null} total the value of the block that day
@@ -125,7 +128,7 @@ export function breakdownTooltipLines(block, total, i, breakdown) {
     .sort((a, b) => b.value - a.value);
   const lines = rows.map(({party, value}) => `${tooltipMarker((breakdown.colors || {})[party] || '#999')}${escapeText(`${party} ${fmtNum(value, 1)}`)}`);
   const rest = present(total) ? total - rows.reduce((sum, row) => sum + row.value, 0) : 0;
-  if (rest >= REST_MIN) {
+  if (block === REST_BLOCK && rest >= REST_MIN) {
     lines.push(`${tooltipMarker('#999')}${escapeText(`Resto ${fmtNum(rest, 1)}`)}`);
   }
   return lines;
