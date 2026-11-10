@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo simulamos los escaños?{% endblock %}
-{% block description %}Cómo pasa el modelo del promedio de encuestas a los escaños: el sorteo del voto con sus dos errores, la deriva de la opinión que separa Hoy de Elección, el swing proporcional y las oscilaciones por comunidad y provincia, la regla D'Hondt y las barreras de cada ámbito, qué significa cada cifra publicada y cómo lo comprobamos, con las fórmulas y los supuestos en seis notas técnicas.{% endblock %}
+{% block description %}Cómo pasa el modelo del promedio de encuestas a los escaños: el sorteo del voto con sus dos errores, la deriva de la opinión que separa Hoy de Elección, el swing logístico y las oscilaciones por comunidad y provincia, la regla D'Hondt y las barreras de cada ámbito, qué significa cada cifra publicada y cómo lo comprobamos, con las fórmulas y los supuestos en seis notas técnicas.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
@@ -307,21 +307,35 @@
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('circunscripciones', 'De España a las circunscripciones', 'El voto sorteado es el del conjunto; para repartir escaños hace falta el de cada circunscripción, y el modelo lo deduce de la elección anterior.') }}
-        <h3 id="swing">El swing proporcional</h3>
+        <h3 id="swing">El swing logístico</h3>
         <p>
-          Cada partido conserva la geografía de su voto en la elección anterior y la escala en la misma proporción
-          que su voto en el conjunto. Si pasa del 20% al 22%, un 10% más, su voto crece un 10% en cada
-          circunscripción: del 30% al 33% donde era fuerte, del 10% al 11% donde era débil.
+          Cada partido conserva la geografía de su voto en la elección anterior y la mueve con una misma regla en
+          todas las circunscripciones. La regla no multiplica su porcentaje, sino la razón entre quienes lo votan y
+          quienes no: un partido con el 20% tiene 20 votantes por cada 80 que no lo son, una razón de 0,25. Si esa
+          razón se dobla, el 20% pasa al 33,3%; un 2% pasa al 3,9%, casi el doble; y un 50% pasa al 66,7%, no al
+          100%.
         </p>
         <div class="math-wrap">
-          <math display="block" aria-label="v sub r igual a v sub r anterior por v entre v anterior"><mrow><msub><mi>v</mi><mi>r</mi></msub><mo>=</mo><msubsup><mi>v</mi><mi>r</mi><mtext>ant</mtext></msubsup><mo>·</mo><mfrac><mi>v</mi><msup><mi>v</mi><mtext>ant</mtext></msup></mfrac></mrow></math>
+          <math display="block" aria-label="v sub r entre cien menos v sub r igual a k por v sub r anterior entre cien menos v sub r anterior"><mrow><mfrac><msub><mi>v</mi><mi>r</mi></msub><mrow><mn>100</mn><mo>−</mo><msub><mi>v</mi><mi>r</mi></msub></mrow></mfrac><mo>=</mo><mi>k</mi><mo>·</mo><mfrac><msubsup><mi>v</mi><mi>r</mi><mtext>ant</mtext></msubsup><mrow><mn>100</mn><mo>−</mo><msubsup><mi>v</mi><mi>r</mi><mtext>ant</mtext></msubsup></mrow></mfrac></mrow></math>
         </div>
         <p>
-          <var>v</var><sub><var>r</var></sub> es el voto del partido en la circunscripción <var>r</var>,
-          <var>v</var> su voto en el conjunto y «ant» la elección anterior. Es un swing proporcional, no uniforme:
-          un partido que sube dos puntos no sube dos puntos en todas partes, sino un 10% en todas partes. «Otros» se
-          escala igual; el voto en blanco mantiene el porcentaje que tuvo en cada circunscripción. Al final, cada
-          circunscripción se reajusta para sumar 100.
+          <var>v</var><sub><var>r</var></sub> es el voto del partido en la circunscripción <var>r</var>, en
+          porcentaje, y «ant» la elección anterior. El factor <var>k</var> es el mismo en todas las
+          circunscripciones: el que hace que el partido reúna entre todas, cada una con sus votos válidos, lo que
+          le corresponde por su voto en el conjunto. Con porcentajes pequeños equivale a escalar el voto en la
+          misma proporción en todas partes; donde el partido ya es fuerte crece menos que en el conjunto, y donde
+          es débil, algo más. «Otros» sigue la misma regla; el voto en blanco mantiene el porcentaje que tuvo en
+          cada circunscripción. Al final, cada circunscripción se reajusta para sumar 100.
+        </p>
+        <p>
+          Hasta el 10 de noviembre de 2026 usábamos un swing proporcional: el porcentaje de cada circunscripción se
+          multiplicaba por lo que el partido crecía o caía en el conjunto. Lo cambiamos tras comparar las dos reglas
+          en las elecciones generales. Conocido el resultado del conjunto, en los trece pares de elecciones
+          consecutivas de 1982 a 2023 la logística queda más cerca del voto real de cada provincia en los trece,
+          con un error medio de 1,9 puntos frente a 2,0. La diferencia está donde el partido pasa del 20%: allí el
+          error es de 2,6 puntos frente a 2,8; por debajo, las dos reglas dan casi lo mismo. La
+          nota{{ m.note('swing', note_keys) }} recoge la medición, las reglas de las herencias, el tratamiento de
+          «otros» y del voto en blanco y cómo se convierten las cuotas en votos.
         </p>
         <h3 id="herencias">Las herencias</h3>
         <p>
@@ -330,25 +344,23 @@
           reparten el voto previo en proporción a lo que estima hoy cada uno; si una marca desaparece, su voto pasa
           a sus sucesores. Las mismas reglas valen para las encuestas: las que listaban a Unidas Podemos y Más País
           antes de que existiera Sumar cuentan para Sumar en su promedio, en vez de perderse en «otros». Un partido
-          sin resultado previo ni partido del que heredar no obtiene escaños en la simulación. La
-          nota{{ m.note('swing', note_keys) }} recoge las reglas, el tratamiento de «otros» y del voto en blanco y
-          cómo se convierten las cuotas en votos.
+          sin resultado previo ni partido del que heredar no obtiene escaños en la simulación.
         </p>
         <h3 id="oscilaciones">Las oscilaciones por comunidad y provincia</h3>
         <p>
           No todas las circunscripciones se mueven como el conjunto: Andalucía, Cataluña o Galicia pueden ir por su
           lado, y las provincias de una comunidad tienden a moverse juntas. Lo hemos medido comparando, entre
           elecciones generales consecutivas, el voto real de cada partido en cada provincia con el que daba el
-          swing proporcional:
+          swing:
         </p>
         <div class="table-wrap">
           <table class="et et-fit">
-            <caption>Desviación típica del voto real de cada partido en cada provincia frente al swing proporcional, entre elecciones generales consecutivas de 1993 a 2023 (diez pares, 1.877 celdas con cuota previa de al menos el 1%); medido en septiembre de 2026.</caption>
+            <caption>Desviación típica del voto real de cada partido en cada provincia frente al swing, entre elecciones generales consecutivas de 1993 a 2023 (diez pares, 1.877 celdas con cuota previa de al menos el 1%); medido en noviembre de 2026.</caption>
             <thead><tr><th scope="col" class="f l">Voto previsto en la provincia</th><th scope="col">1-3%</th><th scope="col">3-10%</th><th scope="col">10-20%</th><th scope="col">Más del 20%</th></tr></thead>
             <tbody>
-              <tr><td class="f l">Desviación, como parte del voto</td><td>32%</td><td>22%</td><td>12%</td><td>11%</td></tr>
-              <tr><td class="f l">Desviación, en puntos</td><td>0,8</td><td>1,3</td><td>1,9</td><td>3,7</td></tr>
-              <tr><td class="f l">Celdas</td><td>112</td><td>354</td><td>390</td><td>1.021</td></tr>
+              <tr><td class="f l">Desviación, como parte del voto</td><td>31%</td><td>22%</td><td>12%</td><td>10%</td></tr>
+              <tr><td class="f l">Desviación, en puntos</td><td>0,8</td><td>1,3</td><td>1,9</td><td>3,4</td></tr>
+              <tr><td class="f l">Celdas</td><td>114</td><td>353</td><td>389</td><td>1.021</td></tr>
             </tbody>
           </table>
         </div>
@@ -476,7 +488,7 @@
       {{ m.card_start('cifras', 'Qué es cada cifra', 'El titular es un reparto; las demás cifras resumen todas las simulaciones: cuentan en cuántas ocurre cada cosa.') }}
         <ul>
           <li><strong>Los escaños de cada partido</strong> son su reparto central: proyectamos el promedio de
-            sondeos a cada circunscripción con el swing proporcional, sin sorteo ni oscilaciones, y aplicamos
+            sondeos a cada circunscripción con el swing, sin sorteo ni oscilaciones, y aplicamos
             D'Hondt y la barrera. La suma de las circunscripciones es el titular y los bloques suman sus partidos. Es
             el mismo titular en el nowcast y en el forecast, Hoy y Elección: la deriva sólo abre los rangos. No es la mediana de las
             simulaciones: las medianas de cada partido no tienen por qué sumar los escaños de la cámara, y un
@@ -554,7 +566,7 @@
           pieza: las diferencias de unas centésimas en las pruebas históricas están dentro del ruido.
         </p>
         <p>
-          La geografía del voto es la de la elección anterior, escalada y perturbada: no hay participación
+          La geografía del voto es la de la elección anterior, desplazada y perturbada: no hay participación
           diferencial, ni candidaturas locales fuera del catálogo, ni correlación explícita entre partidos dentro
           de una provincia. Las oscilaciones usan una sola curva para todos los partidos y comunidades: los de
           implantación desigual se desvían más de lo que la curva recoge. Un partido que se escinde de otro hereda
@@ -667,7 +679,19 @@
             supuesto: la correlación de la deriva entre partidos cambia de ciclo en ciclo.
           </p>
         {% endcall %}
-        {% call m.note_item('swing') %}<strong>Las herencias, «otros», el voto en blanco y los votos de cada circunscripción.</strong>
+        {% call m.note_item('swing') %}<strong>El factor del swing, las herencias, «otros», el voto en blanco y los votos de cada circunscripción.</strong>
+          <p>
+            El factor <var>k</var> de cada partido se resuelve en cada simulación por bisección sobre su logaritmo:
+            el total de votos del partido en las circunscripciones crece con <var>k</var>, y se busca el que iguala
+            el que daría el swing proporcional, es decir, su voto previo en cada una por la razón entre su voto
+            sorteado y su voto previo en el conjunto. Donde un partido no tenía voto sigue sin tenerlo, y una lista
+            que vota todo el ámbito, como la autonómica canaria, toma la razón del conjunto. La comparación de las
+            dos reglas usa las mismas 2.415 celdas de partido y provincia de las oscilaciones (partidos con más del
+            1% del conjunto en las dos elecciones y al menos el 1% en la provincia): error absoluto medio de 1,88
+            puntos con la logística y de 2,05 con la proporcional, menor con la logística en los trece pares; por
+            voto previsto, 0,55 frente a 0,56 entre el 1% y el 3%, 1,02 frente a 1,04 entre el 3% y el 10%, 1,41
+            frente a 1,46 entre el 10% y el 20% y 2,55 frente a 2,84 por encima del 20%. Medido en noviembre de 2026.
+          </p>
           <p>
             Antes del swing se aplican a los resultados de la elección anterior las reglas del catálogo de cada
             elección, en orden: <em>agg</em> suma al partido el voto previo de los partidos que hereda (Sumar de
@@ -684,8 +708,8 @@
           </p>
           <p>
             La cuota previa de «otros» en cada circunscripción es 100 menos la suma de los partidos simulados menos el
-            voto en blanco; su cuota simulada es el residuo del sorteo menos el blanco del conjunto, escalado como
-            cualquier partido (plana si no había «otros» antes). El voto en blanco conserva su cuota previa en cada
+            voto en blanco; su cuota simulada es el residuo del sorteo menos el blanco del conjunto, movido con la
+            misma regla que cualquier partido (plana si no había «otros» antes). El voto en blanco conserva su cuota previa en cada
             circunscripción: no es una candidatura y no sigue el residuo de las encuestas. Las cuotas de cada
             circunscripción, con «otros» y el blanco, se reajustan para sumar 100, de modo que sólo se corrigen las
             pequeñas incoherencias del swing. Los votos de cada candidatura son su cuota por los votos válidos de la
@@ -698,9 +722,9 @@
         {% endcall %}
         {% call m.note_item('oscilaciones') %}<strong>Las oscilaciones por comunidad y provincia.</strong>
           <p>
-            Para cada par de elecciones generales consecutivas, partido y provincia, el residuo del swing
-            proporcional es <var>z</var> = ln(real / (anterior · razón del conjunto)), con cuota previa de al menos
-            el 1%. Se descompone en la media de su comunidad autónoma (para ese par y partido) y la desviación dentro
+            Para cada par de elecciones generales consecutivas, partido y provincia, el residuo del swing es
+            <var>z</var> = ln(real / previsto), donde «previsto» es el voto que la regla logística da al partido en
+            la provincia con su resultado real en el conjunto, con cuota previa de al menos el 1%. Se descompone en la media de su comunidad autónoma (para ese par y partido) y la desviación dentro
             de ella. Las dos varianzas decrecen con el voto previsto <var>L</var> del partido en la comunidad o en
             la provincia según <var>a</var> + <var>b</var>/<var>L</var>, ajustada por mínimos cuadrados ponderados
             sobre tramos de nivel con <var>a</var>, <var>b</var> ≥ 0, con dos correcciones: la desviación dentro de
@@ -708,8 +732,8 @@
             las comunidades con dos o más; y a la varianza de la media de la comunidad se le resta la parte
             provincial, σ<sub>prov</sub>²/<var>k</var>. Los partidos presentes en una sola comunidad quedan fuera del
             ajuste autonómico, porque su media de comunidad es nula por construcción. Con las elecciones anteriores
-            a 2026 (trece pares, 2.415 celdas): comunidad 0,0095 + 0,158/<var>L</var> (desviación relativa 0,12 al
-            30%, 0,16 al 10%, 0,25 al 3%) y provincia 0,0047 + 0,035/<var>L</var> (0,08, 0,09 y 0,13); unas tres
+            a 2026 (trece pares, 2.415 celdas): comunidad 0,0084 + 0,153/<var>L</var> (desviación relativa 0,12 al
+            30%, 0,15 al 10%, 0,24 al 3%) y provincia 0,0042 + 0,037/<var>L</var> (0,07, 0,09 y 0,13); unas tres
             cuartas partes de la varianza es de comunidad.
           </p>
           <div class="math-wrap"><math display="block" aria-label="cuota con oscilación igual a cuota del swing por la exponencial de épsilon de la comunidad y el partido más eta de la provincia y el partido; épsilon y eta normales de media menos sigma al cuadrado entre dos"><mrow><msubsup><mi>v</mi><mi>r</mi><mo>′</mo></msubsup><mo>=</mo><msub><mi>v</mi><mi>r</mi></msub><mo>·</mo><msup><mi>e</mi><mrow><msub><mi>ε</mi><mrow><mi>c</mi><mo>,</mo><mi>p</mi></mrow></msub><mo>+</mo><msub><mi>η</mi><mrow><mi>r</mi><mo>,</mo><mi>p</mi></mrow></msub></mrow></msup><mo>,</mo><mspace width="1.5em"/><mi>ε</mi><mo>,</mo><mi>η</mi><mo>∼</mo><mi>N</mi><mrow><mo>(</mo><mo>−</mo><msup><mi>σ</mi><mn>2</mn></msup><mo>/</mo><mn>2</mn><mo>,</mo><msup><mi>σ</mi><mn>2</mn></msup><mo>)</mo></mrow></mrow></math></div>
@@ -742,7 +766,7 @@
           </p>
           <p>
             <em>El reparto central</em> es una pasada determinista del mismo camino, sin sorteo, sin deriva y sin
-            oscilaciones: D'Hondt con la barrera sobre el voto central proyectado con el swing proporcional, en cada
+            oscilaciones: D'Hondt con la barrera sobre el voto central proyectado con el swing, en cada
             circunscripción; la suma es el titular, idéntico en Hoy y en Elección. Las medianas o las medias de las
             simulaciones no se publican como titular: las medianas por partido no suman los escaños de la cámara y
             exigirían una expansión proporcional redondeada por restos mayores, y la simulación más cercana a ellas

@@ -604,10 +604,11 @@ def fake_prov():
     return {'commit': 'abc1234', 'dirty': False, 'versions': {'python': '3.11.9'}}
 
 
-def publish_es(tmp_path, run_id=RUN, fs=None, factory=None):
+def publish_es(tmp_path, run_id=RUN, fs=None, factory=None, **kwargs):
     writer = make_writer(tmp_path, fs)
     factory = factory or FakeSimulator()
-    result = publish.publish_forecast('es', writer, run_id, '2026-11-29', n_sim=50, simulator=factory, stats=fake_stats, prov=fake_prov)
+    result = publish.publish_forecast('es', writer, run_id, '2026-11-29', n_sim=50, simulator=factory, stats=fake_stats, prov=fake_prov,
+                                      **kwargs)
     return writer, factory, result
 
 
@@ -632,6 +633,28 @@ def test_publish_forecast_reads_the_average_today_and_cuts_the_series_at_the_anc
     assert writer.read_json(bundle.path_part('es', RUN, 'weights'))['data']['date'] == '2026-10-03'
     meta = writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']
     assert meta['as_of'] == '2026-10-03' and meta['date_fit_last'] == '2026-10-05'
+
+
+def test_publish_forecast_builds_the_simulator_with_the_logistic_swing_and_records_it(tmp_path):
+    """La regla del swing del run es la logística salvo que `correctors` pida otra; `meta.correctors` la guarda."""
+    writer, factory, _ = publish_es(tmp_path)
+    assert factory.calls[0][3]['swing'] == 'logistic'
+    assert writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']['correctors']['swing'] == 'logistic'
+
+
+def test_publish_forecast_takes_another_swing_rule_from_the_correctors(tmp_path):
+    writer, factory, _ = publish_es(tmp_path, correctors={'swing': 'proportional'})
+    assert factory.calls[0][3]['swing'] == 'proportional'
+    assert writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']['correctors']['swing'] == 'proportional'
+
+
+def test_export_backtest_meta_takes_a_run_without_swing_as_proportional():
+    """Un `run.json` anterior a la regla logística se hizo con la proporcional; uno posterior lleva la suya."""
+    tables = synthetic_backtest()
+    older = publish.export_backtest_meta('es', tables.run, tables, 'x', fake_prov(), {})['params']
+    assert older['swing'] == 'proportional'
+    newer = publish.export_backtest_meta('es', {**tables.run, 'swing': 'logistic'}, tables, 'x', fake_prov(), {})['params']
+    assert newer['swing'] == 'logistic'
 
 
 def test_publish_forecast_writes_the_whole_layout_in_order(tmp_path):

@@ -183,7 +183,10 @@ def test_params_2026_general_election_line_up():
     assert 'COMPROMIS' not in conf['smap']
     # 2026-11-09: since 26-10 Wikipedia gives Compromís-Front Valencià apart again in some polls (FV column: Sigma Dos,
     # SocioMétrica, 40dB, Celeste Tel, ElectoPanel), with FA without it: FA sums FV in those polls (shares and seats).
-    assert conf['smap']['FA'] == {'type': 'agg', 'names': ['SUMAR', 'FV']}
+    # 2026-11-10: FV is the list of FA in the Valencian provinces; the polls that give it apart set the share of the
+    # vote of FA cast there (rule `geo`) instead of the geography of Sumar in 2023 alone
+    assert conf['smap']['FA'] == [{'type': 'agg', 'names': ['SUMAR', 'FV']},
+                                  {'type': 'geo', 'names': ['FV'], 'regions': ['3', '12', '46']}]
     assert 'FV' not in conf['parties']['event'] and 'FV' in conf['parties']['polls']
     assert 'FV' in conf['bmaps']['blocks']['Izquierda'] and 'FV' in conf['bmaps']['vs']['Izquierda']
     assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}

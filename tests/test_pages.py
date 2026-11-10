@@ -3173,17 +3173,21 @@ def test_metodo_escanos_text(api):
                    'la elección simulada se celebra en la fecha de la estimación, el día del cálculo',
                    'Por qué cada partido se sortea por su lado', 'Un paseo al azar proporcional al tamaño',
                    'Las oscilaciones por comunidad y provincia', 'Qué límites tiene la simulación',
+                   'El swing logístico', 'la razón entre quienes lo votan y quienes no',
+                   'Hasta el 10 de noviembre de 2026 usábamos un swing proporcional',
+                   'la logística queda más cerca del voto real de cada provincia en los trece',
                    'en las generales, el 3% de los votos válidos', 'cambiaba 64 de los 10.400 repartos provinciales'):
         assert phrase in text, phrase
     for phrase in ('en unos meses', 'suben y bajan a la vez', 'el de su banda', 'la banda del promedio', 'En resumen',
-                   'que se prolonga unos días tras el último sondeo', 'lo que se sabía'):
+                   'que se prolonga unos días tras el último sondeo', 'lo que se sabía',
+                   'El swing proporcional', 'frente al swing proporcional', 'Es un swing proporcional, no uniforme'):
         assert phrase not in text, phrase
     # the dated tables: the error by size, the drift by horizon and by age, the swing residuals, the joint draw and
     # the backtest of the reference run
     for row in ('<td class="f l">De ámbito estatal</td><td>1,36</td><td>1,49</td><td>1,70</td><td>2,14</td><td>2,57</td><td>3,00</td>',
                 '<td class="f l">Parte del voto</td><td>1,7%</td><td>3,4%</td><td>6,0%</td><td>8,4%</td><td>11,6%</td>',
                 '<td class="f l">Deriva frente a los asentados</td><td>×3,0</td><td>×4,5</td><td>×3,2</td><td>×1,1</td><td>×0,9</td>',
-                '<td class="f l">Desviación, en puntos</td><td>0,8</td><td>1,3</td><td>1,9</td><td>3,7</td>',
+                '<td class="f l">Desviación, en puntos</td><td>0,8</td><td>1,3</td><td>1,9</td><td>3,4</td>',
                 '<td class="f l">Probabilidad de mayoría absoluta de la derecha</td><td>0,984</td><td>0,974</td>',
                 '<td class="f l">Error medio de los escaños</td><td>7,1</td><td>9,4</td><td>12,8</td>'):
         assert row in page, row

@@ -407,6 +407,7 @@ def run_case(
     herding: bool = True,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
+    swing: str = 'logistic',
     min_events: Optional[int] = None,
     error_model: str = 'polls',
     drift_scale: Optional[str | float] = None,
@@ -432,7 +433,9 @@ def run_case(
     measured on the same polls (M12); `herding` also reduces the weight of the pollsters less dispersed than
     their samples allow (M13). `composition` sets the joint noise of the national parties
     (M7): `'auto'` estimates the ratio from the elections before `event_date`; `None` or 1 (default) draws
-    them independently. `min_events` is the number of featured elections of the scope before the event from
+    them independently. `swing` is the rule that projects the national shares to the provinces
+    (`Simulator(swing=...)`: `'logistic'`, the default, or `'proportional'`, the rule used up to 2026-11-10);
+    `meta` records it. `min_events` is the number of featured elections of the scope before the event from
     which its estimators are fitted on the scope itself instead of its parent (M11, `Simulator.estimator_scope`;
     `None`, the default, always takes the parent); `meta` records the scope used (`est_scope`) and the count
     (`n_featured`). `error_model` is the terminal error of the `Simulator` (`'polls'`, the default, a single
@@ -493,7 +496,8 @@ def run_case(
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
-            disp_params=disp_params | {'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
+            disp_params=disp_params | {'herding': bool(herding)}, regional_noise=regional_noise, swing=swing,
+            min_events=min_events,
             error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings,
             rating_exponent=rating_exponent, **tuned, **extra
         )
@@ -617,7 +621,7 @@ def run_case(
         )),
         'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias), 'dispersion': bool(dispersion), 'herding': bool(herding),
         'composition_ratio': float(sim.composition_ratio), 'composition_rho': composition_rho,
-        'regional_noise': bool(regional_noise),
+        'regional_noise': bool(regional_noise), 'swing': swing,
         'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured), 'error_model': sim.error_model_used,
         'min_events': int(min_events) if min_events is not None else np.nan,
         'swing_ar': sim.v2swing.a_r if sim.v2swing is not None else np.nan, 'swing_br': sim.v2swing.b_r if sim.v2swing is not None else np.nan,
@@ -1005,6 +1009,7 @@ def run_backtest(
     herding: bool = True,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
+    swing: str = 'logistic',
     min_events: Optional[int] = None,
     error_model: str = 'polls',
     drift_scale: Optional[str | float] = None,
@@ -1048,8 +1053,8 @@ def run_backtest(
                 case = run_case(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
-                    herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
-                    error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
+                    herding=herding, composition=composition, regional_noise=regional_noise, swing=swing,
+                    min_events=min_events, error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
                     weight_ratings=weight_ratings, config=config, rating_exponent=rating_exponent,
                     drop_ctypes=drop_ctypes
                 )
@@ -1074,7 +1079,7 @@ def run_backtest(
                         scope, event_date, 0, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
                         nowcast_only=True, house_effects=house_effects, industry_bias=industry_bias,
                         dispersion=dispersion, herding=herding, composition=composition,
-                        regional_noise=regional_noise, min_events=min_events, error_model=error_model,
+                        regional_noise=regional_noise, swing=swing, min_events=min_events, error_model=error_model,
                         drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings, config=config,
                         rating_exponent=rating_exponent, drop_ctypes=['exit']
                     )
@@ -1337,6 +1342,7 @@ def backtest_scope(
     herding: bool = True,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
+    swing: str = 'logistic',
     min_events: Optional[int] = None,
     error_model: str = 'polls',
     drift_scale: Optional[str | float] = None,
@@ -1367,7 +1373,7 @@ def backtest_scope(
     horizons : list of int, optional
         Horizons in days; `DEFAULT_HORIZONS` by default.
     n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, \
-min_events, error_model, drift_scale, tail_dof
+swing, min_events, error_model, drift_scale, tail_dof
         Parameters of `run_backtest`, recorded in `run.json` (`error_model` and `drift_scale` as requested;
         `meta.csv` has the ones each case used).
     config : dict, optional
@@ -1419,7 +1425,8 @@ min_events, error_model, drift_scale, tail_dof
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                   regional_noise=regional_noise, min_events=min_events, error_model=error_model,
-                  drift_scale=drift_scale, tail_dof=tail_dof, config=config, rating_exponent=rating_exponent, ban=ban)
+                  drift_scale=drift_scale, tail_dof=tail_dof, config=config, rating_exponent=rating_exponent, ban=ban,
+                  swing=swing)
     if config is not None:
         params.update({key: config[key] for key in CONFIG_SWITCHES})
     weight_ratings = 'flat' if flat_ratings else (rating_overrides(scope) if recompute_ratings else None)

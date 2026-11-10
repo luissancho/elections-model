@@ -133,6 +133,7 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.tail_dof = None  # grados de libertad de la t por partido, `nobs - 2` (por defecto)
     sim.composition_ratio, sim.composition_rho = 1.0, 0.
     sim.house_effects = sim.dispersion = sim.regional_noise = True
+    sim.swing = 'logistic'  # regla del swing por defecto
     sim.industry_bias, sim.composition, sim.smap = False, None, {'UP': [{'agg': ['UP', 'MP']}]}
     sim.threshold, sim.threshold_scope = 3.0, None
     sim.v2swing, sim.rng, sim.rng_swing, sim.region_groups, sim.central_table = None, np.random.default_rng(42), None, {}, None

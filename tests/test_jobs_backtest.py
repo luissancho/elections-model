@@ -115,6 +115,23 @@ def test_backtest_job_passes_the_tail_dof_to_the_runner(fresh_app, patched, tmp_
     assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['tail_dof'] == expected
 
 
+@pytest.mark.parametrize('value, expected', [(None, 'logistic'), ('logistic', 'logistic'), ('proportional', 'proportional')])
+def test_backtest_job_passes_the_swing_rule_to_the_runner(fresh_app, patched, tmp_path, value, expected):
+    runner = FakeRunner()
+    kwargs = {} if value is None else {'swing': value}
+    Backtest().run(scopes=['es'], out=str(tmp_path), verbose=0, runner=runner, stats=stats, **kwargs)
+    assert runner.calls[0]['swing'] == expected
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['swing'] == expected
+
+
+@pytest.mark.parametrize('bad', ['uniform', '', None, 1, True, ['logistic']])
+def test_backtest_rejects_a_bad_swing_before_running(fresh_app, patched, tmp_path, bad):
+    runner = FakeRunner()
+    with pytest.raises(ValueError, match='backtest: swing must be "logistic" or "proportional"'):
+        Backtest().run(scopes=['es'], out=str(tmp_path), swing=bad, runner=runner, stats=stats)
+    assert runner.calls == [] and not (tmp_path / 'run.json').exists()
+
+
 @pytest.mark.parametrize('bad', [0, 1, -3, 2.5, True, 'x', [5]])
 def test_backtest_rejects_a_bad_tail_dof_before_running(fresh_app, patched, tmp_path, bad):
     runner = FakeRunner()

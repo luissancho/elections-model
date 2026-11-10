@@ -314,6 +314,67 @@ def normal_update(
 REGIONAL_LIST_ID = 100  # `region_id` of a list voted by the whole scope (Canary Islands): not a part of it
 
 
+def logistic_swing(
+    prev_pcts: pd.DataFrame,
+    ratios: pd.Series,
+    weights: pd.Series,
+    districts: list
+) -> pd.DataFrame:
+    """
+    Logistic swing: project the previous shares of each party to its new level by multiplying its odds
+    `p / (100 - p)` by the same factor in every district, the factor that gives the party in the districts the
+    votes of the proportional swing (`previous share · ratio`, weighted by `weights`).
+
+    For small shares it is the proportional swing; in the strongholds of a party that grows it gives less
+    than the proportional one (a share cannot pass 100) and in its weak districts a little more, which is how
+    the provinces have moved between elections.
+
+    Parameters
+    ----------
+    prev_pcts : pd.DataFrame
+        Previous shares (percentages) by region (rows) and party (columns); NaN or 0 where a party has no base.
+    ratios : pd.Series
+        National ratio of each party, new share over previous share.
+    weights : pd.Series
+        Valid votes of each region.
+    districts : list
+        Rows of `prev_pcts` that are districts. The other rows (the total of the scope, a list voted by the
+        whole scope) take `previous share · ratio`.
+
+    Returns
+    -------
+    pd.DataFrame
+        The swung shares, with the layout of `prev_pcts`. A party keeps no base where it had none; without a
+        finite ratio it gets no projection (NaN), as with the proportional swing.
+    """
+    out = prev_pcts.mul(ratios)
+
+    p = prev_pcts.loc[districts].to_numpy(dtype=float)
+    w = weights.loc[districts].to_numpy(dtype=float)[:, None]
+    r = ratios.reindex(prev_pcts.columns).to_numpy(dtype=float)
+
+    has = np.isfinite(p) & (p > 0)
+    solve = np.isfinite(r) & (r > 0) & has.any(axis=0)
+    # Votes (times 100) of each party in the districts under the proportional swing: the total to keep
+    target = np.where(has, p * w, 0.).sum(axis=0) * np.where(solve, r, 0.)
+
+    pp = np.clip(np.where(has, p, 50.), None, 100. - 1e-9)
+    x = np.log(pp / (100. - pp))
+
+    # The total grows with the shift of the log-odds: bisection, one shift per party
+    lo, hi = np.full(p.shape[1], -40.), np.full(p.shape[1], 40.)
+    for _ in range(60):
+        mid = (lo + hi) / 2.
+        total = np.where(has, w * 100. / (1. + np.exp(-(x + mid))), 0.).sum(axis=0)
+        below = total < target
+        lo, hi = np.where(below, mid, lo), np.where(below, hi, mid)
+
+    swung = 100. / (1. + np.exp(-(x + (lo + hi) / 2.)))
+    out.loc[districts] = np.where(has & solve, swung, p * r)
+
+    return out
+
+
 def partial_parties(
     pct: pd.DataFrame,
     votes: pd.Series,

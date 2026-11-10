@@ -490,6 +490,47 @@ def test_projection_skips_a_block_without_members_present(mode):
     assert empty.empty and len(empty.columns) == 0
 
 
+# --- Regla del swing: de la cuota nacional a las provincias (`Simulator.build_umat`) -------------------------
+
+def test_unknown_swing_raises_before_touching_data():
+    with pytest.raises(ValueError, match='`swing` must be one of'):
+        Simulator(scope='es', event_date='2026-11-29', swing='uniform')
+
+
+def _swing_simulator(swing):
+    """Simulator mínimo (patrón `__new__`) con dos provincias iguales y un partido al 20 % y al 50 % (35 %
+    nacional); el resto del voto es el residuo `'-'`, sin votos en blanco."""
+    sim = Simulator.__new__(Simulator)
+    sim.swing, sim.default_region, sim.verbose, sim.smap = swing, 0, 0, {}
+    sim.regional_noise, sim.v2swing, sim.rng_swing, sim.rng_geo = False, None, None, None
+    sim.geo_cache, sim.geo_summary = {}, {}
+    sim.cols_unit = ['prev_pct', 'vpred_pct']
+    regions = pd.Index([0, 1, 2], name='region_id')
+    sim.params = {'names': ['A'], 'regions': [0, 1, 2], 'random': False}
+    sim.prev_results = pd.concat({'pct': pd.DataFrame({'A': [35., 20., 50.]}, index=regions)}, axis=1)
+    sim.prev_totals = pd.DataFrame({'votes': [200., 100., 100.], 'blank_pct': [0., 0., 0.]}, index=regions)
+    return sim
+
+
+def test_build_umat_swings_the_provinces_with_the_logistic_rule():
+    """El partido sube del 35 % al 50 %: factor 2 sobre sus odds (0,25 y 1), 33,33 % y 66,67 %. El residuo baja
+    del 65 % al 50 % con la misma regla (odds 4 y 1 por 0,5: 66,67 % y 33,33 %), así que cada provincia suma 100
+    sin renormalizar."""
+    frame = pd.DataFrame({'vpred': [50., 50.]}, index=['A', '-'])
+    umat = _swing_simulator('logistic').build_umat(frame)['vpred_pct']
+    assert umat['A'].tolist() == pytest.approx([50., 33.33, 66.67], abs=0.01)
+    assert umat['-'].tolist() == pytest.approx([50., 66.67, 33.33], abs=0.01)
+
+
+def test_build_umat_keeps_the_proportional_rule_as_an_option():
+    """Con `swing='proportional'`, cuota anterior por la razón nacional (28,57 % y 71,43 %; residuo 61,54 % y
+    38,46 %) y renormalización de cada provincia a 100: 31,71 % y 65 %."""
+    frame = pd.DataFrame({'vpred': [50., 50.]}, index=['A', '-'])
+    umat = _swing_simulator('proportional').build_umat(frame)['vpred_pct']
+    assert umat['A'].tolist() == pytest.approx([50., 31.71, 65.], abs=0.01)
+    assert umat['-'].tolist() == pytest.approx([50., 68.29, 35.], abs=0.01)
+
+
 # --- Reglas del smap sobre las bases provinciales (`Simulator.apply_source_rules`) -----------------------
 
 @pytest.fixture
@@ -574,6 +615,58 @@ def test_source_rules_sub_keep_without_own_base_falls_back_to_the_forecasts():
     out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
     assert out['NEW'].tolist() == pytest.approx([3.75, 0., 7.5], abs=0.01)
     assert out['PP'].tolist() == pytest.approx([26.25, 30., 22.5], abs=0.01)
+
+
+def test_source_rules_ignore_geo_rules(source_rules_case):
+    # Una regla `geo` no mueve bases entre partidos: no se aplica aquí (ni deja a FA sin base fuera de `regions`)
+    prev, votes, frame = source_rules_case
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR']}, {'type': 'geo', 'names': ['FV'], 'regions': ['46']}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    assert out['FA'].tolist() == [15., 20., 10., 15.]
+
+
+def test_poll_blocks_keep_the_agg_sources_with_a_geo_rule():
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR', 'FV']}, {'type': 'geo', 'names': ['FV'], 'regions': ['46']}]}
+    assert Simulator.poll_blocks(['PP', 'FA'], smap) == {'PP': ['PP'], 'FA': ['FA', 'SUMAR', 'FV']}
+
+
+# --- Regla `geo`: parte del voto de un partido en unas provincias, según los sondeos que la desglosan --------
+
+def test_geo_poll_shares_only_polls_listing_the_part():
+    labels = pd.DataFrame({'FA': [6., 7., 5., 6.], 'SUMAR': [np.nan] * 4, 'FV': [1.5, np.nan, 1.0, 2.0],
+                           'weight': [1., 1., 2., 0.]})
+    out = Simulator.geo_poll_shares(labels, ['FA', 'SUMAR', 'FV'], ['FV'])
+    # El 2º no desglosa FV y el 4º no pesa: quedan el 1º (1,5 / 7,5) y el 3º (1 / 6)
+    assert out['share'].tolist() == pytest.approx([0.2, 1 / 6])
+    assert out['weight'].tolist() == [1., 2.]
+
+
+def test_geo_share_estimate_shrinks_towards_the_prior():
+    shares = pd.Series([0.10, 0.20, 0.15, 0.15])
+    weights = pd.Series([1., 1., 1., 1.])
+    share, sd, n_eff = Simulator.geo_share_estimate(shares, weights, prior=0.13, k=4)
+    # Media 0,15 con n_eff 4 y 4 sondeos ficticios en 0,13: la mitad del camino
+    assert n_eff == pytest.approx(4.)
+    assert share == pytest.approx(0.14)
+    # Error típico de la media ponderada (desviación 0,0354 / raíz de 4), encogido a la mitad
+    assert sd == pytest.approx(0.5 * np.sqrt(0.00125) / 2, rel=1e-6)
+
+
+def test_geo_share_estimate_without_polls_is_the_prior():
+    assert Simulator.geo_share_estimate(pd.Series(dtype=float), pd.Series(dtype=float), prior=0.13) == (0.13, 0., 0.)
+
+
+def test_apply_geo_share_moves_the_vote_between_the_two_areas():
+    regions = pd.Index([0, 3, 46, 28], name='region_id')  # total, Alicante, Valencia, Madrid
+    vpred = pd.DataFrame({'FA': [7., 6., 8., 10.], 'PP': [30., 33., 31., 37.]}, index=regions)
+    valid = pd.Series([100., 20., 30., 50.], index=regions)
+    out, base = Simulator.apply_geo_share(vpred, 'FA', [3, 46], 0.5, valid, 0)
+    # Votos de FA: 1,2 + 2,4 en la zona (3,6) y 5 fuera; con s = 0,5 cada zona se queda 4,3
+    assert base == pytest.approx(3.6 / 8.6)
+    assert out.loc[[3, 46], 'FA'].tolist() == pytest.approx([6. * 4.3 / 3.6, 8. * 4.3 / 3.6])
+    assert out.loc[28, 'FA'] == pytest.approx(10. * 4.3 / 5.)
+    assert out.loc[0, 'FA'] == 7. and out['PP'].equals(vpred['PP'])
+    assert (out.loc[[3, 46, 28], 'FA'] * valid.loc[[3, 46, 28]] / 100).sum() == pytest.approx(8.6)
 
 
 def test_source_rules_split_shares_the_previous_vote_equally(source_rules_case):

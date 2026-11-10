@@ -254,11 +254,15 @@ def test_anchor_is_the_earliest_of_the_fit_end_the_ban_eve_and_today(sim26):
 # Desde el 19-10-2026 Sumar es FA (Frente Amplio) y Compromís va aparte en sus provincias; con la base del 24-10
 # (325 sondeos) la mediana expandida es 134 / 108 / 67 / 9. Desde el 26-10-2026 el promedio se lee hoy, no tres
 # días por delante del último sondeo (`as_of` nunca en el futuro): con la base del 26-10, 135 / 109 / 68 / 8.
-REGRESSION_TOTALS = [135, 109, 68, 8]
+# Desde el 10-11-2026 el swing es logístico (método 18, `Simulator(swing='logistic')`): con la base del 10-11
+# (355 sondeos; AA y las reglas de Vox en Tenerife y de FV ya dentro), 129 / 110 / 68 / 11; con el swing
+# proporcional y la misma base, 130 / 109 / 69 / 10.
+REGRESSION_TOTALS = [129, 110, 68, 11]
 # Desde el 24-10-2026 el titular es el reparto central (M13, `Simulator.central_result`): D'Hondt sobre el voto
 # central, igual en nowcast y forecast; no depende de la secuencia aleatoria, sólo del promedio y de las bases.
-# Con la lectura a hoy del 26-10-2026 (base del 26-10), 134 / 111 / 66 / 9.
-CENTRAL_TOTALS = [134, 111, 66, 9]
+# Con la lectura a hoy del 26-10-2026 (base del 26-10), 134 / 111 / 66 / 9. Con el swing logístico y la base del
+# 10-11-2026, 127 / 109 / 70 / 11 (con el proporcional, 128 / 110 / 68 / 11).
+CENTRAL_TOTALS = [127, 109, 70, 11]
 
 
 def test_nowcast_regression_seed_42(sim26):

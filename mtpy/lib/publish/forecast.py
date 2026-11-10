@@ -42,8 +42,10 @@ WEIGHTS_COLUMNS = ['name', 'date', 'pollster_id', 'pollster', 'sponsor', 'sample
                    'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating']
 
 
+# Switches of the model given to the `Simulator` and recorded in `meta.correctors`; `swing` is the rule that
+# projects the national shares to the provinces (`'logistic'` since 2026-11-10, `'proportional'` before)
 DEFAULT_CORRECTORS = {'house_effects': True, 'dispersion': True, 'regional_noise': True, 'industry_bias': False,
-                      'composition': None}
+                      'composition': None, 'swing': 'logistic'}
 
 
 SUMMARY_COLS = ('pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats')
