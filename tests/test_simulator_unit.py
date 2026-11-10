@@ -545,6 +545,37 @@ def test_source_rules_sub_regional_with_an_empty_source_province(source_rules_ca
     assert out['FA'].tolist() == pytest.approx([10.67, 20., 6.67, 0.], abs=0.01)
 
 
+def test_source_rules_sub_regional_keep_adds_the_base_only_where_listed():
+    # Vox no concurrió en Santa Cruz de Tenerife en 2023 (aquí, la provincia 46): con `keep` hereda del PP sólo
+    # allí y conserva su base propia en el resto, en vez de quedarse sin base fuera de las provincias listadas
+    regions = pd.Index([0, 8, 28, 46], name='region_id')
+    prev = pd.DataFrame({'VOX': [9.2, 12., 11., 0.], 'PP': [30., 25., 35., 30.]}, index=regions)
+    votes = pd.Series([100., 40., 40., 20.], index=regions)
+    frame = pd.DataFrame({'vpred': [20., 30.]}, index=['VOX', 'PP'])
+    smap = {'VOX': [{'type': 'sub', 'names': ['PP'], 'regions': ['46'], 'keep': True}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    # Hereda la parte que conserva el swing del bloque: ratios nacionales Vox 20 / 9,2, PP 30 / 30 y bloque
+    # 50 / 39,2, así que la parte es (1,2755 - 1) / (2,1739 - 1) = 0,2347 de los 30 del PP en 46 (7,04); las
+    # filas nacionales se recalculan desde las provincias
+    assert out['VOX'].tolist() == pytest.approx([10.61, 12., 11., 7.04], abs=0.01)
+    assert out['PP'].tolist() == pytest.approx([28.59, 25., 35., 22.96], abs=0.01)
+    # Tras el swing proporcional, Vox + PP en 46 crece como el bloque nacional: 30 * 50 / 39,2
+    swung = out.loc[46, 'VOX'] * 20 / 9.2 + out.loc[46, 'PP'] * 30 / 30
+    assert swung == pytest.approx(30 * 50 / 39.2, abs=0.05)
+
+
+def test_source_rules_sub_keep_without_own_base_falls_back_to_the_forecasts():
+    # Sin base propia en ningún sitio no hay ratio del partido: reparte como un `sub` normal
+    regions = pd.Index([0, 8, 46], name='region_id')
+    prev = pd.DataFrame({'NEW': 0., 'PP': [30., 30., 30.]}, index=regions)
+    votes = pd.Series([100., 50., 50.], index=regions)
+    frame = pd.DataFrame({'vpred': [10., 30.]}, index=['NEW', 'PP'])
+    smap = {'NEW': [{'type': 'sub', 'names': ['PP'], 'regions': ['46'], 'keep': True}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    assert out['NEW'].tolist() == pytest.approx([3.75, 0., 7.5], abs=0.01)
+    assert out['PP'].tolist() == pytest.approx([26.25, 30., 22.5], abs=0.01)
+
+
 def test_source_rules_split_shares_the_previous_vote_equally(source_rules_case):
     prev, votes, frame = source_rules_case
     out = Simulator.apply_source_rules(prev, {'SUMAR': [{'type': 'split', 'names': ['FA', 'UP']}]}, frame, 0, votes)

@@ -1590,14 +1590,19 @@ class Simulator(Core):
         base only in those provinces, a `sub` rule inherits only there (the sources keep their whole base
         elsewhere) and the national row of the party and of its sources is recomputed from the provinces,
         weighted by their valid votes, so that the national swing reproduces the forecast within the
-        provinces kept.
+        provinces kept. A `sub` rule with `keep` true adds what it inherits to the own base of the party and
+        leaves its base elsewhere untouched: for a party that did not run in some provinces last time (Vox in
+        Santa Cruz de Tenerife in 2023), whose voters went to `names` there. Its share is not the forecast
+        proportion but the one that makes the party and its sources grow, after the proportional swing, like
+        their national bloc (the forecast proportion, when the party has no base of its own anywhere).
 
         Parameters
         ----------
         prev_pcts : pd.DataFrame
             Previous shares by `region_id` (the scope total included) and party, 0 where none.
         smap : dict
-            `{party: [{'type': 'agg' | 'sub' | 'split', 'names': [...], 'regions': ...}, ...]}`.
+            `{party: [{'type': 'agg' | 'sub' | 'split', 'names': [...], 'regions': ..., 'keep': bool}, ...]}`
+            (`keep` only for `sub`, false by default).
         frame : pd.DataFrame
             Current national forecasts, indexed by party, with the column `vpred`.
         default_region : int
@@ -1624,6 +1629,7 @@ class Simulator(Core):
                 type = rule.get('type')
                 names = rule.get('names')
                 regions = rule.get('regions')
+                keep = type == 'sub' and bool(rule.get('keep', False))
 
                 kept = None
                 if regions is not None:
@@ -1649,15 +1655,30 @@ class Simulator(Core):
 
                         # Share of the previous vote of the source parties inherited by the new party,
                         # in proportion to the current forecasts: prev_v * fc_k / (fc_k + fc_v)
-                        if fc_k + fc_v > 0:
-                            inherited = np.round(prev_v * fc_k / (fc_k + fc_v), 2)
-                        else:
-                            inherited = prev_v * 0.
+                        share = fc_k / (fc_k + fc_v) if fc_k + fc_v > 0 else 0.
+                        nat_k = prev_pcts.loc[default_region, key]
+                        nat_v = prev_pcts.loc[default_region, names].sum()
+                        if keep and nat_k > 0 and nat_v > 0 and fc_v > 0:
+                            # The party has its own base (and its own swing) elsewhere: inherit the share that,
+                            # after the proportional swing of each party, makes key + sources grow like the
+                            # national bloc. With the ratios r = forecast / previous national share,
+                            # share * r_k + (1 - share) * r_v = r_bloc. The forecast proportion would apply the
+                            # (larger) swing of the party to a base taken from a shrinking source and inflate
+                            # the bloc, squeezing every other party of the province through the renormalization
+                            r_k, r_v = fc_k / nat_k, fc_v / nat_v
+                            r_b = (fc_k + fc_v) / (nat_k + nat_v)
+                            if r_k != r_v:
+                                share = float(np.clip((r_b - r_v) / (r_k - r_v), 0., 1.))
+                        inherited = np.round(prev_v * share, 2)
                         if kept is not None:
                             # Only where the new party runs: the sources keep their whole base elsewhere
                             inherited = inherited.where(kept, 0.)
 
-                        prev_pcts[key] = inherited
+                        if keep:
+                            # The party keeps its own base and adds the inherited share where listed
+                            prev_pcts[key] = prev_pcts[key] + inherited
+                        else:
+                            prev_pcts[key] = inherited
                         prev_pcts[names] = prev_pcts[names].sub(inherited / len(names), axis=0)
 
                         if kept is not None:
@@ -1668,7 +1689,7 @@ class Simulator(Core):
                         for name in names:
                             prev_pcts[name] += (prev_k / len(names))
 
-                if kept is not None:
+                if kept is not None and not keep:
                     prev_pcts[key] = prev_pcts[key].where(kept, .0)
 
                     # Keep the national share consistent with the provinces kept by the rule, so that the
