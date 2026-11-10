@@ -7515,8 +7515,8 @@ def test_poll_kpis_title_fieldwork_and_sheet():
     assert pages.fieldwork_text(POLL) == '5 nov 2026 – 7 nov 2026'
     assert pages.fieldwork_text(POLL | {'end_date': None}) == '5 nov 2026' and pages.fieldwork_text({'date': '2026-11-09'}) is None
     sheet = pages.sheet_rows(POLL, '/casas/nc-report', 'Elecciones generales · 29 nov 2026')
-    assert [row['label'] for row in sheet] == ['Encuestadora', 'Medio', 'Tipo', 'Trabajo de campo', 'Muestra', 'Rating', 'Peso',
-                                               'Elección']  # neither the source nor the model update (Luis, 2026-11-09)
+    # neither the source nor the model update (Luis, 2026-11-09), nor the rating and the weight (in the weight card, 2026-11-10)
+    assert [row['label'] for row in sheet] == ['Encuestadora', 'Medio', 'Tipo', 'Trabajo de campo', 'Muestra', 'Elección']
     assert sheet[0] == {'label': 'Encuestadora', 'text': 'NC Report', 'href': '/casas/nc-report'}
     assert sheet[3]['text'] == '5 nov 2026 – 7 nov 2026'
     assert all(row['label'] != 'Fuente' for row in sheet)  # no source row (Luis, 2026-11-09)

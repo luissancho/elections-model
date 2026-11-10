@@ -401,17 +401,15 @@ def sheet_rows(poll: dict, house_href: str, event_label: str) -> list:
     Returns
     -------
     list
-        ``{'label', 'text', 'href'}`` rows: house (linked to its profile), sponsor, type, fieldwork, sample, rating,
-        weight and election. Neither the source nor the model update (Luis, 2026-11-09): the footer of every page
-        names both.
+        ``{'label', 'text', 'href'}`` rows: house (linked to its profile), sponsor, type, fieldwork, sample and
+        election. Neither the source nor the model update (Luis, 2026-11-09): the footer of every page names both;
+        nor the rating and the weight (2026-11-10): the weight card right above shows them.
     """
     return [{'label': 'Encuestadora', 'text': poll.get('pollster'), 'href': house_href},
             {'label': 'Medio', 'text': poll.get('sponsor') or '—', 'href': None},
             {'label': 'Tipo', 'text': mtype_label(poll.get('mtype')), 'href': None},
             {'label': 'Trabajo de campo', 'text': fieldwork_text(poll) or fmt_date(poll.get('date')), 'href': None},
             {'label': 'Muestra', 'text': fmt_int(poll.get('sample_size')), 'href': None},
-            {'label': 'Rating', 'text': fmt_num(poll.get('rating'), 1), 'href': None},
-            {'label': 'Peso', 'text': fmt_num(poll.get('weight'), 2), 'href': None},
             {'label': 'Elección', 'text': event_label, 'href': None}]
 
 
