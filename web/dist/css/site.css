@@ -709,6 +709,11 @@ ol.notes > li:target { color: var(--color-text); }
 .poll-pair > * { min-width: 0; }
 .poll-seats .csub { margin: 0 0 4px; text-align: center; }
 .poll-card .card-head h2 a { color: inherit; text-decoration: none; }
+/* the sheet of a poll: two columns as wide as their content, the values aligned left, the same thin line under the
+   names and the values (Luis, 2026-11-10) */
+#sheet-table { width: auto; }
+#sheet-table th, #sheet-table td { text-align: left; border-bottom: 1px solid var(--color-line); }
+#sheet-table th { padding-right: var(--space-4); }
 
 /* Escaños: histograms, blocks chart, majority calculator and district form */
 #ridge-chart { margin-top: var(--space-3); }
