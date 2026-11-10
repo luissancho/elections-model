@@ -107,6 +107,8 @@
         {% endif %}
         {% endcall %}
       {{ m.card_end() }}
+      {#- the right column: the weight of the poll and its sheet (Luis, 2026-11-10) -#}
+      <div class="stack poll-side">
       {{ m.card_start('weight', 'Peso en el promedio', 'El rating de ' ~ house.name ~ ' y cuánto cuenta este sondeo en el promedio: el producto de sus tres factores propios.') }}
         {{ m.kpis(kpis) }}
         {{ m.kpis(weight.factors) }}
@@ -137,6 +139,27 @@
         <p>El cálculo completo, con un ejemplo vivo, está en <a href="{{ method_href('promedio') }}">cómo hacemos el promedio</a>.</p>
         {% endcall %}
       {{ m.card_end() }}
+      {{ m.card_start('sheet', 'Ficha', 'Los datos del sondeo.') }}
+        <div class="table-wrap">
+          <table id="sheet-table">
+            <tbody>
+              {% for row in sheet %}
+              <tr>
+                <th scope="row">{{ row.label }}</th>
+                <td>{% if row.href %}<a href="{{ row.href }}"{% if row.href.startswith('http') %} rel="noopener"{% endif %}>{{ row.text }}</a>{% else %}{{ row.text }}{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% call m.how() %}
+        <p>
+          La fecha de un sondeo es el último día de su trabajo de campo. Los datos salen de las listas de sondeos de
+          Wikipedia.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      </div>
       </div>
       {{ m.card_start('house', house.name ~ ' en este ciclo', 'Los sondeos de ' ~ house.name ~ ' en este ciclo frente al promedio de todas las encuestadoras, con este sondeo marcado.',
                       tools=m.download_button('house-download', house.name ~ ' · ' ~ event_label, 'frente al promedio · ' ~ title_suffix, image_sign, chart_file)) }}
@@ -167,26 +190,6 @@
         <p>
           Separarse del promedio no es equivocarse: el acierto de cada encuestadora se mide con los resultados, en
           <a href="{{ house.href }}">el perfil de {{ house.name }}</a> y en el <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>.
-        </p>
-        {% endcall %}
-      {{ m.card_end() }}
-      {{ m.card_start('sheet', 'Ficha', 'Los datos del sondeo.') }}
-        <div class="table-wrap">
-          <table id="sheet-table">
-            <tbody>
-              {% for row in sheet %}
-              <tr>
-                <th scope="row">{{ row.label }}</th>
-                <td>{% if row.href %}<a href="{{ row.href }}"{% if row.href.startswith('http') %} rel="noopener"{% endif %}>{{ row.text }}</a>{% else %}{{ row.text }}{% endif %}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% call m.how() %}
-        <p>
-          La fecha de un sondeo es el último día de su trabajo de campo. Los datos salen de las listas de sondeos de
-          Wikipedia.
         </p>
         {% endcall %}
       {{ m.card_end() }}

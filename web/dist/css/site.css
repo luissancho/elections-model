@@ -693,22 +693,27 @@ ol.notes > li:target { color: var(--color-text); }
 /* The page of a poll: its card to share, the vote bars on the left and the hemicycle of the seats the house gave on
    the right (the bars take the whole width when it gave none); the house in the heading links its profile but reads
    as the title (and draws as plain text in the image) */
-.poll-card .poll-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); align-items: center; }
+.poll-card .poll-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: center; }
 .poll-grid.single { grid-template-columns: 1fr; }
 .poll-card .pc-event { margin: -4px 0 0; font-size: 13.5px; color: var(--color-muted); }
 .poll-card .pc-gauge { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 12px 0 var(--space-3); font-size: 13.5px; color: var(--color-muted); font-variant-numeric: normal; }
 .poll-card .pc-gauge .lbl { color: inherit; text-decoration: none; }
 .poll-card .pc-gauge .lbl:hover { color: var(--color-accent); text-decoration: underline; }
-.poll-card .pc-gauge b { font: 700 15px var(--font-head); }
+.poll-card .pc-gauge b { font-weight: 700; }
 .poll-card .pc-gauge .bar { display: block; width: 190px; height: 6px; margin-left: 6px; border-radius: 3px; background: #e3e6ec; overflow: hidden; }
 .poll-card .pc-gauge .bar i { display: block; height: 100%; border-radius: 3px; }
 .poll-card .pc-note { margin: var(--space-2) 0 var(--space-3); font-size: 12.5px; }
 .poll-card .poll-bars { height: auto; }
 /* the table of the vote and the weight card side by side (Luis, 2026-11-09); stacked on phones */
-.poll-pair { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
+.poll-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .poll-pair > * { min-width: 0; }
 .poll-seats .csub { margin: 0 0 4px; text-align: center; }
 .poll-card .card-head h2 a { color: inherit; text-decoration: none; }
+/* the sheet of a poll: its lines across the whole card, the names as wide as the longest one and the values aligned
+   left next to them, the same thin line under both (Luis, 2026-11-10) */
+#sheet-table th, #sheet-table td { text-align: left; border-bottom: 1px solid var(--color-line); }
+#sheet-table th { width: 1%; padding-right: var(--space-4); }
+#sheet-table tr:last-child th, #sheet-table tr:last-child td { border-bottom: 0; }
 
 /* Escaños: histograms, blocks chart, majority calculator and district form */
 #ridge-chart { margin-top: var(--space-3); }
