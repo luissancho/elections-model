@@ -576,6 +576,58 @@ def test_source_rules_sub_keep_without_own_base_falls_back_to_the_forecasts():
     assert out['PP'].tolist() == pytest.approx([26.25, 30., 22.5], abs=0.01)
 
 
+def test_source_rules_ignore_geo_rules(source_rules_case):
+    # Una regla `geo` no mueve bases entre partidos: no se aplica aquí (ni deja a FA sin base fuera de `regions`)
+    prev, votes, frame = source_rules_case
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR']}, {'type': 'geo', 'names': ['FV'], 'regions': ['46']}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    assert out['FA'].tolist() == [15., 20., 10., 15.]
+
+
+def test_poll_blocks_keep_the_agg_sources_with_a_geo_rule():
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR', 'FV']}, {'type': 'geo', 'names': ['FV'], 'regions': ['46']}]}
+    assert Simulator.poll_blocks(['PP', 'FA'], smap) == {'PP': ['PP'], 'FA': ['FA', 'SUMAR', 'FV']}
+
+
+# --- Regla `geo`: parte del voto de un partido en unas provincias, según los sondeos que la desglosan --------
+
+def test_geo_poll_shares_only_polls_listing_the_part():
+    labels = pd.DataFrame({'FA': [6., 7., 5., 6.], 'SUMAR': [np.nan] * 4, 'FV': [1.5, np.nan, 1.0, 2.0],
+                           'weight': [1., 1., 2., 0.]})
+    out = Simulator.geo_poll_shares(labels, ['FA', 'SUMAR', 'FV'], ['FV'])
+    # El 2º no desglosa FV y el 4º no pesa: quedan el 1º (1,5 / 7,5) y el 3º (1 / 6)
+    assert out['share'].tolist() == pytest.approx([0.2, 1 / 6])
+    assert out['weight'].tolist() == [1., 2.]
+
+
+def test_geo_share_estimate_shrinks_towards_the_prior():
+    shares = pd.Series([0.10, 0.20, 0.15, 0.15])
+    weights = pd.Series([1., 1., 1., 1.])
+    share, sd, n_eff = Simulator.geo_share_estimate(shares, weights, prior=0.13, k=4)
+    # Media 0,15 con n_eff 4 y 4 sondeos ficticios en 0,13: la mitad del camino
+    assert n_eff == pytest.approx(4.)
+    assert share == pytest.approx(0.14)
+    # Error típico de la media ponderada (desviación 0,0354 / raíz de 4), encogido a la mitad
+    assert sd == pytest.approx(0.5 * np.sqrt(0.00125) / 2, rel=1e-6)
+
+
+def test_geo_share_estimate_without_polls_is_the_prior():
+    assert Simulator.geo_share_estimate(pd.Series(dtype=float), pd.Series(dtype=float), prior=0.13) == (0.13, 0., 0.)
+
+
+def test_apply_geo_share_moves_the_vote_between_the_two_areas():
+    regions = pd.Index([0, 3, 46, 28], name='region_id')  # total, Alicante, Valencia, Madrid
+    vpred = pd.DataFrame({'FA': [7., 6., 8., 10.], 'PP': [30., 33., 31., 37.]}, index=regions)
+    valid = pd.Series([100., 20., 30., 50.], index=regions)
+    out, base = Simulator.apply_geo_share(vpred, 'FA', [3, 46], 0.5, valid, 0)
+    # Votos de FA: 1,2 + 2,4 en la zona (3,6) y 5 fuera; con s = 0,5 cada zona se queda 4,3
+    assert base == pytest.approx(3.6 / 8.6)
+    assert out.loc[[3, 46], 'FA'].tolist() == pytest.approx([6. * 4.3 / 3.6, 8. * 4.3 / 3.6])
+    assert out.loc[28, 'FA'] == pytest.approx(10. * 4.3 / 5.)
+    assert out.loc[0, 'FA'] == 7. and out['PP'].equals(vpred['PP'])
+    assert (out.loc[[3, 46, 28], 'FA'] * valid.loc[[3, 46, 28]] / 100).sum() == pytest.approx(8.6)
+
+
 def test_source_rules_split_shares_the_previous_vote_equally(source_rules_case):
     prev, votes, frame = source_rules_case
     out = Simulator.apply_source_rules(prev, {'SUMAR': [{'type': 'split', 'names': ['FA', 'UP']}]}, frame, 0, votes)

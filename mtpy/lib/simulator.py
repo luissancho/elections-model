@@ -43,6 +43,9 @@ class Simulator(Core):
     ERROR_MODELS = ('polls', 'average')  # Terminal error of the simulation, see `fit_error_estimator`
     DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
     MODES = {'nowcast': None, 'forecast': 'deadline'}  # Default `horizon` param of each mode, see `run`
+    # Pseudo-polls at the share implied by the previous election towards which the `geo` share of the polls is
+    # shrunk (see `geo_share_estimate`): with one or two polls the previous geography still weighs
+    GEO_PRIOR_POLLS = 3
 
     def __init__(
         self,
@@ -412,6 +415,9 @@ class Simulator(Core):
         self.units = None
         self.results = None
         self.central_table = None  # Cache of `central_result`
+        self.rng_geo = None  # Generator of the shares of the `geo` rules, see `apply_geo_rules`
+        self.geo_cache = {}  # Poll shares of each `geo` rule, see `geo_polls`
+        self.geo_summary = {}  # Central estimate of each `geo` rule, see `apply_geo_rules`
         self.forecast = None  # Set by `fit_forecast` or `load_forecast`
 
         if self.verbose > 0:
@@ -463,9 +469,12 @@ class Simulator(Core):
             self.rng = np.random.default_rng(self.seed)
             # Own generator for the provincial shocks: the national draws do not depend on them
             self.rng_swing = np.random.default_rng(self.seed + 1 if self.seed is not None else None)
+            # And another for the shares of the `geo` rules: the other draws do not depend on them either
+            self.rng_geo = np.random.default_rng(self.seed + 2 if self.seed is not None else None)
         else:
             self.rng = None
             self.rng_swing = None
+            self.rng_geo = None
 
         return self
 
@@ -1627,6 +1636,9 @@ class Simulator(Core):
         for key, rules in smap.items():
             for rule in (rules if isinstance(rules, list) else [rules]):
                 type = rule.get('type')
+                if type == 'geo':
+                    # Moves no base between parties: applied after the swing (`apply_geo_share`)
+                    continue
                 names = rule.get('names')
                 regions = rule.get('regions')
                 keep = type == 'sub' and bool(rule.get('keep', False))
@@ -1697,6 +1709,133 @@ class Simulator(Core):
                     prev_pcts.loc[default_region, key] = national(key)
 
         return prev_pcts
+
+    # --- Rule `geo`: share of the vote of a party cast in some provinces, from the polls (pure functions) ------
+
+    @staticmethod
+    def geo_poll_shares(labels: pd.DataFrame, block: list[str], names: list[str]) -> pd.DataFrame:
+        """
+        Share of the vote of a party cast in the provinces of a `geo` rule, in each poll that breaks it down:
+        the labels `names` (FV, the list of FA in the Valencian provinces) over all the labels of its poll block
+        (FA + SUMAR + FV).
+
+        Parameters
+        ----------
+        labels : pd.DataFrame
+            One row per poll, the raw party labels (before grouping into blocks) and `weight`.
+        block : list of str
+            Labels of the poll block of the party (`poll_blocks`).
+        names : list of str
+            Labels of the part (the `names` of the rule).
+
+        Returns
+        -------
+        pd.DataFrame
+            `share` and `weight` of the polls that list every label of `names`, with a positive weight and a
+            positive block total.
+        """
+        if labels is None or any(n not in labels.columns for n in names):
+            return pd.DataFrame({'share': pd.Series(dtype=float), 'weight': pd.Series(dtype=float)})
+
+        listed = labels[names].notnull().all(axis=1) & (labels['weight'] > 0)
+        polls = labels.loc[listed]
+        total = polls[[c for c in block if c in polls.columns]].sum(axis=1, min_count=1)
+        part = polls[names].sum(axis=1)
+        ok = total > 0
+
+        return pd.DataFrame({'share': (part / total)[ok].astype(float), 'weight': polls['weight'][ok].astype(float)})
+
+    @staticmethod
+    def geo_share_estimate(
+        shares: pd.Series,
+        weights: pd.Series,
+        prior: float,
+        k: float = GEO_PRIOR_POLLS
+    ) -> tuple[float, float, float]:
+        """
+        Share of a `geo` rule: the weighted mean of the shares of the polls, shrunk towards `prior` (the share
+        implied by the previous election) with `k` pseudo-polls against the effective number of polls.
+
+        Parameters
+        ----------
+        shares, weights : pd.Series
+            Share and weight of each poll (`geo_poll_shares`).
+        prior : float
+            Share of the previous geography, the one of the proportional swing.
+        k : float, default `GEO_PRIOR_POLLS`
+            Pseudo-polls at `prior`.
+
+        Returns
+        -------
+        tuple
+            ``(share, sd, n_eff)``: the shrunk share, its standard error (the one of the weighted mean, shrunk
+            likewise; the prior adds none) and the effective number of polls. ``(prior, 0, 0)`` without polls.
+        """
+        w = np.asarray(weights, dtype=float)
+        s = np.asarray(shares, dtype=float)
+        if len(s) == 0 or w.sum() <= 0:
+            return float(prior), 0., 0.
+
+        mean = float((w * s).sum() / w.sum())
+        n_eff = float(w.sum() ** 2 / (w ** 2).sum())
+        var = float((w * (s - mean) ** 2).sum() / w.sum())
+        lam = n_eff / (n_eff + k)
+
+        return lam * mean + (1. - lam) * float(prior), float(lam * np.sqrt(var / n_eff)), n_eff
+
+    @staticmethod
+    def apply_geo_share(
+        vpred_pcts: pd.DataFrame,
+        key: str,
+        regions: list[int],
+        share: float,
+        valid: pd.Series,
+        default_region: int
+    ) -> tuple[pd.DataFrame, float]:
+        """
+        Rescale the provincial shares of `key` so that the provinces `regions` hold `share` of its vote and the
+        rest of the provinces `1 - share`: one swing ratio inside and another outside, instead of a single
+        proportional swing. The national row, the regional list and the other parties are left as they are.
+
+        Parameters
+        ----------
+        vpred_pcts : pd.DataFrame
+            Provincial shares after the proportional swing, indexed by `region_id`.
+        key : str
+            Party of the rule.
+        regions : list of int
+            Province codes of the rule.
+        share : float
+            Share of the vote of `key` to be cast in `regions`.
+        valid : pd.Series
+            Valid votes by `region_id`, the weights of the provinces.
+        default_region : int
+            `region_id` of the scope total.
+
+        Returns
+        -------
+        tuple
+            ``(frame, base)``: a rescaled copy of `vpred_pcts` and the share of `regions` before the rescaling
+            (the one implied by the previous election).
+        """
+        out = vpred_pcts.copy()
+        provinces = [r for r in out.index if r not in (default_region, REGIONAL_LIST_ID)]
+        inside = [r for r in provinces if r in set(regions)]
+        outside = [r for r in provinces if r not in set(regions)]
+
+        votes = out.loc[provinces, key].fillna(0) * valid.loc[provinces]
+        v_in, v_out = float(votes.loc[inside].sum()), float(votes.loc[outside].sum())
+        total = v_in + v_out
+        if total <= 0:
+            return out, 0.
+
+        base = v_in / total
+        if v_in > 0:
+            out.loc[inside, key] = out.loc[inside, key] * (share * total / v_in)
+        if v_out > 0:
+            out.loc[outside, key] = out.loc[outside, key] * ((1. - share) * total / v_out)
+
+        return out, base
 
     # --- Summaries of the simulated distributions (pure functions) ---------------------------------
 
@@ -2207,6 +2346,54 @@ class Simulator(Core):
 
         return df[self.cols_frame]
     
+    def geo_rules(self) -> list[tuple[str, list[str], list[int]]]:
+        """
+        Rules `geo` of the source map that apply: ``(party, names, province codes)`` of each simulated party
+        with one, in the order of `smap`.
+        """
+        rules = []
+        for key, items in self.smap.items():
+            if key not in self.params['names']:
+                continue
+            for rule in (items if isinstance(items, list) else [items]):
+                if rule.get('type') == 'geo' and rule.get('names') and rule.get('regions') is not None:
+                    rules.append((key, list(rule['names']), [int(r) for r in rule['regions']]))
+
+        return rules
+
+    def geo_polls(self, key: str, names: list[str]) -> pd.DataFrame:
+        """
+        Shares of the polls that break the vote of `key` down by `names` (`geo_poll_shares`), cached per rule
+        until the next fit (the weights of the polls are those of the series of the model).
+        """
+        labels = getattr(self.model, 'series_labels', None)
+        cache_key = (key, tuple(names), id(labels))
+        if cache_key not in self.geo_cache:
+            block = self.poll_blocks(self.params['names'], self.smap).get(key, [key])
+            self.geo_cache[cache_key] = self.geo_poll_shares(labels, block, names)
+
+        return self.geo_cache[cache_key]
+
+    def apply_geo_rules(self, vpred_pcts: pd.DataFrame, valid: pd.Series) -> pd.DataFrame:
+        """
+        Apply the rules `geo` to the provincial shares after the proportional swing (see `apply_geo_share`).
+        The share is the estimate of the polls shrunk towards the one of the previous geography
+        (`geo_share_estimate`); with `random` it is drawn in each simulation with `rng_geo`. Without `random`
+        (the central allocation) the estimate is kept in `geo_summary`.
+        """
+        for key, names, regions in self.geo_rules():
+            polls = self.geo_polls(key, names)
+            _, base = self.apply_geo_share(vpred_pcts, key, regions, 0., valid, self.default_region)
+            share, sd, n_eff = self.geo_share_estimate(polls['share'], polls['weight'], base)
+            if self.params['random'] and self.rng_geo is not None and sd > 0:
+                share = float(np.clip(self.rng_geo.normal(share, sd), 0., 1.))
+            else:
+                self.geo_summary[key] = {'names': names, 'regions': regions, 'share': share, 'sd': sd,
+                                         'prior': base, 'n_polls': int(len(polls)), 'n_eff': n_eff}
+            vpred_pcts, _ = self.apply_geo_share(vpred_pcts, key, regions, share, valid, self.default_region)
+
+        return vpred_pcts
+
     def build_umat(self, frame: pd.DataFrame) -> pd.DataFrame:
         prev_pcts = self.apply_source_rules(
             self.prev_results['pct'].fillna(0), self.smap, frame, self.default_region, self.prev_totals['votes']
@@ -2228,6 +2415,10 @@ class Simulator(Core):
         # Proportional swing: each party keeps its previous geography, scaled by its national ratio
         fmul = fc_votes[names] / prev_votes.loc[self.default_region][names]
         vpred_pcts = prev_pcts.mul(fmul)
+
+        # Rules `geo`: the share of the vote of a party cast in some provinces comes from the polls that break it
+        # down (drawn in each simulation with its standard error), not from the previous geography alone
+        vpred_pcts = self.apply_geo_rules(vpred_pcts, valid)
 
         orphans = [n for n in names if fc_votes[n] > 0 and not np.isfinite(fmul[n])]
         if len(orphans) > 0 and self.verbose > 0:

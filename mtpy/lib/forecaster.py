@@ -278,6 +278,7 @@ class Forecaster(Core):
         self.series = None  # DataFrame to build containing the series of polls, weights and results
         self.series_raw = None  # The same series before subtracting the house effects (see `fit_house_effects`)
         self.party_first_polls = None  # First poll of each party (raw party columns, before grouping into blocks)
+        self.series_labels = None  # Raw party labels and weight of each poll, before grouping (see `build_series`)
         self.house_effects = None  # House effect of each pollster on each series, once fitted
         self.dispersion = None  # Dispersion of each pollster around the average and its weight factor, once fitted
         self.forecast = None  # Fitted estimation of the percentage of votes for each party in the election event
@@ -651,6 +652,9 @@ class Forecaster(Core):
             if mask.any():
                 first[name] = polls_only.index.get_level_values('date')[mask].min()
         self.party_first_polls = pd.Series(first, dtype='datetime64[ns]', name='first_poll')
+        # Raw party labels of each poll with its weight, before grouping: the `geo` rules of the Simulator read
+        # the breakdown of a block that only some polls give (FV within FA)
+        self.series_labels = polls_only[['weight'] + party_names].copy()
 
         # Build blocks using the defined mapping and aggregate the results of each group of parties
         if self.bmap is None:
