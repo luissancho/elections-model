@@ -713,6 +713,7 @@ ol.notes > li:target { color: var(--color-text); }
    left next to them, the same thin line under both (Luis, 2026-11-10) */
 #sheet-table th, #sheet-table td { text-align: left; border-bottom: 1px solid var(--color-line); }
 #sheet-table th { width: 1%; padding-right: var(--space-4); }
+#sheet-table tr:last-child th, #sheet-table tr:last-child td { border-bottom: 0; }
 
 /* Escaños: histograms, blocks chart, majority calculator and district form */
 #ridge-chart { margin-top: var(--space-3); }
