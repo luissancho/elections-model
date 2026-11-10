@@ -39,9 +39,9 @@ BACKTEST_BOOL_COLS = ('seats_valid', 'majority', 'main')
 BACKTEST_RUN_EXCLUDED = ('run_at', 'commit', 'scope', 'events', 'horizons', 'note')
 
 
-# The parameters of the uncertainty of the backtest (method 15) in `meta.params`, with the value that reproduces a
-# `run.json` written before they existed (the behaviour of the code then)
-BACKTEST_RUN_DEFAULTS = {'error_model': 'polls', 'drift_scale': None, 'tail_dof': None}
+# The parameters of the uncertainty of the backtest (method 15) and the swing rule in `meta.params`, with the value
+# that reproduces a `run.json` written before they existed (the behaviour of the code then)
+BACKTEST_RUN_DEFAULTS = {'error_model': 'polls', 'drift_scale': None, 'tail_dof': None, 'swing': 'proportional'}
 
 
 def backtest_source(scope: str, root: Optional[str] = None) -> tuple:
@@ -128,7 +128,7 @@ def export_backtest_meta(scope: str, run: dict, tables, source: str, prov: dict,
     -------
     dict
         Data for the ``backtest-meta`` schema. ``params`` is the rest of ``run`` (``BACKTEST_RUN_EXCLUDED`` out), with
-        ``error_model``, ``drift_scale`` and ``tail_dof`` always present when there is a ``run.json``
+        ``error_model``, ``drift_scale``, ``tail_dof`` and ``swing`` always present when there is a ``run.json``
         (``BACKTEST_RUN_DEFAULTS`` for one written before them).
     """
     metrics = tables.metrics

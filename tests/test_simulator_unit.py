@@ -490,6 +490,47 @@ def test_projection_skips_a_block_without_members_present(mode):
     assert empty.empty and len(empty.columns) == 0
 
 
+# --- Regla del swing: de la cuota nacional a las provincias (`Simulator.build_umat`) -------------------------
+
+def test_unknown_swing_raises_before_touching_data():
+    with pytest.raises(ValueError, match='`swing` must be one of'):
+        Simulator(scope='es', event_date='2026-11-29', swing='uniform')
+
+
+def _swing_simulator(swing):
+    """Simulator mínimo (patrón `__new__`) con dos provincias iguales y un partido al 20 % y al 50 % (35 %
+    nacional); el resto del voto es el residuo `'-'`, sin votos en blanco."""
+    sim = Simulator.__new__(Simulator)
+    sim.swing, sim.default_region, sim.verbose, sim.smap = swing, 0, 0, {}
+    sim.regional_noise, sim.v2swing, sim.rng_swing, sim.rng_geo = False, None, None, None
+    sim.geo_cache, sim.geo_summary = {}, {}
+    sim.cols_unit = ['prev_pct', 'vpred_pct']
+    regions = pd.Index([0, 1, 2], name='region_id')
+    sim.params = {'names': ['A'], 'regions': [0, 1, 2], 'random': False}
+    sim.prev_results = pd.concat({'pct': pd.DataFrame({'A': [35., 20., 50.]}, index=regions)}, axis=1)
+    sim.prev_totals = pd.DataFrame({'votes': [200., 100., 100.], 'blank_pct': [0., 0., 0.]}, index=regions)
+    return sim
+
+
+def test_build_umat_swings_the_provinces_with_the_logistic_rule():
+    """El partido sube del 35 % al 50 %: factor 2 sobre sus odds (0,25 y 1), 33,33 % y 66,67 %. El residuo baja
+    del 65 % al 50 % con la misma regla (odds 4 y 1 por 0,5: 66,67 % y 33,33 %), así que cada provincia suma 100
+    sin renormalizar."""
+    frame = pd.DataFrame({'vpred': [50., 50.]}, index=['A', '-'])
+    umat = _swing_simulator('logistic').build_umat(frame)['vpred_pct']
+    assert umat['A'].tolist() == pytest.approx([50., 33.33, 66.67], abs=0.01)
+    assert umat['-'].tolist() == pytest.approx([50., 66.67, 33.33], abs=0.01)
+
+
+def test_build_umat_keeps_the_proportional_rule_as_an_option():
+    """Con `swing='proportional'`, cuota anterior por la razón nacional (28,57 % y 71,43 %; residuo 61,54 % y
+    38,46 %) y renormalización de cada provincia a 100: 31,71 % y 65 %."""
+    frame = pd.DataFrame({'vpred': [50., 50.]}, index=['A', '-'])
+    umat = _swing_simulator('proportional').build_umat(frame)['vpred_pct']
+    assert umat['A'].tolist() == pytest.approx([50., 31.71, 65.], abs=0.01)
+    assert umat['-'].tolist() == pytest.approx([50., 68.29, 35.], abs=0.01)
+
+
 # --- Reglas del smap sobre las bases provinciales (`Simulator.apply_source_rules`) -----------------------
 
 @pytest.fixture

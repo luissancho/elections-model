@@ -124,6 +124,26 @@ def test_swing_noise_fit_recovers_level_curves():
     assert noise.sigma_region(30.) == pytest.approx(np.sqrt(noise.a_r + noise.b_r / 30.))
 
 
+def test_swing_noise_pair_residuals_are_measured_against_the_swing_rule():
+    """A sube del 35 % al 50 % con dos provincias iguales al 20 % y al 50 %, y el resultado es 30 % y 70 %. La regla
+    logística preveía 33,33 % y 66,67 % (residuos log 0,9 y log 1,05); la proporcional, 28,57 % y 71,43 % (log 1,05
+    y log 0,98). B no llega al 1 % nacional en la segunda elección y no entra; la provincia 3 de A tampoco, por
+    debajo del nivel mínimo, aunque sí cuenta en el total que reparte la regla."""
+    from mtpy.lib.computer import SwingNoise
+    prev = pd.DataFrame({'A': [35., 20., 50., 0.5], 'B': [5., 4., 6., 5.]}, index=[0, 1, 2, 3])
+    new = pd.DataFrame({'A': [50., 30., 70., 1.], 'B': [0.8, 1., 0.6, 0.8]}, index=[0, 1, 2, 3])
+    weights = pd.Series([2.001, 1., 1., 0.001], index=[0, 1, 2, 3])
+
+    out = SwingNoise.pair_residuals(prev, new, weights, swing='logistic')
+    assert out['party'].tolist() == ['A', 'A'] and out['region'].tolist() == [1, 2]
+    assert out['level'].tolist() == pytest.approx([33.333, 66.667], abs=0.01)
+    assert out['logres'].tolist() == pytest.approx([np.log(0.9), np.log(1.05)], abs=0.001)
+
+    out = SwingNoise.pair_residuals(prev, new, weights, swing='proportional')
+    assert out['level'].tolist() == pytest.approx([28.571, 71.429], abs=0.01)
+    assert out['logres'].tolist() == pytest.approx([np.log(1.05), np.log(0.98)], abs=0.001)
+
+
 def test_swing_noise_without_enough_pairs_is_zero():
     from mtpy.lib.computer import SwingNoise
     res = pd.DataFrame({'pair': ['a'] * 10, 'level': np.linspace(2, 30, 10), 'reg_mean': 0.1, 'within': 0.05})

@@ -31,7 +31,7 @@ from .mtypes import DROP_MTYPES
 from .quality import count_national_events, load_criteria, prior_quality, read_quality
 from .rating_check import WINDOW_DAYS, population_of
 from .utils import (
-    build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
+    build_blocks, group_results, logistic_swing, norm_range, partial_parties, REGIONAL_LIST_ID
 )
 
 
@@ -292,9 +292,10 @@ def check_drift_scale(scale: Optional[str | float]) -> Optional[str | float]:
 
 class SwingNoise:
     """
-    Deviations of the provinces from the proportional swing between two elections (M9). The relative residual
-    `log(actual / (previous · national ratio))` of a party in a province splits into the mean of its autonomous
-    community (`reg_mean`: the regional swing, 86 % of the variance) and the deviation within it (`within`).
+    Deviations of the provinces from the swing between two elections (M9). The relative residual
+    `log(actual / projected)` of a party in a province, with the projection of the swing rule of the simulator
+    given its national ratio (`pair_residuals`), splits into the mean of its autonomous community (`reg_mean`:
+    the regional swing, most of the variance) and the deviation within it (`within`).
     Both variances decrease with the predicted level `L` of the party in the province as `a + b / L`
     (a sampling-like term plus a floor), fitted by weighted least squares over level bins.
 
@@ -314,6 +315,60 @@ class SwingNoise:
         self.a_r, self.b_r, self.a_p, self.b_p = float(a_r), float(b_r), float(a_p), float(b_p)
         self.n = int(n)
         self.level_floor = float(level_floor)
+
+    @staticmethod
+    def pair_residuals(
+        prev: pd.DataFrame,
+        new: pd.DataFrame,
+        weights: pd.Series,
+        swing: Literal['logistic', 'proportional'] = 'logistic',
+        min_level: float = 1.,
+        total: int = 0
+    ) -> pd.DataFrame:
+        """
+        Residuals of the swing between two consecutive elections: for each party with more than 1 % of the scope
+        in both and each district, `logres = log(actual / projected)`, where the projection moves the previous
+        shares of the party to its actual ratio in the scope with the rule `swing` (`utils.logistic_swing`, or
+        `previous · ratio` with `'proportional'`), and `level`, the projected share.
+
+        Parameters
+        ----------
+        prev, new : pd.DataFrame
+            Shares of the two elections by `region_id` (rows, the total of the scope included) and party.
+        weights : pd.Series
+            Valid votes of the previous election by `region_id`: the weights of the logistic rule.
+        swing : {'logistic', 'proportional'}, optional
+            Rule of the projection, the one of `Simulator(swing=...)`.
+        min_level : float, optional
+            Minimum previous share of the party in the district to keep the cell.
+        total : int, optional
+            `region_id` of the total of the scope.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per party and district: `party`, `region`, `level` and `logres`.
+        """
+        parties = [p for p in prev.columns if p in new.columns and prev.loc[total, p] > 1 and new.loc[total, p] > 1]
+        districts = [r for r in prev.index if r not in (total, REGIONAL_LIST_ID)]
+        ratios = new.loc[total, parties] / prev.loc[total, parties]
+        if swing == 'proportional':
+            projected = prev[parties].mul(ratios)
+        else:
+            projected = logistic_swing(prev[parties], ratios, weights, districts)
+
+        rows = []
+        for p in parties:
+            for r in districts:
+                if r not in new.index:
+                    continue
+                before, actual = prev.loc[r, p], new.loc[r, p]
+                if not (np.isfinite(before) and np.isfinite(actual)) or before < min_level or actual <= 0:
+                    continue
+                level = float(projected.loc[r, p])
+                rows.append({'party': p, 'region': int(r), 'level': level, 'logres': float(np.log(actual / level))})
+
+        return pd.DataFrame(rows, columns=['party', 'region', 'level', 'logres'])
 
     @staticmethod
     def decompose(residuals: pd.DataFrame) -> pd.DataFrame:
@@ -3997,19 +4052,23 @@ class Computer(Core):
 
     def get_swing_residuals(
         self,
-        min_level: float = 1.
+        min_level: float = 1.,
+        swing: Literal['logistic', 'proportional'] = 'logistic'
     ) -> pd.DataFrame:
         """
-        Residuals of the proportional swing between consecutive elections of the current events (M9): for each
-        pair, party (national share above 1 % in both) and province, `logres = log(actual / (previous ·
-        national ratio))`, the predicted level, the autonomous community of the province (`reg_code` of
-        `data/es-provinces.csv`), the mean residual of the community for that pair and party (`reg_mean`) and
-        the deviation within it (`within`), with the counts `k` and `n_groups` of `SwingNoise.decompose`.
+        Residuals of the swing between consecutive elections of the current events (M9): for each pair, party
+        (national share above 1 % in both) and province, `logres = log(actual / projected)` with the projection
+        of the rule `swing` (`SwingNoise.pair_residuals`), the projected level, the autonomous community of the
+        province (`reg_code` of `data/es-provinces.csv`), the mean residual of the community for that pair and
+        party (`reg_mean`) and the deviation within it (`within`), with the counts `k` and `n_groups` of
+        `SwingNoise.decompose`.
 
         Parameters
         ----------
         min_level : float, optional
             Minimum previous share of the party in the province to keep the cell.
+        swing : {'logistic', 'proportional'}, optional
+            Rule of the projection the residuals are measured against, the one of `Simulator(swing=...)`.
         """
         groups = self.app.data.read_csv('es-provinces.csv').set_index('code')['reg_code']
         dates = list(self.event_dates)
@@ -4018,8 +4077,12 @@ class Computer(Core):
         res['region_id'] = res['region_id'].astype(int)
         pct = res.pivot_table(index=['date', 'region_id'], columns='party', values='pct', aggfunc='sum', observed=True)
         available = pct.index.get_level_values('date').unique()
+        # Valid votes of each election by province: the weights of the logistic rule
+        data = get_event_data(self.scope, dates)
+        data['region_id'] = data['region_id'].astype(int)
+        votes = data.set_index(['date', 'region_id'])['votes'].astype('float64')
 
-        rows = []
+        frames = []
         for a, b in zip(dates[:-1], dates[1:]):
             ta, tb = pd.Timestamp(a), pd.Timestamp(b)
             if ta not in available or tb not in available:
@@ -4027,29 +4090,29 @@ class Computer(Core):
             pa, pb = pct.loc[ta], pct.loc[tb]
             if 0 not in pa.index or 0 not in pb.index:
                 continue
-            parties = [p for p in pa.columns if p in pb.columns and pa.loc[0, p] > 1 and pb.loc[0, p] > 1]
-            for p in parties:
-                ratio = pb.loc[0, p] / pa.loc[0, p]
-                for r in pa.index:
-                    if r == 0 or r not in pb.index:
-                        continue
-                    prev, act = pa.loc[r, p], pb.loc[r, p]
-                    if not (np.isfinite(prev) and np.isfinite(act)) or prev < min_level or act <= 0:
-                        continue
-                    pred = prev * ratio
-                    rows.append({'pair': b, 'party': p, 'region': int(r), 'group': groups.get(int(r), np.nan),
-                                 'level': float(pred), 'logres': float(np.log(act / pred))})
+            weights = votes.loc[ta].reindex(pa.index) if ta in votes.index.get_level_values('date') else pd.Series(np.nan, index=pa.index)
+            if swing != 'proportional' and not (weights.drop(index=0, errors='ignore') > 0).all():
+                warnings.warn('Valid votes missing for {}: its swing residuals are left out'.format(a))
+                continue
+            pair = SwingNoise.pair_residuals(pa, pb, weights, swing=swing, min_level=min_level)
+            pair.insert(0, 'pair', b)
+            pair['group'] = pair['region'].map(lambda r: groups.get(int(r), np.nan))
+            frames.append(pair)
 
-        df = pd.DataFrame(rows, columns=['pair', 'party', 'region', 'group', 'level', 'logres'])
+        cols = ['pair', 'party', 'region', 'group', 'level', 'logres']
+        df = pd.concat(frames, ignore_index=True)[cols] if len(frames) > 0 else pd.DataFrame(columns=cols)
 
         return SwingNoise.decompose(df)
 
-    def get_swing_noise(self) -> SwingNoise:
+    def get_swing_noise(
+        self,
+        swing: Literal['logistic', 'proportional'] = 'logistic'
+    ) -> SwingNoise:
         """
-        Estimator of the regional and provincial deviations from the proportional swing (see `SwingNoise`),
+        Estimator of the regional and provincial deviations from the swing rule `swing` (see `SwingNoise`),
         fitted on the elections of the current events.
         """
-        return SwingNoise.fit(self.get_swing_residuals())
+        return SwingNoise.fit(self.get_swing_residuals(swing=swing))
 
     def get_seats_estimator_data(self) -> pd.DataFrame:
         """

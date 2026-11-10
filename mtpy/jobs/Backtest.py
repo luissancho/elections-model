@@ -87,7 +87,7 @@ class Backtest(SequenceJob):
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
             regional_noise=True, min_events=None, error_model='polls', drift_scale=None, tail_dof=None, config=None,
             recompute_ratings=False, flat_ratings=False, rating_exponent=1.0, ban=False, out=None, verbose=1, runner=None, stats=None,
-            stop_on_error=None, action='run', **kwargs):
+            stop_on_error=None, action='run', swing='logistic', **kwargs):
         """
         Run the backtest of the requested scopes.
 
@@ -120,7 +120,11 @@ class Backtest(SequenceJob):
             Joint noise of the national parties (M7): ``'auto'`` or a ratio in (0, 1] (a numeric string is
             accepted, as in the script); independent draws by default.
         regional_noise : bool, default True
-            Oscillations by community and province (M9); without it, a deterministic proportional swing.
+            Oscillations by community and province (M9); without it, a deterministic swing.
+        swing : str, default ``'logistic'``
+            Rule that projects the national shares to the provinces (``Simulator(swing=...)``): ``'logistic'``
+            (a common factor on the odds of each party) or ``'proportional'`` (on its shares, the rule used up
+            to 2026-11-10), to compare both.
         min_events : int, optional
             Featured elections a regional scope needs to fit the estimators on itself instead of on ``es``
             (M11); by default always ``es``, 1 forces its own.
@@ -193,7 +197,7 @@ class Backtest(SequenceJob):
             If ``flat_ratings`` and ``recompute_ratings`` are both true (``backtest: flat_ratings and recompute_ratings
             are exclusive``), ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, ``error_model`` is not ``'polls'``
             or ``'average'``, ``drift_scale`` is not ``'auto'``, a positive number or ``None``, ``tail_dof`` is not
-            an integer of at least 2 or ``None``, ``config`` is not a valid configuration nor the path of a JSON file
+            an integer of at least 2 or ``None``, ``swing`` is not ``'logistic'`` or ``'proportional'``, ``config`` is not a valid configuration nor the path of a JSON file
             with one (``backtest: config ...``), ``rating_exponent`` is not a finite number of at least 0
             (``rating_exponent: expected a finite number >= 0``) or one of ``house_effects``, ``dispersion``, ``herding`` and
             ``max_fc`` contradicts it (``backtest: <flag> contradicts the config ...``), there are no scopes to run
@@ -210,6 +214,7 @@ class Backtest(SequenceJob):
         error_model = self._error_model(error_model)
         drift_scale = self._drift_scale(drift_scale)
         tail_dof = self._tail_dof(tail_dof)
+        swing = self._swing(swing)
         rating_exponent = check_rating_exponent(rating_exponent)
         config = self._config(config)
         if config is not None:
@@ -224,7 +229,8 @@ class Backtest(SequenceJob):
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, error_model=error_model,
                     drift_scale=drift_scale, tail_dof=tail_dof, config=config, recompute_ratings=recompute_ratings,
-                    flat_ratings=flat_ratings, rating_exponent=rating_exponent, ban=ban, out=out, verbose=verbose, runner=runner, stats=stats)
+                    flat_ratings=flat_ratings, rating_exponent=rating_exponent, ban=ban, swing=swing, out=out, verbose=verbose,
+                    runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 
@@ -311,6 +317,30 @@ class Backtest(SequenceJob):
         if scale is None or not math.isfinite(scale) or scale <= 0:
             raise ValueError('backtest: drift_scale must be "auto", a positive number or null (got {!r})'.format(value))
         return scale
+
+    @staticmethod
+    def _swing(value):
+        """
+        Validate the ``swing`` argument.
+
+        Parameters
+        ----------
+        value : str
+            ``'logistic'`` or ``'proportional'``.
+
+        Returns
+        -------
+        str
+            The same value.
+
+        Raises
+        ------
+        ValueError
+            Anything else.
+        """
+        if not isinstance(value, str) or value not in ('logistic', 'proportional'):
+            raise ValueError('backtest: swing must be "logistic" or "proportional" (got {!r})'.format(value))
+        return value
 
     @staticmethod
     def _tail_dof(value):

@@ -272,12 +272,13 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
                         'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
                         'error_model', 'drift_scale', 'tail_dof', 'config', 'rating_exponent', 'recompute_ratings', 'flat_ratings', 'events',
-                        'horizons', 'db_polls', 'db_last_poll', 'ban'}
+                        'horizons', 'db_polls', 'db_last_poll', 'ban', 'swing'}
     assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
     assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
     assert run['error_model'] == 'polls' and seen['error_model'] == 'polls'
     assert run['drift_scale'] is None and seen['drift_scale'] is None
     assert run['tail_dof'] is None and seen['tail_dof'] is None
+    assert run['swing'] == 'logistic' and seen['swing'] == 'logistic'
     assert run['config'] is None and seen['config'] is None
     assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]
     assert run['db_polls'] == 12 and run['db_last_poll'] == '2026-10-03'
@@ -457,7 +458,7 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
     monkeypatch.setattr(sys, 'argv', ['run_backtest.py', '--scopes', 'es-md', 'es-cl', '--horizons', '6', '30',
                                       '--n-sim', '20', '--composition', 'auto', '--no-herding',
                                       '--error-model', 'average', '--drift-scale', 'auto', '--tail-dof', '5',
-                                      '--out', 'x'])
+                                      '--swing', 'proportional', '--out', 'x'])
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
     script = importlib.util.module_from_spec(spec)
@@ -467,7 +468,8 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
                     'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True,
                     'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None,
                     'error_model': 'average', 'drift_scale': 'auto', 'tail_dof': 5, 'config': None,
-                    'rating_exponent': 1.0, 'recompute_ratings': False, 'flat_ratings': False, 'out': 'x'}
+                    'rating_exponent': 1.0, 'recompute_ratings': False, 'flat_ratings': False, 'swing': 'proportional',
+                    'out': 'x'}
     hint = capsys.readouterr().out
     assert hint.startswith('Tables written to x. publish backtest/event read the app file system: run python job.py backtest ')
     assert '\'{"action":"push","scopes":["es-md","es-cl"],"out":"x"}\' (with S3_BUCKET set)' in hint
@@ -731,6 +733,16 @@ def test_run_case_without_a_config_builds_the_simulator_as_before(recording):
     assert init['disp_params'] == {'herding': False} and init['dispersion'] is False and init['house_effects'] is True
     assert init['drange'] == 30 and fit['max_fc'] == 7
     assert recording['polls'] == [] and recording['reweighted'] == []
+
+
+def test_run_case_passes_the_swing_rule_to_the_simulator(recording):
+    """La regla del swing es la logística salvo que el caso pida la proporcional (para compararlas)."""
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30)
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30, swing='proportional')
+    assert [call['init']['swing'] for call in RecordingSimulator.calls] == ['logistic', 'proportional']
 
 
 def test_run_case_passes_drop_ctypes_to_the_simulator(recording):

@@ -24,7 +24,7 @@ from .data import (
 )
 from .mtypes import DROP_MTYPES
 from .utils import (
-    build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
+    build_blocks, group_results, logistic_swing, norm_range, partial_parties, REGIONAL_LIST_ID
 )
 
 
@@ -43,6 +43,7 @@ class Simulator(Core):
     ERROR_MODELS = ('polls', 'average')  # Terminal error of the simulation, see `fit_error_estimator`
     DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
     MODES = {'nowcast': None, 'forecast': 'deadline'}  # Default `horizon` param of each mode, see `run`
+    SWINGS = ('logistic', 'proportional')  # Rules that project the national shares to the provinces, see `swing_shares`
     # Pseudo-polls at the share implied by the previous election towards which the `geo` share of the polls is
     # shrunk (see `geo_share_estimate`): with one or two polls the previous geography still weighs
     GEO_PRIOR_POLLS = 3
@@ -74,6 +75,7 @@ class Simulator(Core):
         disp_params: Optional[dict[str, Any]] = None,
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
+        swing: Literal['logistic', 'proportional'] = 'logistic',
         min_events: Optional[int] = None,
         weight_ratings: Optional[pd.Series | str] = None,
         weight_overrides: Optional[pd.DataFrame] = None,
@@ -178,10 +180,17 @@ class Simulator(Core):
             The marginal intervals are the same in every case (see `build_frame`); the backtest is neutral
             between the two, slightly better independent at short horizons and joint at long ones (M7).
         regional_noise : bool, optional
-            Add to the provincial projection the deviations from the proportional swing observed between
-            elections: a multiplicative shock per party and autonomous community and a smaller one per
-            province, keeping the national share of each party (M9, `apply_swing_noise`). The national draw
-            is identical with or without them (own random generator, `seed + 1`).
+            Add to the provincial projection the deviations from the swing observed between elections: a
+            multiplicative shock per party and autonomous community and a smaller one per province, keeping
+            the national share of each party (M9, `apply_swing_noise`). The national draw is identical with
+            or without them (own random generator, `seed + 1`).
+        swing : {'logistic', 'proportional'}, optional
+            Rule that projects the national share of each party to the provinces from its previous results
+            (`swing_shares`). `'logistic'` (default) multiplies its odds `p / (100 - p)` by the same factor in
+            every province (`utils.logistic_swing`): where the party was already strong it grows less than
+            its national ratio, and a share never passes 100. `'proportional'` multiplies the share itself by
+            the national ratio, the rule used up to 2026-11-10; it is kept to compare both in the backtest.
+            The deviations of `regional_noise` are measured against the same rule.
         min_events : int, optional
             Featured elections of the scope held before the event needed to fit the estimators (polling
             error, drift, seats, composition) on the scope itself; with fewer, they are fitted on its parent
@@ -211,6 +220,8 @@ class Simulator(Core):
             raise ValueError('`mode` must be one of {}'.format(list(self.MODES)))
         if error_model not in self.ERROR_MODELS:
             raise ValueError('`error_model` must be one of {}'.format(list(self.ERROR_MODELS)))
+        if swing not in self.SWINGS:
+            raise ValueError('`swing` must be one of {}'.format(list(self.SWINGS)))
         drift_scale = check_drift_scale(drift_scale)
         tail_dof = self._check_tail_dof(tail_dof)
         rating_exponent = check_rating_exponent(rating_exponent)
@@ -228,6 +239,7 @@ class Simulator(Core):
         self.disp_params = disp_params
         self.composition = composition
         self.regional_noise = bool(regional_noise)
+        self.swing = swing
         self.min_events = None if min_events is None else int(min_events)
         self.weight_ratings = weight_ratings
         self.weight_overrides = weight_overrides
@@ -351,7 +363,7 @@ class Simulator(Core):
         if self.verbose > 0:
             print('Load swing noise estimator...')
 
-        # Regional and provincial deviations from the proportional swing (M9), see `Computer.get_swing_noise`.
+        # Regional and provincial deviations from the swing rule (M9), see `Computer.get_swing_noise`.
         # They are always estimated on the national elections: within an autonomous community only the
         # deviation per district applies (see `_add_swing_noise`), with the provincial curve of `es`
         if not self.regional_noise:
@@ -360,7 +372,7 @@ class Simulator(Core):
             swing_computer = self.computer
         else:
             swing_computer = self._past_computer(self.parent)
-        self.v2swing = swing_computer.get_swing_noise() if swing_computer is not None else None
+        self.v2swing = swing_computer.get_swing_noise(swing=self.swing) if swing_computer is not None else None
 
         # Districts of the scope: autonomous community of each one (the groups of the regional shocks)
         self.districts = get_districts(self.scope).set_index('region_id')
@@ -971,7 +983,7 @@ class Simulator(Core):
     def central_result(self) -> Optional[pd.DataFrame]:
         """
         Central allocation: D'Hondt in each province over the central vote (the mean of the forecast
-        projected to the provinces with the proportional swing, without noise or drift). It is the
+        projected to the provinces with the swing rule, see `swing_shares`, without noise or drift). It is the
         published headline and it is the same in a nowcast and in a forecast.
 
         One deterministic pass `build_frame` -> `build_umat` -> `simulate` with `random` off; the random
@@ -1588,8 +1600,8 @@ class Simulator(Core):
         reg_votes: pd.Series
     ) -> pd.DataFrame:
         """
-        Previous shares of every region after the rules of the source map (`smap`): the base of the
-        proportional swing of `build_umat`.
+        Previous shares of every region after the rules of the source map (`smap`): the base of the swing
+        of `build_umat`.
 
         Rules, applied in the order of `smap` (a party may carry several): `agg` adds the previous vote of
         `names` to the party (a successor inherits its predecessors: FA from Sumar); `sub` carves the base of
@@ -1602,8 +1614,10 @@ class Simulator(Core):
         provinces kept. A `sub` rule with `keep` true adds what it inherits to the own base of the party and
         leaves its base elsewhere untouched: for a party that did not run in some provinces last time (Vox in
         Santa Cruz de Tenerife in 2023), whose voters went to `names` there. Its share is not the forecast
-        proportion but the one that makes the party and its sources grow, after the proportional swing, like
-        their national bloc (the forecast proportion, when the party has no base of its own anywhere).
+        proportion but the one that makes the party and its sources grow, when each one moves by its national
+        ratio, like their national bloc (the forecast proportion, when the party has no base of its own
+        anywhere). The ratio is exact under the proportional swing and a close approximation under the
+        logistic one, which moves a province a little less or more than the ratio according to its level.
 
         Parameters
         ----------
@@ -1672,7 +1686,7 @@ class Simulator(Core):
                         nat_v = prev_pcts.loc[default_region, names].sum()
                         if keep and nat_k > 0 and nat_v > 0 and fc_v > 0:
                             # The party has its own base (and its own swing) elsewhere: inherit the share that,
-                            # after the proportional swing of each party, makes key + sources grow like the
+                            # when each party moves by its national ratio, makes key + sources grow like the
                             # national bloc. With the ratios r = forecast / previous national share,
                             # share * r_k + (1 - share) * r_v = r_bloc. The forecast proportion would apply the
                             # (larger) swing of the party to a base taken from a shrinking source and inflate
@@ -1705,7 +1719,7 @@ class Simulator(Core):
                     prev_pcts[key] = prev_pcts[key].where(kept, .0)
 
                     # Keep the national share consistent with the provinces kept by the rule, so that the
-                    # proportional swing reproduces the national forecast within those provinces
+                    # swing reproduces the national forecast within those provinces
                     prev_pcts.loc[default_region, key] = national(key)
 
         return prev_pcts
@@ -1761,7 +1775,7 @@ class Simulator(Core):
         shares, weights : pd.Series
             Share and weight of each poll (`geo_poll_shares`).
         prior : float
-            Share of the previous geography, the one of the proportional swing.
+            Share of the previous geography: the one the swing gives before the `geo` rule.
         k : float, default `GEO_PRIOR_POLLS`
             Pseudo-polls at `prior`.
 
@@ -1794,13 +1808,13 @@ class Simulator(Core):
     ) -> tuple[pd.DataFrame, float]:
         """
         Rescale the provincial shares of `key` so that the provinces `regions` hold `share` of its vote and the
-        rest of the provinces `1 - share`: one swing ratio inside and another outside, instead of a single
-        proportional swing. The national row, the regional list and the other parties are left as they are.
+        rest of the provinces `1 - share`: the shares of the swing are rescaled with one factor inside and
+        another outside. The national row, the regional list and the other parties are left as they are.
 
         Parameters
         ----------
         vpred_pcts : pd.DataFrame
-            Provincial shares after the proportional swing, indexed by `region_id`.
+            Provincial shares after the swing, indexed by `region_id`.
         key : str
             Party of the rule.
         regions : list of int
@@ -2043,8 +2057,8 @@ class Simulator(Core):
         n_pass: int = 2
     ) -> pd.DataFrame:
         """
-        Apply multiplicative regional and provincial shocks to the provincial shares of the proportional
-        swing, keeping the national share of each party (its weighted mean over the provinces) and the
+        Apply multiplicative regional and provincial shocks to the provincial shares of the swing, keeping
+        the national share of each party (its weighted mean over the provinces) and the
         provincial totals (100 with the residual): shares × exp(ε[group, party] + η[province, party]), then
         `n_pass` rounds of rescaling each party to its `target` mean and renormalising each province.
 
@@ -2376,7 +2390,7 @@ class Simulator(Core):
 
     def apply_geo_rules(self, vpred_pcts: pd.DataFrame, valid: pd.Series) -> pd.DataFrame:
         """
-        Apply the rules `geo` to the provincial shares after the proportional swing (see `apply_geo_share`).
+        Apply the rules `geo` to the provincial shares after the swing (see `apply_geo_share`).
         The share is the estimate of the polls shrunk towards the one of the previous geography
         (`geo_share_estimate`); with `random` it is drawn in each simulation with `rng_geo`. Without `random`
         (the central allocation) the estimate is kept in `geo_summary`.
@@ -2393,6 +2407,39 @@ class Simulator(Core):
             vpred_pcts, _ = self.apply_geo_share(vpred_pcts, key, regions, share, valid, self.default_region)
 
         return vpred_pcts
+
+    def swing_shares(
+        self,
+        prev_pcts: pd.DataFrame,
+        ratios: pd.Series,
+        valid: pd.Series
+    ) -> pd.DataFrame:
+        """
+        Project the previous shares of each party to its national ratio with the rule of the simulator
+        (`swing`): the same factor on the odds of every district (`utils.logistic_swing`, weighted by the
+        valid votes) or on the shares themselves (`'proportional'`). The total of the scope and the list voted
+        by the whole scope are not districts: they take the national ratio in both rules.
+
+        Parameters
+        ----------
+        prev_pcts : pd.DataFrame
+            Previous shares by `region_id` and party, NaN where a party has no base.
+        ratios : pd.Series
+            National ratio of each party, forecast over previous votes.
+        valid : pd.Series
+            Valid votes of the previous election by `region_id`.
+
+        Returns
+        -------
+        pd.DataFrame
+            The projected shares, with the layout of `prev_pcts` (not yet renormalized by province).
+        """
+        if self.swing == 'proportional':
+            return prev_pcts.mul(ratios)
+
+        districts = [r for r in prev_pcts.index if r not in (self.default_region, REGIONAL_LIST_ID)]
+
+        return logistic_swing(prev_pcts, ratios, valid, districts)
 
     def build_umat(self, frame: pd.DataFrame) -> pd.DataFrame:
         prev_pcts = self.apply_source_rules(
@@ -2412,9 +2459,9 @@ class Simulator(Core):
         prev_votes = prev_pcts.mul(valid / 100, axis=0).round()
         fc_votes = (frame['vpred'] * n_votes / 100).round()
 
-        # Proportional swing: each party keeps its previous geography, scaled by its national ratio
+        # Swing: each party keeps its previous geography, moved to its national ratio with the rule of `swing`
         fmul = fc_votes[names] / prev_votes.loc[self.default_region][names]
-        vpred_pcts = prev_pcts.mul(fmul)
+        vpred_pcts = self.swing_shares(prev_pcts, fmul, valid)
 
         # Rules `geo`: the share of the vote of a party cast in some provinces comes from the polls that break it
         # down (drawn in each simulation with its standard error), not from the previous geography alone
@@ -2427,13 +2474,14 @@ class Simulator(Core):
         # The residual of the poll average, net of the (constant) blank share, swings like any other party
         otros_fc = max(0., frame.loc[self.OTHERS, 'vpred'] - blank.loc[self.default_region])
         if prev_otros.loc[self.default_region] > 0:
-            vpred_otros = prev_otros * (otros_fc / prev_otros.loc[self.default_region])
+            ratio = pd.Series({self.OTHERS: otros_fc / prev_otros.loc[self.default_region]})
+            vpred_otros = self.swing_shares(prev_otros.to_frame(self.OTHERS), ratio, valid)[self.OTHERS]
         else:
             vpred_otros = pd.Series(otros_fc, index=prev_otros.index)
         prev_pcts[self.OTHERS] = prev_otros + blank
         vpred_pcts[self.OTHERS] = vpred_otros + blank
 
-        # Regional and provincial deviations from the proportional swing (M9), keeping the national shares
+        # Regional and provincial deviations from the swing (M9), keeping the national shares
         if self.regional_noise and self.params['random'] and self.v2swing is not None and self.rng_swing is not None:
             vpred_pcts = self._add_swing_noise(vpred_pcts, names, valid)
 

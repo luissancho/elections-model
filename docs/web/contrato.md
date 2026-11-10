@@ -79,7 +79,9 @@ Cómo y cuándo se produjo el run. Fuente: `Simulator`, `Forecaster` y `provenan
 `data`: `run_id`, `run_at`, `commit` (`null` si no hay git ni `GIT_COMMIT`), `dirty`, `versions` (python y
 `numpy`, `pandas`, `scipy`, `statsmodels`), `scope`, `event_date`, `as_of`, `date_last` (último sondeo
 usado), `date_fit_last` (o `null`), `horizon_max`, `n_sim`, `seed`, `drange`, `max_fc`, `alpha`,
-`correctors`, `n_polls`, `n_pollsters` (sondeos y casas usados), `db_polls`, `db_last_poll` (sondeos del
+`correctors` (los interruptores del modelo con los que se hizo el run; desde el 2026-11-10 incluye `swing`, la
+regla que lleva el voto del conjunto a las circunscripciones: `logistic`; un run sin esa clave usó la
+proporcional), `n_polls`, `n_pollsters` (sondeos y casas usados), `db_polls`, `db_last_poll` (sondeos del
 evento en la base y fecha del último), `n_seats`, `majority`, `parties` (lista de `{name, id, fullname,
 color, block, regional}` en el orden de la simulación), `bmaps`, `smap`, `regions` (`{id, name, seats}`;
 incluye el total del ámbito, `id` 0, que es la cámara entera),

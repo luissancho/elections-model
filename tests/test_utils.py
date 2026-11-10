@@ -116,3 +116,67 @@ def test_party_roots_follow_parent_id():
     })
     roots = party_roots(parties)
     assert roots.to_dict() == {'PSOE': 'PSOE', 'CiU': 'CiU', 'JxCat': 'CiU', 'PDeCAT': 'CiU', 'PSC': 'PSOE', 'LOOP': 'LOOP'}
+
+
+# --- Swing logístico: un factor común sobre las odds de cada partido (`logistic_swing`) ---------------------
+
+def test_logistic_swing_multiplies_the_odds_by_a_common_factor():
+    """Dos provincias iguales al 20 % y al 50 % (odds 0,25 y 1) y el partido sube del 35 % al 50 %: el factor 2
+    sobre las odds da 33,33 % y 66,67 % (media 50); el swing proporcional daría 28,57 % y 71,43 %."""
+    from mtpy.lib.utils import logistic_swing
+    prev = pd.DataFrame({'A': [35., 20., 50.]}, index=[0, 1, 2])
+    out = logistic_swing(prev, pd.Series({'A': 50. / 35.}), pd.Series([2., 1., 1.], index=[0, 1, 2]), [1, 2])
+    assert out['A'].tolist() == pytest.approx([50., 33.333, 66.667], abs=0.001)
+
+
+def test_logistic_swing_weighs_the_districts_by_their_votes():
+    """10 % con peso 3 y 40 % con peso 1 (media 17,5): con el factor 3 sobre las odds quedan en 25 % y 66,67 %,
+    media ponderada 35,4167. La solución sin pesos sería otra."""
+    from mtpy.lib.utils import logistic_swing
+    prev = pd.DataFrame({'A': [17.5, 10., 40.]}, index=[0, 1, 2])
+    out = logistic_swing(prev, pd.Series({'A': 35.416667 / 17.5}), pd.Series([4., 3., 1.], index=[0, 1, 2]), [1, 2])
+    assert out.loc[[1, 2], 'A'].tolist() == pytest.approx([25., 66.667], abs=0.001)
+
+
+@pytest.mark.parametrize('empty', [np.nan, 0.])
+def test_logistic_swing_leaves_out_the_districts_without_base(empty):
+    """Donde el partido no tiene base sigue sin tenerla, y esa provincia (aquí la de más peso) no entra en el
+    total que deben sumar las demás."""
+    from mtpy.lib.utils import logistic_swing
+    prev = pd.DataFrame({'A': [35., 20., empty, 50.]}, index=[0, 1, 2, 3])
+    out = logistic_swing(prev, pd.Series({'A': 50. / 35.}), pd.Series([7., 1., 5., 1.], index=[0, 1, 2, 3]), [1, 2, 3])
+    assert out.loc[[1, 3], 'A'].tolist() == pytest.approx([33.333, 66.667], abs=0.001)
+    assert (np.isnan(out.loc[2, 'A']) if np.isnan(empty) else out.loc[2, 'A'] == 0.)
+
+
+def test_logistic_swing_solves_each_party_with_its_own_ratio():
+    """Cada columna con su razón: B baja del 50 % al 35 % (el camino inverso del primer test), C no tiene base
+    nacional (razón NaN: sin proyección, como en el proporcional) y D se queda sin votos."""
+    from mtpy.lib.utils import logistic_swing
+    prev = pd.DataFrame({'A': [35., 20., 50.], 'B': [50., 33.3333, 66.6667], 'C': [np.nan, 5., 6.], 'D': [4., 3., 5.]},
+                        index=[0, 1, 2])
+    ratios = pd.Series({'A': 50. / 35., 'B': 0.7, 'C': np.nan, 'D': 0.})
+    out = logistic_swing(prev, ratios, pd.Series([2., 1., 1.], index=[0, 1, 2]), [1, 2])
+    assert out['A'].tolist() == pytest.approx([50., 33.333, 66.667], abs=0.001)
+    assert out['B'].tolist() == pytest.approx([35., 20., 50.], abs=0.001)
+    assert out['C'].isna().all()
+    assert out['D'].tolist() == [0., 0., 0.]
+
+
+def test_logistic_swing_never_passes_100():
+    """Feudos al 60 % y al 90 % y el partido sube un 30 %: el proporcional daría 78 % y 117 %; el logístico
+    reparte el mismo total (media 97,5) sin pasar de 100 en ninguna provincia."""
+    from mtpy.lib.utils import logistic_swing
+    prev = pd.DataFrame({'A': [75., 60., 90.]}, index=[0, 1, 2])
+    out = logistic_swing(prev, pd.Series({'A': 1.3}), pd.Series([2., 1., 1.], index=[0, 1, 2]), [1, 2])
+    assert out.loc[[1, 2], 'A'].max() < 100.
+    assert out.loc[[1, 2], 'A'].mean() == pytest.approx(97.5, abs=0.001)
+    assert out.loc[1, 'A'] < out.loc[2, 'A']
+
+
+def test_logistic_swing_keeps_the_rows_that_are_not_districts_proportional():
+    """El total del ámbito (0) y la lista autonómica canaria (100) no son provincias: toman base · razón."""
+    from mtpy.lib.utils import logistic_swing
+    prev = pd.DataFrame({'A': [35., 36., 20., 50.]}, index=[0, 100, 1, 2])
+    out = logistic_swing(prev, pd.Series({'A': 50. / 35.}), pd.Series([2., 2., 1., 1.], index=[0, 100, 1, 2]), [1, 2])
+    assert out['A'].tolist() == pytest.approx([50., 51.429, 33.333, 66.667], abs=0.001)
