@@ -1,13 +1,16 @@
-{#- "Los cambios de cada casa": the matrix house x party with the change of each party between the last two deliveries
+{#- "Cambios por encuestadora": the matrix house x party with the change of each party between the last two deliveries
     of each pollster, in vote (`house_changes.pct`) and, when some house gives them, in seats (`house_changes.seats`).
-    Included by Promedios under the average when `house_changes` is not None; needs `catalog`, `state`, `meta`,
+    Included by Promedios under the majority calculator when `house_changes` is not None; needs `catalog`, `state`, `meta`,
     `event_bar`, `site_title`, `site_host` and `author_handle` in the context. Without JS only the vote table shows:
-    the switch and the seats table carry `hidden` (the browser reveals and wires them). -#}
+    the switch and the seats table carry `hidden` (the browser reveals and wires them). The pill of the title names
+    the view (`% Voto` or `Escaños`, kept by the browser) and shows only in the downloaded image, which leaves the
+    switch out. -#}
 {% macro changes_table(view, digits, label) -%}
 <table class="hc" aria-label="{{ label }}">
   <thead>
     <tr>
       <th scope="col" class="f">Encuestadora</th>
+      <th scope="col" title="Rating de la encuestadora, de 0 a 100: cuanto más alto, más pesa su sondeo en el promedio. Rojo por debajo de 50, verde por encima.">Rating<span class="th-sub">(0-100)</span></th>
       {% for party in view.parties %}
       <th scope="col" title="{{ catalog[party.name].fullname }}"><i class="pd" style="background: {{ party.color }}"></i>{{ party.name }}</th>
       {% endfor %}
@@ -16,15 +19,14 @@
   <tbody>
     {% for row in view.rows %}
     <tr>
-      <th scope="row" class="f">{% if row.href %}<a href="{{ row.href }}"><b>{{ row.pollster }}</b></a>{% else %}<b>{{ row.pollster }}</b>{% endif %}{% if row.rating_color %} <span class="rt" style="background: {{ row.rating_color }}">{{ row.rating }}</span>{% endif %}<small>{% if row.sponsor %}{{ row.sponsor }} · {% endif %}{% if row.prev_href %}<a href="{{ row.prev_href }}">{{ row.prev_date }}</a>{% else %}{{ row.prev_date }}{% endif %} → {% if row.last_href %}<a href="{{ row.last_href }}">{{ row.last_date }}</a>{% else %}{{ row.last_date }}{% endif %} ({{ 'mismo día' if row.gap_days == 0 else ('1 día' if row.gap_days == 1 else row.gap_days ~ ' días') }})</small></th>
+      <th scope="row" class="f">{% if row.href %}<a href="{{ row.href }}"><b>{{ row.pollster }}</b></a>{% else %}<b>{{ row.pollster }}</b>{% endif %}<small>{% if row.sponsor %}{{ row.sponsor }} · {% endif %}{% if row.prev_href %}<a href="{{ row.prev_href }}">{{ row.prev_date }}</a>{% else %}{{ row.prev_date }}{% endif %} → {% if row.last_href %}<a href="{{ row.last_href }}">{{ row.last_date }}</a>{% else %}{{ row.last_date }}{% endif %} ({{ 'mismo día' if row.gap_days == 0 else ('1 día' if row.gap_days == 1 else row.gap_days ~ ' días') }})</small></th>
+      {% if row.rating_color %}<td><span class="rt" style="background: {{ row.rating_color }}">{{ row.rating }}</span></td>{% else %}<td class="na">—</td>{% endif %}
       {% for cell in row.cells %}
+      {#- a figure the previous delivery did not give counts as no change: the dash over the one figure -#}
       {% if cell is none %}<td class="na">—</td>
-      {% elif cell.change is none %}<td>
-        <small>{{ cell.value }}</small>
-      </td>
       {% else %}<td>
-        {% if cell.change == 0 %}<span class="dlt flat">=</span>{% else %}{{ m.badge(cell.change, digits) }}{% endif %}
-        <small>{{ cell.prev }} → {{ cell.value }}</small>
+        {{ m.badge(cell.change, digits) }}
+        <small>{% if cell.prev is not none %}{{ cell.prev }} → {% endif %}{{ cell.value }}</small>
       </td>
       {% endif %}
       {% endfor %}
@@ -33,17 +35,21 @@
   </tbody>
   <tfoot>
     <tr>
-      <th scope="row" class="f">Suben · bajan · igual</th>
+      <th scope="row" class="f">Suben · Bajan · Igual</th>
+      <td></td>
       {% for party in view.parties %}
       {% set count = view.counts[party.name] %}
-      {% if count.up or count.down or count.flat %}<td><span class="dlt up">▲ {{ count.up }}</span> <span class="dlt down">▼ {{ count.down }}</span> <span class="dlt flat">= {{ count.flat }}</span></td>{% else %}<td class="na">—</td>{% endif %}
+      {% if count.up or count.down or count.flat %}<td><span class="dlt up">▲ {{ count.up }}</span> <span class="dlt down">▼ {{ count.down }}</span> <span class="dlt flat">– {{ count.flat }}</span></td>{% else %}<td class="na">—</td>{% endif %}
       {% endfor %}
     </tr>
   </tfoot>
 </table>
 {%- endmacro %}
-{{ m.card_start('house-changes', 'Los cambios de cada casa', 'Cuánto cambia cada partido entre las dos últimas entregas de cada encuestadora con al menos dos sondeos en las últimas cuatro semanas.', classes='shot') }}
-        {{ m.card_image_button(site_title|lower ~ '-cambios-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png', 'Los cambios de cada casa · ' ~ event_bar.title ~ ' · ' ~ meta.as_of|date ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}
+{#- the same «Descargar» button of the other cards, here for the image of the whole card (`card-image.js`) -#}
+{{ m.card_start('house-changes', 'Cambios por encuestadora', 'Cuánto cambia cada partido entre el último sondeo de cada encuestadora y el anterior (casas con al menos dos sondeos en las últimas cuatro semanas).', subtitle='% Voto', subtitle_class='shot-only',
+                tools=m.download_button('changes-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Cambios por encuestadora',
+                                        'Cambios por encuestadora · ' ~ event_bar.title ~ ' · ' ~ meta.as_of|date ~ ' · ' ~ site_host ~ ' · ' ~ author_handle,
+                                        site_title|lower ~ '-cambios-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
         {% if house_changes.seats %}
         <fieldset id="changes-metric" class="seg" hidden>
           <legend>Mostrar</legend>
@@ -63,9 +69,12 @@
         {% call m.how() %}
         <p>
           Cada fila es una encuestadora, con el medio para el que publica, que ha terminado al menos dos sondeos en las
-          últimas cuatro semanas. La flecha dice cuánto ha movido a cada partido entre su entrega anterior y la última, y
-          debajo van las dos cifras: verde si sube, roja si baja y un signo igual si repite. Una raya quiere decir que
-          la última entrega no da cifra para ese partido; una cifra sola, sin flecha, que la anterior no la daba.
+          últimas cuatro semanas; van de la entrega más reciente a la más antigua y, con la misma fecha, por rating.
+          La flecha dice cuánto ha movido a cada partido entre su entrega anterior y la última, y debajo van las dos
+          cifras: verde si sube, roja si baja y un guion gris sobre las dos cifras si repite. Si la entrega anterior
+          no daba cifra para un partido, se trata como si no hubiera cambiado: el guion va sobre la única cifra. Una
+          celda con sólo una raya quiere decir que la última entrega no da cifra para ese partido. La última fila
+          cuenta cuántas encuestadoras lo suben, cuántas lo bajan y cuántas repiten la cifra.
         </p>
         <p>
           La comparación es siempre de una casa consigo misma. No importa que una encuestadora suela dar a un partido

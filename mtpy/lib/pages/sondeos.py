@@ -153,13 +153,14 @@ def _change_cell(last: dict, previous: dict, name: str, seats: bool) -> Optional
     dict or None
         ``{'prev', 'value', 'change'}`` (texts of the two figures and their difference, one decimal for the vote; for
         the seats, the exact difference of the midpoints of the two ranges, ``((low2 + high2) − (low1 + high1)) / 2``,
-        which may end in .5); ``prev`` and ``change`` are ``None`` when the previous delivery lacks the figure;
-        ``None`` when the last delivery gives none.
+        which may end in .5). When the previous delivery lacks the figure, ``prev`` is ``None`` and ``change`` is 0:
+        the party counts as if it had not changed (Luis, 2026-11-11). ``None`` when the last delivery gives none.
     """
+    change = 0
+
     if seats:
         now, before = ((record.get('seats') or {}).get(name) for record in (last, previous))
         value, prev = seats_text(now), seats_text(before)
-        change = None
 
         if value is not None and prev is not None:
             change = (int(now[0]) + int(now[1]) - int(before[0]) - int(before[1])) / 2
@@ -167,7 +168,9 @@ def _change_cell(last: dict, previous: dict, name: str, seats: bool) -> Optional
         now, before = last.get(name), previous.get(name)
         value = fmt_num(now, 1) if _has_value(now) else None
         prev = fmt_num(before, 1) if _has_value(before) else None
-        change = round(now - before, 1) if value is not None and prev is not None else None
+
+        if value is not None and prev is not None:
+            change = round(now - before, 1)
 
     return None if value is None else {'prev': prev, 'value': value, 'change': change}
 
@@ -208,7 +211,6 @@ def _changes_view(lines: list, parties: list, colors: dict, seats: bool) -> Opti
 
     for index in shown:
         changes = [cells[index]['change'] for _, cells in rows if cells[index] is not None]
-        changes = [change for change in changes if change is not None]
         counts[parties[index]] = {'up': sum(change > 0 for change in changes),
                                   'down': sum(change < 0 for change in changes),
                                   'flat': sum(change == 0 for change in changes)}
@@ -244,7 +246,8 @@ def house_changes(polls: list, parties: list, colors: dict, as_of: Optional[str]
     dict or None
         ``{'days', 'pct', 'seats'}``: ``pct`` and ``seats`` are views ``{'parties', 'rows', 'counts'}`` with one
         row per line (same house and sponsor) with two or more polls in the window, comparing its last delivery with
-        the previous one (the rows by descending rating of the house, those without it last, ties by name; a house
+        the previous one (the rows by the day of the last delivery, the latest first, then by descending rating of
+        the house, those without it last, ties by name; a house
         without name shows a dash); a cell is ``None`` or ``{'prev', 'value', 'change'}`` aligned with the parties of
         the view. ``seats`` compares the seats ranges the houses publish by the exact difference of their midpoints
         (``None`` when no line has them). ``None`` without a valid ``as_of`` or without lines.
@@ -292,7 +295,8 @@ def house_changes(polls: list, parties: list, colors: dict, as_of: Optional[str]
 
     def order(line: tuple) -> tuple:
         rating = line[1].get('rating')
-        return (not _has_value(rating), -rating if _has_value(rating) else 0,
+        return (-_parse_datetime(line[1].get('date')).date().toordinal(),
+                not _has_value(rating), -rating if _has_value(rating) else 0,
                 str(line[0]['pollster']).casefold(), str(line[0]['sponsor'] or '').casefold())
 
     lines.sort(key=order)

@@ -56,6 +56,14 @@ def test_chart_options_carry_the_image_option_of_a_chart_and_image_option_of_pic
     assert run_js('c.imageOptionOf({option: {a: 1}, imageOption: null}, 500, 300)') == {'a': 1}
 
 
+def test_wire_card_images_looks_for_the_square_button_or_for_the_selector_given():
+    """Una tarjeta puede descargar su imagen con otro botón (el «Descargar» de la cabecera): `wireCardImages` busca
+    el cuadrado por defecto y el selector que se le pase."""
+    wire = ('(() => { const seen = []; const root = {querySelectorAll: (sel) => { seen.push(sel); return []; }}; '
+            'c.wireCardImages(root); c.wireCardImages(root, null, "#changes-download"); return seen; })()')
+    assert run_js(wire) == ['button.card-img-btn', '#changes-download']
+
+
 def test_fit_overflow_widens_the_card_by_what_its_marked_scrollers_hide():
     """Una tabla más ancha que la tarjeta (`data-shot-fit`) ensancha la copia lo que desborda; las ocultas (ancho 0) y
     las que caben no cuentan."""

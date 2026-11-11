@@ -151,3 +151,33 @@ va a la URL; sin JavaScript se ve sólo la tabla de voto.
 - Cómo consigue la imagen la tabla entera: `cardImage` admite `width`, así que puede pedirse más ancha que los
   1.200 px habituales cuando la tabla no quepa, o compactar las columnas en la copia.
 - Anchuras en el móvil (primera columna estrecha, como los 124 px de «Todas las encuestas» bajo 720 px).
+
+## Cambios tras la fusión (Luis, 2026-11-11)
+
+Pedidos por Luis al ver la tarjeta ya fusionada; sustituyen lo que dicen arriba los objetivos 1, 2, 3, 4 y 6:
+
+- **Sitio:** la tarjeta va debajo de la «Calculadora de mayorías», la última de la sección Escaños (no bajo
+  «Promedio de sondeos»).
+- **Orden de las filas:** por el día de la última entrega, la más reciente arriba; con la misma fecha, por rating
+  descendente (sin rating, al final) y luego por nombre.
+- **Rating:** en su propia columna tras la de la casa, con la insignia y la cabecera «Rating (0-100)» de «Todas las
+  encuestas»; raya si la casa no tiene rating. Sólo la columna de la casa queda fija al desplazar.
+- **Enlaces:** las dos fechas, que llevan al detalle de cada sondeo, van subrayadas y en el color de los enlaces,
+  como la fecha de «Todas las encuestas»; el nombre de la casa sigue sin subrayar.
+- **Sin cambio:** el guion gris de las flechas de la web (`m.badge`, «–») sobre las dos cifras, no «=» («no se
+  entiende bien, parece el resultado de algo»). El pie cuenta «▲ 3 ▼ 2 – 2» (suben, bajan, igual) con ese mismo guion.
+- En el móvil la columna fija baja a 118 px, la cabecera del rating va en dos líneas y las celdas llevan menos
+  margen, para que a 390 px se vean el rating y dos partidos enteros.
+- **Partido sin cifra en la entrega anterior:** se trata como si no hubiera cambiado (guion gris sobre la única
+  cifra, y cuenta como «igual» en el pie), en vez de la cifra sola sin flecha. Luis lo pidió al ver la fila de SW
+  Demoscopia: su entrega del 8 de noviembre sólo trae PP, PSOE, VOX y FA. Corrige a propósito el anti-objetivo de
+  arriba para este caso; la raya sola sigue reservada a «la última entrega no da cifra».
+- **Textos de Luis:** título «Cambios por encuestadora»; entradilla «Cuánto cambia cada partido entre el último
+  sondeo de cada encuestadora y el anterior (casas con al menos dos sondeos en las últimas cuatro semanas).»; rótulo
+  del pie «Suben · Bajan · Igual». La firma de la imagen lleva el título nuevo; el nombre del fichero no cambia.
+- **Imagen sin selector:** el selector «% Voto / Escaños» no sale en la imagen descargada; en su lugar, una pastilla
+  junto al título dice la vista («% Voto» o «Escaños»). La pastilla sólo se ve en la imagen (clase `shot-only`).
+- **Botón de la imagen:** el mismo «Descargar» con icono de las demás tarjetas, en la cabecera
+  (`m.download_button`, id `changes-download`), en vez del botón cuadrado de la esquina; sigue descargando la tarjeta
+  entera (`wireCardImages` admite el selector del botón). La tarjeta ya no lleva la clase `shot`.
+- **Fila al pasar por encima:** se colorea entera, también la celda fija de la casa.

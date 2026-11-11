@@ -1,4 +1,4 @@
-"""El selector % Voto / Escaños de «Los cambios de cada casa» (`web/dist/js/pages/house-changes-wire.js`), comprobado
+"""El selector % Voto / Escaños de «Cambios por encuestadora» (`web/dist/js/pages/house-changes-wire.js`), comprobado
 con `node` y un documento de mentira (se salta sin él)."""
 import json
 import os
@@ -21,7 +21,9 @@ FAKES = (
     'const nodes = {"house-changes": el(false), "changes-metric": el(true), "changes-pct": el(false), '
     '"changes-seats": el(true)}; '
     'const button = {dataset: {file: "demoscopio-cambios-es-2026-11-11.png"}}; '
-    'nodes["house-changes"].querySelector = (sel) => (sel === "button.card-img-btn" ? button : null); '
+    'const pill = {textContent: "% Voto"}; '
+    'const parts = {"#changes-download": button, ".card-head .pill": pill}; '
+    'nodes["house-changes"].querySelector = (sel) => parts[sel] || null; '
     'const doc = {getElementById: (id) => nodes[id] || null}; '
     'const ids = ["changes-metric", "changes-pct", "changes-seats"]; '
     'const shown = () => ids.map((id) => (nodes[id] ? nodes[id].hidden : null)); '
@@ -63,6 +65,13 @@ def test_the_switch_renames_the_file_of_the_image_button():
              'const seats = button.dataset.file; pick("pct"); return [start, seats, button.dataset.file];')
     assert run_js(steps) == ['demoscopio-cambios-es-2026-11-11.png', 'demoscopio-cambios-escanos-es-2026-11-11.png',
                              'demoscopio-cambios-es-2026-11-11.png']
+
+
+def test_the_switch_names_the_view_in_the_pill_of_the_title():
+    """La pastilla del título dice qué vista lleva la imagen descargada, donde el selector no sale."""
+    steps = ('m.wireHouseChanges(doc); const start = pill.textContent; pick("seats"); '
+             'const seats = pill.textContent; pick("pct"); return [start, seats, pill.textContent];')
+    assert run_js(steps) == ['% Voto', 'Escaños', '% Voto']
 
 
 def test_wiring_without_the_card_or_without_seats_does_nothing():

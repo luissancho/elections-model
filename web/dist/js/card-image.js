@@ -165,9 +165,11 @@ export async function cardImage(card, {sign = '', width = CARD_IMAGE.width, scal
  *
  * @param {ParentNode} [root] where the buttons are
  * @param {function} [onError] called with a message when the image cannot be made
+ * @param {string} [selector] the buttons: the square one of the corner by default; a card may use another one (the
+ *   «Descargar» button of its head)
  */
-export function wireCardImages(root = document, onError = null) {
-  for (const button of root.querySelectorAll('button.card-img-btn')) {
+export function wireCardImages(root = document, onError = null, selector = 'button.card-img-btn') {
+  for (const button of root.querySelectorAll(selector)) {
     const card = button.closest('.card');
     if (!card || !card.id) {
       continue;
