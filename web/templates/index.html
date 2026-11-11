@@ -121,15 +121,6 @@
       <div class="card step"><span class="n">4</span><h3>Se comprueba a sí mismo</h3><p>Contra cada elección pasada: errores por encuestadora, rating y efecto rebaño.</p></div>
     </div>
 
-    {% if past_shown %}
-    <div class="sec-h" id="past"><h2>Elecciones pasadas</h2><a href="/elecciones">Ver el histórico ›</a></div>
-    <div class="past">
-      {% for event in past_shown %}<a href="{{ event.href }}">{{ 'Generales' if event.scope == 'es' else event.scope_name }} <small>{{ event.date|date }}</small></a>
-      {% endfor %}
-      {% if past_more %}<a href="/elecciones">+ {{ past_more }} más</a>{% endif %}
-    </div>
-    {% endif %}
-
     {% if studies %}
     <div class="sec-h" id="analisis"><h2>Análisis</h2><a href="/analisis">Ver los análisis ›</a></div>
     <div class="studies" id="studies">

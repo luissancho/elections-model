@@ -14,6 +14,7 @@ from mtpy import mtpy
 from mtpy.core.api import HttpError
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
+from tests.fakes import CountingFileSystem
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
     PARTIES, ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event,
@@ -4409,26 +4410,55 @@ def test_home_cards_pick_the_mode_of_each_scope_by_its_horizon(api, fresh_app):
     assert 'Pronóstico para las generales' in page and 'Si hoy hubiera' not in page
 
 
-def test_home_closing_sections_link_the_model_pages_and_the_past(events_site):
+def test_home_closing_sections_link_the_model_pages(events_site):
     page = html(call(events_site, '/')[2])
     more = page[page.index('id="more"'):page.index('id="how"')]
     for href, icon in (('/elecciones', 'i-target'), ('/casas', 'i-trophy'), ('/metodo', 'i-book')):
         assert re.search(r'<a class="card card-link" href="%s">\s*<span class="ic"><svg[^>]*><use href="#%s"' % (href, icon), more), href
     assert page.count('<div class="card step">') == 4 and 'Recoge los sondeos' in page
-    past = page[page.index('id="past"'):]
-    assert 'href="/elecciones/es/generales/2023-07"' in past and past.index('2023') < past.index('2019')
     assert 'PP −25 escaños <small>vs 2023</small>' in page.replace('\n', '')  # el chip de delta del hero
 
 
-def test_home_past_elections_include_scopes_without_a_run(history_two_scopes, fresh_app):
-    """«Elecciones pasadas» de Inicio lista también las elecciones de un ámbito sin previsión publicada (recién
-    votado): su detalle existe (2026-10-20)."""
-    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)
+def test_home_has_no_past_elections_strip(history_two_scopes):
+    """Inicio ya no lista las elecciones pasadas (2026-11-11: 188 lecturas a S3 por render para 12 nombres); el
+    enlace al histórico es la tarjeta «Histórico Errores»."""
+    page = html(call(history_two_scopes, '/')[2])
+    assert 'id="past"' not in page and 'Elecciones pasadas' not in page and 'class="past"' not in page
+    assert 'href="/elecciones/es/generales/2023-07"' not in page and 'href="/elecciones/es/madrid/2021-05"' not in page
+    more = page[page.index('id="more"'):page.index('id="how"')]
+    assert '<a class="card card-link" href="/elecciones">' in more  # the link to the history that stays
+
+
+def counting(fresh_app, delay=0.0):
+    """Cambia el `fs` del lector de la web por un `CountingFileSystem` sobre la misma carpeta y vacía los punteros."""
+    fs = CountingFileSystem(fresh_app.fs.path, delay=delay)
+    webapi.site().reader.fs = fs
     webapi.site().manifest_cache_clear()
-    webapi.site().files.clear()
-    past = html(call(history_two_scopes, '/')[2])
-    past = past[past.index('id="past"'):]
-    assert 'href="/elecciones/es/andalucia/2022-06"' in past and 'href="/elecciones/es/madrid/2021-05"' in past
+    return fs
+
+
+def test_home_reads_only_the_elections_of_its_scope_and_never_asks_exists(history_two_scopes, fresh_app):
+    call(history_two_scopes, '/')  # the run files stay in the LRU
+    fs = counting(fresh_app)
+    assert call(history_two_scopes, '/')[0] == 200
+    events = [name for method, name in fs.names if method == 'read_bytes' and '/events/' in name]
+    assert fs.calls['exists'] == 0 and fs.calls['listdir'] == 1
+    assert events and all('/events/es/' in name for name in events) and len(events) == len(set(events))
+
+
+def test_elecciones_reads_every_scope_once_and_never_asks_exists(history_two_scopes, fresh_app):
+    before = html(call(history_two_scopes, '/elecciones')[2])
+    fs = counting(fresh_app, delay=0.02)
+    status, _, body = call(history_two_scopes, '/elecciones')
+    assert status == 200 and html(body) == before
+    scopes = webapi.site().scopes()['scopes']
+    events = [name for method, name in fs.names if method == 'read_bytes' and '/events/' in name]
+    assert fs.calls['exists'] == 0 and fs.calls['listdir'] == len(scopes)
+    assert events and len(events) == len(set(events))  # no file of an election is read twice in one render
+    # two waves over every scope: all the listings first, then the metas; and the analysis of the scopes side by side
+    listings = [index for index, (method, name) in enumerate(fs.names) if method == 'listdir']
+    assert max(listings) < fs.names.index(('read_bytes', events[0]))
+    assert fs.overlap('/analysis/') >= 2
 
 
 def test_event_page_table_draws_the_seat_range_and_the_ridge_is_compact(api):
@@ -4723,16 +4753,13 @@ def test_eleccion_detail_route_errors(events_site, path, status, text):
     assert got == status and text in html(body) and headers['cache-control'] == 'no-store'
 
 
-def test_history_and_home_link_the_elections_by_slug(history_two_scopes):
+def test_history_links_the_elections_by_slug(history_two_scopes):
     status, _, body = call(history_two_scopes, '/elecciones')
     page = html(body)
     assert status == 200 and 'href="/elecciones/es/generales/2023-07"' in page and 'href="/elecciones/es/madrid/2021-05"' in page
     assert '/elecciones?scope=' not in page.replace('/elecciones?scope=es"', '')  # sólo queda el enlace al histórico
     events = {event['key']: event['href'] for event in initial(body)['events']}
     assert events['es:2023-07-23'] == '/elecciones/es/generales/2023-07' and events['es-md:2021-05-04'] == '/elecciones/es/madrid/2021-05'
-    home = html(call(history_two_scopes, '/')[2])
-    past = home[home.index('id="past"'):]
-    assert 'href="/elecciones/es/generales/2023-07"' in past and 'href="/elecciones/es/madrid/2021-05"' in past
 
 
 # Seguimiento 2026-10-15 (recorrido de Luis): en el perfil, los cuatro listados van de la elección más nueva a la
@@ -5656,14 +5683,14 @@ def test_analisis_unknown_study_is_404(api, fresh_app):
 
 
 def test_inicio_shows_the_studies_band_only_with_a_study(api, fresh_app):
-    write_event(fresh_app.fs)  # a past election, so the band goes after «Elecciones pasadas»
+    write_event(fresh_app.fs)  # a past election, for the «vs 2023» of the hero
     page = html(call(api, '/')[2])
     assert 'id="analisis"' not in page and 'href="/analisis/voto-cera"' not in page
     publish_study(fresh_app.fs)
     page = html(call(api, '/')[2])
     assert '<div class="sec-h" id="analisis"><h2>Análisis</h2><a href="/analisis">Ver los análisis ›</a></div>' in page
     band = page[page.index('id="analisis"'):]
-    assert page.index('id="past"') < page.index('id="analisis"')
+    assert page.index('id="how"') < page.index('id="analisis"')
     # the same card as the index of the Análisis: title, subtitle and the button, no verdicts and no dates
     meta = fixture_data('study-meta')
     cards = study_cards_html(band)

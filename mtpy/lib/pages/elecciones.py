@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import Callable, Optional, Sequence
 
 from ...core.api import HttpError
+from .. import bundle
 from ..bundle import POLL_ERRORS_WINDOW
 from ..webapi import check_date, event_params, site
 from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color,
@@ -183,12 +184,8 @@ def published_events(scope: str) -> list:
     """
     events = []
 
-    for date in sorted(site().events(scope), reverse=True):
-        meta = event_part(scope, date, 'meta')
-
-        if meta is None:
-            continue
-
+    for date, raw in sorted(site().event_metas(scope).items(), reverse=True):
+        meta = bundle.loads(raw)['data']
         summary = meta.get('summary') or {}
         event = {'date': date, 'name': meta.get('name')}
         event.update({key: summary.get(key) for key in SUMMARY_KEYS})
@@ -537,6 +534,10 @@ def elecciones_context(state: dict, active: str = '/elecciones', today: Optional
     """
     raw_scope = state['scope']
     context = common_context(state, active)
+    # the page goes over every scope: read their elections and their analysis at once, not scope by scope
+    codes = [row['code'] for row in site().scopes()['scopes']]
+    site().warm_events(codes)
+    site().warm_analysis([code for code in codes if site().events(code)], ('meta', 'poll-errors'))
     scopes = history_scopes()
     events = history_events(scopes)
     parts = poll_error_parts(scopes)

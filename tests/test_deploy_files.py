@@ -100,6 +100,25 @@ def test_nginx_trusts_the_private_ranges_and_reports_the_client():
     assert 'X-Client-IP $remote_addr always' in conf
 
 
+def nginx_location(conf, header):
+    """Directivas (líneas sin espacios alrededor) del bloque `location` cuya cabecera es `header`."""
+    body = conf[conf.index(header + ' {') + len(header) + 2:]
+    return [line.strip() for line in body[:body.index('}')].splitlines() if line.strip() and not line.strip().startswith('#')]
+
+
+def test_nginx_refreshes_only_the_history_page_in_the_background():
+    """`/elecciones` se sirve desde la copia guardada mientras se refresca por detrás, y cierra la conexión para que
+    nadie haga cola detrás del refresco; el resto, como siempre."""
+    conf = read('deploy/docker/nginx.conf')
+    everything, history = nginx_location(conf, 'location /'), nginx_location(conf, 'location = /elecciones')
+    assert set(history) - set(everything) == {'proxy_cache_background_update on;', 'keepalive_timeout 0;'}
+    assert set(everything) <= set(history) and len(history) == len(everything) + 2
+    assert any(line.startswith('proxy_cache_use_stale') and ' updating ' in line for line in history)
+    assert conf.index('location = /elecciones {') < conf.index('location / {')
+    assert 'inactive=10m' in conf  # the bound of the age of the copy that is served
+    assert subprocess.run(['bash', '-n', 'deploy/nginx-stale-check.sh'], cwd=ROOT).returncode == 0
+
+
 def test_load_test_script_is_valid_bash():
     """El script de carga existe, es ejecutable y es bash válido."""
     path = ROOT / 'deploy' / 'load-test.sh'
