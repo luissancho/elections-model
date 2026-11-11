@@ -71,9 +71,26 @@ export function imageOptionOf(chart, width, height) {
 }
 
 /**
- * Prepare the copy of the card in the document html2canvas renders: strip the tools (`STRIPPED`), replace each
- * chart by an image of its option (`imageOptionOf`) at the size the copy's layout gives the container, append the signature and wait
- * for the fonts.
+ * Widen the copy of a card so that its marked scrollers (`[data-shot-fit]`, like a table wider than the card) show
+ * whole in the image: the card grows by the most any of them hides (`scrollWidth − clientWidth`). A hidden scroller
+ * measures 0 and one that fits hides nothing; without overflow the card is left as it is.
+ *
+ * @param {HTMLElement} card the card in the cloned document
+ * @returns {number} the CSS pixels the card grew (0 when nothing overflows)
+ */
+export function fitOverflow(card) {
+  const excess = Math.max(0, ...[...card.querySelectorAll('[data-shot-fit]')]
+    .map((el) => el.scrollWidth - el.clientWidth));
+  if (excess > 0) {
+    card.style.width = `${Math.ceil(card.getBoundingClientRect().width + excess)}px`;
+  }
+  return excess;
+}
+
+/**
+ * Prepare the copy of the card in the document html2canvas renders: strip the tools (`STRIPPED`), widen it to show
+ * its marked scrollers whole (`fitOverflow`), replace each chart by an image of its option (`imageOptionOf`) at the
+ * size the copy's layout gives the container, append the signature and wait for the fonts.
  *
  * @param {Document} doc the cloned document
  * @param {string} cardId id of the card
@@ -88,6 +105,7 @@ export async function prepareClone(doc, cardId, charts, sign, scale) {
   }
   card.classList.add('shot-image');
   card.querySelectorAll(STRIPPED).forEach((el) => el.remove());
+  fitOverflow(card);
   for (const chart of charts) {
     const {id} = chart;
     const el = doc.getElementById(id);

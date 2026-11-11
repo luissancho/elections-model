@@ -54,3 +54,14 @@ def test_chart_options_carry_the_image_option_of_a_chart_and_image_option_of_pic
     assert run_js('c.chartOptions(%s)[1].imageOption' % card) is None
     assert run_js('c.imageOptionOf({option: {a: 1}, imageOption: (w, h) => ({w, h})}, 500, 300)') == {'w': 500, 'h': 300}
     assert run_js('c.imageOptionOf({option: {a: 1}, imageOption: null}, 500, 300)') == {'a': 1}
+
+
+def test_fit_overflow_widens_the_card_by_what_its_marked_scrollers_hide():
+    """Una tabla más ancha que la tarjeta (`data-shot-fit`) ensancha la copia lo que desborda; las ocultas (ancho 0) y
+    las que caben no cuentan."""
+    card = ('{style: {}, getBoundingClientRect: () => ({width: 1136}), querySelectorAll: (sel) => '
+            'sel === "[data-shot-fit]" ? %s : []}')
+    fit = '(() => { const card = %s; return [c.fitOverflow(card), card.style.width || null]; })()'
+    wide = card % '[{scrollWidth: 1500, clientWidth: 1100}, {scrollWidth: 0, clientWidth: 0}]'
+    assert run_js(fit % wide) == [400, '1536px']
+    assert run_js(fit % (card % '[{scrollWidth: 900, clientWidth: 1100}]')) == [0, None]

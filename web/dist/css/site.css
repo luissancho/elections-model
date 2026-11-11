@@ -832,7 +832,11 @@ ol.notes > li:target { color: var(--color-text); }
 .et .rt, .hc .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
 /* «Los cambios de cada casa»: the matrix house x party, centred cells with the change on top and the two figures
    in a muted line below; the first column (the house, its rating and its dates) is pinned while the table scrolls */
+#changes-metric { margin: 0 0 var(--space-2); }
 .hc-wrap { overflow-x: auto; margin-top: var(--space-2); }
+/* In the copy of the downloadable image the table shows whole: `fitOverflow` (card-image.js) widens the card by what
+   the scroller hides */
+.shot-image .hc-wrap { overflow: visible; }
 .hc { width: 100%; border-collapse: collapse; }
 .hc th, .hc td { padding: 8px 10px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--color-line); }
 .hc thead th { color: var(--color-muted); font-weight: 600; }

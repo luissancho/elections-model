@@ -45,13 +45,11 @@
 {{ m.card_start('house-changes', 'Los cambios de cada casa', 'Cuánto cambia cada partido entre las dos últimas entregas de cada encuestadora con al menos dos sondeos en las últimas cuatro semanas.', classes='shot') }}
         {{ m.card_image_button(site_title|lower ~ '-cambios-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png', 'Los cambios de cada casa · ' ~ event_bar.title ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}
         {% if house_changes.seats %}
-        <div class="ctrl-bar">
-          <fieldset id="changes-metric" class="seg" hidden>
-            <legend>Mostrar</legend>
-            <label><input type="radio" name="hcmetric" value="pct" checked> % Voto</label>
-            <label><input type="radio" name="hcmetric" value="seats"> Escaños</label>
-          </fieldset>
-        </div>
+        <fieldset id="changes-metric" class="seg" hidden>
+          <legend>Mostrar</legend>
+          <label><input type="radio" name="hcmetric" value="pct" checked> % Voto</label>
+          <label><input type="radio" name="hcmetric" value="seats"> Escaños</label>
+        </fieldset>
         {% endif %}
         <div class="hc-wrap" id="changes-pct" data-shot-fit>
           {{ changes_table(house_changes.pct, 1) }}

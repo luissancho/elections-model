@@ -14,6 +14,7 @@ import {sparklineSvg} from '../sparkline.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 import {markLegend} from './legend-dom.js';
 import {wireEvolution} from './evolution-wire.js';
+import {wireHouseChanges} from './house-changes-wire.js';
 import {wirePollsTable} from './polls-wire.js';
 import {wireSeatsPage} from './seats-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, viewCaption, wireAverage} from './series-wire.js';
@@ -368,6 +369,7 @@ function paint() {
   tryDraw(() => paintCards(initial), 'the party cards');
   tryDraw(wireCardsCarousel, 'the party carousel');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
+  tryDraw(() => wireHouseChanges(document, showError), 'the changes of each house');
   // the hemicycle and the seats in their own calls: a failure in one does not stop the other, and the seats read the
   // view of the switch (Partidos until the hemicycle has been drawn)
   let results = null;
