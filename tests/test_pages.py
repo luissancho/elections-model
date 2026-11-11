@@ -14,6 +14,7 @@ from mtpy import mtpy
 from mtpy.core.api import HttpError
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
+from tests.fakes import CountingFileSystem
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
     PARTIES, ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event,
@@ -4426,6 +4427,23 @@ def test_home_has_no_past_elections_strip(history_two_scopes):
     assert 'href="/elecciones/es/generales/2023-07"' not in page and 'href="/elecciones/es/madrid/2021-05"' not in page
     more = page[page.index('id="more"'):page.index('id="how"')]
     assert '<a class="card card-link" href="/elecciones">' in more  # the link to the history that stays
+
+
+def counting(fresh_app):
+    """Cambia el `fs` del lector de la web por un `CountingFileSystem` sobre la misma carpeta y vacía los punteros."""
+    fs = CountingFileSystem(fresh_app.fs.path)
+    webapi.site().reader.fs = fs
+    webapi.site().manifest_cache_clear()
+    return fs
+
+
+def test_home_reads_only_the_elections_of_its_scope_and_never_asks_exists(history_two_scopes, fresh_app):
+    call(history_two_scopes, '/')  # the run files stay in the LRU
+    fs = counting(fresh_app)
+    assert call(history_two_scopes, '/')[0] == 200
+    events = [name for method, name in fs.names if method == 'read_bytes' and '/events/' in name]
+    assert fs.calls['exists'] == 0 and fs.calls['listdir'] == 1
+    assert events and all('/events/es/' in name for name in events) and len(events) == len(set(events))
 
 
 def test_event_page_table_draws_the_seat_range_and_the_ridge_is_compact(api):

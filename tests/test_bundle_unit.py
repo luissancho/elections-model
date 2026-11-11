@@ -171,6 +171,17 @@ def test_list_events_and_event_exists_need_the_meta(tmp_path):
     assert writer.list_events('es-md') == []
 
 
+def test_list_event_dates_lists_the_date_folders_without_reading_metas(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    assert writer.list_event_dates('es') == []
+    data = load_fixture('event-results')['data']
+    for date in ('2023-07-23', '2019-11-10'):
+        writer.write_json(bundle.path_event('es', date, 'results'), 'event-results', data, 'es')
+    assert writer.list_event_dates('es') == ['2019-11-10', '2023-07-23'] and writer.list_events('es') == []
+    with pytest.raises(ValueError):
+        writer.list_event_dates('../x')
+
+
 def test_envelope_has_the_common_keys():
     env = bundle.envelope('vote', {'x': 1}, 'es', run_id='20261008-141503', mode='nowcast', generated_at='2026-10-08T14:15:03Z')
     assert env == {'schema': 'vote@1', 'contract': 1, 'scope': 'es', 'run_id': '20261008-141503', 'mode': 'nowcast',

@@ -1,6 +1,7 @@
 """Tests del paquete `mtpy/lib/webapi/` sin servidor ni base de datos: validadores, cachés y lector del paquete."""
 import json
 import os
+from collections import Counter
 from types import SimpleNamespace
 
 import pandas as pd
@@ -10,6 +11,7 @@ from mtpy.core.api import HttpError
 from mtpy.core.app import App
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish, webapi
+from tests.fakes import CountingFileSystem
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 FIXTURES = os.path.join(ROOT, 'tests', 'fixtures', 'bundle')
@@ -299,6 +301,81 @@ def test_site_events_expire_with_the_ttl(fresh_app, tmp_path):
     assert site.events('es') == ['2023-07-23']
     now[0] = 61.0
     assert site.events('es') == ['2019-11-10', '2023-07-23']
+
+
+def counting_site(tmp_path, delay=0.0, workers=16):
+    """Site con reloj inyectado sobre un `CountingFileSystem`: `(site, fs, now)`."""
+    fs = CountingFileSystem(str(tmp_path), delay=delay)
+    now = [0.0]
+    return webapi.Site(bundle.BundleReader(fs), ttl=60, clock=lambda: now[0], workers=workers), fs, now
+
+
+def test_ttl_cache_fresh_tells_an_unexpired_entry():
+    now = [0.0]
+    cache = webapi.TTLCache(ttl=60, clock=lambda: now[0])
+    assert not cache.fresh('k')
+    cache.get('k', lambda: None)
+    assert cache.fresh('k')
+    now[0] = 60.0
+    assert not cache.fresh('k')
+
+
+def test_site_events_read_the_metas_in_parallel_and_never_ask_exists(tmp_path):
+    site, fs, now = counting_site(tmp_path, delay=0.02)
+    for date in ('2011-11-20', '2015-12-20', '2019-11-10', '2023-07-23'):
+        write_event(fs, date=date, model=False)
+    fs.reset()
+    assert site.events('es') == ['2011-11-20', '2015-12-20', '2019-11-10', '2023-07-23'] == site.reader.list_events('es')
+    assert fs.peak >= 2
+    fs.reset()
+    assert site.events('es-cb') == [] and site.events('es') == site.events('es')
+    metas = site.event_metas('es')
+    assert list(metas) == site.events('es') and metas['2023-07-23'] == site.event('es', '2023-07-23', 'meta')
+    assert fs.calls['exists'] == 0 and fs.calls['read_bytes'] == 0 and fs.calls['listdir'] == 1  # only `es-cb`
+
+
+def test_site_events_skip_a_date_folder_without_meta(tmp_path):
+    site, fs, now = counting_site(tmp_path)
+    write_event(fs)
+    writer = bundle.BundleWriter(fs)
+    writer.write_json(bundle.path_event('es', '2019-11-10', 'results'), 'event-results', fixture_data('event-results'), 'es')
+    assert site.events('es') == ['2023-07-23'] == site.reader.list_events('es')
+    fs.reset()
+    assert site.events('es') == ['2023-07-23'] and list(site.event_metas('es')) == ['2023-07-23']
+    assert sum(fs.calls.values()) == 0  # the folder without meta is not asked again within the TTL
+
+
+def test_site_events_propagate_an_error_that_is_not_a_404_and_cache_nothing(tmp_path, monkeypatch):
+    site, fs, now = counting_site(tmp_path)
+    write_event(fs)
+    write_event(fs, date='2019-11-10', model=False)
+    inner = fs.read_bytes
+    broken = [True]
+
+    def read(name):
+        if broken[0] and name.endswith('2019-11-10/meta.json'):
+            raise OSError('S3 down')
+        return inner(name)
+    monkeypatch.setattr(fs, 'read_bytes', read)
+    with pytest.raises(OSError):
+        site.events('es')
+    broken[0] = False
+    assert site.events('es') == ['2019-11-10', '2023-07-23']
+
+
+def test_site_event_metas_reread_in_parallel_what_expired(tmp_path):
+    site, fs, now = counting_site(tmp_path, delay=0.02)
+    dates = ['2011-11-20', '2015-12-20', '2019-11-10', '2023-07-23']
+    for date in dates:
+        write_event(fs, date=date, model=False)
+    for date in dates:
+        site.event('es', date, 'meta')  # the metas enter the cache at t=0
+    now[0] = 30.0
+    assert site.events('es') == dates  # the list enters at t=30 and outlives the metas
+    now[0] = 61.0
+    fs.reset()
+    assert list(site.event_metas('es')) == dates
+    assert fs.calls == Counter(read_bytes=4) and fs.peak >= 2
 
 
 def test_site_requires_a_file_system(fresh_app):

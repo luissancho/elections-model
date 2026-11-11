@@ -1,7 +1,10 @@
 """Dobles de prueba de la publicación: un Simulator sintético que ejercita sus métodos reales de salida sin base
 y un Computer sintético con los resúmenes de casas que publica `publish analysis`."""
+import collections
 import json
 import os
+import threading
+import time
 import types
 import warnings
 
@@ -510,6 +513,53 @@ class RecordingFileSystem(FileSystem):
     def write_bytes(self, content, name):
         self.written.append(name)
         return super().write_bytes(content, name)
+
+
+class CountingFileSystem(FileSystem):
+    """FileSystem local que cuenta las lecturas, los listados y las comprobaciones de existencia (también las que
+    lanzan) y mide cuántos `read_bytes` coinciden a la vez (`peak`); `delay` alarga cada lectura para que se
+    solapen."""
+
+    def __init__(self, path, delay=0.0):
+        super().__init__(path)
+        self.delay = delay
+        self.lock = threading.Lock()
+        self.active = 0
+        self.reset()
+
+    def reset(self):
+        """Vacía las cuentas y el máximo de lecturas simultáneas."""
+        with self.lock:
+            self.calls = collections.Counter()
+            self.names = []
+            self.peak = 0
+
+    def note(self, method, name):
+        """Anota una llamada a `method` con `name`."""
+        with self.lock:
+            self.calls[method] += 1
+            self.names.append((method, name))
+
+    def read_bytes(self, name):
+        self.note('read_bytes', name)
+        with self.lock:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        try:
+            if self.delay:
+                time.sleep(self.delay)
+            return super().read_bytes(name)
+        finally:
+            with self.lock:
+                self.active -= 1
+
+    def listdir(self, name=None):
+        self.note('listdir', name)
+        return super().listdir(name)
+
+    def exists(self, name):
+        self.note('exists', name)
+        return super().exists(name)
 
 
 LEAN_RUN = '20261024-120000'
