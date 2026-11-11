@@ -3,8 +3,8 @@
     Included by Promedios under the average when `house_changes` is not None; needs `catalog`, `state`, `meta`,
     `event_bar`, `site_title`, `site_host` and `author_handle` in the context. Without JS only the vote table shows:
     the switch and the seats table carry `hidden` (the browser reveals and wires them). -#}
-{% macro changes_table(view, digits) -%}
-<table class="hc">
+{% macro changes_table(view, digits, label) -%}
+<table class="hc" aria-label="{{ label }}">
   <thead>
     <tr>
       <th scope="col" class="f">Encuestadora</th>
@@ -43,7 +43,7 @@
 </table>
 {%- endmacro %}
 {{ m.card_start('house-changes', 'Los cambios de cada casa', 'Cuánto cambia cada partido entre las dos últimas entregas de cada encuestadora con al menos dos sondeos en las últimas cuatro semanas.', classes='shot') }}
-        {{ m.card_image_button(site_title|lower ~ '-cambios-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png', 'Los cambios de cada casa · ' ~ event_bar.title ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}
+        {{ m.card_image_button(site_title|lower ~ '-cambios-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png', 'Los cambios de cada casa · ' ~ event_bar.title ~ ' · ' ~ meta.as_of|date ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}
         {% if house_changes.seats %}
         <fieldset id="changes-metric" class="seg" hidden>
           <legend>Mostrar</legend>
@@ -52,19 +52,20 @@
         </fieldset>
         {% endif %}
         <div class="hc-wrap" id="changes-pct" data-shot-fit>
-          {{ changes_table(house_changes.pct, 1) }}
+          {{ changes_table(house_changes.pct, 1, 'Cambio del voto de cada partido entre las dos últimas entregas de cada encuestadora') }}
         </div>
         {% if house_changes.seats %}
         <div class="hc-wrap" id="changes-seats" data-shot-fit hidden>
-          {{ changes_table(house_changes.seats, 0) }}
+          {{ changes_table(house_changes.seats, 0, 'Cambio de los escaños de cada partido entre las dos últimas entregas de cada encuestadora') }}
         </div>
         {% endif %}
+        <p class="scroll-hint">Desliza para ver más →</p>
         {% call m.how() %}
         <p>
           Cada fila es una encuestadora, con el medio para el que publica, que ha terminado al menos dos sondeos en las
           últimas cuatro semanas. La flecha dice cuánto ha movido a cada partido entre su entrega anterior y la última, y
           debajo van las dos cifras: verde si sube, roja si baja y un signo igual si repite. Una raya quiere decir que
-          alguna de las dos entregas no da cifra para ese partido.
+          la última entrega no da cifra para ese partido; una cifra sola, sin flecha, que la anterior no la daba.
         </p>
         <p>
           La comparación es siempre de una casa consigo misma. No importa que una encuestadora suela dar a un partido

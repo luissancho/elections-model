@@ -30,7 +30,8 @@ FAKES = (
 
 
 def run_js(steps):
-    """Ejecuta `steps` (sentencias que acaban en `return`) con `m` (el módulo) y el documento de `FAKES`; da su JSON."""
+    """Ejecuta `steps` (sentencias que acaban en `return`) con `m` (el módulo) y el documento de `FAKES`; da su
+    JSON."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '

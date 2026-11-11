@@ -859,7 +859,9 @@ ol.notes > li:target { color: var(--color-text); }
 .hc tfoot td .dlt { display: inline; font-size: 11.5px; }
 @media (max-width: 720px) {
   .hc .f { min-width: 130px; }
-  .hc th.f small { white-space: normal; }
+  /* On a phone the house may wrap and its rating badge falls under the name, so the pinned column keeps near its
+     minimum and leaves room for the parties */
+  .hc tbody th.f, .hc th.f small { white-space: normal; }
 }
 .et td.mx { font-weight: 800; }
 .et td.na { color: var(--color-muted); }

@@ -2,7 +2,7 @@
 The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the lookup of the poll named by the URL and
 of the previous delivery of its house and sponsor, the rows and figures of its cards and the template context.
 """
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from ...core.api import HttpError
@@ -146,20 +146,23 @@ def _change_cell(last: dict, previous: dict, name: str, seats: bool) -> Optional
     name : str
         Party.
     seats : bool
-        Compare the seats ranges (by their midpoints) instead of the vote.
+        Compare the seats ranges (by their exact midpoints) instead of the vote.
 
     Returns
     -------
     dict or None
-        ``{'prev', 'value', 'change'}`` (texts of the two figures and their difference, one decimal for the vote);
-        ``prev`` and ``change`` are ``None`` when the previous delivery lacks the figure; ``None`` when the last
-        delivery gives none.
+        ``{'prev', 'value', 'change'}`` (texts of the two figures and their difference, one decimal for the vote; for
+        the seats, the exact difference of the midpoints of the two ranges, ``((low2 + high2) − (low1 + high1)) / 2``,
+        which may end in .5); ``prev`` and ``change`` are ``None`` when the previous delivery lacks the figure;
+        ``None`` when the last delivery gives none.
     """
     if seats:
-        now, before = (record.get('seats') or {} for record in (last, previous))
-        value, prev = seats_text(now.get(name)), seats_text(before.get(name))
-        mid, prev_mid = _seats_mid(now.get(name)), _seats_mid(before.get(name))
-        change = None if mid is None or prev_mid is None else mid - prev_mid
+        now, before = ((record.get('seats') or {}).get(name) for record in (last, previous))
+        value, prev = seats_text(now), seats_text(before)
+        change = None
+
+        if value is not None and prev is not None:
+            change = (int(now[0]) + int(now[1]) - int(before[0]) - int(before[1])) / 2
     else:
         now, before = last.get(name), previous.get(name)
         value = fmt_num(now, 1) if _has_value(now) else None
@@ -223,7 +226,7 @@ def house_changes(polls: list, parties: list, colors: dict, as_of: Optional[str]
     Parameters
     ----------
     polls : list
-        Records of the ``polls`` part of a scope, in its order.
+        Records of the ``polls`` part of a scope, in its order; those without a valid ``date`` are skipped.
     parties : list
         Parties of the scope, in their order.
     colors : dict
@@ -231,7 +234,8 @@ def house_changes(polls: list, parties: list, colors: dict, as_of: Optional[str]
     as_of : str or None
         Day of the page, ``YYYY-MM-DD``; the window runs from ``days`` days before it, both ends included.
     scope : str, optional
-        Scope code, for the links to the detail pages of the two deliveries (``None`` without it).
+        Scope code, for the links to the detail pages of the two deliveries (``None`` without it, and also when both
+        deliveries share the day, and so the URL).
     days : int, optional
         Length of the window in days.
 
@@ -240,45 +244,47 @@ def house_changes(polls: list, parties: list, colors: dict, as_of: Optional[str]
     dict or None
         ``{'days', 'pct', 'seats'}``: ``pct`` and ``seats`` are views ``{'parties', 'rows', 'counts'}`` with one
         row per line (same house and sponsor) with two or more polls in the window, comparing its last delivery with
-        the previous one (the rows by descending rating of the house, those without it last, ties by name); a cell
-        is ``None`` or ``{'prev', 'value', 'change'}`` aligned with the parties of the view. ``seats`` compares the
-        seats ranges the houses publish (``None`` when no line has them). ``None`` without a valid ``as_of`` or
-        without lines.
+        the previous one (the rows by descending rating of the house, those without it last, ties by name; a house
+        without name shows a dash); a cell is ``None`` or ``{'prev', 'value', 'change'}`` aligned with the parties of
+        the view. ``seats`` compares the seats ranges the houses publish by the exact difference of their midpoints
+        (``None`` when no line has them). ``None`` without a valid ``as_of`` or without lines.
     """
-    start = _parse_datetime(as_of)
+    window_end = _parse_datetime(as_of)
 
-    if start is None:
+    if window_end is None:
         return None
 
-    first_day = (start.date() - timedelta(days=days)).isoformat()
+    first_day = (window_end.date() - timedelta(days=days)).isoformat()
+    dated = [poll for poll in polls if _parse_datetime(poll.get('date')) is not None]
     lines = []
 
-    for index, last in enumerate(polls):
+    for index, last in enumerate(dated):
         house_key = 'pollster_id' if last.get('pollster_id') is not None else 'pollster'
-        same_line = [(str(other.get('date'))[:10], position) for position, other in enumerate(polls)
+        same_line = [(str(other.get('date'))[:10], position) for position, other in enumerate(dated)
                      if other.get(house_key) == last.get(house_key)
                      and slugify(other.get('sponsor') or '') == slugify(last.get('sponsor') or '')]
 
         if max(same_line) != (str(last.get('date'))[:10], index) or str(last.get('date'))[:10] < first_day:
             continue
 
-        previous = previous_poll(polls, last)
+        previous = previous_poll(dated, last)
 
         if previous is None or str(previous.get('date'))[:10] < first_day:
             continue
 
         rating = last.get('rating')
         color = gradient(rating, 0, 100, RATING_COLORS) if _has_value(rating) else 'transparent'
-        gap = (datetime.fromisoformat(str(last.get('date'))[:10])
-               - datetime.fromisoformat(str(previous.get('date'))[:10])).days
-        row = {'pollster': last.get('pollster'), 'href': poll_href(last),
+        gap = (_parse_datetime(last.get('date')).date() - _parse_datetime(previous.get('date')).date()).days
+        hrefs = (poll_detail_href(scope, previous), poll_detail_href(scope, last)) if scope else (None, None)
+        # two deliveries of the same day share their URL, which the detail page answers with a 404: no links then
+        hrefs = (None, None) if hrefs[0] == hrefs[1] else hrefs
+        row = {'pollster': last.get('pollster') or DASH, 'href': poll_href(last),
                'rating': fmt_num(rating, 1), 'rating_color': None if color == 'transparent' else color,
                'sponsor': last.get('sponsor') or None,
                'prev_date': fieldwork_label(None, None, previous.get('date')),
                'last_date': fieldwork_label(None, None, last.get('date')),
                'gap_days': gap,
-               'prev_href': poll_detail_href(scope, previous) if scope else None,
-               'last_href': poll_detail_href(scope, last) if scope else None}
+               'prev_href': hrefs[0], 'last_href': hrefs[1]}
         lines.append((row, last, previous))
 
     if not lines:

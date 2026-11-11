@@ -2,7 +2,7 @@
 import re
 
 from mtpy.lib import bundle, pages, webapi
-from mtpy.lib.pages.filters import DASH, gradient
+from mtpy.lib.pages.filters import DASH, fmt_date, gradient
 from mtpy.lib.pages.slugs import poll_detail_href
 from tests.test_api_asgi import call
 from tests.test_pages import api, assert_public_wording, html  # noqa: F401  (fixtures y ayudas de las páginas)
@@ -70,12 +70,24 @@ def test_house_changes_seats_are_the_houses_own_ranges_by_their_midpoints():
     assert [party['name'] for party in view['parties']] == ['PP', 'PSOE']
     assert [row['pollster'] for row in view['rows']] == ['Sigma Dos', 'SW Demoscopia']
     assert view['rows'][0]['cells'] == [{'prev': f'133{DASH}139', 'value': f'131{DASH}137', 'change': -2},
-                                        {'prev': f'97{DASH}103', 'value': f'101{DASH}106', 'change': 4}]
+                                        {'prev': f'97{DASH}103', 'value': f'101{DASH}106', 'change': 3.5}]
     assert view['rows'][1]['cells'] == [{'prev': '116', 'value': f'113{DASH}119', 'change': 0},
                                         {'prev': None, 'value': f'127{DASH}132', 'change': None}]
     assert view['counts'] == {'PP': {'up': 0, 'down': 1, 'flat': 1}, 'PSOE': {'up': 1, 'down': 0, 'flat': 0}}
     without = [{key: value for key, value in record.items() if key != 'seats'} for record in POLLS]
     assert pages.house_changes(without, NAMES, COLORS, AS_OF, 'es')['seats'] is None
+
+
+def test_house_changes_seats_change_is_the_exact_difference_of_the_midpoints():
+    """Sin redondear cada punto medio: el medio escaño cuenta y la flecha nunca contradice las horquillas."""
+    pairs = [([1, 2], [2, 3], 1), ([4, 5], [5, 6], 1), ([115, 122], [114, 121], -1), ([6, 6], [5, 6], -0.5),
+             ([7, 8], [6, 8], -0.5)]
+    polls = [poll(date, 20 + index, f'Casa {index}', None, 50.0 - index, {'PP': seats}, PP=30.0)
+             for index, (before, after, _) in enumerate(pairs)
+             for date, seats in (('2026-11-01', before), ('2026-11-02', after))]
+    view = pages.house_changes(polls, NAMES, COLORS, AS_OF)['seats']
+    assert [row['cells'][0]['change'] for row in view['rows']] == [change for _, _, change in pairs]
+    assert view['counts']['PP'] == {'up': 2, 'down': 3, 'flat': 0}  # half a seat down is a fall, not «=»
 
 
 def test_house_changes_without_two_deliveries_in_the_window_or_without_the_day_is_none():
@@ -87,6 +99,16 @@ def test_house_changes_without_two_deliveries_in_the_window_or_without_the_day_i
     assert [row['pollster'] for row in week['pct']['rows']] == ['SW Demoscopia'] and week['days'] == 7
 
 
+def test_house_changes_skip_polls_without_a_valid_date_and_name_the_nameless_house_with_a_dash():
+    undated = {'pollster_id': 3, 'pollster': 'SW Demoscopia', 'sponsor': 'La Séptima', 'rating': 25.5, 'PP': 40.0}
+    broken = [poll(None, 1, 'Sigma Dos', 'El Mundo', 65.9, PP=40.0), undated,
+              poll('2026-11-1', 6, '40dB', 'Prisa', 60.0, PP=40.0)]
+    assert pages.house_changes(POLLS + broken, NAMES, COLORS, AS_OF, 'es') == pages.house_changes(
+        POLLS, NAMES, COLORS, AS_OF, 'es')
+    nameless = [poll('2026-11-01', 11, None, None, None, PP=29.0), poll('2026-11-02', 11, None, None, None, PP=29.5)]
+    assert pages.house_changes(nameless, NAMES, COLORS, AS_OF)['pct']['rows'][0]['pollster'] == DASH
+
+
 def test_house_changes_same_day_deliveries_rating_ties_and_no_scope():
     polls = [poll('2026-11-05', 9, 'Zeta', 'M', 50.0, PP=30.0), poll('2026-11-05', 9, 'Zeta', 'M', 50.0, PP=30.4),
              poll('2026-11-01', 8, 'Alfa', None, 50.0, PP=29.0),
@@ -96,6 +118,10 @@ def test_house_changes_same_day_deliveries_rating_ties_and_no_scope():
     zeta = view['rows'][1]
     assert zeta['gap_days'] == 0 and zeta['cells'][0] == {'prev': '30,0', 'value': '30,4', 'change': 0.4}
     assert (zeta['prev_href'], zeta['last_href']) == (None, None)
+    # with a scope too: the two deliveries of the day share their URL, which the detail page answers with a 404
+    zeta, alfa = (pages.house_changes(polls, NAMES, COLORS, AS_OF, 'es')['pct']['rows'][index] for index in (1, 0))
+    assert (zeta['prev_href'], zeta['last_href']) == (None, None)
+    assert (alfa['prev_href'], alfa['last_href']) == tuple(poll_detail_href('es', record) for record in polls[2:])
     assert [party['name'] for party in view['parties']] == ['PP', 'PSOE']  # UP has no figure in any row
     assert view['rows'][0]['cells'][1] == {'prev': None, 'value': '27,0', 'change': None}
     assert view['counts']['PSOE'] == {'up': 0, 'down': 0, 'flat': 0}
@@ -136,7 +162,15 @@ def test_event_page_changes_card_follows_the_average_with_both_views(api, fresh_
     assert page.index('id="series"') < page.index('id="house-changes"') < page.index('id="escanos"')
     assert '<h2>Los cambios de cada casa</h2>' in card
     assert 'class="card-img-btn" hidden data-file="demoscopio-cambios-es-2026-10-08.png"' in card
+    # the image says the day it was made: the card speaks of «las últimas cuatro semanas»
+    sign = r'data-sign="Los cambios de cada casa · [^"·]+ · {} · demoscopio\.es · @luis_sancho"'
+    assert re.search(sign.format(re.escape(fmt_date('2026-10-08'))), card)
     assert '<fieldset id="changes-metric" class="seg" hidden>' in card
+    for metric in ('del voto', 'de los escaños'):
+        label = f'Cambio {metric} de cada partido entre las dos últimas entregas de cada encuestadora'
+        assert f'<table class="hc" aria-label="{label}">' in card
+    hint = '<p class="scroll-hint">Desliza para ver más →</p>'
+    assert card.count(hint) == 1 and card.index('id="changes-seats"') < card.index(hint) < card.index('<details')
     radios = re.findall(r'<label><input type="radio" name="hcmetric" value="(\w+)"( checked)?> ([^<]+)</label>', card)
     assert radios == [('pct', ' checked', '% Voto'), ('seats', '', 'Escaños')]
     pct, seats = card.split('id="changes-seats" data-shot-fit hidden>')
@@ -161,10 +195,23 @@ def test_event_page_changes_card_follows_the_average_with_both_views(api, fresh_
     assert '<b>GAD3</b>' not in seats and '<b>Sondaxe</b>' not in seats
     assert re.search(r'<span class="dlt down">▼ 2</span>\s*<small>133–139 → 131–137</small>', seats)
     for phrase in ('La comparación es siempre de una casa consigo misma', 'Mira el conjunto, no una celda',
-                   'no un reparto nuestro', 'aquí sólo se ve hacia dónde lo mueve'):
+                   'no un reparto nuestro', 'aquí sólo se ve hacia dónde lo mueve',
+                   'Una raya quiere decir que la última entrega no da cifra para ese partido; una cifra sola, sin '
+                   'flecha, que la anterior no la daba.'):
         assert phrase in card, phrase
+    assert 'alguna de las dos entregas' not in card
     assert_public_wording(page, '/es con los cambios de cada casa')
     assert 'id="house-changes"' in changes_card(api, 'mode=nowcast')[1]
+
+
+def test_event_page_changes_card_half_a_seat_is_a_whole_arrow_and_a_fall(api, fresh_app):
+    write_polls(fresh_app, [poll('2026-10-01', 7, 'Sigma Dos', 'El Mundo', 65.9, {'PP': [6, 6]}, PP=31.1),
+                            poll('2026-10-06', 7, 'Sigma Dos', 'El Mundo', 65.9, {'PP': [5, 6]}, PP=31.0)])
+    seats = changes_card(api)[0].split('id="changes-seats" data-shot-fit hidden>')[1]
+    assert re.search(r'<span class="dlt down">▼ 1</span>\s*<small>6 → 5–6</small>', seats)
+    foot = seats[seats.index('<tfoot>'):]
+    count = '<span class="dlt up">▲ 0</span> <span class="dlt down">▼ 1</span> <span class="dlt flat">= 0</span>'
+    assert count in foot  # half a seat down is a fall
 
 
 def test_event_page_changes_card_without_seats_has_no_switch(api, fresh_app):
