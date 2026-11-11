@@ -2,6 +2,7 @@
 The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the lookup of the poll named by the URL and
 of the previous delivery of its house and sponsor, the rows and figures of its cards and the template context.
 """
+from datetime import datetime, timedelta
 from typing import Optional
 
 from ...core.api import HttpError
@@ -10,7 +11,7 @@ from .casas import mtype_label
 from .common import block_color, bundle_part, common_context, ink_color, part
 from .elecciones import chart_parties
 from .filters import DASH, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num, gradient
-from .promedios import RATING_COLORS, chart_polls, round_series
+from .promedios import RATING_COLORS, chart_polls, fieldwork_label, poll_href, round_series
 from .slugs import poll_detail_href, pollster_href, slugify
 
 
@@ -129,6 +130,169 @@ def previous_poll(polls: list, poll: dict) -> Optional[dict]:
     earlier = [item for item in keys if item < key]
 
     return polls[max(earlier)[1]] if earlier else None
+
+
+HOUSE_CHANGES_DAYS = 28
+
+
+def _change_cell(last: dict, previous: dict, name: str, seats: bool) -> Optional[dict]:
+    """
+    Cell of a party in the row of a house: its figure in the last delivery against the previous one.
+
+    Parameters
+    ----------
+    last, previous : dict
+        Poll records of the last delivery of a line and of the one before.
+    name : str
+        Party.
+    seats : bool
+        Compare the seats ranges (by their midpoints) instead of the vote.
+
+    Returns
+    -------
+    dict or None
+        ``{'prev', 'value', 'change'}`` (texts of the two figures and their difference, one decimal for the vote);
+        ``prev`` and ``change`` are ``None`` when the previous delivery lacks the figure; ``None`` when the last
+        delivery gives none.
+    """
+    if seats:
+        now, before = (record.get('seats') or {} for record in (last, previous))
+        value, prev = seats_text(now.get(name)), seats_text(before.get(name))
+        mid, prev_mid = _seats_mid(now.get(name)), _seats_mid(before.get(name))
+        change = None if mid is None or prev_mid is None else mid - prev_mid
+    else:
+        now, before = last.get(name), previous.get(name)
+        value = fmt_num(now, 1) if _has_value(now) else None
+        prev = fmt_num(before, 1) if _has_value(before) else None
+        change = round(now - before, 1) if value is not None and prev is not None else None
+
+    return None if value is None else {'prev': prev, 'value': value, 'change': change}
+
+
+def _changes_view(lines: list, parties: list, colors: dict, seats: bool) -> Optional[dict]:
+    """
+    One view (vote or seats) of the matrix of changes of each house.
+
+    Parameters
+    ----------
+    lines : list
+        ``(row, last, previous)`` of each line, already sorted: the row without ``cells``, the last delivery and the
+        previous one.
+    parties : list
+        Parties of the scope, in their order.
+    colors : dict
+        ``{party: colour}``.
+    seats : bool
+        Build the seats view instead of the vote one.
+
+    Returns
+    -------
+    dict or None
+        ``{'parties', 'rows', 'counts'}``; the rows are the lines whose last delivery gives some figure (seats view
+        only: some seats range), the parties those with a cell in some row, and ``counts`` the number of rows where
+        each party goes ``up``, ``down`` or stays ``flat``. ``None`` without rows.
+    """
+    rows = [(row, [_change_cell(last, previous, name, seats) for name in parties]) for row, last, previous in lines]
+
+    if seats:
+        rows = [(row, cells) for row, cells in rows if any(cell is not None for cell in cells)]
+
+    if not rows:
+        return None
+
+    shown = [index for index in range(len(parties)) if any(cells[index] is not None for _, cells in rows)]
+    counts = {}
+
+    for index in shown:
+        changes = [cells[index]['change'] for _, cells in rows if cells[index] is not None]
+        changes = [change for change in changes if change is not None]
+        counts[parties[index]] = {'up': sum(change > 0 for change in changes),
+                                  'down': sum(change < 0 for change in changes),
+                                  'flat': sum(change == 0 for change in changes)}
+
+    return {'parties': [{'name': parties[index], 'color': colors.get(parties[index])} for index in shown],
+            'rows': [row | {'cells': [cells[index] for index in shown]} for row, cells in rows],
+            'counts': counts}
+
+
+def house_changes(polls: list, parties: list, colors: dict, as_of: Optional[str], scope: Optional[str] = None,
+                  days: int = HOUSE_CHANGES_DAYS) -> Optional[dict]:
+    """
+    Matrix house by party of the change between the last two deliveries of each house and sponsor in the last days.
+
+    Parameters
+    ----------
+    polls : list
+        Records of the ``polls`` part of a scope, in its order.
+    parties : list
+        Parties of the scope, in their order.
+    colors : dict
+        ``{party: colour}``.
+    as_of : str or None
+        Day of the page, ``YYYY-MM-DD``; the window runs from ``days`` days before it, both ends included.
+    scope : str, optional
+        Scope code, for the links to the detail pages of the two deliveries (``None`` without it).
+    days : int, optional
+        Length of the window in days.
+
+    Returns
+    -------
+    dict or None
+        ``{'days', 'pct', 'seats'}``: ``pct`` and ``seats`` are views ``{'parties', 'rows', 'counts'}`` with one
+        row per line (same house and sponsor) with two or more polls in the window, comparing its last delivery with
+        the previous one (the rows by descending rating of the house, those without it last, ties by name); a cell
+        is ``None`` or ``{'prev', 'value', 'change'}`` aligned with the parties of the view. ``seats`` compares the
+        seats ranges the houses publish (``None`` when no line has them). ``None`` without a valid ``as_of`` or
+        without lines.
+    """
+    start = _parse_datetime(as_of)
+
+    if start is None:
+        return None
+
+    first_day = (start.date() - timedelta(days=days)).isoformat()
+    lines = []
+
+    for index, last in enumerate(polls):
+        house_key = 'pollster_id' if last.get('pollster_id') is not None else 'pollster'
+        same_line = [(str(other.get('date'))[:10], position) for position, other in enumerate(polls)
+                     if other.get(house_key) == last.get(house_key)
+                     and slugify(other.get('sponsor') or '') == slugify(last.get('sponsor') or '')]
+
+        if max(same_line) != (str(last.get('date'))[:10], index) or str(last.get('date'))[:10] < first_day:
+            continue
+
+        previous = previous_poll(polls, last)
+
+        if previous is None or str(previous.get('date'))[:10] < first_day:
+            continue
+
+        rating = last.get('rating')
+        color = gradient(rating, 0, 100, RATING_COLORS) if _has_value(rating) else 'transparent'
+        gap = (datetime.fromisoformat(str(last.get('date'))[:10])
+               - datetime.fromisoformat(str(previous.get('date'))[:10])).days
+        row = {'pollster': last.get('pollster'), 'href': poll_href(last),
+               'rating': fmt_num(rating, 1), 'rating_color': None if color == 'transparent' else color,
+               'sponsor': last.get('sponsor') or None,
+               'prev_date': fieldwork_label(None, None, previous.get('date')),
+               'last_date': fieldwork_label(None, None, last.get('date')),
+               'gap_days': gap,
+               'prev_href': poll_detail_href(scope, previous) if scope else None,
+               'last_href': poll_detail_href(scope, last) if scope else None}
+        lines.append((row, last, previous))
+
+    if not lines:
+        return None
+
+    def order(line: tuple) -> tuple:
+        rating = line[1].get('rating')
+        return (not _has_value(rating), -rating if _has_value(rating) else 0,
+                str(line[0]['pollster']).casefold(), str(line[0]['sponsor'] or '').casefold())
+
+    lines.sort(key=order)
+
+    return {'days': days, 'pct': _changes_view(lines, parties, colors, False),
+            'seats': _changes_view(lines, parties, colors, True)}
 
 
 def fieldwork_overlaps(previous: dict, poll: dict) -> bool:
