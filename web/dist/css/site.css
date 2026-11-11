@@ -825,7 +825,40 @@ ol.notes > li:target { color: var(--color-text); }
 .et td.f a:hover { color: var(--color-accent); text-decoration: underline; }
 /* Rating badge of "Todas las encuestas": the figure on a solid colour from red (0) through grey (50) to green (100),
    `gradient` over `RATING_COLORS` in the server and the browser alike */
-.et .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
+.et .rt, .hc .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
+/* «Los cambios de cada casa»: the matrix house x party, centred cells with the change on top and the two figures
+   in a muted line below; the first column (the house, its rating and its dates) is pinned while the table scrolls */
+#changes-metric { margin: 0 0 var(--space-2); }
+.hc-wrap { overflow-x: auto; margin-top: var(--space-2); }
+/* In the copy of the downloadable image the table shows whole: `fitOverflow` (card-image.js) widens the card by what
+   the scroller hides */
+.shot-image .hc-wrap { overflow: visible; }
+.hc { width: 100%; border-collapse: collapse; }
+.hc th, .hc td { padding: 8px 10px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--color-line); }
+.hc thead th { color: var(--color-muted); font-weight: 600; }
+.hc th .pd { display: block; width: 10px; height: 10px; margin: 0 auto 3px; border-radius: 50%; }
+.hc td small { display: block; color: var(--color-muted); font-size: 11.5px; font-weight: 400; }
+.hc td.na { color: var(--color-muted); }
+.hc .f { position: sticky; left: 0; z-index: 1; min-width: 190px; text-align: left; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
+.hc th.f { font-weight: 400; }
+/* The row headers (the house and the label of the foot) read like the first column of «Todas las encuestas», not
+   like the column headers: the size of the table, normal case, the house in bold ink over its muted line */
+.hc tbody th.f, .hc tfoot th.f { font-size: 13px; text-transform: none; letter-spacing: 0; }
+.hc tbody th.f { color: var(--color-text); }
+.hc td .dlt { display: block; }
+.hc th.f b { color: var(--color-text); }
+.hc th.f small { display: block; color: var(--color-muted); font-size: 11.5px; font-weight: 400; }
+.hc th.f a { color: inherit; text-decoration: none; }
+.hc th.f a:hover { color: var(--color-accent); text-decoration: underline; }
+.hc tfoot th, .hc tfoot td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); border-bottom: 0; }
+.hc tfoot th.f { background: var(--color-soft); font-weight: 600; }
+.hc tfoot td .dlt { display: inline; font-size: 11.5px; }
+@media (max-width: 720px) {
+  .hc .f { min-width: 130px; }
+  /* On a phone the house may wrap and its rating badge falls under the name, so the pinned column keeps near its
+     minimum and leaves room for the parties */
+  .hc tbody th.f, .hc th.f small { white-space: normal; }
+}
 .et td.mx { font-weight: 800; }
 .et td.na { color: var(--color-muted); }
 /* The model scored like a pollster in the table of the last polls of an election: a highlighted row */

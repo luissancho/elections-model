@@ -85,6 +85,9 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
+      {% if house_changes %}
+      {% include '_house_changes.html' %}
+      {% endif %}
       </section>
       <section class="event-section" id="escanos">
       <div class="hemi-grid">

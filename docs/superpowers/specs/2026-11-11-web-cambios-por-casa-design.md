@@ -37,8 +37,9 @@ semanas, el cambio de cada partido frente a su entrega inmediatamente anterior, 
    - la última no da cifra: una raya.
 5. **Selector Voto / Escaños** (`.seg`, como el de Evolución), sólo si alguna fila tiene escaños. En Escaños las
    cifras son **las que publica la propia casa** (`poll['seats']`, nunca un reparto del modelo), con su horquilla
-   («133–139 → 131–137», `seats_text`), y el cambio es la diferencia de los puntos medios (`_seats_mid`, como el
-   detalle del sondeo). Las líneas cuya última entrega no publica escaños no salen en esa vista.
+   («133–139 → 131–137», `seats_text`), y el cambio es la diferencia de los puntos medios exactos de las dos
+   horquillas: el medio escaño cuenta y se muestra redondeado a un escaño entero. Las líneas cuya última entrega no
+   publica escaños no salen en esa vista.
 6. **Fila final** «Suben · bajan · igual»: por partido, cuántas filas lo suben, lo bajan y lo dejan igual
    («▲ 3 ▼ 2 = 2»), contando sólo las celdas con cambio calculable.
 7. **Imagen.** Botón de descargar la tarjeta (`m.card_image_button`, clase `shot`), con la vista que esté a la
@@ -83,7 +84,9 @@ semanas, el cambio de cada partido frente a su entrega inmediatamente anterior, 
   `{'pollster', 'href', 'rating', 'rating_color', 'sponsor', 'prev_date', 'last_date', 'gap_days', 'prev_href',
   'last_href', 'cells': [{'prev', 'value', 'change'} | None]}` (textos ya formateados salvo `change`, que va a
   `m.badge` con 1 decimal en voto y 0 en escaños). El cambio de voto es `round(última − anterior, 1)`; el de
-  escaños, `_seats_mid(última) − _seats_mid(anterior)`. Con docstring y nombres en inglés.
+  escaños, la diferencia de los puntos medios exactos de las dos horquillas,
+  `((bajo2 + alto2) − (bajo1 + alto1)) / 2`, que puede acabar en ,5: el medio escaño cuenta y se muestra redondeado
+  a un escaño entero. Con docstring y nombres en inglés.
 - `promedios_context` añade `context['house_changes']` (importación local de `sondeos`, como ya hace con
   `elecciones`: `sondeos` importa `promedios`).
 - `web/templates/promedios.html` (o un parcial `_house_changes.html`): la tarjeta con `m.card_start(...,
@@ -106,7 +109,7 @@ semanas, el cambio de cada partido frente a su entrega inmediatamente anterior, 
   1. «Cada fila es una encuestadora, con el medio para el que publica, que ha terminado al menos dos sondeos en las
      últimas cuatro semanas. La flecha dice cuánto ha movido a cada partido entre su entrega anterior y la última, y
      debajo van las dos cifras: verde si sube, roja si baja y un signo igual si repite. Una raya quiere decir que
-     alguna de las dos entregas no da cifra para ese partido.»
+     la última entrega no da cifra para ese partido; una cifra sola, sin flecha, que la anterior no la daba.»
   2. «La comparación es siempre de una casa consigo misma. No importa que una encuestadora suela dar a un partido
      más o menos que las demás: aquí sólo se ve hacia dónde lo mueve. Si casi todas lo mueven en la misma
      dirección, es una señal que no depende de qué casas hayan publicado esa semana.»
