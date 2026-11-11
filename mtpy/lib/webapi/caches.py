@@ -122,6 +122,25 @@ class TTLCache:
 
         return value
 
+    def fresh(self, key: Any) -> bool:
+        """
+        Whether a key holds an entry that has not expired, without loading it or touching its position.
+
+        Parameters
+        ----------
+        key : hashable
+            Cache key.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``get`` would answer from the cache.
+        """
+        with self._lock:
+            hit = self._items.get(key)
+
+            return hit is not None and self.clock() - hit[0] < self.ttl
+
     def clear(self) -> None:
         """
         Drop every entry.

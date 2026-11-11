@@ -263,6 +263,9 @@
         <p>No dice si esos partidos querrían pactar: sólo si les darían los números.</p>
         {% endcall %}
       {{ m.card_end() }}
+      {% if house_changes %}
+      {% include '_house_changes.html' %}
+      {% endif %}
       </section>
       <section class="event-section" id="evolucion">
       {#- one card for the two metrics: the % Voto / Escaños switch changes the chart and the table of changes

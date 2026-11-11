@@ -39,15 +39,15 @@ from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, h
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,
                       fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around,
                       shade_scale)
-from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
+from .inicio import INTRO, card_headline, event_cards, inicio_context
 from . import ban, herd, lean, shy
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, quality_rubric, subpages, thresholds_rows)
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, poll_detail_href, pollster_href, pollster_slugs,
                     resolve_event_path, resolve_pollster, scope_paths, scope_slug, slugify)
-from .sondeos import (fieldwork_overlaps, fieldwork_text, find_poll, poll_kpis, poll_title,
-                      previous_poll, rating_badge, sample_text, seats_text, sheet_rows, sondeo_context, vote_rows,
-                      weight_card)
+from .sondeos import (HOUSE_CHANGES_DAYS, fieldwork_overlaps, fieldwork_text, find_poll, house_changes, poll_kpis,
+                      poll_title, previous_poll, rating_badge, sample_text, seats_text, sheet_rows, sondeo_context,
+                      vote_rows, weight_card)
 from .promedios import (BLOCK_ORDER, PAGE_SIZE, RATING_COLORS, block_result_rows, chart_polls, fieldwork_label, inherited_results,
                         lineage_blocks, party_cards,
                         poll_href, poll_months, poll_name, polls_table, pollster_options, promedios_context, result_rows,

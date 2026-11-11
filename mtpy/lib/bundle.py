@@ -1006,13 +1006,34 @@ class BundleReader:
         ValueError
             If the scope is invalid.
         """
+        return [date for date in self.list_event_dates(scope) if self.event_exists(scope, date)]
+
+    def list_event_dates(self, scope: str) -> list:
+        """
+        List the date folders of the past elections of a scope, published or not: one listing, no ``meta.json`` asked.
+
+        Parameters
+        ----------
+        scope : str
+            The scope; it must match ``ROUTE_ALIAS_RE``.
+
+        Returns
+        -------
+        list of str
+            The folder names of ``events/{scope}`` that are dates, ascending. Empty if the scope has no events folder.
+
+        Raises
+        ------
+        ValueError
+            If the scope is invalid.
+        """
         _check_file(scope, 'meta', EVENT_PARTS, 'event')
         try:
             names = self.fs.listdir(self.path(f'events/{scope}'))
         except FileNotFoundError:
             return []
 
-        return sorted(name for name in names if DATE_RE.fullmatch(name) and self.event_exists(scope, name))
+        return sorted(name for name in names if DATE_RE.fullmatch(name))
 
     def event_exists(self, scope: str, date: str) -> bool:
         """

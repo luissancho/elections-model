@@ -436,15 +436,11 @@ article.card p, .card-link p { margin: 6px 0; }
 .metodo-nav { margin: 0 0 var(--space-4); }
 .metodo-nav a[aria-current="page"] { font-weight: 600; }
 
-/* Numbered steps ("¿Cómo funciona?") and the chips of the past elections (home) */
+/* Numbered steps ("¿Cómo funciona?") of the home */
 .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 .step .n { display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 10px; border-radius: 999px; background: var(--color-text); color: #fff; font: 800 14px var(--font-head); }
 .step h3 { margin: 0 0 4px; font-size: 15px; }
 .step p { margin: 0; font-size: 13px; color: var(--color-muted); }
-.past { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.past a { display: inline-flex; align-items: center; gap: var(--space-2); padding: 7px 12px; border-radius: var(--radius-sm); background: var(--color-card); border: 1px solid var(--color-line); font-size: 13px; font-weight: 600; color: var(--color-text); text-decoration: none; }
-.past a:hover { border-color: var(--color-line-strong); }
-.past a small { font-weight: 500; color: var(--color-muted); }
 
 /* Text helpers */
 .muted { color: var(--color-muted); font-size: 0.9em; }
@@ -819,7 +815,7 @@ ol.notes > li:target { color: var(--color-text); }
 .et th[aria-sort="ascending"] .sort::after { content: " ▴"; }
 .et th .pd { display: block; width: 10px; height: 10px; margin: 0 0 3px auto; border-radius: 50%; }
 /* A second, smaller line under a header label: «Elecciones» with «(generales)», the count in brackets in its cells */
-.et th .th-sub { display: block; font-size: 0.85em; text-transform: none; letter-spacing: 0; }
+.et th .th-sub, .hc th .th-sub { display: block; font-size: 0.85em; text-transform: none; letter-spacing: 0; }
 .et .f { position: sticky; left: 0; z-index: 1; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
 .et td.f { white-space: normal; }
 .et tbody tr:hover td.f { background: var(--color-row-hover); }
@@ -829,7 +825,49 @@ ol.notes > li:target { color: var(--color-text); }
 .et td.f a:hover { color: var(--color-accent); text-decoration: underline; }
 /* Rating badge of "Todas las encuestas": the figure on a solid colour from red (0) through grey (50) to green (100),
    `gradient` over `RATING_COLORS` in the server and the browser alike */
-.et .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
+.et .rt, .hc .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
+/* «Cambios por encuestadora»: the matrix house x party, centred cells with the change on top and the two figures
+   in a muted line below; the first column (the house, its rating and its dates) is pinned while the table scrolls */
+#changes-metric { margin: 0 0 var(--space-2); }
+.hc-wrap { overflow-x: auto; margin-top: var(--space-2); }
+/* In the copy of the downloadable image the table shows whole: `fitOverflow` (card-image.js) widens the card by what
+   the scroller hides */
+.shot-image .hc-wrap { overflow: visible; }
+/* The image leaves the switch out and names its view with the pill of the title, which the page does not show */
+.shot-image #changes-metric { display: none; }
+.card:not(.shot-image) .shot-only { display: none; }
+.hc { width: 100%; border-collapse: collapse; }
+.hc th, .hc td { padding: 8px 10px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--color-line); }
+.hc thead th { color: var(--color-muted); font-weight: 600; }
+.hc th .pd { display: block; width: 10px; height: 10px; margin: 0 auto 3px; border-radius: 50%; }
+.hc td small { display: block; color: var(--color-muted); font-size: 11.5px; font-weight: 400; }
+.hc td.na { color: var(--color-muted); }
+.hc .f { position: sticky; left: 0; z-index: 1; min-width: 190px; text-align: left; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
+.hc th.f { font-weight: 400; }
+/* The pinned cell has its own background (it covers what scrolls under it), so the hover of the row must paint
+   it too: the site-wide rule only reaches the `td` */
+.hc tbody tr:hover th.f { background: var(--color-row-hover); }
+/* The row headers (the house and the label of the foot) read like the first column of «Todas las encuestas», not
+   like the column headers: the size of the table, normal case, the house in bold ink over its muted line */
+.hc tbody th.f, .hc tfoot th.f { font-size: 13px; text-transform: none; letter-spacing: 0; }
+.hc tbody th.f { color: var(--color-text); }
+.hc td .dlt { display: block; }
+.hc th.f b { color: var(--color-text); }
+.hc th.f small { display: block; color: var(--color-muted); font-size: 11.5px; font-weight: 400; }
+.hc th.f a { color: inherit; text-decoration: none; }
+.hc th.f a:hover { color: var(--color-accent); text-decoration: underline; }
+/* The two dates link to the page of each poll: underlined, like the date of «Todas las encuestas» */
+.hc th.f small a { color: var(--color-accent); text-decoration: underline; }
+.hc tfoot th, .hc tfoot td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); border-bottom: 0; }
+.hc tfoot th.f { background: var(--color-soft); font-weight: 600; }
+.hc tfoot td .dlt { display: inline; font-size: 11.5px; }
+@media (max-width: 720px) {
+  .hc th, .hc td { padding: 8px 6px; }
+  .hc .f { min-width: 118px; }
+  /* On a phone the house, its line of dates and the label of the foot may wrap, so the pinned column keeps near its
+     minimum and leaves room for the rating and two parties */
+  .hc tbody th.f, .hc tfoot th.f, .hc th.f small { white-space: normal; }
+}
 .et td.mx { font-weight: 800; }
 .et td.na { color: var(--color-muted); }
 /* The model scored like a pollster in the table of the last polls of an election: a highlighted row */
