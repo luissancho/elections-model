@@ -8,7 +8,7 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
 
 1. "Fichero de configuración", "Construir la imagen" y "Arrancar el contenedor" (Docker en local).
 2. "La web": nginx, páginas, API y base de datos; "Cómo añadir una página", "Desarrollo sin Docker" y
-   "Comprobaciones de la infraestructura" (`nginx-check.sh`, `smoke.sh`, `check-api.sh`).
+   "Comprobaciones de la infraestructura" (`nginx-check.sh`, `nginx-stale-check.sh`, `smoke.sh`, `check-api.sh`).
 3. "Despliegue en ECS": qué debe existir en AWS, marcadores de las plantillas de `deploy/ecs/` y procedimiento.
 4. "Comprobar S3" y "Si `check_s3` falla".
 5. "Cargar los sondeos": el job `load` (qué hace y cuándo lanzarla, nombres descartados y `force`, ejemplos,
@@ -82,6 +82,14 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
   y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
   permitía envenenar la caché. Los parámetros de más crean entradas, acotadas por `max_size=100m`,
   `inactive=10m` y `limit_req`.
+- `/elecciones` (2026-11-11) tiene bloque propio, `location = /elecciones`: el mismo que `/` más
+  `proxy_cache_background_update on` y `keepalive_timeout 0`. Con la copia caducada nginx responde con ella al
+  instante (`X-Cache: STALE`) y la refresca por detrás, porque es la página que más ficheros lee del bundle (todas
+  las elecciones pasadas). La copia servida tiene como mucho unos 10 minutos (`inactive=10m` borra la que nadie ha
+  pedido en ese tiempo; entonces la visita espera al render). Sólo ella lo lleva: en el resto, una copia vieja
+  enseñaría cifras anteriores a la última publicación. nginx retiene la conexión hasta que acaba el refresco, así que
+  el bloque la cierra tras responder (`keepalive_timeout 0`): si no, la siguiente petición que el ALB mandara por ella
+  haría cola. El bloque cubre `/elecciones?scope=…`; el detalle de una elección (`/elecciones/es/…`) va por `/`.
 - `/healthz` → `200 ok`, sin pasar por Python. (Enmienda 2026-10-13, fase 6: también devuelve la cabecera
   `X-Client-IP` con la IP que nginx atribuye al cliente; `check-api.sh` la imprime y avisa si es privada.)
 
@@ -399,6 +407,12 @@ inexistente da 404.)
 
 - `bash deploy/nginx-check.sh`: `nginx -t` sobre `deploy/docker/nginx.conf` con los dos `alias` de
   `/dist/` reescritos a `<repo>/web/dist/...` (no arranca nginx). Requiere nginx instalado.
+- `bash deploy/nginx-stale-check.sh`: arranca ese nginx en el puerto 18042 delante de un servidor de pega (18000,
+  2 s por respuesta, `max-age=5`) y comprueba en unos 25 s el refresco por detrás de `/elecciones`: sin copia espera
+  (`MISS`), con la copia caducada responde al instante (`STALE`) sin que la petición siguiente haga cola, el refresco
+  deja la copia nueva (`HIT`) y el detalle de una elección sigue esperando (`EXPIRED`). Requiere nginx, curl y
+  python3. Para probarlo con el nginx de la imagen: `docker run --rm -v "$PWD":/app -w /app python:3.11-slim bash -c
+  "apt-get update -qq && apt-get install -y -qq nginx curl >/dev/null && nginx -v && bash deploy/nginx-stale-check.sh"`.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
   (`max-age=31536000`, también de `/dist/vendor/fonts/SourceSans3-3.052-Regular.woff2`), `/dist/js/pages/promedios.js`
