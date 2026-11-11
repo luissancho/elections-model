@@ -8,8 +8,8 @@
 # Adapta la configuracion como deploy/nginx-check.sh (rutas de la imagen Docker a las locales) y la
 # arranca en puertos propios: nginx en el 18042 y, en el 18000, un servidor de pega que tarda 2 s
 # en responder cualquier ruta, con `Cache-Control: public, max-age=5` y, en el cuerpo, cuantas
-# veces le han pedido esa ruta. Tarda unos 25 s. Imprime OK o FAIL por paso y sale con 1 si alguno
-# falla:
+# veces le han pedido esa ruta. Tarda unos 27 s y necesita curl 7.84 o posterior (`%header{}`).
+# Imprime OK o FAIL por paso y sale con 1 si alguno falla:
 #
 #   1. /elecciones?scope=es-md sin copia: MISS, espera al servidor (>= 2 s), cuerpo 1.
 #   2. La misma, con la copia caducada: STALE, al instante (< 0,5 s), cuerpo 1.
@@ -148,8 +148,9 @@ read -r status seconds cache _ <<< "$(curl -s -o "$tmp/body" -w "$format" "$hist
 report 1 "/elecciones sin copia: $cache en $seconds s, cuerpo $(cat "$tmp/body")" \
     "$(is "$status" 200)" "$(is "$cache" MISS)" "$(over "$seconds" 2)" "$(is "$(cat "$tmp/body")" 1)"
 
-# 2 y 3. Copia caducada (max-age=5): la sirve al instante y la peticion siguiente no hace cola.
-sleep 5.5
+# 2 y 3. Copia caducada: la sirve al instante y la peticion siguiente no hace cola. nginx cuenta la
+# vigencia en segundos enteros, asi que una copia con max-age=5 vale entre 5 y 6 s: se espera 6,5.
+sleep 6.5
 curl -s -o "$tmp/body" -w "$format" "$history" -o /dev/null -w "$format" "$base/healthz" > "$tmp/pair"
 read -r status seconds cache _ < "$tmp/pair"
 report 2 "/elecciones con la copia caducada: $cache en $seconds s, cuerpo $(cat "$tmp/body")" \
@@ -167,7 +168,7 @@ report 4 "/elecciones tras el refresco por detras: $cache en $seconds s, cuerpo 
 # 5. El detalle de una eleccion va por `location /`: caducada, espera al servidor.
 read -r status seconds cache _ <<< "$(curl -s -o "$tmp/body" -w "$format" "$detail")"
 first="$(is "$cache" MISS)"
-sleep 5.5
+sleep 6.5
 read -r status seconds cache _ <<< "$(curl -s -o "$tmp/body" -w "$format" "$detail")"
 report 5 "el detalle de una eleccion con la copia caducada: $cache en $seconds s, cuerpo $(cat "$tmp/body")" \
     "$first" "$(is "$status" 200)" "$(is "$cache" EXPIRED)" "$(over "$seconds" 2)" "$(is "$(cat "$tmp/body")" 2)"

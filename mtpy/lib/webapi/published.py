@@ -13,9 +13,11 @@ from .caches import DEFAULT_TTL, LRU_SIZE, LRUCache, TTLCache, settings
 from .checks import catalogue
 
 IMMUTABLE_MAX_AGE = 31536000
-# Threads that read the small files of the bundle side by side. Measured on 2026-11-11 with the 18 listings and the 94
-# metas of the past elections, from a laptop: 18.4 s with 1 thread, 2.4 s with 8, 1.5 s with 16 and 1.05 s with 32
-POOL_SIZE = 16
+# Threads that read the small files of the bundle side by side: as many as connections the S3 client keeps (10, the
+# default of botocore); each thread beyond them opens a new connection per wave, which urllib3 discards with a
+# warning. Measured on 2026-11-11 with the 18 listings and the 94 metas of the past elections, from a laptop: 18.4 s
+# with 1 thread, 2.4 s with 8, 1.5 s with 16 and 1.05 s with 32
+POOL_SIZE = 10
 
 
 class Site:

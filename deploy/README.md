@@ -116,8 +116,8 @@ familias de páginas:
   catálogo da 404 "Ámbito desconocido."; uno del catálogo sin pronóstico, 404 "Este ámbito no tiene pronóstico
   publicado".
 - **Globales**, en el menú principal (`pages.PAGES`: Inicio, Histórico Errores, Ranking Encuestadoras, Método):
-  `/` (Inicio, `Index`, `index.html`: los pronósticos publicados, uno por ámbito, y las elecciones pasadas con
-  detalle), `/elecciones` (Histórico Errores, `Elecciones`; con `?date=YYYY-MM-DD`, el detalle de una elección),
+  `/` (Inicio, `Index`, `index.html`: los pronósticos publicados, uno por ámbito; desde el 2026-11-11 no lista las
+  elecciones pasadas, que están en el histórico), `/elecciones` (Histórico Errores, `Elecciones`; con `?date=YYYY-MM-DD`, el detalle de una elección),
   `/casas` (Ranking Encuestadoras, `Casas`; con `?id=`, el perfil de una encuestadora) y `/metodo` (`Metodo`, `metodo.html`:
   introducción, índice de las cuatro preguntas, datos, publicación y limitaciones) con sus subpáginas
   `/metodo/promedio`, `/metodo/escanos`, `/metodo/rating` y `/metodo/backtest` (la precisión del modelo, antes
@@ -408,9 +408,9 @@ inexistente da 404.)
 - `bash deploy/nginx-check.sh`: `nginx -t` sobre `deploy/docker/nginx.conf` con los dos `alias` de
   `/dist/` reescritos a `<repo>/web/dist/...` (no arranca nginx). Requiere nginx instalado.
 - `bash deploy/nginx-stale-check.sh`: arranca ese nginx en el puerto 18042 delante de un servidor de pega (18000,
-  2 s por respuesta, `max-age=5`) y comprueba en unos 25 s el refresco por detrás de `/elecciones`: sin copia espera
+  2 s por respuesta, `max-age=5`) y comprueba en unos 27 s el refresco por detrás de `/elecciones`: sin copia espera
   (`MISS`), con la copia caducada responde al instante (`STALE`) sin que la petición siguiente haga cola, el refresco
-  deja la copia nueva (`HIT`) y el detalle de una elección sigue esperando (`EXPIRED`). Requiere nginx, curl y
+  deja la copia nueva (`HIT`) y el detalle de una elección sigue esperando (`EXPIRED`). Requiere nginx, curl 7.84 o posterior y
   python3. Para probarlo con el nginx de la imagen: `docker run --rm -v "$PWD":/app -w /app python:3.11-slim bash -c
   "apt-get update -qq && apt-get install -y -qq nginx curl >/dev/null && nginx -v && bash deploy/nginx-stale-check.sh"`.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
