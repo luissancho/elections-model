@@ -3174,13 +3174,13 @@ def test_metodo_escanos_text(api):
                    'Por qué cada partido se sortea por su lado', 'Un paseo al azar proporcional al tamaño',
                    'Las oscilaciones por comunidad y provincia', 'Qué límites tiene la simulación',
                    'El swing logístico', 'la razón entre quienes lo votan y quienes no',
-                   'Hasta el 10 de noviembre de 2026 usábamos un swing proporcional',
-                   'la logística queda más cerca del voto real de cada provincia en los trece',
+                   'deja un error medio de 1,9 puntos frente al voto real de cada provincia',
                    'en las generales, el 3% de los votos válidos', 'cambiaba 64 de los 10.400 repartos provinciales'):
         assert phrase in text, phrase
     for phrase in ('en unos meses', 'suben y bajan a la vez', 'el de su banda', 'la banda del promedio', 'En resumen',
                    'que se prolonga unos días tras el último sondeo', 'lo que se sabía',
-                   'El swing proporcional', 'frente al swing proporcional', 'Es un swing proporcional, no uniforme'):
+                   'El swing proporcional', 'frente al swing proporcional', 'Es un swing proporcional, no uniforme',
+                   'usábamos un swing proporcional', 'Lo cambiamos'):
         assert phrase not in text, phrase
     # the dated tables: the error by size, the drift by horizon and by age, the swing residuals, the joint draw and
     # the backtest of the reference run
