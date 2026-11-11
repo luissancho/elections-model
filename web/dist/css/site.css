@@ -436,15 +436,11 @@ article.card p, .card-link p { margin: 6px 0; }
 .metodo-nav { margin: 0 0 var(--space-4); }
 .metodo-nav a[aria-current="page"] { font-weight: 600; }
 
-/* Numbered steps ("¿Cómo funciona?") and the chips of the past elections (home) */
+/* Numbered steps ("¿Cómo funciona?") of the home */
 .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 .step .n { display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 10px; border-radius: 999px; background: var(--color-text); color: #fff; font: 800 14px var(--font-head); }
 .step h3 { margin: 0 0 4px; font-size: 15px; }
 .step p { margin: 0; font-size: 13px; color: var(--color-muted); }
-.past { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.past a { display: inline-flex; align-items: center; gap: var(--space-2); padding: 7px 12px; border-radius: var(--radius-sm); background: var(--color-card); border: 1px solid var(--color-line); font-size: 13px; font-weight: 600; color: var(--color-text); text-decoration: none; }
-.past a:hover { border-color: var(--color-line-strong); }
-.past a small { font-weight: 500; color: var(--color-muted); }
 
 /* Text helpers */
 .muted { color: var(--color-muted); font-size: 0.9em; }

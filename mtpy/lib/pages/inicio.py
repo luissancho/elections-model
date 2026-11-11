@@ -1,6 +1,6 @@
 """
 Home page context: the hero of the next election (the first published scope), the rows of the other published
-scopes, the latest polls and the past elections.
+scopes and the latest polls.
 """
 from datetime import date, datetime
 from typing import Optional
@@ -9,18 +9,15 @@ from ..webapi import site
 from .common import (CHAMBERS, block_color, bundle_part, catalog, common_context, days_left, days_text, default_mode,
                      event_title, hemicycle_order, published_scopes, run_horizon)
 from .analisis import study_cards
-from .elecciones import last_results, published_events
+from .elecciones import last_results
 from .filters import _madrid_tz, delta_text, fmt_date_short
 from .promedios import inherited_results, leader_of, poll_sample
-from .slugs import event_href
 
 INTRO = ('Demoscopio promedia los sondeos de cada elección, simula el reparto de escaños y puntúa a las encuestadoras '
          'según lo que acertaron. Un proyecto transparente y divulgativo, con el método y modelo a la vista.')
 # Long names of the chambers, for the featured card
 CHAMBER_NAMES = {'es': 'Congreso de los Diputados'}
 DEFAULT_CHAMBER_NAME = 'Parlamento'
-# Past elections shown as chips before "+ N más"
-PAST_SHOWN = 12
 # Rows of "Últimas encuestas" and the parties whose figures they show
 LATEST_POLLS = 10
 TOP_PARTIES = 3
@@ -120,40 +117,6 @@ def event_cards(scopes: list, today: Optional[date] = None) -> list:
         })
 
     return cards
-
-
-def past_events(scopes: list) -> list:
-    """
-    Past elections of every scope that has some published, newest first (with or without a published forecast
-    of the scope: the detail of an election exists either way).
-
-    Parameters
-    ----------
-    scopes : list of dict
-        Rows of the scope catalogue (``site().scopes()['scopes']``); those without published elections add
-        nothing.
-
-    Returns
-    -------
-    list of dict
-        ``scope``, ``scope_name``, ``date``, ``name`` and ``href`` (``event_href``: the detail of the election) per
-        election.
-    """
-    events = []
-
-    for row in scopes:
-        dates = site().events(row['code'])
-
-        for event in published_events(row['code']):
-            events.append({
-                'scope': row['code'],
-                'scope_name': row['name'],
-                'date': event['date'],
-                'name': event['name'],
-                'href': event_href(row['code'], event['date'], dates),
-            })
-
-    return sorted(events, key=lambda event: event['date'], reverse=True)
 
 
 def hero_segments(summary: Optional[dict], parties) -> list:
@@ -366,8 +329,8 @@ def inicio_context(state: dict) -> dict:
     dict
         ``common_context`` of the home (default scope) plus ``intro``, ``hero`` (``hero_context`` of the first
         published scope, or ``None``), ``autonomics`` (the other published cards), ``unpublished`` (the names of
-        the scopes without a forecast), ``latest_polls``, ``past_shown`` and ``past_more`` (``past_events`` cut at
-        ``PAST_SHOWN``), ``studies`` (``study_cards``: the band of the Análisis, empty without a published study) and,
+        the scopes without a forecast), ``latest_polls``, ``studies`` (``study_cards``: the band of the Análisis,
+        empty without a published study) and,
         with a seat bar, ``initial`` (the hemicycle data: ``hero.seats``, ``colors``,
         ``fullnames``, ``order``, ``n_seats``, ``majority``).
 
@@ -380,15 +343,12 @@ def inicio_context(state: dict) -> dict:
     cards = event_cards(site().scopes()['scopes'])
     featured = next((card for card in cards if card['published']), None)
     hero = hero_context(featured) if featured else None
-    past = past_events(site().scopes()['scopes'])
     context.update(
         intro=INTRO,
         hero=hero,
         autonomics=[card for card in cards if card['published'] and (featured is None or card['code'] != featured['code'])],
         unpublished=[card['name'] for card in cards if not card['published']],
         latest_polls=latest_polls(featured['code'], featured['run'], hero['catalog'], hero['top']) if hero else [],
-        past_shown=past[:PAST_SHOWN],
-        past_more=max(0, len(past) - PAST_SHOWN),
         studies=study_cards(),
     )
 
