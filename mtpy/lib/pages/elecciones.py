@@ -534,6 +534,10 @@ def elecciones_context(state: dict, active: str = '/elecciones', today: Optional
     """
     raw_scope = state['scope']
     context = common_context(state, active)
+    # the page goes over every scope: read their elections and their analysis at once, not scope by scope
+    codes = [row['code'] for row in site().scopes()['scopes']]
+    site().warm_events(codes)
+    site().warm_analysis([code for code in codes if site().events(code)], ('meta', 'poll-errors'))
     scopes = history_scopes()
     events = history_events(scopes)
     parts = poll_error_parts(scopes)

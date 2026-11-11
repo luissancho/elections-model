@@ -378,6 +378,40 @@ def test_site_event_metas_reread_in_parallel_what_expired(tmp_path):
     assert fs.calls == Counter(read_bytes=4) and fs.peak >= 2
 
 
+def test_site_warm_events_loads_every_scope_in_two_waves_without_deadlock(tmp_path):
+    site, fs, now = counting_site(tmp_path, delay=0.02, workers=2)
+    scopes = ['es', 'es-md', 'es-an', 'es-ct', 'es-pv', 'es-cb']  # the last one has no elections
+    for scope in scopes[:5]:
+        write_event(fs, scope=scope, date='2019-11-10', model=False)
+        write_event(fs, scope=scope, date='2023-07-23', model=False)
+    fs.reset()
+    site.warm_events(scopes)
+    assert fs.calls == Counter(listdir=6, read_bytes=10) and fs.peak == 2
+    fs.reset()
+    site.warm_events(scopes)
+    assert [site.events(scope) for scope in scopes] == [['2019-11-10', '2023-07-23']] * 5 + [[]]
+    assert sum(fs.calls.values()) == 0
+
+
+def test_site_warm_analysis_ignores_the_unpublished_parts(tmp_path):
+    site, fs, now = counting_site(tmp_path)
+    write_analysis(fs)
+    fs.reset()
+    site.warm_analysis(['es', 'es-md'], ('meta', 'poll-errors'))  # nothing of `es-md` is published
+    assert fs.calls == Counter(read_bytes=4)
+    fs.reset()
+    assert site.analysis('es', 'meta') and sum(fs.calls.values()) == 0
+
+
+def test_site_studies_reads_the_metas_once_and_in_parallel(tmp_path):
+    site, fs, now = counting_site(tmp_path, delay=0.02)
+    write_study(fs)
+    write_study(fs, study='sesgo-cis')
+    fs.reset()
+    assert site.studies() == ['voto-cera', 'sesgo-cis']
+    assert fs.calls == Counter(read_bytes=len(bundle.STUDIES)) and fs.peak >= 2
+
+
 def test_site_requires_a_file_system(fresh_app):
     with pytest.raises(HttpError) as err:
         webapi.site()

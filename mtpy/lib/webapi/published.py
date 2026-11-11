@@ -461,19 +461,18 @@ class Site:
         Returns
         -------
         list of str
-            The slugs of ``bundle.STUDIES`` with a published ``meta``, in that order.
+            The slugs of ``bundle.STUDIES`` with a published ``meta``, in that order; the metas are read side by
+            side.
         """
-        found = []
-
-        for study in bundle.STUDIES:
+        def published(study):
             try:
                 self.study(study, 'meta')
             except HttpError:
-                continue
+                return False
 
-            found.append(study)
+            return True
 
-        return found
+        return [study for study, found in zip(bundle.STUDIES, self._each(published, bundle.STUDIES)) if found]
 
     def _event_meta(self, scope: str, date: str) -> Optional[bytes]:
         """
@@ -549,6 +548,61 @@ class Site:
             Empty when the scope has none.
         """
         return self.pointers.get(('events', scope), lambda: self._load_events([scope])[scope])
+
+    def warm_events(self, scopes: Sequence[str]) -> None:
+        """
+        Read at once the published elections of several scopes, for the pages that go over all of them.
+
+        The scopes whose list of dates is still cached are left alone; the rest are loaded together (``_load_events``:
+        every listing side by side, then every meta), instead of scope by scope as ``events`` would.
+
+        Parameters
+        ----------
+        scopes : sequence of str
+            Validated scope codes.
+
+        Returns
+        -------
+        None
+        """
+        stale = [scope for scope in scopes if not self.pointers.fresh(('events', scope))]
+
+        if not stale:
+            return
+
+        loaded = self._load_events(stale)
+
+        for scope in stale:
+            self.pointers.get(('events', scope), lambda scope=scope: loaded[scope])
+
+    def warm_analysis(self, scopes: Sequence[str], parts: Sequence[str]) -> None:
+        """
+        Read at once some parts of the houses analysis of several scopes, so the page finds them in the TTL cache.
+
+        Parameters
+        ----------
+        scopes : sequence of str
+            Validated scope codes.
+        parts : sequence of str
+            Part names, of ``ANALYSIS_PARTS``.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        HttpError
+            Any error of a read other than the 404 of an unpublished part, which is ignored.
+        """
+        def read(pair):
+            try:
+                self.analysis(*pair)
+            except HttpError as error:
+                if error.status != 404:
+                    raise
+
+        self._each(read, [(scope, part) for scope in scopes for part in parts])
 
     def event_metas(self, scope: str) -> dict:
         """

@@ -517,8 +517,8 @@ class RecordingFileSystem(FileSystem):
 
 class CountingFileSystem(FileSystem):
     """FileSystem local que cuenta las lecturas, los listados y las comprobaciones de existencia (también las que
-    lanzan) y mide cuántos `read_bytes` coinciden a la vez (`peak`); `delay` alarga cada lectura para que se
-    solapen."""
+    lanzan) y mide cuántos `read_bytes` coinciden a la vez (`peak`, y `overlap` para los de una carpeta); `delay`
+    alarga cada lectura para que se solapen."""
 
     def __init__(self, path, delay=0.0):
         super().__init__(path)
@@ -532,6 +532,7 @@ class CountingFileSystem(FileSystem):
         with self.lock:
             self.calls = collections.Counter()
             self.names = []
+            self.spans = []
             self.peak = 0
 
     def note(self, method, name):
@@ -542,6 +543,7 @@ class CountingFileSystem(FileSystem):
 
     def read_bytes(self, name):
         self.note('read_bytes', name)
+        start = time.perf_counter()
         with self.lock:
             self.active += 1
             self.peak = max(self.peak, self.active)
@@ -552,6 +554,13 @@ class CountingFileSystem(FileSystem):
         finally:
             with self.lock:
                 self.active -= 1
+                self.spans.append((name, start, time.perf_counter()))
+
+    def overlap(self, fragment):
+        """Máximo de `read_bytes` simultáneos entre los ficheros cuyo nombre contiene `fragment`."""
+        with self.lock:
+            spans = [(start, end) for name, start, end in self.spans if fragment in name]
+        return max((sum(1 for other, end in spans if other <= start < end) for start, _ in spans), default=0)
 
     def listdir(self, name=None):
         self.note('listdir', name)

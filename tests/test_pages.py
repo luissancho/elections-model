@@ -4429,9 +4429,9 @@ def test_home_has_no_past_elections_strip(history_two_scopes):
     assert '<a class="card card-link" href="/elecciones">' in more  # the link to the history that stays
 
 
-def counting(fresh_app):
+def counting(fresh_app, delay=0.0):
     """Cambia el `fs` del lector de la web por un `CountingFileSystem` sobre la misma carpeta y vacía los punteros."""
-    fs = CountingFileSystem(fresh_app.fs.path)
+    fs = CountingFileSystem(fresh_app.fs.path, delay=delay)
     webapi.site().reader.fs = fs
     webapi.site().manifest_cache_clear()
     return fs
@@ -4444,6 +4444,21 @@ def test_home_reads_only_the_elections_of_its_scope_and_never_asks_exists(histor
     events = [name for method, name in fs.names if method == 'read_bytes' and '/events/' in name]
     assert fs.calls['exists'] == 0 and fs.calls['listdir'] == 1
     assert events and all('/events/es/' in name for name in events) and len(events) == len(set(events))
+
+
+def test_elecciones_reads_every_scope_once_and_never_asks_exists(history_two_scopes, fresh_app):
+    before = html(call(history_two_scopes, '/elecciones')[2])
+    fs = counting(fresh_app, delay=0.02)
+    status, _, body = call(history_two_scopes, '/elecciones')
+    assert status == 200 and html(body) == before
+    scopes = webapi.site().scopes()['scopes']
+    events = [name for method, name in fs.names if method == 'read_bytes' and '/events/' in name]
+    assert fs.calls['exists'] == 0 and fs.calls['listdir'] == len(scopes)
+    assert events and len(events) == len(set(events))  # no file of an election is read twice in one render
+    # two waves over every scope: all the listings first, then the metas; and the analysis of the scopes side by side
+    listings = [index for index, (method, name) in enumerate(fs.names) if method == 'listdir']
+    assert max(listings) < fs.names.index(('read_bytes', events[0]))
+    assert fs.overlap('/analysis/') >= 2
 
 
 def test_event_page_table_draws_the_seat_range_and_the_ridge_is_compact(api):
