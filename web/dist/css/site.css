@@ -845,6 +845,10 @@ ol.notes > li:target { color: var(--color-text); }
 .hc td.na { color: var(--color-muted); }
 .hc .f { position: sticky; left: 0; z-index: 1; min-width: 190px; text-align: left; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
 .hc th.f { font-weight: 400; }
+/* The row headers (the house and the label of the foot) read like the first column of «Todas las encuestas», not
+   like the column headers: the size of the table, normal case, the house in bold ink over its muted line */
+.hc tbody th.f, .hc tfoot th.f { font-size: 13px; text-transform: none; letter-spacing: 0; }
+.hc tbody th.f { color: var(--color-text); }
 .hc td .dlt { display: block; }
 .hc th.f b { color: var(--color-text); }
 .hc th.f small { display: block; color: var(--color-muted); font-size: 11.5px; font-weight: 400; }

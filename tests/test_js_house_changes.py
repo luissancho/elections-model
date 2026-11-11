@@ -17,9 +17,11 @@ pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no di
 
 FAKES = (
     'const el = (hidden) => ({hidden, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, '
-    'querySelectorAll: () => []}); '
+    'querySelectorAll: () => [], querySelector: () => null}); '
     'const nodes = {"house-changes": el(false), "changes-metric": el(true), "changes-pct": el(false), '
     '"changes-seats": el(true)}; '
+    'const button = {dataset: {file: "demoscopio-cambios-es-2026-11-11.png"}}; '
+    'nodes["house-changes"].querySelector = (sel) => (sel === "button.card-img-btn" ? button : null); '
     'const doc = {getElementById: (id) => nodes[id] || null}; '
     'const ids = ["changes-metric", "changes-pct", "changes-seats"]; '
     'const shown = () => ids.map((id) => (nodes[id] ? nodes[id].hidden : null)); '
@@ -44,6 +46,22 @@ def test_the_switch_shows_one_table_at_a_time():
     steps = ('m.wireHouseChanges(doc); const start = shown(); pick("seats"); const seats = shown(); pick("pct"); '
              'return [start, seats, shown()];')
     assert run_js(steps) == [[False, False, True], [False, True, False], [False, False, True]]
+
+
+def test_changes_file_names_the_image_of_each_view():
+    """La imagen de Escaños lleva su palabra en el nombre (como `evolutionFile`); la de voto, el del botón."""
+    vote, seats = 'demoscopio-cambios-es-2026-11-11.png', 'demoscopio-cambios-escanos-es-2026-11-11.png'
+    assert run_js('return m.changesFile("%s", "seats");' % vote) == seats
+    assert run_js('return m.changesFile("%s", "seats");' % seats) == seats
+    assert run_js('return m.changesFile("%s", "pct");' % seats) == vote
+    assert run_js('return m.changesFile("%s", "pct");' % vote) == vote
+
+
+def test_the_switch_renames_the_file_of_the_image_button():
+    steps = ('m.wireHouseChanges(doc); const start = button.dataset.file; pick("seats"); '
+             'const seats = button.dataset.file; pick("pct"); return [start, seats, button.dataset.file];')
+    assert run_js(steps) == ['demoscopio-cambios-es-2026-11-11.png', 'demoscopio-cambios-escanos-es-2026-11-11.png',
+                             'demoscopio-cambios-es-2026-11-11.png']
 
 
 def test_wiring_without_the_card_or_without_seats_does_nothing():
