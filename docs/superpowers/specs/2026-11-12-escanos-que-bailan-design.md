@@ -289,3 +289,80 @@ Nombres de funciones, clases y ficheros dentro de las convenciones del repositor
 maqueta y de los componentes que ya existen (tarjetas, `.seg`, `.pill`, `.dot`, KPIs); cómo se resuelve el
 desplegable sin JavaScript (como el formulario de circunscripción de la página del evento); el detalle de la
 imagen descargada; el reparto del trabajo en tareas.
+
+## Estado al cierre (2026-11-12)
+
+### Lo construido
+
+Rama `feat/escanos-que-bailan` (`git log --oneline dev..HEAD`):
+
+- Plan en seis tareas: `60507db`.
+- Parte `seat-odds` por modo, con su CSV (`Simulator.seat_reach`, `export_seat_odds`): `0fede09`.
+- Funciones puras de la página (fichas al 99% y desde el 1%, recuentos, órdenes, frases): `88b6cc5`, y la frase que
+  concuerda con uno o ningún aspirante: `6e7988f`.
+- Página `/{scope}/circunscripciones` con la cabecera y la ficha de cada circunscripción: `152c2c7`.
+- Barra del evento de una subpágina en un solo sitio (sondeo y circunscripciones): `dc83d28`.
+- Vista por partido y «Los más reñidos»: `b529437`.
+- Entradas desde la página del evento («Resultados por territorio») y descarga de la parte: `2352595`.
+- Apartado «Escaños seguros y en el aire» de `/metodo/escanos` y rutas de la página en `docs/web/contrato.md`:
+  `86a1dad`.
+- Este cierre y la regla de CSS de los enlaces de entrada (abajo): el commit que añade esta sección.
+
+### Lo que difiere de este documento
+
+- El título lleva delante el «Demoscopio · » que pone `base.html` a todas las páginas: «Demoscopio · Escaños que
+  bailan en Madrid · Elecciones generales 2026».
+- La imagen descargada se llama `demoscopio-escanos-{scope}-{slug}.png`, con el `slug` de la circunscripción o el de
+  las siglas del partido (`demoscopio-escanos-es-madrid.png`, `demoscopio-escanos-es-psoe.png`), como el resto de
+  descargas del sitio.
+- Las frases con un solo aspirante o con ninguno: el verbo concuerda («disputa 1 aspirante» frente a «disputan 6
+  aspirantes») y, sin aspirantes, la parte que los cuenta no sale. Las variantes en singular y vacías de la frase del partido y de la de «Los
+  más reñidos» las escribió el constructor; todas tienen su test y son provisionales, como el resto de textos.
+- El enlace «Escaño a escaño en …» del detalle de la circunscripción no desaparece cuando la circunscripción
+  mostrada no tiene ficha: se pinta oculto y sin `href`, para que el JavaScript lo enseñe si el selector pasa a una
+  que sí la tiene.
+- La barra del evento de una subpágina (el índice de secciones reenlazado a `/{scope}{query}#id`) la arma una sola
+  función, `subpage_event_bar`, que comparten la página de un sondeo y esta.
+- Los botones de partido de la vista por partido usan la clase `so-party-btn` (`so-party` ya era la celda del
+  partido en la ficha).
+- Los dos enlaces de entrada de «Resultados por territorio» (`p.more > a.more-link`) salían como enlaces corrientes
+  (15 px, subrayados), porque `.more-link` sólo tenía estilo dentro de `.card-head`. Una regla de `site.css` les da
+  el aspecto de los demás «Ver más» del sitio (13 px, seminegrita, sin subrayado salvo al pasar el ratón).
+- En el método, los umbrales están escritos («99%», «1%»): el contexto de `/metodo/escanos` no recibe las
+  constantes `SAFE_SHARE` y `OPEN_FLOOR`, que sí usan la leyenda y el «Cómo leerlo» de la página. Si cambian, hay
+  que cambiar ese párrafo a mano.
+
+### Comprobación en el navegador
+
+Datos reales de `es`, sólo leídos: un `Simulator` construido como en `publish_forecast` (nowcast, semilla 42, hoy
+2026-11-12, 1.000 simulaciones, 52 circunscripciones), del que salieron `seat-odds`, `districts`, `scenario` y el
+catálogo de partidos. Se escribieron en un paquete de prueba en una carpeta temporal fuera del repositorio (el del
+fixture de los tests con esas partes en los dos modos), servido en local con uvicorn, y se miró con Chrome headless
+por el protocolo de DevTools a 1280 px y a 390 px (emulación de móvil). La página abrió en Elección (el run del
+fixture está a menos de 60 días); las cifras de cabecera: 208 seguros de 350, 142 en el aire, 328 aspirantes, 51 de
+52 circunscripciones con algo en juego. Nada se publicó ni se escribió en S3 ni en la base.
+
+| Criterio | Resultado | Cómo se vio |
+|---|---|---|
+| Madrid (38 escaños) en varias líneas, sin desbordar la tarjeta ni pisar las etiquetas | pasa | 56 fichas, 0 fuera de la tarjeta y 0 solapes con las celdas de partido, «Central» y resumen, a 1280 y 390 px; a 390 la fila del PP ocupa 4 líneas (a 1280 cabe en una); el ancho de desplazamiento de la tarjeta es su ancho |
+| «Más en el aire / A–Z» reordena sin recargar | pasa | Madrid, Barcelona, Valencia… pasa a Álava, Albacete, Alicante…, en orden alfabético español; la página no se recarga (una variable de la ventana sobrevive) y la URL no cambia; al volver, el orden inicial |
+| A 390 px se ve el desplegable y no la lista; cambiarlo lleva a la ficha | pasa | lista oculta, desplegable visible (y al revés a 1280); elegir Cádiz lleva a `/es/circunscripciones/cadiz?mode=forecast` con la ficha de Cádiz. Sin JavaScript, `?circunscripcion=cadiz` responde el 301 a esa dirección |
+| Ninguna ficha en el aire dice 99%, 100% ni 0% | pasa | las 52 fichas de circunscripción y las 13 de partido: 656 fichas en el aire, etiquetas de 1% a 98%; las 40 filas de «Los más reñidos», entre 40% y 60% |
+| Vista por partido de un partido grande sin desplazamiento horizontal | pasa | PP y PSOE, 51 filas: ni la página ni la tarjeta se desplazan, a 1280 y 390 px |
+| «Los más reñidos» sin desplazamiento horizontal | **falla a 390 px** (pasa a 1280) | la tabla mide como mínimo 358 px y la tarjeta deja 326: se sale 17 px por la derecha de la tarjeta, los porcentajes quedan cortados en su borde, y la página se desplaza 1 px (a 360 px serían 31). Lo fuerzan las tres columnas visibles: cabeceras en mayúsculas sin corte, la barra con mínimo de 60 px, la cifra de 38 px y los rellenos de 8 px. No se ha tocado: es CSS de la tarea 4 |
+| El botón de imagen descarga la ficha entera, con su leyenda y sin el botón | pasa | Madrid a 1280 y 390 px y PSOE a 1280: PNG con la cabecera, la frase, todas las filas, la leyenda y la firma, sin el botón (ni el «Cómo leerlo») |
+| En `/es`, el enlace «Escaño a escaño en…» sigue al selector de circunscripción | pasa | Madrid → Barcelona → Soria: el `href` (`/es/circunscripciones/{slug}?mode=forecast#ficha`) y el texto cambian con el selector, a 1280 y 390 px. El caso oculto (una circunscripción sin ficha) no se ha comprobado: con los datos reales las 52 tienen ficha |
+
+Otras cosas vistas, fuera de los criterios: a 390 px las tres pestañas de vista no caben en una línea y «Los más
+reñidos» baja a una segunda dentro de la píldora; en «Los más reñidos» la columna «Reparto central» no sale por
+debajo de 720 px (ya apuntado en la revisión de la tarea 4); la imagen descargada es la misma a cualquier ancho de
+pantalla.
+
+### Lo que queda (Luis)
+
+- Revisar los textos públicos: entradilla, frases de las fichas, «Cómo leerlo», enlaces de entrada y el apartado
+  del método.
+- Decidir el arreglo de «Los más reñidos» a 390 px antes de desplegar.
+- Integrar la rama en `dev`, push, imágenes nuevas de web y de jobs, y un `update` de cada ámbito antes del 24-N (el
+  último run que puede llevar la parte es el del 23-N). No hace falta relleno.
+- Al limpiar el worktree, quitar el enlace `.env` que se le añadió para la comprobación.
