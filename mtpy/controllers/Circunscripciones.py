@@ -16,7 +16,8 @@ class Circunscripciones(Page):
 
     active = None
 
-    def page(self, scope: str, district: Optional[str] = None) -> str:
+    def page(self, scope: str, district: Optional[str] = None, party: Optional[str] = None,
+             view: Optional[str] = None) -> str:
         """
         Render the page for a scope already resolved.
 
@@ -25,20 +26,25 @@ class Circunscripciones(Page):
         scope : str
             Scope code.
         district : str, optional
-            Slug of the district shown; the first of the list without it.
+            Slug of the district shown; it wins over ``party`` and ``view``.
+        party : str, optional
+            Slug of the party of the view by party (``partido``); it wins over ``view``.
+        view : str, optional
+            ``renidos`` for the list of the closest seats (``vista``).
 
         Returns
         -------
         str
             The HTML of ``circunscripciones.html``; its canonical drops ``mode`` and ``run`` (``canonical_url``).
         """
-        context = pages.seat_odds_context(self.state(scope), district)
+        context = pages.seat_odds_context(self.state(scope), district, party, view)
 
         return self.render('circunscripciones.html', **context)
 
     async def index_action(self, scope: str) -> str:
         """
-        Render the page on the district with most open seats, or send the dropdown of districts to the address of
+        Render the page on the district with most open seats (or on the party of ``partido``, or the closest seats of
+        ``vista=renidos``), or send the dropdown of districts to the address of
         the one chosen.
 
         The dropdown (``#district-pick``) submits ``circunscripcion`` with the slug of a district: without
@@ -58,8 +64,8 @@ class Circunscripciones(Page):
         Raises
         ------
         HttpError
-            404 for an unknown scope or a run without the ``seat-odds`` part (or with a single district); 400 for an
-            invalid ``mode`` or ``run``.
+            404 for an unknown scope or party, or a run without the ``seat-odds`` part (or with a single district);
+            400 for an invalid ``mode``, ``run`` or ``vista``.
         """
         code = pages.resolve_event_scope(scope)
         wanted = self.request.query.get('circunscripcion')
@@ -68,7 +74,8 @@ class Circunscripciones(Page):
             return self.redirect('/{}/circunscripciones/{}{}'.format(code, quote(wanted, safe=''),
                                                                      self.query_without('circunscripcion')))
 
-        return self.page(code)
+        return self.page(code, party=self.request.query.get('partido') or None,
+                         view=self.request.query.get('vista') or None)
 
     async def detail_action(self, scope: str, district: str) -> str:
         """

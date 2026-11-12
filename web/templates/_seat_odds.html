@@ -1,3 +1,4 @@
+{% import '_macros.html' as m %}
 {#- The tokens of «Escaños que bailan» (`/{scope}/circunscripciones`) and their legend. Import with
     `{% import '_seat_odds.html' as s with context %}`: the legend reads the `thresholds` of the context
     (`SAFE_SHARE` and `OPEN_FLOOR`, never literals). -#}
@@ -27,4 +28,21 @@
   <span><i class="so-key open out"></i>en el aire, y el reparto central no se lo da</span>
   <span>por debajo del {{ thresholds.floor }} no se dibuja</span>
 </div>
+{%- endmacro %}
+
+
+{#- The «Cómo leerlo» of the cards of a district and of a party. -#}
+{% macro how() -%}
+{% call m.how() %}
+<p>
+  Cada ficha es un escaño que el partido puede conseguir en esa circunscripción. Es seguro si lo consigue en
+  el {{ thresholds.safe }} o más de las simulaciones; si lo consigue en menos del {{ thresholds.floor }}, no se
+  dibuja; entre medias está en el aire y lleva su porcentaje.
+</p>
+<p>
+  La columna «Central» es el reparto central de la página de encuestas: no siempre coincide con lo más
+  probable, y por eso hay fichas en el aire que el reparto central da y otras que no. «Seguro» no es una
+  garantía: es lo que dicen las simulaciones.
+</p>
+{% endcall %}
 {%- endmacro %}

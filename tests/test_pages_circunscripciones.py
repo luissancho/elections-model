@@ -265,3 +265,49 @@ def test_the_event_bar_of_a_subpage_links_the_event_page_and_drops_the_territory
     webapi.site().files.clear()
     assert [entry['id'] for entry in pages.subpage_event_bar(context)['sections']] == [
         'promedio', 'escanos', 'evolucion', 'tabla']
+
+
+def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(odds_site):
+    status, page = page_of(odds_site, '/es/circunscripciones', 'partido=psoe')
+    assert status == 200 and '<title>Demoscopio · Escaños que bailan: PSOE' in page
+    assert re.findall(r'class="so-party-btn[^"]*" href="[^"]*partido=([a-z]+)', page) == ['pp', 'psoe', 'vox', 'aa', 'bng']
+    card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
+    assert re.findall(r'href="/es/circunscripciones/([a-z-]+)\?mode=forecast#ficha"', card) == ['cadiz', 'la-coruna']
+    assert 'Tiene 4 escaños seguros y aspira a otros 3 en 2 circunscripciones.' in card
+    assert 'Sin nada en el aire (1):' in card and 'Guadalajara 1' in card
+    assert 'rel="canonical" href="' in page and 'circunscripciones?partido=psoe"' in page
+    assert 'data-file="demoscopio-escanos-es-psoe.png"' in page and page.count('<details class="how"') == 1
+    assert ('<meta name="description" content="Los escaños de PSOE, circunscripción a circunscripción: cuáles tiene '
+            'seguros y cuáles están en el aire, según las simulaciones del modelo para Elecciones generales 2026.">') in page
+    assert_public_wording(page, 'circunscripciones por partido')
+    assert call(odds_site, '/es/circunscripciones', query='partido=nadie')[0] == 404
+    kept = page_of(odds_site, '/es/circunscripciones', 'partido=pp&mode=nowcast')[1]
+    assert 'href="/es/circunscripciones/cadiz?mode=nowcast#ficha"' in kept
+    assert 'class="so-party-btn on" href="/es/circunscripciones?mode=nowcast&amp;partido=pp"' in kept
+    # the district of the path wins over the party
+    assert '<title>Demoscopio · Escaños que bailan en Cádiz' in page_of(odds_site, '/es/circunscripciones/cadiz', 'partido=pp')[1]
+
+
+def test_the_closest_view_ranks_the_open_seats_by_their_distance_to_a_coin_toss(odds_site):
+    status, page = page_of(odds_site, '/es/circunscripciones', 'vista=renidos')
+    table = page[page.index('id="closest"'):]
+    rows = re.findall(r'<tr>(.*?)</tr>', table[table.index('<tbody>'):])
+    assert status == 200 and len(rows) == 11
+    assert 'Cádiz' in rows[0] and '3.º de PSOE' in rows[0] and '41%' in rows[0] and 'no se lo da' in rows[0]
+    assert 'La Coruña' in rows[1] and '1.º de VOX' in rows[1] and 'se lo da' in rows[1] and 'no se lo da' not in rows[1]
+    assert 'circunscripciones?vista=renidos"' in page
+    assert 'Los 11 escaños más cercanos al cara o cruz, de los 11 que están en el aire. La raya marca el 50%.' in page
+    assert '<title>Demoscopio · Los escaños más reñidos · Elecciones generales 2026' in page
+    assert 'class="seg lg so-tabs"' in page and re.findall(r'<a href="[^"]*"( class="on")', page) == [' class="on"']
+    assert_public_wording(page, 'circunscripciones, los más reñidos')
+    assert call(odds_site, '/es/circunscripciones', query='vista=otra')[0] == 400
+
+
+def test_the_sentences_of_the_party_and_of_the_closest_seats_agree_with_their_numbers():
+    assert pages.party_sentence({'safe': 4, 'open': 3, 'rows': [1, 2]}) == (
+        'Tiene 4 escaños seguros y aspira a otros 3 en 2 circunscripciones. Primero, las más dudosas.')
+    assert pages.party_sentence({'safe': 1, 'open': 1, 'rows': [1]}) == 'Tiene 1 escaño seguro y aspira a otro en 1 circunscripción.'
+    assert pages.party_sentence({'safe': 2, 'open': 0, 'rows': []}) == 'Tiene 2 escaños seguros y ninguno en el aire.'
+    assert pages.closest_sentence(0, 0) == 'Ningún escaño está en el aire.'
+    assert pages.closest_sentence(1, 1) == 'El único escaño que está en el aire. La raya marca el 50%.'
+    assert pages.closest_sentence(40, 55).startswith('Los 40 escaños más cercanos al cara o cruz, de los 55 que')

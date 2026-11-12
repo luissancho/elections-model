@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% set event_year = ' ' ~ event_bar.year if event_bar.year else '' %}
 {% block title %}{{ page_title }} · {{ event_bar.title }}{{ event_year }}{% endblock %}
-{% block description %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endblock %}
+{% block description %}{% if view == 'party' %}Los escaños de {{ party.name }}, circunscripción a circunscripción: cuáles tiene seguros y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'closest' %}Los escaños más reñidos de {{ event_bar.title }}{{ event_year }}: los más cercanos al cara o cruz, según las simulaciones del modelo.{% else %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endif %}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/circunscripciones.js"></script>
 {% endblock %}
@@ -76,20 +76,72 @@
             {% endfor %}
           </div>
           {{ s.legend() }}
-          {% call m.how() %}
-          <p>
-            Cada ficha es un escaño que el partido puede conseguir en esa circunscripción. Es seguro si lo consigue en
-            el {{ thresholds.safe }} o más de las simulaciones; si lo consigue en menos del {{ thresholds.floor }}, no se
-            dibuja; entre medias está en el aire y lleva su porcentaje.
-          </p>
-          <p>
-            La columna «Central» es el reparto central de la página de encuestas: no siempre coincide con lo más
-            probable, y por eso hay fichas en el aire que el reparto central da y otras que no. «Seguro» no es una
-            garantía: es lo que dicen las simulaciones.
-          </p>
-          {% endcall %}
+          {{ s.how() }}
         </section>
       </div>
+      {% elif view == 'party' %}
+      <nav class="seg so-pills" aria-label="Partidos">
+        {% for item in parties %}
+        <a class="so-party-btn{% if item.on %} on{% endif %}" href="{{ item.href }}" title="{{ item.fullname }}"{% if item.on %} aria-current="page"{% endif %}><span class="dot" style="background-color: {{ item.color }}"></span>{{ item.name }}</a>
+        {% endfor %}
+      </nav>
+      <section class="card shot so-card" id="ficha">
+        {{ m.card_image_button(image_file, image_sign) }}
+        <header class="so-head">
+          <h2><span class="dot" style="background-color: {{ party.color }}"></span>{{ party.fullname }}</h2>
+          <span class="so-seats">{{ party.seats }} escaño{{ '' if party.seats == 1 else 's' }} en el reparto central</span>
+          <span class="chip"><b>{{ party.safe }}</b> seguro{{ '' if party.safe == 1 else 's' }}</span>
+          <span class="chip so-air"><b>{{ party.open }}</b> en el aire</span>
+        </header>
+        <p class="so-says">{{ sentence }}</p>
+        {% if party.rows %}
+        <div class="so-grid so-by-party">
+          <div class="so-h">Circunscripción</div>
+          <div class="so-h so-c so-wide">Escaños</div>
+          <div class="so-h so-c">Central</div>
+          <div class="so-h">Escaño a escaño</div>
+          <div class="so-h so-note"></div>
+          {% for row in party.rows %}
+          <div class="so-dname"><a href="{{ row.href }}">{{ row.district.name }}</a></div>
+          <div class="so-num so-wide" title="Escaños de la circunscripción">{{ row.district.seats }}</div>
+          <div class="so-num" title="Escaños de {{ party.name }} en el reparto central">{{ row.seats }}</div>
+          {{ s.tokens(row, row.color) }}
+          <div class="so-note">{{ row.note }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if party.settled %}
+        <p class="so-settled"><b>Sin nada en el aire ({{ party.settled|length }}):</b> {% for item in party.settled %}{{ item.name }} {{ item.safe }}{{ ' · ' if not loop.last }}{% endfor %}.</p>
+        {% endif %}
+        {{ s.legend() }}
+        {{ s.how() }}
+      </section>
+      {% elif view == 'closest' %}
+      <section class="card so-card">
+        <p class="so-says">{{ sentence }}</p>
+        {% if closest %}
+        <table class="so-table" id="closest">
+          <thead>
+            <tr>
+              <th class="l">Circunscripción</th>
+              <th class="l">Escaño</th>
+              <th class="l so-meter-col">Lo consigue en</th>
+              <th class="so-wide">Reparto central</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for seat in closest %}
+            <tr>
+              <td class="l"><a href="{{ seat.href }}">{{ seat.district }}</a></td>
+              <td class="l b"><span class="so-who"><span class="dot" style="background-color: {{ seat.color }}"></span>{{ seat.k }}.º de {{ seat.party }}</span></td>
+              <td class="l"><div class="so-meter"><div class="so-track" aria-hidden="true"><i style="width: {{ (seat.share * 100)|round(1) }}%; background-color: {{ seat.color }}"></i><u></u></div><b>{{ seat.label }}</b></div></td>
+              <td class="so-wide">{{ 'se lo da' if seat.central else 'no se lo da' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </section>
       {% endif %}
     </div>
 {% endblock %}
