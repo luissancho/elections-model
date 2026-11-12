@@ -1,13 +1,16 @@
 {% extends 'base.html' %}
 {% set event_year = ' ' ~ event_bar.year if event_bar.year else '' %}
 {% block title %}{{ page_title }} · {{ event_bar.title }}{{ event_year }}{% endblock %}
-{% block description %}{% if view == 'party' %}Los escaños de {{ party.name }}, circunscripción a circunscripción: cuáles tiene seguros y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'closest' %}Los escaños más reñidos de {{ event_bar.title }}{{ event_year }}: los más cercanos al cara o cruz, según las simulaciones del modelo.{% else %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endif %}{% endblock %}
+{% block description %}{% if view == 'party' %}Los escaños de {{ party.name }}, circunscripción a circunscripción: cuáles tiene seguros y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'closest' %}Los escaños más reñidos de {{ event_bar.title }}{{ event_year }}: los más cercanos al cara o cruz, según las simulaciones del modelo.{% elif landing %}Qué escaños tiene seguros cada partido en cada circunscripción y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% else %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endif %}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/circunscripciones.js"></script>
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
 {% import '_seat_odds.html' as s with context %}
+{#- the line of the image of a card (`shot-only`: hidden on the page): which election, which estimate and its day, for
+    the same district exists in the general and in a regional scope and the figures change every day -#}
+{% set stamp %}<p class="so-stamp shot-only">{{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %} · {{ title_suffix }} · Actualizado: {{ event_bar.run_at|date }}</p>{% endset %}
     <div id="content" class="stack">
       {{ m.headline('Escaños que bailan', 'h1') }}
       <p class="so-intro">Qué escaños tiene seguros cada partido en cada circunscripción y cuáles están en el aire, según las {{ n_sim|int }} simulaciones del modelo.</p>
@@ -64,6 +67,7 @@
             <span class="chip so-air"><b>{{ district.open }}</b> en el aire</span>
             {% endif %}
           </header>
+          {{ stamp }}
           <p class="so-says">{{ sentence }}</p>
           <div class="so-grid">
             <div class="so-h">Partido</div>
@@ -95,6 +99,7 @@
           <span class="chip"><b>{{ party.safe }}</b> seguro{{ '' if party.safe == 1 else 's' }}</span>
           <span class="chip so-air"><b>{{ party.open }}</b> en el aire</span>
         </header>
+        {{ stamp }}
         <p class="so-says">{{ sentence }}</p>
         {% if party.rows %}
         <div class="so-grid so-by-party">

@@ -35,11 +35,20 @@ class Circunscripciones(Page):
         Returns
         -------
         str
-            The HTML of ``circunscripciones.html``; its canonical drops ``mode`` and ``run`` (``canonical_url``).
+            The HTML of ``circunscripciones.html``; its canonical drops ``mode`` and ``run`` (``canonical_url``) and
+            the parameters the page ignores: ``circunscripcion`` always, ``partido`` and ``vista`` on the route of a
+            district, ``vista`` when ``partido`` wins (and either when empty).
         """
         context = pages.seat_odds_context(self.state(scope), district, party, view)
+        ignored = ['circunscripcion']
 
-        return self.render('circunscripciones.html', **context)
+        if district is not None or party is None:
+            ignored.append('partido')
+
+        if district is not None or party is not None or view is None:
+            ignored.append('vista')
+
+        return self.render('circunscripciones.html', canonical=self.canonical_url(*ignored), **context)
 
     async def index_action(self, scope: str) -> str:
         """

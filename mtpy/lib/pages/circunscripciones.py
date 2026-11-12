@@ -38,7 +38,8 @@ def token_label(share: float) -> str:
     str
         The percentage with the ``%`` attached; never 0%, 99% nor 100%.
     """
-    return '{}%'.format(min(98, max(1, int(share * 100 + 0.5))))
+    # the epsilon rounds up the exact halves that the binary floats put a hair below (0.145 * 100 is 14.4999...)
+    return '{}%'.format(min(98, max(1, int(share * 100 + 0.5 + 1e-9))))
 
 
 def seat_tokens(name: str, reach: list, seats: int, n_sim: int) -> list:
@@ -495,8 +496,8 @@ def closest_sentence(shown: int, contenders: int) -> str:
         return 'Ningún escaño está en el aire.'
     if shown == 1:
         return 'El único escaño que está en el aire. La raya marca el 50%.'
-    return 'Los {} escaños más cercanos al cara o cruz, de los {} que están en el aire. La raya marca el 50%.'.format(
-        shown, contenders)
+    return ('Los {} escaños más cercanos al cara o cruz, de los {} que están en el aire. '
+            'La raya marca el 50%.').format(shown, contenders)
 
 
 def _party_names(data: dict, views: list) -> list:
@@ -691,29 +692,32 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         Slug (``slugify``) of the acronym of a party with some token: the view of that party.
     view : str, optional
         ``'renidos'``: the list of the closest seats. ``party`` wins over it. Without any of the three, the view of
-        the first of ``district_order``.
+        the first of ``district_order``, under the title of the page itself (``landing``).
 
     Returns
     -------
     dict
         ``common_context`` of an event page, its ``event_bar['sections']`` linking the sections of the event page
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``view``
-        (``'district'``, ``'party'`` or ``'closest'``), ``totals`` (``scope_totals``), ``kpis`` (rows of ``m.kpis``), ``districts``
-        (``district_order``, each with ``href``, ``district_href`` keeping the query, and ``rank_name``, its
-        position in alphabetical order), ``sentence`` and the data of the view: ``district`` (the chosen one, its rows
-        ``drawn_row`` with the colour of each party), or ``parties`` (the buttons: ``name``, ``fullname``, ``color``,
-        ``href``, ``on``) and ``party`` (``party_view`` with ``fullname``, ``color`` and the rows ``drawn_row`` with
-        the ``href`` of their district), or ``closest`` (``closest_seats`` with ``color`` and ``href``); ``tabs`` (``key``, ``label``, ``href`` keeping the query and
-        ``on`` of the three views), ``n_sim``, ``thresholds`` (``safe`` and ``floor``, ``threshold_label`` of
-        ``SAFE_SHARE`` and ``OPEN_FLOOR``, for the legend), ``page_title``, ``image_file`` (of the card of a district
-        or a party) and ``image_sign``.
+        (``'district'``, ``'party'`` or ``'closest'``), ``landing`` (none of ``district``, ``party`` and ``view``
+        given), ``totals`` (``scope_totals``), ``kpis`` (rows of ``m.kpis``), ``districts`` (``district_order``,
+        each with ``href``, ``district_href`` keeping the query, and ``rank_name``, its position in alphabetical
+        order), ``sentence`` and the data of the view: ``district`` (the chosen one, its rows ``drawn_row`` with the
+        colour of each party), or ``parties`` (the buttons: ``name``, ``fullname``, ``color``, ``href`` keeping the
+        query and landing on the tabs, ``on``) and ``party`` (``party_view`` with ``fullname``, ``color`` and the
+        rows ``drawn_row`` with the ``href`` of their district), or ``closest`` (``closest_seats`` with ``color`` and
+        ``href``); ``tabs`` (``key``, ``label``, ``href`` keeping the query and landing on the tabs, and ``on`` of
+        the three views), ``n_sim``, ``thresholds`` (``safe`` and ``floor``, ``threshold_label`` of ``SAFE_SHARE``
+        and ``OPEN_FLOOR``, for the legend), ``page_title`` (``'Escaños que bailan'`` on the landing), ``image_file``
+        (of the card of a district or a party) and ``image_sign``.
 
     Raises
     ------
     HttpError
-        404 ``seat odds not published`` when the run shown has no ``seat-odds`` part in the mode or it has fewer
-        than two districts; 404 ``region not found`` for an unknown ``district``; 404 ``party not found`` when ``party`` is not
-        a party of the part with some token; 400 ``invalid view`` for a ``view`` other than ``renidos``; those of ``common_context``.
+        404 ``seat odds not published`` when the run shown has no ``seat-odds`` part in the mode (or one without
+        simulations, or with fewer than two districts: ``published_seat_odds``); 404 ``region not found`` for an
+        unknown ``district``; 404 ``party not found`` when ``party`` is not a party of the part with some token; 400
+        ``invalid view`` for a ``view`` other than ``renidos``; those of ``common_context``.
     """
     context = common_context(state, None, event=True)
     full, query, parties = context['state'], context['query'], context['catalog']
@@ -750,7 +754,9 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
 
         shown, card = 'closest', _closest_card(views, parties, scope, query)
     else:
-        shown, card = 'district', _district_card(districts[0], parties)
+        # the address of the page itself: it is shared as the page, not as its first district (which changes between
+        # runs); the card and its image stay that district's
+        shown, card = 'district', dict(_district_card(districts[0], parties), page_title='Escaños que bailan')
 
     totals = scope_totals(views)
     # the index links the sections of the event page, keeping the mode and the pinned run
@@ -768,6 +774,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
 
     context.update({
         'view': shown,
+        'landing': district is None and party is None and view is None,
         'totals': totals,
         'kpis': [
             {'label': 'Escaños seguros', 'value': totals['safe'], 'unit': 'de {}'.format(totals['seats']),

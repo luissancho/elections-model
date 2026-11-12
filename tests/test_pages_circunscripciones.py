@@ -48,7 +48,10 @@ def test_tokens_follow_the_two_thresholds_to_the_exact_count():
 
 
 @pytest.mark.parametrize('share, label', [(0.9899, '98%'), (0.985, '98%'), (0.805, '81%'), (0.5, '50%'),
-                                           (0.0149, '1%'), (0.01, '1%')])
+                                           (0.0149, '1%'), (0.01, '1%'),
+                                           # exact halves that the binary floats put a hair below: rounded up too
+                                           (0.145, '15%'), (0.285, '29%'), (0.565, '57%'), (0.575, '58%'),
+                                           (1450 / 10000, '15%'), (5750 / 10000, '58%')])
 def test_token_label_is_a_whole_percentage_between_1_and_98(share, label):
     assert pages.token_label(share) == label
 
@@ -238,9 +241,18 @@ def test_the_list_sorts_itself_without_javascript_and_the_rows_read_aloud(odds_s
     legend = page[page.index('class="so-legend"'):]
     assert 'lo consigue en el 99% o más de las simulaciones' in legend and 'por debajo del 1% no se dibuja' in legend
     assert 'data-file="demoscopio-escanos-es-cadiz.png"' in page and '/dist/js/pages/circunscripciones.js' in page
-    assert ('<meta name="description" content="Los escaños de Cádiz, uno a uno: cuáles tiene seguros cada partido y cuáles '
-            'están en el aire, según las simulaciones del modelo para Elecciones generales 2026.">') in page
     assert 'según las 10.000 simulaciones del modelo.' in page
+    # the address without a district, a party or a view is shared as the page, not as its first district (which
+    # changes between runs); its card is still that district's, with the same image
+    assert '<title>Demoscopio · Escaños que bailan · Elecciones generales 2026</title>' in page
+    assert ('<meta name="description" content="Qué escaños tiene seguros cada partido en cada circunscripción y cuáles '
+            'están en el aire, según las simulaciones del modelo para Elecciones generales 2026.">') in page
+    assert '<meta property="og:title" content="Demoscopio · Escaños que bailan · Elecciones generales 2026">' in page
+    assert '<h2>Cádiz</h2>' in page
+    cadiz = page_of(odds_site, '/es/circunscripciones/cadiz')[1]
+    assert '<title>Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026</title>' in cadiz
+    assert ('<meta name="description" content="Los escaños de Cádiz, uno a uno: cuáles tiene seguros cada partido y cuáles '
+            'están en el aire, según las simulaciones del modelo para Elecciones generales 2026.">') in cadiz
 
 
 def test_the_texts_of_a_row_and_the_link_of_a_district():
@@ -420,3 +432,47 @@ def test_two_renders_of_the_event_page_without_the_part_read_it_once(odds_site, 
     fs = counting(fresh_app)
     assert call(api, '/es')[0] == 200 and call(api, '/es')[0] == 200
     assert len([name for method, name in fs.names if 'seat-odds' in name]) == 1
+
+
+def test_the_image_of_both_cards_says_the_election_the_estimate_and_its_date(odds_site):
+    for query in ('', 'partido=psoe'):
+        page = page_of(odds_site, '/es/circunscripciones', query)[1]
+        suffix = re.search(r'<span class="pill brand">([^<]+)</span>', page).group(1)  # the pill of the event bar
+        card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
+        stamp = re.search(r'<p class="so-stamp shot-only">([^<]+)</p>', card)
+        # only in the image (`.card:not(.shot-image) .shot-only` is hidden): the same district exists in the general
+        # and in a regional scope, and the figures change every day
+        assert stamp and stamp.group(1).startswith('Elecciones generales 2026 · {} · Actualizado: '.format(suffix))
+        assert re.search(r' · Actualizado: \d', stamp.group(1))  # the day the run was computed, written out
+
+
+@pytest.mark.parametrize('path, query, canonical', [
+    # the route of a district ignores the party, the view and the dropdown
+    ('/es/circunscripciones/cadiz', 'partido=pp&vista=x&circunscripcion=', '/es/circunscripciones/cadiz'),
+    # the party wins over the view
+    ('/es/circunscripciones', 'partido=pp&vista=renidos', '/es/circunscripciones?partido=pp'),
+    # the dropdown never stays (an empty one is ignored by the page)
+    ('/es/circunscripciones', 'vista=renidos&circunscripcion=&mode=nowcast', '/es/circunscripciones?vista=renidos'),
+])
+def test_the_canonical_keeps_only_what_the_page_shows(odds_site, path, query, canonical):
+    status, page = page_of(odds_site, path, query)
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es{}">'.format(canonical) in page
+
+
+def test_the_party_wins_over_the_view_and_the_errors_and_units_read_well(odds_site):
+    page = page_of(odds_site, '/es/circunscripciones', 'partido=psoe&vista=renidos')[1]
+    assert '<title>Demoscopio · Escaños que bailan: PSOE' in page and 'id="closest"' not in page
+    status, page = page_of(odds_site, '/es/circunscripciones/no-existe')
+    assert status == 404 and 'Circunscripción no encontrada.' in page
+    kpis = page_of(odds_site, '/es/circunscripciones')[1]
+    assert '<div class="l">Aspirantes</div><div class="v">11<small>a esos 5</small></div>' in kpis
+
+
+def test_a_party_with_only_safe_seats_has_no_grid_and_says_so(odds_site, fresh_app):
+    settled = copy.deepcopy(ODDS)
+    settled['rows'][3] = odds_row(11, 'AA', 1, 10000)  # AA's seat in Cádiz, safe: nothing of AA in the air
+    write_odds(fresh_app.fs, settled)
+    status, page = page_of(odds_site, '/es/circunscripciones', 'partido=aa')
+    card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
+    assert status == 200 and 'Tiene 1 escaño seguro y ninguno en el aire.' in card
+    assert 'so-grid' not in card and '<b>Sin nada en el aire (1):</b> Cádiz 1.' in card
