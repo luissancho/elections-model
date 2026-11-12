@@ -276,7 +276,7 @@
           <div>
             <p class="ctitle">Datos</p>
             <ul class="src-list">
-              <li>Los sondeos de las {{ n|int }} elecciones publicadas en el <a href="/elecciones">Histórico</a>, tal como se publicaron, con sus fechas de campo: {{ summary.get('n_general')|int }} generales ({{ summary.get('first_year') or '–' }}-{{ texts.last_general or '–' }}) y {{ summary.get('n_regional')|int }} autonómicas de {{ texts.n_communities|int }} comunidades ({{ summary.get('first_year_regional') or '–' }}-{{ last_year or '–' }}). Sin agregadores ni paneles abiertos.</li>
+              <li>Los sondeos de las {{ n|int }} elecciones publicadas en el <a href="/elecciones">Histórico</a>, tal como se publicaron, con sus fechas de campo: {{ summary.get('n_general')|int }} generales ({{ summary.get('first_year') or '–' }}-{{ texts.last_general or '–' }}) y {{ summary.get('n_regional')|int }} autonómicas de {{ texts.n_communities|int }} comunidades ({{ summary.get('first_year_regional') or '–' }}-{{ last_year or '–' }}). Sin agregadores, paneles abiertos ni llamadas automáticas.</li>
               <li>Los resultados oficiales de cada elección y el bloque de cada partido, los mismos que enseña la página de la elección.</li>
               <li>Linajes: AP y CD como PP; PSC y PSE-EE como PSOE; PCE, IU, Podemos (y sus marcas autonómicas) y Sumar como un espacio: en cada sondeo se suman las marcas que estima y, en el resultado, esas mismas. El partido del Gobierno, por elección, en una tabla propia.</li>
             </ul>

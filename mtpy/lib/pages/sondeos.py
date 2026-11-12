@@ -461,7 +461,7 @@ def rating_badge(poll: dict) -> Optional[dict]:
     dict or None
         ``{'text', 'color', 'width'}``: the rating at one decimal, its colour from red at 0 through grey at 50 to green
         at 100 (``gradient`` over ``RATING_COLORS``, as the badge of the polls table) and the width of its 0-100 bar in
-        percent (clipped to 0-100); ``None`` without a rating (aggregators and online panels).
+        percent (clipped to 0-100); ``None`` without a rating (the houses of a ``DROP_MTYPES`` type).
     """
     rating = poll.get('rating')
 

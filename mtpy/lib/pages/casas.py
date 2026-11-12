@@ -22,7 +22,7 @@ RATING_SCOPE = 'es'
 RANKING_SHOWN = 50
 # The type of a pollster in the catalogue (``mtype``) and its public label; a pollster without one (null, or ``-`` as
 # the catalogue prints it) is an ordinary private house (``MTYPE_DEFAULT``).
-MTYPE_LABELS = {'state': 'Pública', 'aggr': 'Agregador', 'online': 'Panel Online'}
+MTYPE_LABELS = {'state': 'Pública', 'aggr': 'Agregador', 'online': 'Panel Online', 'ivr': 'Llamadas Automáticas'}
 MTYPE_DEFAULT = 'Privada'
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'num_national_events',
                 'error_avg', 'error_blocks', 'bias_blocks', 'bias_dev_adj')
@@ -48,8 +48,8 @@ def mtype_label(mtype) -> str:
     Parameters
     ----------
     mtype : str or None
-        The ``mtype`` of the catalogue (``'state'``, ``'aggr'``, ``'online'``); ``None``, NaN, ``''`` or ``'-'`` when
-        it has none.
+        The ``mtype`` of the catalogue (``'state'``, ``'aggr'``, ``'online'``, ``'ivr'``); ``None``, NaN, ``''`` or
+        ``'-'`` when it has none.
 
     Returns
     -------
@@ -687,7 +687,8 @@ def profile_kpis(current: dict, mtype: Optional[str], quality_support: str, rate
     quality_support : str
         Text under the prior quality: the points of its evaluation, or that it is not evaluated.
     rated : bool, optional
-        False for the aggregators and online panels (``DROP_MTYPES``), which have no rating: no rating tile.
+        False for the houses of a ``DROP_MTYPES`` type (aggregators, online panels and automated calls), which have
+        no rating: no rating tile.
 
     Returns
     -------
@@ -762,7 +763,8 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
         ``national`` and ``standards`` are set on the implantation row only, ``source`` and ``parts`` being those
         of the standards; empty when not evaluated), ``points``, ``max_points``, ``quality``,
         ``status``, ``draft`` (status ``borrador``), ``checked_at`` (ISO string), ``notes``, ``informative``
-        (aggregators and online panels, whose polls do not enter the average), ``support`` (the text under the KPI),
+        (the houses of a ``DROP_MTYPES`` type, whose polls do not enter the average), ``support`` (the text under the
+        KPI),
         the ``floor`` and ``per_point`` of the scale and ``national`` (set when not evaluated only: whether the
         pollster has polled a general election, computed from the quality of today, which is above the floor only
         with that implantation point).

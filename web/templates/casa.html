@@ -58,7 +58,7 @@
         <p class="notice">Sin evaluar: nadie ha comprobado todavía cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>, así que sólo cuenta la parte calculada de la Implantación. {% if quality.national %}Ha publicado sondeos de alguna elección general, que vale un punto: confianza {{ quality.per_point }}.{% else %}No ha publicado sondeos de ninguna elección general: tiene la confianza mínima, {{ quality.floor }}.{% endif %}</p>
         {% endif %}
         {% if quality.informative %}
-        <p class="muted">Sus sondeos no entran en el promedio ni en el rating (agregadores y paneles en línea quedan fuera): la confianza es informativa.</p>
+        <p class="muted">Sus sondeos no entran en el promedio ni en el rating (agregadores, paneles en línea y llamadas automáticas quedan fuera): la confianza es informativa.</p>
         {% endif %}
         {% call m.how() %}
         <p><a href="/metodo/rating#calidad-previa">La rúbrica</a> puntúa cómo trabaja la encuestadora, no cuánto acierta: eso lo cuenta el rating; cada punto vale {{ quality.per_point }} de confianza, con un mínimo de {{ quality.floor }}.</p>

@@ -839,7 +839,7 @@ def get_national_events() -> pd.DataFrame:
 
     A pollster counts for a general election (``event_scope = 'es'``) when it has at least one poll with a
     non-null ``bias`` that is not an exit poll or a ``wban`` (``ctype`` null counts); ``mtype`` is not filtered, so
-    the public figure also holds for online panels and aggregators.
+    the public figure also holds for the pollsters of the dropped types (`DROP_MTYPES`).
 
     Returns
     -------
@@ -1112,7 +1112,7 @@ def save_ratings_data(
 
     pmodel = Pollsters()
     dp = get_pollsters()
-    # aggregators and online panels have no rating (`DROP_MTYPES`): null, not the 0 of a house without evidence
+    # the pollsters of a `DROP_MTYPES` type have no rating: null, not the 0 of a house without evidence
     dp['rating'] = dp['id'].map(rlast).fillna(0).astype(int).astype('Int64')
     dp.loc[dp['mtype'].isin(DROP_MTYPES), 'rating'] = pd.NA
 
@@ -1415,7 +1415,7 @@ def update_featured(
     min_polls : int, optional
         Useful polls needed.
     drop_mtypes : list of str, optional
-        Methodology types that do not count (aggregators and online panels).
+        Methodology types that do not count (aggregators, online panels and automated calls).
     drop_ctypes : list of str, optional
         Context types that do not count (polls within the ban and exit polls).
 

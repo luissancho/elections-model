@@ -1,4 +1,5 @@
-"""Agregadores y paneles online (`DROP_MTYPES`, 2026-10-21): fuera del promedio, del rating y de los listados."""
+"""Agregadores y paneles online (`DROP_MTYPES`, 2026-10-21) y sondeos por llamadas automáticas (`ivr`, 2026-11-12):
+fuera del promedio, del rating y de los listados."""
 import inspect
 import re
 
@@ -12,7 +13,7 @@ def test_every_default_drops_the_same_methodology_types():
     from mtpy.lib.forecaster import Forecaster
     from mtpy.lib.simulator import Simulator
 
-    assert DROP_MTYPES == ('aggr', 'online')
+    assert DROP_MTYPES == ('aggr', 'online', 'ivr')
     for func in (Computer.__init__, Forecaster.__init__, Simulator.__init__, data.update_featured):
         assert list(inspect.signature(func).parameters['drop_mtypes'].default) == list(DROP_MTYPES), func
 
@@ -77,16 +78,17 @@ def test_get_ratings_carries_the_type_of_each_pollster(monkeypatch):
 
 
 def test_the_ratings_of_the_web_leave_out_the_excluded_pollsters(fresh_app, monkeypatch):
-    """`query_ratings` (ranking de /casas y CSV de ratings): sin agregadores ni paneles online."""
+    """`query_ratings` (ranking de /casas y CSV de ratings): sin agregadores, paneles online ni llamadas automáticas."""
     import pandas as pd
     from mtpy.lib import webapi
     from tests.test_webapi_unit import use_database
 
     use_database(fresh_app)
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: pd.DataFrame({
-        'event_date': pd.to_datetime(['2026-11-29'] * 3), 'pollster_id': [2, 28, 8],
-        'pollster': ['GAD3', 'ElectoPanel', 'KeyData'], 'mtype': [None, 'online', 'aggr'],
-        'event_scope': 'es', 'rating': [61.4, float('nan'), float('nan')], 'num_polls': [12, 40, 9]}))
+        'event_date': pd.to_datetime(['2026-11-29'] * 4), 'pollster_id': [2, 28, 8, 16],
+        'pollster': ['GAD3', 'ElectoPanel', 'KeyData', 'Automatica'], 'mtype': [None, 'online', 'aggr', 'ivr'],
+        'event_scope': 'es', 'rating': [61.4, float('nan'), float('nan'), float('nan')],
+        'num_polls': [12, 40, 9, 7]}))
     assert webapi.query_ratings('es')['pollster'].tolist() == ['GAD3']
 
 
