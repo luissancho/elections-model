@@ -7873,3 +7873,10 @@ def test_sondeo_page_errors_and_pinned_run(api, fresh_app):
     assert 'href="/es?mode=nowcast&amp;run=%s#tabla"' % RUN in page and 'href="/es?mode=nowcast&amp;run=%s#escanos"' % RUN in page
     assert '<link rel="canonical" href="https://demoscopio.es/es/sondeos/2026-10-01/gad3/abc">' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
+
+
+def test_api_serves_the_seat_odds_part_of_a_mode(api):
+    status, _, body = call(api, '/api/v1/forecast/es/forecast/seat-odds')
+    payload = json.loads(body)
+    assert status == 200 and (payload['schema'], payload['mode']) == ('seat-odds@1', 'forecast')
+    assert payload['data'] == fixture_data('seat-odds')

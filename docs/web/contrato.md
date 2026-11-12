@@ -29,10 +29,10 @@ site/v1/
     runs/{scope}/{run_id}/
         meta.json headline.json series.json polls.json fan.json house-effects.json dispersion.json weights.json
         {nowcast,forecast}/
-            vote.json summary.json dist.json districts.json scenario.json projection.json
+            vote.json summary.json dist.json districts.json scenario.json seat-odds.json projection.json
         csv/
             series.csv polls.csv fan.csv house-effects.csv dispersion.csv weights.csv
-            {nowcast,forecast}-{vote,summary,dist,districts,scenario,projection}.csv
+            {nowcast,forecast}-{vote,summary,dist,districts,scenario,seat-odds,projection}.csv
 ```
 
 ## Sobre común
@@ -47,8 +47,8 @@ Todo JSON es un sobre:
 - `schema` es `{nombre}@{contract}`; `contract` es 1.
 - `scope` y `run_id` son `null` en los ficheros que no pertenecen a un run (`manifest`, `history`; en
   `history` sí se informa `scope`).
-- `mode` solo se informa en los seis ficheros por modo (`vote`, `summary`, `dist`, `districts`,
-  `scenario`, `projection`), que viven en `nowcast/` y `forecast/`.
+- `mode` solo se informa en los siete ficheros por modo (`vote`, `summary`, `dist`, `districts`,
+  `scenario`, `seat-odds`, `projection`), que viven en `nowcast/` y `forecast/`.
 - `data` tiene las claves de cada esquema (secciones siguientes). Se exige que estén todas y con el tipo
   correcto; puede haber claves adicionales dentro de las filas.
 
@@ -286,6 +286,25 @@ mediana de escaños de cada partido (empates por L2 y después por el menor índ
 
 `data`: `simulation` (índice de la simulación), `parties` y `rows` (`{region_id, region, seats: [escaños
 por partido]}`). CSV: `region_id, region` y una columna por partido.
+
+### `seat-odds`
+
+En cuántas simulaciones consigue cada partido su escaño número `k` de cada circunscripción. Fuente:
+`sim.seat_reach(r)` por región y `sim.central_result()` para el titular.
+
+`data`: `n_sim` (número de simulaciones), `parties`, `regions` (`{id, name, seats}`, solo las circunscripciones,
+como `districts`) y `rows` (`{region_id, name, seats, reach}`). `seats` es el titular entero del reparto central en
+esa circunscripción. `reach` es una lista de enteros: `reach[k-1]` es el número de simulaciones en que el partido
+logra al menos `k` escaños, para `k = 1..máximo` (decreciente; vacía si ninguna simulación le da un escaño). Son
+recuentos y no probabilidades para poder decir «en N de `n_sim` simulaciones» sin redondeos; la probabilidad es
+`reach[k-1] / n_sim`. Solo hay filas de partidos con `reach` no vacío o `seats > 0`: un escaño central que ninguna
+simulación da aparece con `reach` vacío. No se exige que los recuentos sumen `n_sim` por escaño, porque hay
+simulaciones que no reparten todos los escaños cuando nadie pasa la barrera. En un ámbito de una sola
+circunscripción `regions` trae esa única circunscripción. Sin reparto central (modos de regresión) `regions` y
+`rows` van vacíos. CSV: `region_id, region, name, seats, k, sims, p`, una fila por región, partido y `k`
+(ascendente), con `p = sims / n_sim` a 4 decimales.
+
+Enmienda 2026-11-12: los runs anteriores no llevan esta parte.
 
 ### `projection`
 
@@ -736,7 +755,7 @@ código es `ROUTES` en `mtpy/lib/webapi.py` y los controladores `mtpy/controller
 | `/api/v1/forecast/{scope}` | `meta.json` del run (atajo de `/forecast/{scope}/meta`) | 60 s, o inmutable con `?run=` |
 | `/api/v1/forecast/{scope}/runs` | `runs/{scope}/history.json` | `public, max-age=60` |
 | `/api/v1/forecast/{scope}/{part}` | `part` ∈ `meta`, `headline`, `series`, `polls`, `fan`, `house-effects`, `dispersion`, `weights` (enmienda 2026-10-15) | 60 s, o inmutable con `?run=` |
-| `/api/v1/forecast/{scope}/{mode}/{part}` | `mode` ∈ `nowcast`, `forecast`; `part` ∈ `vote`, `summary`, `dist`, `districts`, `scenario`, `projection` | 60 s, o inmutable con `?run=` |
+| `/api/v1/forecast/{scope}/{mode}/{part}` | `mode` ∈ `nowcast`, `forecast`; `part` ∈ `vote`, `summary`, `dist`, `districts`, `scenario`, `seat-odds`, `projection` | 60 s, o inmutable con `?run=` |
 
 Enmienda 2026-10-10 (fase 4): diez rutas más, de dos controladores. `Data` lee las tablas de la base de
 datos (`/parties`, `/pollsters`, `/pollsters/{id}`, `/ratings`, `/polls`, `/results/{scope}/{date}`,
