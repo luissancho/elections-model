@@ -38,7 +38,7 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
                          table_blocks, with_abs, with_model_row, year_range)
 from .circunscripciones import (CLOSEST_SHOWN, OPEN_FLOOR, SAFE_SHARE, closest_seats, closest_sentence, district_href,
                                 district_order, district_sentence, district_views, drawn_row, party_sentence,
-                                party_view, scope_totals, seat_odds_context, seat_tokens, threshold_label, tint,
+                                party_view, published_seat_odds, scope_totals, seat_odds_context, seat_odds_links, seat_tokens, threshold_label, tint,
                                 token_label, tokens_note, tokens_reading)
 from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, has_communities, region_rows, resolve_region,
                       seats_context)

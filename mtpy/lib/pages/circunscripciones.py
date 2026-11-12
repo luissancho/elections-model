@@ -602,6 +602,64 @@ def _closest_card(views: list, parties: dict, scope: str, query: str) -> dict:
     }
 
 
+def published_seat_odds(scope: str, run: str, mode: str) -> Optional[dict]:
+    """
+    The ``seat-odds`` part of a run when the page «Escaños que bailan» exists for it.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    run : str
+        Run id.
+    mode : str
+        Simulation mode.
+
+    Returns
+    -------
+    dict or None
+        The data of the part; ``None`` when the run has no such part or it has fewer than two districts.
+    """
+    data = bundle_part(site().run_file, scope, run, 'seat-odds', mode)
+
+    if data is None or len(data.get('regions') or []) < 2:
+        return None
+
+    return data
+
+
+def seat_odds_links(scope: str, run: str, mode: str, query: str) -> Optional[dict]:
+    """
+    Links from the event page to the page «Escaños que bailan» and to the card of each district.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    run : str
+        Run id the event page shows.
+    mode : str
+        Simulation mode.
+    query : str
+        ``event_query`` of the event page, so that the links keep ``mode`` and ``run``.
+
+    Returns
+    -------
+    dict or None
+        ``{'page': '/{scope}/circunscripciones{query}', 'districts': {region_id: href}}`` with the href of
+        ``district_href``; ``None`` when the page does not exist for the run (``published_seat_odds``).
+    """
+    data = published_seat_odds(scope, run, mode)
+
+    if data is None:
+        return None
+
+    return {
+        'page': '/{}/circunscripciones{}'.format(scope, query),
+        'districts': {view['id']: district_href(scope, view['slug'], query) for view in district_views(data)},
+    }
+
+
 def seat_odds_context(state: dict, district: Optional[str] = None, party: Optional[str] = None,
                       view: Optional[str] = None) -> dict:
     """
@@ -644,9 +702,9 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
     context = common_context(state, None, event=True)
     full, query, parties = context['state'], context['query'], context['catalog']
     scope, mode, run = full['scope'], full['mode'], full['run']
-    data = bundle_part(site().run_file, scope, run, 'seat-odds', mode)
+    data = published_seat_odds(scope, run, mode)
 
-    if data is None or len(data.get('regions') or []) < 2:
+    if data is None:
         raise HttpError(404, 'seat odds not published')
 
     views = district_order(district_views(data))

@@ -311,3 +311,31 @@ def test_the_sentences_of_the_party_and_of_the_closest_seats_agree_with_their_nu
     assert pages.closest_sentence(0, 0) == 'Ningún escaño está en el aire.'
     assert pages.closest_sentence(1, 1) == 'El único escaño que está en el aire. La raya marca el 50%.'
     assert pages.closest_sentence(40, 55).startswith('Los 40 escaños más cercanos al cara o cruz, de los 55 que')
+
+
+DISTRICTS = {  # the districts of `ODDS` in the `districts` part, so that the detail of the event page shows one of them
+    'parties': ['PP'],
+    'regions': [dict(region, community=None, votes=1000) for region in ODDS['regions']],
+    'rows': [{'region_id': region['id'], 'region': region['name'], 'name': 'PP', 'pct': 30.0, 'pct_lo': 27.0,
+              'pct_hi': 33.0, 'seats': 3, 'seats_median': 3.0, 'seats_mean': 3.1, 'seats_lo': 2, 'seats_hi': 4,
+              'p_seats': 1.0} for region in ODDS['regions']],
+}
+
+
+def test_the_event_page_links_the_page_and_the_card_of_the_district_shown(odds_site, api, fresh_app, tmp_path):
+    writer = bundle.BundleWriter(fresh_app.fs)
+    for mode in bundle.MODES:
+        writer.write_json(bundle.path_part('es', RUN, 'districts', mode), 'districts', DISTRICTS, 'es', run_id=RUN, mode=mode)
+    webapi.site().files.clear()
+    status, _, body = call(odds_site, '/es', query='mode=nowcast')
+    page = re.sub(r'\s+', ' ', html(body))
+    territory = page[page.index('id="territorio"'):page.index('id="tabla"')]
+    assert status == 200 and 'href="/es/circunscripciones?mode=nowcast"' in territory and 'Escaños que bailan' in territory
+    assert re.search(r'<a id="region-odds"[^>]*href="/es/circunscripciones/[a-z-]+\?mode=nowcast#ficha"', territory)
+    assert initial(body)['odds_hrefs']['11'] == '/es/circunscripciones/cadiz?mode=nowcast#ficha'
+    assert 'seat-odds' in page[page.index('id="escanos"'):]  # its CSV among the downloads
+    for mode in bundle.MODES:
+        os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'seat-odds', mode)))
+    webapi.site().files.clear()
+    status, bare = page_of(api, '/es')
+    assert status == 200 and '/es/circunscripciones' not in bare and 'region-odds' not in bare and 'seat-odds' not in bare
