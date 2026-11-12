@@ -620,11 +620,22 @@ def published_seat_odds(scope: str, run: str, mode: str) -> Optional[dict]:
     Returns
     -------
     dict or None
-        The data of the part; ``None`` when the run has no such part or it has fewer than two districts.
+        The data of the part; ``None`` when the run has no such part, it has no simulations (``n_sim`` missing or
+        0) or it has fewer than two districts.
     """
-    data = bundle_part(site().run_file, scope, run, 'seat-odds', mode)
+    reader = site()
+    # every run published before the part lacks it, and the LRU of the run files keeps only the files that exist:
+    # its presence is remembered under the TTL of the pointers, so the event page does not read the bundle again on
+    # every render; when present, the bytes come from the LRU
+    present = reader.cached(('seat-odds', scope, run, mode),
+                            lambda: bundle_part(reader.run_file, scope, run, 'seat-odds', mode) is not None)
 
-    if data is None or len(data.get('regions') or []) < 2:
+    if not present:
+        return None
+
+    data = bundle_part(reader.run_file, scope, run, 'seat-odds', mode)
+
+    if data is None or not data.get('n_sim') or len(data.get('regions') or []) < 2:
         return None
 
     return data
@@ -649,7 +660,8 @@ def seat_odds_links(scope: str, run: str, mode: str, query: str) -> Optional[dic
     -------
     dict or None
         ``{'page': '/{scope}/circunscripciones{query}', 'districts': {region_id: href}}`` with the href of
-        ``district_href``; ``None`` when the page does not exist for the run (``published_seat_odds``).
+        ``district_href``, built from the ``regions`` of the part alone (no token is computed); ``None`` when the
+        page does not exist for the run (``published_seat_odds``).
     """
     data = published_seat_odds(scope, run, mode)
 
@@ -658,7 +670,9 @@ def seat_odds_links(scope: str, run: str, mode: str, query: str) -> Optional[dic
 
     return {
         'page': '/{}/circunscripciones{}'.format(scope, query),
-        'districts': {view['id']: district_href(scope, view['slug'], query) for view in district_views(data)},
+        # the keys are the ids of the regions, ints; in the JSON embedded in the event page (`odds_hrefs`) they become
+        # strings
+        'districts': {region['id']: district_href(scope, slugify(region['name']), query) for region in data['regions']},
     }
 
 

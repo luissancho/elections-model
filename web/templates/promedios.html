@@ -460,7 +460,8 @@
           </table>
         </div>
         {% if odds %}
-        {#- hidden, not absent, when the district shown is not in the part: the script shows it for another one -#}
+        {#- hidden, not absent, when the district shown is not in the part: the script shows it for another one. The keys
+            of `odds.districts` are ints here and strings in the embedded JSON (`odds_hrefs`) -#}
         {% set odds_href = odds.districts.get(region.id) %}
         <p class="more"{% if not odds_href %} hidden{% endif %}><a id="region-odds" class="more-link"{% if odds_href %} href="{{ odds_href }}"{% endif %}>Escaño a escaño en {{ region.name }} ›</a></p>
         {% endif %}

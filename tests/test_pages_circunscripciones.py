@@ -7,7 +7,7 @@ import pytest
 
 from mtpy.lib import bundle, pages, webapi
 from tests.test_api_asgi import call
-from tests.test_pages import api, assert_public_wording, html, initial  # noqa: F401
+from tests.test_pages import api, assert_public_wording, counting, html, initial  # noqa: F401
 from tests.test_webapi_unit import RUN, fixture_data
 
 
@@ -139,6 +139,7 @@ def write_odds(fs, data=ODDS, modes=bundle.MODES):
     for mode in modes:
         writer.write_json(bundle.path_part('es', RUN, 'seat-odds', mode), 'seat-odds', data, 'es', run_id=RUN, mode=mode)
     webapi.site().files.clear()
+    webapi.site().manifest_cache_clear()  # the presence of the part is remembered under the TTL of the pointers
 
 
 @pytest.fixture
@@ -201,9 +202,7 @@ def test_the_page_does_not_exist_without_the_part_or_with_a_single_district(api,
     write_odds(fresh_app.fs, fixture_data('seat-odds'))
     status, page = page_of(api, '/es/circunscripciones')
     assert status == 404 and 'Este run no tiene el desglose escaño a escaño.' in page  # one district
-    for mode in bundle.MODES:
-        os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'seat-odds', mode)))
-    webapi.site().files.clear()
+    remove_odds(tmp_path)
     assert call(api, '/es/circunscripciones')[0] == 404  # a run published before the part existed
 
 
@@ -334,11 +333,24 @@ DISTRICTS = {  # the districts of `ODDS` in the `districts` part, so that the de
 }
 
 
-def test_the_event_page_links_the_page_and_the_card_of_the_district_shown(odds_site, api, fresh_app, tmp_path):
-    writer = bundle.BundleWriter(fresh_app.fs)
+def write_event_districts(fs, districts=DISTRICTS):
+    """Sobrescribe la parte `districts` del run en los dos modos, para el detalle de la página del evento."""
+    writer = bundle.BundleWriter(fs)
     for mode in bundle.MODES:
-        writer.write_json(bundle.path_part('es', RUN, 'districts', mode), 'districts', DISTRICTS, 'es', run_id=RUN, mode=mode)
+        writer.write_json(bundle.path_part('es', RUN, 'districts', mode), 'districts', districts, 'es', run_id=RUN, mode=mode)
     webapi.site().files.clear()
+
+
+def remove_odds(tmp_path):
+    """Quita la parte `seat-odds` del run en los dos modos (un run publicado antes de que existiera)."""
+    for mode in bundle.MODES:
+        os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'seat-odds', mode)))
+    webapi.site().files.clear()
+    webapi.site().manifest_cache_clear()  # the presence of the part is remembered under the TTL of the pointers
+
+
+def test_the_event_page_links_the_page_and_the_card_of_the_district_shown(odds_site, api, fresh_app, tmp_path):
+    write_event_districts(fresh_app.fs)
     status, _, body = call(odds_site, '/es', query='mode=nowcast')
     page = re.sub(r'\s+', ' ', html(body))
     territory = page[page.index('id="territorio"'):page.index('id="tabla"')]
@@ -346,8 +358,65 @@ def test_the_event_page_links_the_page_and_the_card_of_the_district_shown(odds_s
     assert re.search(r'<a id="region-odds"[^>]*href="/es/circunscripciones/[a-z-]+\?mode=nowcast#ficha"', territory)
     assert initial(body)['odds_hrefs']['11'] == '/es/circunscripciones/cadiz?mode=nowcast#ficha'
     assert 'seat-odds' in page[page.index('id="escanos"'):]  # its CSV among the downloads
-    for mode in bundle.MODES:
-        os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'seat-odds', mode)))
-    webapi.site().files.clear()
+    remove_odds(tmp_path)
     status, bare = page_of(api, '/es')
     assert status == 200 and '/es/circunscripciones' not in bare and 'region-odds' not in bare and 'seat-odds' not in bare
+
+
+def test_the_links_of_the_event_page_keep_a_pinned_run(odds_site, fresh_app):
+    write_event_districts(fresh_app.fs)
+    status, _, body = call(odds_site, '/es', query='mode=nowcast&run=' + RUN)
+    page = re.sub(r'\s+', ' ', html(body))
+    assert status == 200 and 'href="/es/circunscripciones?mode=nowcast&amp;run={}"'.format(RUN) in page
+    hrefs = initial(body)['odds_hrefs']
+    assert hrefs['11'] == '/es/circunscripciones/cadiz?mode=nowcast&run={}#ficha'.format(RUN)
+    assert all('run={}#ficha'.format(RUN) in href for href in hrefs.values()) and len(hrefs) == 3
+
+
+def test_the_link_of_a_district_without_card_is_hidden_and_a_single_district_gives_no_links(odds_site, api, fresh_app):
+    # the detail shows a district that is not in the part: its link is there, hidden and without href, for the script
+    soria = {'id': 42, 'name': 'Soria', 'seats': 2}
+    districts = dict(DISTRICTS, regions=DISTRICTS['regions'] + [dict(soria, community=None, votes=1000)],
+                     rows=DISTRICTS['rows'] + [dict(DISTRICTS['rows'][0], region_id=42, region='Soria')])
+    write_event_districts(fresh_app.fs, districts)
+    page = page_of(odds_site, '/es', 'region=42')[1]
+    assert '<p class="more" hidden><a id="region-odds" class="more-link">Escaño a escaño en Soria ›</a></p>' in page
+    assert 'href="/es/circunscripciones?mode=forecast"' in page  # the link to the page stays
+    write_odds(fresh_app.fs, fixture_data('seat-odds'))  # one district: no page, so no links
+    status, bare = page_of(api, '/es')
+    assert status == 200 and '/es/circunscripciones' not in bare and 'region-odds' not in bare and 'seat-odds' not in bare
+
+
+def test_the_links_of_the_event_page_do_not_compute_the_tokens(odds_site, fresh_app, monkeypatch):
+    def fail(data):
+        raise AssertionError('district_views called')
+
+    monkeypatch.setattr('mtpy.lib.pages.circunscripciones.district_views', fail)
+    links = pages.seat_odds_links('es', RUN, 'forecast', '?mode=forecast')
+    assert links == {'page': '/es/circunscripciones?mode=forecast',
+                     'districts': {11: '/es/circunscripciones/cadiz?mode=forecast#ficha',
+                                   19: '/es/circunscripciones/guadalajara?mode=forecast#ficha',
+                                   15: '/es/circunscripciones/la-coruna?mode=forecast#ficha'}}
+
+
+def test_a_part_without_simulations_takes_down_no_page(odds_site, api, fresh_app):
+    write_odds(fresh_app.fs, dict(ODDS, n_sim=0))
+    assert pages.published_seat_odds('es', RUN, 'forecast') is None
+    status, page = page_of(api, '/es')
+    assert status == 200 and '/es/circunscripciones' not in page and 'seat-odds' not in page
+    status, page = page_of(api, '/es/circunscripciones')
+    assert status == 404 and 'Este run no tiene el desglose escaño a escaño.' in page
+
+
+def test_two_renders_of_the_event_page_without_the_part_read_it_once(odds_site, api, fresh_app, tmp_path):
+    remove_odds(tmp_path)
+    call(api, '/es')  # the other run files stay in the LRU
+    fs = counting(fresh_app)
+    assert call(api, '/es')[0] == 200 and call(api, '/es')[0] == 200
+    assert [name for method, name in fs.names if 'seat-odds' in name] == [
+        ('/'.join((bundle.PREFIX, bundle.path_part('es', RUN, 'seat-odds', 'forecast'))))]
+    # with the part, its bytes come from the LRU: the second render reads nothing of it
+    write_odds(fresh_app.fs)
+    fs = counting(fresh_app)
+    assert call(api, '/es')[0] == 200 and call(api, '/es')[0] == 200
+    assert len([name for method, name in fs.names if 'seat-odds' in name]) == 1
