@@ -3570,6 +3570,14 @@ def test_metodo_escanos_quotes_the_coverage_only_with_a_backtest(api, fresh_app)
     assert 'el intervalo del 95% del voto contiene el resultado el 96% de las veces a 6 días' in page
 
 
+def test_method_seats_explains_the_safe_and_the_open_seats(api):
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    block = page[page.index('<h3 id="seguros">'):page.index('id="comprobacion"')]
+    assert 'Escaños seguros y en el aire' in block and '99%' in block and '1%' in block
+    assert 'no es una garantía' in block
+    assert_public_wording(page, 'metodo/escanos')
+
+
 def test_thresholds_and_figures_come_from_the_catalogue_and_the_bundle(api, fresh_app):
     write_backtest(fresh_app.fs)
     rows = {row['code']: row for row in pages.thresholds_rows()}
