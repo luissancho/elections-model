@@ -507,6 +507,19 @@
           La nota{{ m.note('reparto', note_keys) }} recoge la barrera en el reparto, el reparto central y cómo se
           resumen las simulaciones.
         </p>
+        <h3 id="seguros">Escaños seguros y en el aire</h3>
+        <p>
+          En cada simulación repartimos los escaños de cada circunscripción. Al terminar contamos, para cada partido
+          y cada escaño (el primero, el segundo, el tercero…), en cuántas simulaciones lo consigue. Llamamos seguro
+          al escaño que sale en el 99% o más de las simulaciones, y decimos que está en el aire el que sale entre el
+          1% y el 99%; por debajo del 1% lo damos por descartado.
+        </p>
+        <p>
+          «Seguro» no es una garantía: es lo que dicen nuestras simulaciones, que heredan los errores del promedio y
+          los de la proyección del voto a las circunscripciones. El reparto central es otra cosa: reparte el voto
+          central, y puede dar a un partido un escaño que sale en menos de la mitad de las simulaciones. Cuando
+          ocurre, lo marcamos.
+        </p>
       {{ m.card_end() }}
       {{ m.card_start('comprobacion', 'Cómo lo comprobamos', 'El modelo se repite en las elecciones generales pasadas, con los sondeos publicados hasta cada fecha, y se mira si sus intervalos contienen el resultado tantas veces como anuncian.') }}
         <p>

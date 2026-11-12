@@ -2584,6 +2584,39 @@ class Simulator(Core):
             'p_seats': (seats > 0).mean()
         })
 
+    def seat_reach(self, region: int | str) -> dict[str, list[int]]:
+        """
+        In how many simulations each party reaches at least `k` seats in one region, for `k = 1..maximum`.
+
+        Parameters
+        ----------
+        region : int or str
+            `region_id` or region name.
+
+        Returns
+        -------
+        dict
+            `{party: [count of simulations with seats >= k for k = 1..max]}` for each party of
+            `params['names']`, in its order; an empty list when the party never wins a seat. Counts are
+            integers (not shares), so the page can say "in N of M simulations".
+
+        Raises
+        ------
+        ValueError
+            Without simulations.
+        """
+        if self.units is None or self.results is None:
+            raise ValueError('No simulations available: call `run()` first.')
+
+        rloc = self.params['regions'].index(self.region_id(region))
+        reach = {}
+        for position, name in enumerate(self.params['names']):
+            seats = self.results[:, rloc, position]
+            top = int(seats.max()) if len(seats) else 0
+            reach[name] = [int((seats >= k).sum()) for k in range(1, top + 1)]
+
+        return reach
+
     def simulate(
         self,
         frame: Optional[pd.DataFrame] = None,

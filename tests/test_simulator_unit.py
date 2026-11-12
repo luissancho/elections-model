@@ -1060,3 +1060,22 @@ def test_simulator_passes_drop_ctypes_to_the_forecaster(monkeypatch, kwargs, exp
     with pytest.raises(_StopAfterForecaster):
         Simulator('es', '2026-11-29', threshold=3., **kwargs)
     assert seen['drop_ctypes'] == expected
+
+
+def test_seat_reach_counts_the_simulations_that_reach_each_seat():
+    sim = synthetic_simulator()
+    sim.results = np.array([  # 4 simulations x [total, Madrid, Barcelona] x [PP, PSOE, VOX]
+        [[5, 4, 1], [3, 2, 1], [2, 2, 0]],
+        [[6, 3, 1], [4, 2, 0], [2, 1, 1]],
+        [[5, 5, 0], [3, 3, 0], [2, 2, 0]],
+        [[5, 4, 1], [3, 2, 1], [2, 2, 0]],
+    ])
+    assert sim.seat_reach(28) == {'PP': [4, 4, 4, 1], 'PSOE': [4, 4, 1], 'VOX': [2]}
+    assert sim.seat_reach('Barcelona') == {'PP': [4, 4], 'PSOE': [4, 3], 'VOX': [1]}
+    assert all(isinstance(n, int) for counts in sim.seat_reach(28).values() for n in counts)
+    assert sum(sum(counts) for counts in sim.seat_reach(28).values()) == 4 * 6  # every simulation fills Madrid
+    sim.results[:, 1, 2] = 0
+    assert sim.seat_reach(28)['VOX'] == []
+    sim.results = None
+    with pytest.raises(ValueError):
+        sim.seat_reach(28)

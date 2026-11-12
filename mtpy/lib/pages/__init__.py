@@ -2,8 +2,9 @@
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
-``backtest``, ``analisis``, ``sondeos``, with the view models of the CERA study in ``cera``), plus ``common`` (routes,
-messages, environment and shared context) and ``filters`` (formatting filters). This facade re-exports every public name, so callers use ``pages.<name>``.
+``backtest``, ``analisis``, ``sondeos``, ``circunscripciones``, with the view models of the CERA study in ``cera``),
+plus ``common`` (routes, messages, environment and shared context) and ``filters`` (formatting filters). This facade
+re-exports every public name, so callers use ``pages.<name>``.
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
 from the templates of ``web/templates``. Every context is built from the published bundle through
@@ -25,7 +26,8 @@ from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OTHE
                      ROUTES, SITE_TAGLINE, SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog,
                      chamber_text, common_context, days_left, days_text, default_mode, environment, event_info,
                      event_query, event_title, hemicycle_order, ink_color, parse_state, part, parties_catalogue,
-                     published_scopes, resolve_event_scope, resolve_scope, run_horizon, scope_query, tabbar, title_of)
+                     published_scopes, resolve_event_scope, resolve_scope, run_horizon, scope_query,
+                     subpage_event_bar, tabbar, title_of)
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
                          history_scopes,
@@ -34,6 +36,10 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
                          last_results, horizon_tables, majority_of, mark_shown, model_last, MODEL_ROW, party_blocks,
                          poll_error_parts, published_events, resolve_event, run_less_colours, shown_parties, split_sides,
                          table_blocks, with_abs, with_model_row, year_range)
+from .circunscripciones import (CLOSEST_SHOWN, OPEN_FLOOR, SAFE_SHARE, closest_seats, closest_sentence, district_href,
+                                district_order, district_sentence, district_views, drawn_row, party_sentence,
+                                party_view, published_seat_odds, scope_totals, seat_odds_context, seat_odds_links,
+                                seat_tokens, threshold_label, tint, token_label, tokens_note, tokens_reading)
 from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, has_communities, region_rows, resolve_region,
                       seats_context)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,

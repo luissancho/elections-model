@@ -257,6 +257,49 @@ def export_scenario(sim):
     return {'parties': parties, 'rows': rows}, frame
 
 
+def export_seat_odds(sim):
+    """Export, per district and party, in how many simulations the party reaches its k-th seat.
+
+    Each row carries ``reach`` (``sim.seat_reach``: the number of simulations with at least ``k`` seats, for
+    ``k = 1..max``) and ``seats``, the central allocation (``sim.central_result()``) the headline shows. Only
+    the parties with some ``reach`` or a central seat are kept. Without a central allocation (regression
+    modes) the part is empty. The scope total is left out, as in ``export_districts``.
+
+    Parameters
+    ----------
+    sim : Simulator
+        Simulator already run.
+
+    Returns
+    -------
+    tuple of (dict, pandas.DataFrame)
+        Data for the ``seat-odds`` schema and its CSV twin (one row per region, party and ``k``).
+    """
+    n_sim = int(sim.params['n_sim'])
+    names = list(sim.params['names'])
+    columns = ['region_id', 'region', 'name', 'seats', 'k', 'sims', 'p']
+    central = sim.central_result()
+    regions, rows, records_csv = [], [], []
+    if central is not None:
+        region_ids = list(sim.params['regions'])
+        for position, r in enumerate(region_ids):
+            if r == sim.default_region:
+                continue
+            region = sim.region_names.get(r, r)
+            regions.append({'id': r, 'name': region, 'seats': int(sim.reg_totals.loc[r, 'seats'])})
+            reach = sim.seat_reach(r)
+            for name in names:
+                seats = int(central.iloc[position][name])
+                if not reach[name] and seats <= 0:
+                    continue
+                rows.append({'region_id': r, 'name': name, 'seats': seats, 'reach': reach[name]})
+                for k, sims in enumerate(reach[name], start=1):
+                    records_csv.append({'region_id': r, 'region': region, 'name': name, 'seats': seats, 'k': k,
+                                        'sims': sims, 'p': round(sims / n_sim, 4)})
+    data = {'n_sim': n_sim, 'parties': names, 'regions': regions, 'rows': rows}
+    return data, pd.DataFrame(records_csv, columns=columns)
+
+
 def export_projection(sim):
     """Export the projected vote share over time for parties and both block groupings.
 
@@ -803,7 +846,8 @@ def backfill_run_at(day: str) -> str:
 
 
 MODE_EXPORTERS = (('vote', export_vote), ('summary', export_summary), ('dist', export_dist),
-                  ('districts', export_districts), ('scenario', export_scenario), ('projection', export_projection))
+                  ('districts', export_districts), ('scenario', export_scenario),
+                  ('seat-odds', export_seat_odds), ('projection', export_projection))
 
 
 def publish_mode(sim, writer: BundleWriter, scope: str, run_id: str, communities: Optional[dict] = None) -> dict:
