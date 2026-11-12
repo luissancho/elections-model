@@ -1944,6 +1944,7 @@ def test_casa_profile_quality_card_of_an_evaluated_informative_house(houses):
                                             ('Implantación', '1')]
     assert 'href="https://agregador.example/metodo"' in card and '2 de 10 puntos' in card
     assert 'la confianza es informativa' in card and 'Sin evaluar' not in card
+    assert '(agregadores, paneles en línea y llamadas automáticas quedan fuera)' in card  # los tres tipos excluidos
 
 
 def test_profile_confidence_card_shows_implantation_with_its_two_parts(houses):
@@ -3729,6 +3730,34 @@ def assert_public_wording(page, label):
     assert not sólo, (label, sólo[:5])
 
 
+def test_the_pages_that_list_the_excluded_types_name_the_automated_calls(events_site, fresh_app):
+    """Las páginas que enumeran los tipos de encuestadora excluidos (`DROP_MTYPES`) nombran los tres: agregadores,
+    paneles abiertos y sondeos por llamadas automáticas (2026-11-12). /metodo/promedio define la etiqueta como hace
+    con los paneles: qué es y qué no."""
+    publish_study(fresh_app.fs, study='rebano')
+    publish_study(fresh_app.fs, study='voto-oculto')
+    listed = {
+        '/metodo/promedio': (
+            'Dejamos fuera los sondeos por llamadas automáticas.',
+            'No es una cuestión de teléfono: una encuesta telefónica hecha por entrevistadores entra como las demás.',
+            'sin agregadores, paneles ni llamadas automáticas'),
+        '/metodo/rating': (
+            'Dejamos fuera los agregadores, los paneles en línea abiertos y las encuestadoras de llamadas automáticas.',
+            'Los agregadores, los paneles en línea abiertos y las encuestadoras de llamadas automáticas no reciben',
+            'Los agregadores, los paneles en línea abiertos y las encuestadoras de llamadas automáticas quedan fuera'),
+        '/analisis/rebano': (
+            'Quedan fuera el CIS, los agregadores, los paneles abiertos y los sondeos por llamadas automáticas.',
+            'sin agregadores, paneles abiertos ni llamadas automáticas'),
+        '/analisis/voto-oculto': ('Sin agregadores, paneles abiertos ni llamadas automáticas.',),
+    }
+    for path, phrases in listed.items():
+        status, _, body = call(events_site, path)
+        text = re.sub(r'\s+', ' ', visible_text(html(body)))
+        assert status == 200, path
+        for phrase in phrases:
+            assert phrase in text, (path, phrase)
+
+
 def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site, fresh_app):
     # the two studies, published so their pages render (the fixture of the events does not write them)
     publish_study(fresh_app.fs)
@@ -5158,6 +5187,7 @@ def test_table_blocks_put_the_left_block_first_and_bias_colors_follow_the_blocks
 def test_mtype_label_names_the_type_of_the_pollster_in_spanish():
     assert pages.mtype_label('state') == 'Pública' and pages.mtype_label('aggr') == 'Agregador'  # el sustantivo, como la prosa del sitio
     assert pages.mtype_label('online') == 'Panel Online'  # con las iniciales en mayúscula (Luis, 2026-10-17)
+    assert pages.mtype_label('ivr') == 'Llamadas Automáticas'  # sin entrevistador; fuera del promedio (2026-11-12)
     for missing in (None, '', '-', float('nan')):
         assert pages.mtype_label(missing) == 'Privada'  # sin tipo en el catálogo: una encuestadora privada corriente
     assert pages.mtype_label('otro') == 'otro'  # un valor desconocido sale tal cual

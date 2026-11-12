@@ -190,7 +190,7 @@
           Para que el método de cada casa no cuente, usamos las mismas parejas en los dos tramos que se comparan, cada una con el mismo peso en los dos, y contamos por elección, sin mezclar sondeos de elecciones distintas: así{% if pooled.far_final %}, en los recuentos,{% endif %} una elección con muchos sondeos no pesa más que otra con pocos{% if pooled.far_final %}; en la prueba conjunta sí pesa más, y por eso damos las dos{% endif %}.
         </p>
         <p>
-          Hay límites. Las generales entran más a menudo, porque tienen más sondeos tempranos; muchas autonómicas sólo tienen una pareja de casas, a veces una sola pareja de sondeos, comparable. Quedan fuera el CIS, los agregadores y los paneles abiertos. Medimos cuánto se acercan, no por qué.
+          Hay límites. Las generales entran más a menudo, porque tienen más sondeos tempranos; muchas autonómicas sólo tienen una pareja de casas, a veces una sola pareja de sondeos, comparable. Quedan fuera el CIS, los agregadores, los paneles abiertos y los sondeos por llamadas automáticas. Medimos cuánto se acercan, no por qué.
         </p>
         {% if robustness_rows %}
         <details class="how"><summary>Con otros días entre sondeos y otro mínimo de comparaciones</summary><div class="how-body">
@@ -218,7 +218,7 @@
             <p class="ctitle">Datos</p>
             <ul class="src-list">
               <li>Los sondeos de cada elección con resultado, tal como se publicaron, con su muestra y sus fechas de campo: los mismos que enseña cada elección en el <a href="/elecciones">Histórico</a>.</li>
-              <li>Sólo sondeos con muestra publicada{% if params.get('exclude') %}; sin {{ params.exclude|join(', ') }}{% endif %}, sin agregadores ni paneles abiertos.</li>
+              <li>Sólo sondeos con muestra publicada{% if params.get('exclude') %}; sin {{ params.exclude|join(', ') }}{% endif %}, sin agregadores, paneles abiertos ni llamadas automáticas.</li>
             </ul>
           </div>
           <div>

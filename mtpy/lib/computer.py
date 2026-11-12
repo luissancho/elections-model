@@ -2307,8 +2307,8 @@ class Computer(Core):
         blend: the quality above the typical rating of the table is only credited with evidence, so a house without
         elections rates at most `c`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house
         in the polling average. The descriptive means (`error_*`, `bias_*`) stay weighted by poll. The pollsters of a
-        `drop_mtypes` type (aggregators and online panels, whose polls never enter the average) keep their means but
-        get no `rating_adj`, `rating` nor `weight_rating`, and stay out of `mean R`.
+        `drop_mtypes` type (aggregators, online panels and automated calls, whose polls never enter the average) keep
+        their means but get no `rating_adj`, `rating` nor `weight_rating`, and stay out of `mean R`.
 
         See `compute_ratings` for the scopes feeding the rating of each event.
 
@@ -2403,8 +2403,9 @@ class Computer(Core):
         ) / (
             dr['num_events_w'] + k
         )
-        # Aggregators and online panels (`drop_mtypes`) keep their means but get no rating: their polls never enter
-        # the average, so they stay out of the mean that normalises the weight of the others too
+        # The pollsters of a `drop_mtypes` type (aggregators, online panels, automated calls) keep their means but
+        # get no rating: their polls never enter the average, so they stay out of the mean that normalises the weight
+        # of the others too
         if 'mtype' in pollsters.columns:
             excluded = pollsters.loc[pollsters['mtype'].isin(self.drop_mtypes or []), 'name']
             dr.loc[dr.index.isin(excluded), ['rating_adj', 'rating']] = np.nan

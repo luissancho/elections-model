@@ -441,8 +441,8 @@ def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
-        One row per pollster of the event but those of a ``DROP_MTYPES`` type (aggregators and online panels,
-        which have no rating), with a fresh index; empty when there is none.
+        One row per pollster of the event but those of a ``DROP_MTYPES`` type (aggregators, online panels and
+        automated calls, which have no rating), with a fresh index; empty when there is none.
 
     Raises
     ------
@@ -495,8 +495,8 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     ``pct`` of each party as a column); ``get_poll_results`` returns one row per poll and
     party instead. The polls of the event are cached once; ``pollster`` and ``limit`` are
     applied on that frame. Polls tagged with a ``WEB_DROP_CTYPES`` context (published during
-    the ban, exit polls) and those of the ``DROP_MTYPES`` pollsters (aggregators and online
-    panels, out of the average) are dropped at the source.
+    the ban, exit polls) and those of the ``DROP_MTYPES`` pollsters (aggregators, online
+    panels and automated calls, out of the average) are dropped at the source.
 
     Parameters
     ----------

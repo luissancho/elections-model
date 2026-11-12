@@ -598,8 +598,9 @@ partido nuevo que no está ahí detiene el ámbito, con o sin `force`, y hay que
 regla.
 
 Con `force` las encuestadoras y los medios nuevos se dan de alta en la base y la carga sigue. La encuestadora nace sin
-`mtype`: hay que revisarla (un aviso por alta, `new pollster «X» without mtype: check it`) y, si es un agregador o un
-panel online, marcarlo a mano, porque `DROP_MTYPES` no la excluirá del promedio mientras no tenga el tipo. Con
+`mtype`: hay que revisarla (un aviso por alta, `new pollster «X» without mtype: check it`) y, si es un agregador
+(`aggr`), un panel online abierto (`online`) o hace sus sondeos por llamadas automáticas, sin entrevistador (`ivr`),
+marcarlo a mano, porque `DROP_MTYPES` no la excluirá del promedio mientras no tenga el tipo. Con
 `dry_run`, `force` no da de alta nada: la línea dice lo que se habría dado de alta. Antes del primer `force` real,
 comprobar que las secuencias de identidad de `elections.pollsters` y `elections.sponsors` van por delante de
 `max(id)`: si los catálogos se cargaron alguna vez con ids explícitos, la primera alta falla por clave duplicada (sin
