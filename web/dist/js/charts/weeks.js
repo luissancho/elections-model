@@ -1,8 +1,8 @@
 // Separation between houses by weeks before the election (the herd study): one coloured line per past general
 // election, faint so the dashed black mean over the thin line of chance (1) and the election in progress, thick in
 // blue, stand out; two light zones over the stretches the counts below compare (3 to 8 weeks before and the last
-// three). The value axis stops at 2: a point above it is drawn on the top edge as a hollow triangle with its value
-// (Generales 2015 reached 3 and would squash every other line into the bottom third).
+// three). The value axis runs from 0.5 to 3, and a point a little over its top (Generales 2015, 3.03) is drawn
+// just above it rather than raising the axis half a step.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtNum} from '../format.js';
 
@@ -21,33 +21,9 @@ const STRETCHES = [
 const LABEL_BACKGROUND = 'rgba(255,255,255,.85)';
 // How faint the lines of the past elections are (whole again when one is pointed at).
 const PAST_OPACITY = 0.45;
+// How far over the top of the value axis a point may be drawn before the axis rises to the next half.
+const OVERFLOW = 0.1;
 
-/**
- * The data of a line with its points kept inside the value axis: a value above `top` becomes a point on the top edge,
- * a hollow triangle of the colour of the line, whole even on a faint line, with the real value written below it and
- * kept as `real` for the tooltip.
- *
- * @param {Array<number|null>} values one value per bucket
- * @param {number} top the top of the value axis
- * @param {string} color the colour of the line
- * @returns {Array<number|null|object>} the data of the series
- */
-export function clipAbove(values, top, color) {
-  return values.map((value) => {
-    if (typeof value !== 'number' || value <= top) {
-      return value;
-    }
-    return {
-      value: top,
-      real: value,
-      symbol: 'triangle',
-      symbolSize: 9,
-      itemStyle: {color: '#fff', borderColor: color, borderWidth: 1.5, opacity: 1},
-      label: {show: true, position: 'bottom', distance: 3, fontSize: 10.5, fontWeight: 600, color,
-              formatter: () => fmtNum(value, 2)},
-    };
-  });
-}
 
 /**
  * Some field of some rows in the order of the buckets (`null` where a bucket has no row or no value).
@@ -124,29 +100,30 @@ function stretchColors(labels) {
 }
 
 /**
- * ECharts option of the chart: a category axis of the buckets of weeks, a value axis in steps of 0.25 from 0.5 (lower
- * if some value is) to `yMax`, with the points above it on the top edge (`clipAbove`), and the series of the past
- * elections (faint), of their mean (carrying the line of chance and the zones of the stretches) and of the election
- * in progress.
+ * ECharts option of the chart: a category axis of the buckets of weeks, a value axis in steps of 0.25 from `yMin`
+ * (lower, to the quarter below, if some value is) to `yMax` (higher, to the next half, if some value passes it by more than `OVERFLOW`; one
+ * that passes it by less is drawn over the edge), and the series of the past elections (faint), of their mean
+ * (carrying the line of chance and the zones of the stretches) and of the election in progress.
  *
  * @param {{buckets: object[], rows: object[], mean: object[]}} data the `weeks` part: `buckets` as `{lo, hi, label}`
  *   (farthest first), `rows` as `{event_date, label, current, lo, hi, pairs, comparisons, ratio}`, `mean` as
  *   `{lo, hi, k, ratio}`
  * @param {object} opts `current` (colour of the election in progress), `mean` (colour of the mean), `reference`
- *   (the ratio of chance), `yMin` (the most bottom of the value axis), `yMax` (its top: higher values are clipped)
- *   and `palette` (the colours of the past elections, cyclic)
+ *   (the ratio of chance), `yMin` (the most bottom of the value axis), `yMax` (the least top) and `palette` (the
+ *   colours of the past elections, cyclic)
  * @returns {object} the option
  */
 export function weeksOption({buckets = [], rows = [], mean = []} = {},
                             {current = THEME.accentColor, mean: meanColor = THEME.textColor, reference = 1, yMin = 0.5,
-                             yMax = 2, palette = PALETTE} = {}) {
+                             yMax = 3, palette = PALETTE} = {}) {
   const elections = electionsOf(rows);
   const past = elections.filter((election) => !election.current);
   const live = elections.find((election) => election.current);
   const labels = buckets.map((bucket) => bucket.label);
   const ratios = [...rows, ...mean].map((row) => row.ratio).filter((x) => typeof x === 'number');
-  const top = yMax;
-  const bottom = Math.max(0, Math.min(yMin, Math.floor(Math.min(yMin, ...ratios) * 4) / 4));
+  const highest = Math.max(0, ...ratios);
+  const top = highest > yMax + OVERFLOW ? Math.ceil(highest * 2) / 2 : yMax;
+  const bottom = Math.max(0, Math.floor(Math.min(yMin, ...ratios) * 4) / 4);
   // what the tooltip adds to each value, by series and bucket: the pairs of an election, the elections of the mean
   const notes = [];
   const series = past.map((election, i) => {
@@ -155,7 +132,9 @@ export function weeksOption({buckets = [], rows = [], mean = []} = {},
     return {
       name: election.label,
       type: 'line',
-      data: clipAbove(byBucket(buckets, election.rows), top, color),
+      data: byBucket(buckets, election.rows),
+      // a point a little over the top of the axis is drawn, not cut
+      clip: false,
       connectNulls: true,
       symbol: 'circle',
       symbolSize: 4,
@@ -173,7 +152,8 @@ export function weeksOption({buckets = [], rows = [], mean = []} = {},
   series.push({
     name: `Media de las ${past.length}`,
     type: 'line',
-    data: clipAbove(byBucket(buckets, mean), top, meanColor),
+    data: byBucket(buckets, mean),
+    clip: false,
     symbol: 'none',
     lineStyle: {width: 2.5, color: meanColor, type: 'dashed'},
     itemStyle: {color: meanColor},
@@ -205,12 +185,13 @@ export function weeksOption({buckets = [], rows = [], mean = []} = {},
     },
   });
   if (live) {
-    const data = clipAbove(byBucket(buckets, live.rows), top, current);
+    const data = byBucket(buckets, live.rows);
     notes.push(pairsNotes(buckets, live.rows));
     series.push({
       name: live.label,
       type: 'line',
       data,
+      clip: false,
       symbol: 'circle',
       symbolSize: 7,
       lineStyle: {width: 3.5, color: current},
@@ -230,10 +211,7 @@ export function weeksOption({buckets = [], rows = [], mean = []} = {},
         padding: [1, 3],
         borderRadius: 3,
         // the year only: the legend already says which election it is
-        formatter: (params) => {
-          const value = params.data && typeof params.data === 'object' ? params.data.real : params.value;
-          return `${String(live.rows[0].event_date).slice(0, 4)} · ${fmtNum(value, 2)}`;
-        },
+        formatter: (params) => `${String(live.rows[0].event_date).slice(0, 4)} · ${fmtNum(params.value, 2)}`,
       },
     });
   }
@@ -263,9 +241,7 @@ export function weeksOption({buckets = [], rows = [], mean = []} = {},
           .filter((item) => item.value !== null && item.value !== undefined)
           .map((item) => {
             const note = (notes[item.seriesIndex] || [])[item.dataIndex] || '';
-            // a clipped point says its real value
-            const value = item.data && typeof item.data === 'object' ? item.data.real : item.value;
-            return `${item.marker}${escapeHtml(item.seriesName)}: ${escapeHtml(fmtNum(value, 2))}${note}`;
+            return `${item.marker}${escapeHtml(item.seriesName)}: ${escapeHtml(fmtNum(item.value, 2))}${note}`;
           });
         return [`${escapeHtml(params[0].axisValue)} semanas`, ...lines].join('<br>');
       },
