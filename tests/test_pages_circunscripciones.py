@@ -251,3 +251,17 @@ def test_the_texts_of_a_row_and_the_link_of_a_district():
     drawn = pages.drawn_row(by_name(pages.district_views(ODDS)[0])['PP'], 'PP', '#1d84ce')
     assert [token['fill'] for token in drawn['tokens']][:3] == [None, None, pages.tint('#1d84ce', drawn['tokens'][2]['alpha'])]
     assert pages.district_href('es', 'la-coruna', '?mode=nowcast') == '/es/circunscripciones/la-coruna?mode=nowcast#ficha'
+
+
+def test_the_event_bar_of_a_subpage_links_the_event_page_and_drops_the_territory_without_districts(api, tmp_path):
+    """The helper shared by the page of a poll and this page: neither page's tests reach a run without districts."""
+    context = pages.common_context({'scope': 'es', 'mode': 'nowcast', 'run': RUN}, None, event=True)
+    bar = pages.subpage_event_bar(context)
+    query = '?mode=nowcast&run=' + RUN
+    assert [entry['href'] for entry in bar['sections']] == [
+        '/es' + query + '#' + key for key in ('promedio', 'escanos', 'evolucion', 'territorio', 'tabla')]
+    assert context['event_bar']['sections'][0]['href'] == '#promedio'  # a copy: the bar of the context is untouched
+    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'districts', 'nowcast')))
+    webapi.site().files.clear()
+    assert [entry['id'] for entry in pages.subpage_event_bar(context)['sections']] == [
+        'promedio', 'escanos', 'evolucion', 'tabla']

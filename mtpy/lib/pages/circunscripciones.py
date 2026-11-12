@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 
 from ...core.api import HttpError
 from ..webapi import site
-from .common import OTHERS_COLOR, bundle_part, common_context
+from .common import OTHERS_COLOR, bundle_part, common_context, subpage_event_bar
 from .escanos import _sort_name
 from .slugs import slugify
 
@@ -502,12 +502,8 @@ def seat_odds_context(state: dict, district: Optional[str] = None) -> dict:
 
     chosen = dict(chosen, rows=[drawn_row(row, row['name'], parties[row['name']]['color']) for row in chosen['rows']])
     totals = scope_totals(views)
-    # the index links the sections of the event page, keeping the mode and the pinned run, as on the page of a poll
-    event = context['event_bar']
-    regions = (bundle_part(site().run_file, scope, run, 'districts', mode) or {}).get('regions')
-    missing = set() if regions else {'territorio'}
-    context['event_bar'] = dict(event, sections=[dict(entry, href='/' + scope + query + '#' + entry['id'])
-                                                 for entry in event['sections'] if entry['id'] not in missing])
+    # the index links the sections of the event page, keeping the mode and the pinned run
+    context['event_bar'] = subpage_event_bar(context)
     # the view of a party opens on the first party of the part with some token
     drawn = {row['name'] for view in views for row in view['rows'] if row['tokens']}
     first = next((name for name in data.get('parties') or [] if name in drawn), None)

@@ -26,7 +26,8 @@ from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OTHE
                      ROUTES, SITE_TAGLINE, SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog,
                      chamber_text, common_context, days_left, days_text, default_mode, environment, event_info,
                      event_query, event_title, hemicycle_order, ink_color, parse_state, part, parties_catalogue,
-                     published_scopes, resolve_event_scope, resolve_scope, run_horizon, scope_query, tabbar, title_of)
+                     published_scopes, resolve_event_scope, resolve_scope, run_horizon, scope_query,
+                     subpage_event_bar, tabbar, title_of)
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
                          history_scopes,

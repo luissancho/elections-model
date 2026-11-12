@@ -8,7 +8,7 @@ from typing import Optional
 from ...core.api import HttpError
 from ..webapi import site
 from .casas import mtype_label
-from .common import block_color, bundle_part, common_context, ink_color, part
+from .common import block_color, bundle_part, common_context, ink_color, part, subpage_event_bar
 from .elecciones import chart_parties
 from .filters import DASH, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num, gradient
 from .promedios import RATING_COLORS, chart_polls, fieldwork_label, poll_href, round_series
@@ -653,12 +653,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     weight = weight_card(poll, weights)
     house_slug = slugify(poll.get('pollster')) or str(poll.get('pollster_id'))
     sponsor_slug = slugify(poll.get('sponsor') or '')
-    # the index links the sections of the event page, keeping the mode and the pinned run; the territory only when
-    # the run has districts, as the event page does
-    districts = bundle_part(site().run_file, scope, run, 'districts', mode) or {}
-    missing = set() if districts.get('regions') else {'territorio'}
-    context['event_bar'] = dict(event, sections=[dict(entry, href='/' + scope + query + '#' + entry['id'])
-                                                 for entry in event['sections'] if entry['id'] not in missing])
+    # the index links the sections of the event page, keeping the mode and the pinned run
+    context['event_bar'] = subpage_event_bar(context)
     # the polls of the chart of the house: the same id, or the same name when the poll has no id
     key = 'pollster_id' if poll.get('pollster_id') is not None else 'pollster'
     house_polls = dict(polls, polls=[other for other in polls.get('polls') or [] if other.get(key) == poll.get(key)])
