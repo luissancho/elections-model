@@ -34,6 +34,8 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
                          last_results, horizon_tables, majority_of, mark_shown, model_last, MODEL_ROW, party_blocks,
                          poll_error_parts, published_events, resolve_event, run_less_colours, shown_parties, split_sides,
                          table_blocks, with_abs, with_model_row, year_range)
+from .circunscripciones import (CLOSEST_SHOWN, OPEN_FLOOR, SAFE_SHARE, closest_seats, district_order, district_sentence,
+                                district_views, party_view, scope_totals, seat_tokens, token_label)
 from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, has_communities, region_rows, resolve_region,
                       seats_context)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,
