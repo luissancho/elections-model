@@ -295,7 +295,7 @@ En cuántas simulaciones consigue cada partido su escaño número `k` de cada ci
 `data`: `n_sim` (número de simulaciones), `parties`, `regions` (`{id, name, seats}`, solo las circunscripciones,
 como `districts`) y `rows` (`{region_id, name, seats, reach}`). `seats` es el titular entero del reparto central en
 esa circunscripción. `reach` es una lista de enteros: `reach[k-1]` es el número de simulaciones en que el partido
-logra al menos `k` escaños, para `k = 1..máximo` (decreciente; vacía si ninguna simulación le da un escaño). Son
+logra al menos `k` escaños, para `k = 1..máximo` (no creciente; vacía si ninguna simulación le da un escaño). Son
 recuentos y no probabilidades para poder decir «en N de `n_sim` simulaciones» sin redondeos; la probabilidad es
 `reach[k-1] / n_sim`. Solo hay filas de partidos con `reach` no vacío o `seats > 0`: un escaño central que ninguna
 simulación da aparece con `reach` vacío. No se exige que los recuentos sumen `n_sim` por escaño, porque hay
@@ -785,14 +785,19 @@ es una subpágina del evento, con su barra, su modo y su run: `/{scope}/circunsc
 circunscripción con más escaños en el aire) y `/{scope}/circunscripciones/{district}` (la ficha de una; `district` es
 `slugify` de su nombre, `la-coruna`). Las dos aceptan `mode` y `run` como la página del evento; la primera acepta además
 `partido` (`slugify` de las siglas: la vista por partido), `vista` (sólo `renidos`: «Los más reñidos») y
-`circunscripcion` (lo que envía el desplegable sin JavaScript: un 301 a `/{scope}/circunscripciones/{slug}` con el
-resto de la query). La ruta de la circunscripción gana a `partido` y `vista`, y `partido` gana a `vista`; la canónica
-conserva `partido` y `vista` y quita `mode` y `run`. Leen la parte `seat-odds` del modo con `bundle_part` y no tocan la
-base. Errores en HTML: 404 `seat odds not published` ("Este run no tiene el desglose escaño a escaño.") si el run
-mostrado no tiene la parte en ese modo o tiene menos de dos circunscripciones; 404 `region not found` ("Circunscripción
-no encontrada.") para una circunscripción desconocida; 404 `party not found` ("Partido no encontrado.") para unas
-siglas que no son de un partido con alguna ficha en la parte; 400 `invalid view` ("Vista no válida.") para una `vista`
-distinta de `renidos`; y los de la página del evento (ámbito, `mode`, `run`). Las **globales** son `/` (Inicio, `Index`: el índice de eventos), `/elecciones`
+`circunscripcion` (lo que envía el desplegable: un 301 a `/{scope}/circunscripciones/{slug}` con el resto de la query
+y el fragmento `#ficha`, para que en el móvil cada cambio caiga en la ficha y no arriba de la página). La ruta de la
+circunscripción gana a `partido` y `vista`, y `partido` gana a `vista`; la canónica quita `mode` y `run` y lo que la
+página no usa: `circunscripcion` siempre, `partido` y `vista` en la ruta de una circunscripción y `vista` cuando gana
+`partido` (conserva `partido` en la vista por partido y `vista` en «Los más reñidos»). Leen la parte `seat-odds` del
+modo con `bundle_part` y no tocan la base; la presencia de la parte se recuerda durante el TTL de los punteros. Errores
+en HTML: 404 `seat odds not published` ("Este run no tiene el desglose escaño a escaño.") si el run mostrado no tiene
+la parte en ese modo, la tiene sin simulaciones (`n_sim` 0) o con menos de dos circunscripciones; 404 `region not
+found` ("Circunscripción no encontrada.") para una circunscripción desconocida; 404 `party not found` ("Partido no
+encontrado.") para unas siglas que no son de un partido con alguna ficha en la parte; 400 `invalid view` ("Vista no
+válida.") para una `vista` distinta de `renidos`; y los de la página del evento (ámbito, `mode`, `run`).
+
+Las **globales** son `/` (Inicio, `Index`: el índice de eventos), `/elecciones`
 (Histórico Errores, `Elecciones`), `/casas` (Ranking Encuestadoras, `Casas`) y `/metodo` (`Metodo`) con sus
 cuatro subpáginas `/metodo/promedio`, `/metodo/escanos`, `/metodo/rating` y `/metodo/backtest`; una subpágina
 desconocida da 404 ("Página del método no encontrada."). `/elecciones`, `/casas` y `/metodo/backtest` aceptan `scope`
