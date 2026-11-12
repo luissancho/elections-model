@@ -189,6 +189,11 @@
             </div>
           </div>
           {% endif %}
+          {#- the seats one by one, at the foot of the tables as at the foot of the territory card (Luis, 2026-11-12); only
+              when the run shown has the part with two districts or more (`odds`) -#}
+          {% if odds %}
+          {{ m.seat_odds_link(odds.page) }}
+          {% endif %}
           {#- the distributions open on demand (Luis, 2026-10-30): the button only works with JavaScript, which reveals it -#}
           <button type="button" class="more" id="ridge-toggle" aria-expanded="false" aria-controls="ridge-chart" hidden>Ver las distribuciones</button>
           <div class="chart" id="ridge-chart" role="img" aria-label="Distribución de escaños en las simulaciones, una fila por partido o bloque" hidden></div>
@@ -467,7 +472,7 @@
         {% endif %}
         {% endif %}
         {% if odds %}
-        <p class="more"><a class="more-link" href="{{ odds.page }}">Escaños que bailan: los seguros y los que están en el aire ›</a></p>
+        {{ m.seat_odds_link(odds.page) }}
         {% endif %}
         {% call m.how() %}
         <p>

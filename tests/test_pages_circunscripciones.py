@@ -375,6 +375,20 @@ def test_the_event_page_links_the_page_and_the_card_of_the_district_shown(odds_s
     assert status == 200 and '/es/circunscripciones' not in bare and 'region-odds' not in bare and 'seat-odds' not in bare
 
 
+def test_the_results_card_links_the_page_at_the_foot_of_its_tables(odds_site, api, fresh_app, tmp_path):
+    # the same link as the territory card, under the tables of «Resultados» and above its distributions (Luis, 2026-11-12)
+    write_event_districts(fresh_app.fs)
+    link = ('<p class="more"><a class="more-link" href="/es/circunscripciones?mode=nowcast">'
+            'Escaños que bailan: los seguros y los que están en el aire ›</a></p>')
+    page = page_of(odds_site, '/es', 'mode=nowcast')[1]
+    results = page[page.index('id="seats"'):page.index('id="coalition"')]
+    assert results.count(link) == 1 and page.count(link) == 2  # here and at the foot of the territory card
+    assert results.rindex('</table>') < results.index(link) < results.index('id="ridge-toggle"')
+    remove_odds(tmp_path)
+    bare = page_of(api, '/es')[1]
+    assert 'circunscripciones' not in bare[bare.index('id="seats"'):bare.index('id="coalition"')]
+
+
 def test_the_links_of_the_event_page_keep_a_pinned_run(odds_site, fresh_app):
     write_event_districts(fresh_app.fs)
     status, _, body = call(odds_site, '/es', query='mode=nowcast&run=' + RUN)

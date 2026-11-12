@@ -367,6 +367,9 @@ Rama `feat/escanos-que-bailan` (`git log --oneline dev..HEAD`):
   sin calcular fichas.
 - La etiqueta redondea hacia arriba las mitades exactas que la coma flotante deja un pelo por debajo (145 de 1.000
   simulaciones: «15%», no «14%»).
+- Tras la fusión, a petición de Luis (2026-11-12): el enlace a la página va también al pie de las tablas de la
+  tarjeta «Resultados» de la página del evento (sobre «Ver las distribuciones»), además de al pie de «Resultados por
+  territorio». Es el mismo enlace en los dos sitios (macro `m.seat_odds_link`) y con la misma condición.
 
 ### Comprobación en el navegador
 
