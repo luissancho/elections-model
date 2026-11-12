@@ -24,8 +24,8 @@
 {% macro legend() -%}
 <div class="so-legend">
   <span><i class="so-key safe"></i>seguro: lo consigue en el {{ thresholds.safe }} o más de las simulaciones</span>
-  <span><i class="so-key open"></i>en el aire, y el reparto central se lo da</span>
-  <span><i class="so-key open out"></i>en el aire, y el reparto central no se lo da</span>
+  <span><i class="so-key open"></i>posible, y el reparto central se lo da</span>
+  <span><i class="so-key open out"></i>posible, y el reparto central no se lo da</span>
   <span>por debajo del {{ thresholds.floor }} no se dibuja</span>
 </div>
 {%- endmacro %}
@@ -37,11 +37,12 @@
 <p>
   Cada ficha es un escaño que el partido puede conseguir en esa circunscripción. Es seguro si lo consigue en
   el {{ thresholds.safe }} o más de las simulaciones; si lo consigue en menos del {{ thresholds.floor }}, no se
-  dibuja; entre medias está en el aire y lleva su porcentaje.
+  dibuja; entre medias es posible y lleva su porcentaje. Los escaños en el aire de una circunscripción son los
+  que no son seguros de nadie: se los reparten los posibles.
 </p>
 <p>
   La columna «Central» es el reparto central de la página de encuestas: no siempre coincide con lo más
-  probable, y por eso hay fichas en el aire que el reparto central da y otras que no. «Seguro» no es una
+  probable, y por eso hay escaños posibles que el reparto central da y otros que no. «Seguro» no es una
   garantía: es lo que dicen las simulaciones.
 </p>
 {% endcall %}

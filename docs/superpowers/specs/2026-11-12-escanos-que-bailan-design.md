@@ -38,10 +38,14 @@ visto; están listadas en «Decisiones mías» para que las revise.
 - **Escaño k-ésimo de un partido en una circunscripción**: lo consigue una simulación si el partido saca ahí
   `k` escaños o más. Su **probabilidad** es la parte de las simulaciones en que lo consigue.
 - **Seguro**: probabilidad ≥ 99% (`SAFE_SHARE = 0.99`).
-- **En el aire**: probabilidad ≥ 1% y < 99% (`OPEN_FLOOR = 0.01`). Cada uno es un **aspirante**.
+- **Posible**: probabilidad ≥ 1% y < 99% (`OPEN_FLOOR = 0.01`); lleva su porcentaje.
 - **Descartado**: probabilidad < 1%. No se dibuja ni se cuenta.
-- **Escaños en el aire de una circunscripción**: sus escaños menos los seguros (nunca menos de 0). Con 8 escaños y
-  5 seguros hay 3 en el aire, aunque se los disputen 6 aspirantes.
+- **Escaños en el aire de una circunscripción**: sus escaños menos los seguros (nunca menos de 0), es decir, los que
+  no son seguros de nadie. Con 8 escaños y 5 seguros hay 3 en el aire: se los disputan los partidos con algún
+  escaño posible.
+- Tres palabras, cada una con un solo significado (Luis, 2026-11-12, tras la fusión). Hasta entonces el escaño
+  posible se llamaba también «en el aire» y cada uno era un «aspirante»: el resto de este documento, anterior al
+  cambio, usa todavía esas dos palabras (ver «Estado al cierre»).
 - **Reparto central**: el titular de escaños de la web (M13), D'Hondt sobre el voto central. No siempre es lo más
   probable circunscripción a circunscripción: el 12-11, 13 escaños del reparto central salían en menos de la
   mitad de las simulaciones (el primero de Vox en La Coruña, en el 37%). La página lo enseña, no lo esconde.
@@ -370,6 +374,23 @@ Rama `feat/escanos-que-bailan` (`git log --oneline dev..HEAD`):
 - Tras la fusión, a petición de Luis (2026-11-12): el enlace a la página va también al pie de las tablas de la
   tarjeta «Resultados» de la página del evento (sobre «Ver las distribuciones»), además de al pie de «Resultados por
   territorio». Es el mismo enlace en los dos sitios (macro `m.seat_odds_link`) y con la misma condición.
+- Tras la fusión, a petición de Luis (2026-11-12, «no entiendo lo de aspirantes»): tres palabras con un solo
+  significado cada una. **Seguro** (99% o más), **posible** (entre el 1% y el 99%, con su porcentaje) y **en el
+  aire** (los escaños de una circunscripción o del ámbito que no son seguros de nadie). «En el aire» nombraba antes
+  dos cosas (144 escaños en la cabecera, 328 fichas en «Los más reñidos») y «aspirantes» contaba fichas, no
+  partidos. Lo que cambia en la página:
+  - la cabecera lleva tres cifras (seguros, en el aire, circunscripciones con algo en juego), sin «Aspirantes»;
+  - la frase de la ficha nombra a los partidos: «Los otros 3 se los disputan PP, PSOE, VOX y AA.»; con un solo
+    partido, «sólo están al alcance de PP»; sin ninguno, la frase acaba en los seguros;
+  - la nota de cada fila dice «2 seguros · opta a 2 más» («opta a 1» sin seguros);
+  - el partido: pastilla «opta a 85 más», frase «Tiene 66 escaños seguros y opta a otros 85 en 51
+    circunscripciones.» («No tiene ningún escaño seguro y opta a…», «…y no opta a ninguno más.») y la línea «Sólo
+    seguros (N): …»;
+  - «Los más reñidos»: «Los 40 escaños más cercanos al cara o cruz.», sin el recuento de fichas;
+  - la leyenda dice «posible, y el reparto central se lo da / no se lo da», y el «Cómo leerlo» y el apartado del
+    método («Escaños seguros, posibles y en el aire») definen las tres palabras.
+  En el código, `district_views` y `scope_totals` ya no llevan `contenders`; en las filas, `open` sigue siendo el
+  número de escaños posibles del partido y, en la circunscripción, los escaños en el aire.
 
 ### Comprobación en el navegador
 

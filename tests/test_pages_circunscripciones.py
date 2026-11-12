@@ -59,12 +59,12 @@ def test_token_label_is_a_whole_percentage_between_1_and_98(share, label):
 def test_district_views_count_the_safe_and_the_open_seats():
     cadiz, guadalajara, coruna = pages.district_views(ODDS)
     assert (cadiz['name'], cadiz['slug'], cadiz['seats']) == ('Cádiz', 'cadiz', 8) and coruna['slug'] == 'la-coruna'
-    assert (cadiz['safe'], cadiz['open'], cadiz['contenders']) == (5, 3, 6)
+    assert (cadiz['safe'], cadiz['open']) == (5, 3) and 'contenders' not in cadiz  # seats, never tokens
     assert [row['name'] for row in cadiz['rows']] == ['PP', 'PSOE', 'VOX', 'AA']  # central seats, then expected seats
     assert [(row['safe'], row['open']) for row in cadiz['rows']] == [(2, 2), (2, 1), (1, 2), (0, 1)]
     assert by_name(cadiz)['PSOE']['expected'] == pytest.approx(2.414)
-    assert (guadalajara['safe'], guadalajara['open'], guadalajara['contenders']) == (3, 0, 0)
-    assert (coruna['safe'], coruna['open'], coruna['contenders']) == (6, 2, 5)
+    assert (guadalajara['safe'], guadalajara['open']) == (3, 0)
+    assert (coruna['safe'], coruna['open']) == (6, 2)
     vox = by_name(coruna)['VOX']['tokens']
     assert [(t['safe'], t['central'], t['label']) for t in vox] == [(False, True, '37%')]
 
@@ -74,7 +74,7 @@ def test_district_views_keep_a_party_with_a_central_seat_and_no_tokens_and_never
             'rows': [odds_row(1, 'A', 1, 100, 100, 100), odds_row(1, 'B', 1), odds_row(1, 'C', 0, 40)]}
     uno = pages.district_views(data)[0]
     assert [(row['name'], len(row['tokens'])) for row in uno['rows']] == [('A', 3), ('B', 0), ('C', 1)]
-    assert (uno['safe'], uno['open'], uno['contenders']) == (3, 0, 1)  # three safe seats for two: never minus one
+    assert (uno['safe'], uno['open']) == (3, 0)  # three safe seats for two: never minus one
 
 
 def test_district_order_totals_and_sentences():
@@ -83,10 +83,10 @@ def test_district_order_totals_and_sentences():
     tie = [{'name': 'Ávila', 'open': 1, 'seats': 3}, {'name': 'Zamora', 'open': 1, 'seats': 3},
            {'name': 'Soria', 'open': 1, 'seats': 2}, {'name': 'Madrid', 'open': 1, 'seats': 38}]
     assert [d['name'] for d in pages.district_order(tie)] == ['Madrid', 'Ávila', 'Zamora', 'Soria']
-    assert pages.scope_totals(districts) == {'seats': 19, 'safe': 14, 'open': 5, 'contenders': 11, 'live': 2, 'districts': 3}
+    assert pages.scope_totals(districts) == {'seats': 19, 'safe': 14, 'open': 5, 'live': 2, 'districts': 3}
     cadiz, guadalajara, _ = districts
     assert pages.district_sentence(cadiz) == ('De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1). '
-                                              'Los otros 3 se los disputan 6 aspirantes.')
+                                              'Los otros 3 se los disputan PP, PSOE, VOX y AA.')
     assert pages.district_sentence(guadalajara) == 'Los 3 escaños son seguros (PP 1, PSOE 1, VOX 1).'
 
 
@@ -111,29 +111,33 @@ def test_closest_seats_are_the_open_ones_nearest_to_a_coin_toss():
     assert len(pages.closest_seats(pages.district_views(ODDS), limit=4)) == 4
 
 
-def sentence_of(seats, safe_by_party, contenders):
+def sentence_of(seats, safe_by_party, possible):
+    """The sentence of a district with these safe seats by party and these parties with some possible seat."""
     safe = sum(safe_by_party.values())
-    return pages.district_sentence({'seats': seats, 'safe': safe, 'open': max(seats - safe, 0), 'contenders': contenders,
-                                    'rows': [{'name': name, 'safe': n} for name, n in safe_by_party.items()]})
+    names = list(safe_by_party) + [name for name in possible if name not in safe_by_party]
+    rows = [{'name': name, 'safe': safe_by_party.get(name, 0), 'open': int(name in possible)} for name in names]
+    return pages.district_sentence({'seats': seats, 'safe': safe, 'open': max(seats - safe, 0), 'rows': rows})
 
 
-@pytest.mark.parametrize('seats, safe, contenders, text', [
-    (1, {'PP': 1}, 0, 'El escaño es seguro (PP 1).'),
-    (3, {'PP': 2, 'PSOE': 1}, 0, 'Los 3 escaños son seguros (PP 2, PSOE 1).'),
-    (4, {'PP': 1, 'VOX': 0}, 5, 'De los 4 escaños, 1 es seguro (PP 1). Los otros 3 se los disputan 5 aspirantes.'),
-    (3, {'PP': 1, 'PSOE': 1}, 2, 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro se lo disputan 2 aspirantes.'),
-    (3, {'PP': 1, 'PSOE': 1}, 1, 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro se lo disputa 1 aspirante.'),
-    (4, {'PP': 1, 'PSOE': 1}, 1, 'De los 4 escaños, 2 son seguros (PP 1, PSOE 1). Los otros 2 se los disputa 1 aspirante.'),
-    (3, {'PP': 1, 'PSOE': 1}, 0, 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1).'),
-    (4, {'PP': 0}, 6, 'Ninguno de los 4 escaños es seguro: se los disputan 6 aspirantes.'),
-    (4, {'PP': 0}, 1, 'Ninguno de los 4 escaños es seguro: se los disputa 1 aspirante.'),
-    (4, {'PP': 0}, 0, 'Ninguno de los 4 escaños es seguro.'),
-    (1, {'PP': 0}, 2, 'El escaño no es seguro: se lo disputan 2 aspirantes.'),
-    (1, {'PP': 0}, 1, 'El escaño no es seguro: se lo disputa 1 aspirante.'),
-    (1, {'PP': 0}, 0, 'El escaño no es seguro.'),
+@pytest.mark.parametrize('seats, safe, possible, text', [
+    (1, {'PP': 1}, [], 'El escaño es seguro (PP 1).'),
+    (3, {'PP': 2, 'PSOE': 1}, [], 'Los 3 escaños son seguros (PP 2, PSOE 1).'),
+    (4, {'PP': 1, 'VOX': 0}, ['PP', 'VOX', 'PSOE'],
+     'De los 4 escaños, 1 es seguro (PP 1). Los otros 3 se los disputan PP, VOX y PSOE.'),
+    (3, {'PP': 1, 'PSOE': 1}, ['PP', 'PSOE'], 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro se lo disputan PP y PSOE.'),
+    (3, {'PP': 1, 'PSOE': 1}, ['PSOE'], 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro sólo está al alcance de PSOE.'),
+    (4, {'PP': 1, 'PSOE': 1}, ['PP'], 'De los 4 escaños, 2 son seguros (PP 1, PSOE 1). Los otros 2 sólo están al alcance de PP.'),
+    (3, {'PP': 1, 'PSOE': 1}, [], 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1).'),
+    (4, {'PP': 0}, ['PP', 'PSOE', 'IU'], 'Ninguno de los 4 escaños es seguro: se los disputan PP, PSOE e IU.'),
+    (4, {'PP': 0}, ['PP'], 'Ninguno de los 4 escaños es seguro: sólo están al alcance de PP.'),
+    (4, {'PP': 0}, [], 'Ninguno de los 4 escaños es seguro.'),
+    (1, {'PP': 0}, ['PP', 'PSOE'], 'El escaño no es seguro: se lo disputan PP y PSOE.'),
+    (1, {'PP': 0}, ['PP'], 'El escaño no es seguro: sólo está al alcance de PP.'),
+    (1, {'PP': 0}, [], 'El escaño no es seguro.'),
 ])
-def test_district_sentence_agrees_with_the_number_of_seats_and_contenders(seats, safe, contenders, text):
-    assert sentence_of(seats, safe, contenders) == text
+def test_district_sentence_names_the_parties_that_dispute_the_seats_in_the_air(seats, safe, possible, text):
+    # three words, one meaning each (Luis, 2026-11-12): safe, possible, and in the air for the seats nobody has safe
+    assert sentence_of(seats, safe, possible) == text
 
 
 def write_odds(fs, data=ODDS, modes=bundle.MODES):
@@ -160,12 +164,12 @@ def test_the_page_opens_on_the_district_with_most_open_seats(odds_site):
     status, page = page_of(odds_site, '/es/circunscripciones')
     assert status == 200 and '<h1 class="headline">Escaños que bailan</h1>' in page
     kpis = page[page.index('class="kpis"'):page.index('class="seg lg so-tabs"')]
-    assert [int(n) for n in re.findall(r'class="v"[^>]*>(\d+)', kpis)] == [14, 5, 11, 2]
+    assert [int(n) for n in re.findall(r'class="v"[^>]*>(\d+)', kpis)] == [14, 5, 2]
     assert 'de 19' in kpis and 'de 3' in kpis
     items = re.findall(r'class="so-item[^"]*" href="([^"#?]+)', page)
     assert items == ['/es/circunscripciones/cadiz', '/es/circunscripciones/la-coruna', '/es/circunscripciones/guadalajara']
     card = page[page.index('id="ficha"'):]
-    assert 'De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1). Los otros 3 se los disputan 6 aspirantes.' in card
+    assert 'De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1). Los otros 3 se los disputan PP, PSOE, VOX y AA.' in card
     assert re.findall(r'class="so-token[^"]*"[^>]*title="([^"]+)"', card)[:3] == [
         '1.º de PP: seguro', '2.º de PP: seguro', '3.º de PP: lo consigue en el 80% de las simulaciones']
     assert '<link rel="canonical" href="' in page and page.count('<details class="how"') >= 1
@@ -237,7 +241,7 @@ def test_the_list_sorts_itself_without_javascript_and_the_rows_read_aloud(odds_s
     # the seats of each item, read aloud with their unit
     assert '<small title="8 escaños">8<span class="sr-only"> escaños</span></small>' in page
     assert 'aria-label="PP: 2 seguros; 3.º, 80%; 4.º, 7%"' in page and 'aria-label="AA: 1.º, 76%"' in page
-    assert '<div class="so-note">2 seguros · 2 en el aire</div>' in page and '<div class="so-note">1 en el aire</div>' in page
+    assert '<div class="so-note">2 seguros · opta a 2 más</div>' in page and '<div class="so-note">opta a 1</div>' in page
     legend = page[page.index('class="so-legend"'):]
     assert 'lo consigue en el 99% o más de las simulaciones' in legend and 'por debajo del 1% no se dibuja' in legend
     assert 'data-file="demoscopio-escanos-es-cadiz.png"' in page and '/dist/js/pages/circunscripciones.js' in page
@@ -256,7 +260,8 @@ def test_the_list_sorts_itself_without_javascript_and_the_rows_read_aloud(odds_s
 
 
 def test_the_texts_of_a_row_and_the_link_of_a_district():
-    assert pages.tokens_note({'safe': 2, 'open': 2}) == '2 seguros · 2 en el aire'
+    assert pages.tokens_note({'safe': 2, 'open': 2}) == '2 seguros · opta a 2 más'
+    assert pages.tokens_note({'safe': 1, 'open': 1}) == '1 seguro · opta a 1 más' and pages.tokens_note({'safe': 0, 'open': 2}) == 'opta a 2'
     assert pages.tokens_note({'safe': 1, 'open': 0}) == '1 seguro' and pages.tokens_note({'safe': 0, 'open': 0}) == '—'
     row = by_name(pages.district_views(ODDS)[1])['PP']  # Guadalajara: one safe seat, the second below 1%
     assert pages.tokens_reading('PP', row) == 'PP: 1 seguro'
@@ -290,8 +295,9 @@ def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(o
         'pp', 'psoe', 'vox', 'aa', 'bng']
     card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
     assert re.findall(r'href="/es/circunscripciones/([a-z-]+)\?mode=forecast#ficha"', card) == ['cadiz', 'la-coruna']
-    assert 'Tiene 4 escaños seguros y aspira a otros 3 en 2 circunscripciones.' in card
-    assert 'Sin nada en el aire (1):' in card and 'Guadalajara 1' in card
+    assert 'Tiene 4 escaños seguros y opta a otros 3 en 2 circunscripciones.' in card
+    assert '<span class="chip so-air">opta a <b>3</b> más</span>' in card
+    assert 'Sólo seguros (1):' in card and 'Guadalajara 1' in card
     assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones?partido=psoe">' in page
     assert 'data-file="demoscopio-escanos-es-psoe.png"' in page and page.count('<details class="how"') == 1
     assert ('<meta name="description" content="Los escaños de PSOE, circunscripción a circunscripción: cuáles tiene '
@@ -319,7 +325,7 @@ def test_the_closest_view_ranks_the_open_seats_by_their_distance_to_a_coin_toss(
     central = r'<td class="so-central" role="cell"><span class="so-narrow">Central: </span>(?:no )?se lo da</td>'
     assert all(re.search(central, row) for row in rows) and not any('so-wide' in row for row in rows)
     assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones?vista=renidos">' in page
-    assert 'Los 11 escaños más cercanos al cara o cruz, de los 11 que están en el aire. La raya marca el 50%.' in page
+    assert 'Los 11 escaños más cercanos al cara o cruz. La raya marca el 50%.' in page
     assert '<title>Demoscopio · Los escaños más reñidos · Elecciones generales 2026' in page
     assert 'class="seg lg so-tabs"' in page and re.findall(r'<a href="[^"]*"( class="on")', page) == [' class="on"']
     assert_public_wording(page, 'circunscripciones, los más reñidos')
@@ -328,12 +334,15 @@ def test_the_closest_view_ranks_the_open_seats_by_their_distance_to_a_coin_toss(
 
 def test_the_sentences_of_the_party_and_of_the_closest_seats_agree_with_their_numbers():
     assert pages.party_sentence({'safe': 4, 'open': 3, 'rows': [1, 2]}) == (
-        'Tiene 4 escaños seguros y aspira a otros 3 en 2 circunscripciones. Primero, las más dudosas.')
-    assert pages.party_sentence({'safe': 1, 'open': 1, 'rows': [1]}) == 'Tiene 1 escaño seguro y aspira a otro en 1 circunscripción.'
-    assert pages.party_sentence({'safe': 2, 'open': 0, 'rows': []}) == 'Tiene 2 escaños seguros y ninguno en el aire.'
-    assert pages.closest_sentence(0, 0) == 'Ningún escaño está en el aire.'
-    assert pages.closest_sentence(1, 1) == 'El único escaño que está en el aire. La raya marca el 50%.'
-    assert pages.closest_sentence(40, 55).startswith('Los 40 escaños más cercanos al cara o cruz, de los 55 que')
+        'Tiene 4 escaños seguros y opta a otros 3 en 2 circunscripciones. Primero, las más dudosas.')
+    assert pages.party_sentence({'safe': 1, 'open': 1, 'rows': [1]}) == 'Tiene 1 escaño seguro y opta a otro en 1 circunscripción.'
+    assert pages.party_sentence({'safe': 2, 'open': 0, 'rows': []}) == 'Tiene 2 escaños seguros y no opta a ninguno más.'
+    assert pages.party_sentence({'safe': 0, 'open': 2, 'rows': [1, 2]}) == (
+        'No tiene ningún escaño seguro y opta a 2 en 2 circunscripciones. Primero, las más dudosas.')
+    assert pages.party_sentence({'safe': 0, 'open': 1, 'rows': [1]}) == 'No tiene ningún escaño seguro y opta a 1 en 1 circunscripción.'
+    assert pages.closest_sentence(0) == 'Ningún escaño está en el aire.'
+    assert pages.closest_sentence(1) == 'El único escaño posible. La raya marca el 50%.'
+    assert pages.closest_sentence(40) == 'Los 40 escaños más cercanos al cara o cruz. La raya marca el 50%.'
 
 
 DISTRICTS = {  # the districts of `ODDS` in the `districts` part, so that the detail of the event page shows one of them
@@ -478,8 +487,16 @@ def test_the_party_wins_over_the_view_and_the_errors_and_units_read_well(odds_si
     assert '<title>Demoscopio · Escaños que bailan: PSOE' in page and 'id="closest"' not in page
     status, page = page_of(odds_site, '/es/circunscripciones/no-existe')
     assert status == 404 and 'Circunscripción no encontrada.' in page
-    kpis = page_of(odds_site, '/es/circunscripciones')[1]
-    assert '<div class="l">Aspirantes</div><div class="v">11<small>a esos 5</small></div>' in kpis
+    page = page_of(odds_site, '/es/circunscripciones')[1]
+    kpis = page[page.index('id="seat-kpis"'):page.index('id="vistas"')]
+    assert re.findall(r'<div class="l">([^<]+)</div>', kpis) == [
+        'Escaños seguros', 'Escaños en el aire', 'Circunscripciones con algo en juego']
+    # one meaning per word: a possible seat is never called «en el aire» nor an «aspirante»
+    legend = page[page.index('class="so-legend"'):page.index('<details class="how"')]
+    assert 'posible, y el reparto central se lo da' in legend and 'posible, y el reparto central no se lo da' in legend
+    assert 'en el aire' not in legend
+    for query in ('', 'partido=pp', 'vista=renidos'):
+        assert 'spirante' not in page_of(odds_site, '/es/circunscripciones', query)[1], query
 
 
 def test_a_party_with_only_safe_seats_has_no_grid_and_says_so(odds_site, fresh_app):
@@ -488,5 +505,5 @@ def test_a_party_with_only_safe_seats_has_no_grid_and_says_so(odds_site, fresh_a
     write_odds(fresh_app.fs, settled)
     status, page = page_of(odds_site, '/es/circunscripciones', 'partido=aa')
     card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
-    assert status == 200 and 'Tiene 1 escaño seguro y ninguno en el aire.' in card
-    assert 'so-grid' not in card and '<b>Sin nada en el aire (1):</b> Cádiz 1.' in card
+    assert status == 200 and 'Tiene 1 escaño seguro y no opta a ninguno más.' in card
+    assert 'so-grid' not in card and '<b>Sólo seguros (1):</b> Cádiz 1.' in card and 'chip so-air' not in card

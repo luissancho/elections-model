@@ -1172,15 +1172,10 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 #ficha, #vistas { scroll-margin-top: 68px; }
 body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top: 114px; }
 /* Tablet and narrow desktop (720 to 1099 px): beside the list the card keeps its width for the tokens, without the
-   summary of each row (the tokens and their labels say it); the four figures of the head stay in one row */
+   summary of each row (the tokens and their labels say it) */
 @media (max-width: 1099px) {
   .so-md .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
   .so-md .so-note { display: none; }
-}
-@media (min-width: 720px) and (max-width: 1099px) {
-  #seat-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  #seat-kpis .kpi:nth-child(n+4) { border-top: 0; }
-  #seat-kpis .kpi:nth-child(4) { background: linear-gradient(var(--color-line), var(--color-line)) left center / 1px 60% no-repeat; }
 }
 @media (max-width: 719px) {
   #ficha, body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 116px; }

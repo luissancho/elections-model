@@ -97,7 +97,7 @@
           <h2><span class="dot" style="background-color: {{ party.color }}"></span>{{ party.fullname }}</h2>
           <span class="so-seats">{{ party.seats }} escaño{{ '' if party.seats == 1 else 's' }} en el reparto central</span>
           <span class="chip"><b>{{ party.safe }}</b> seguro{{ '' if party.safe == 1 else 's' }}</span>
-          <span class="chip so-air"><b>{{ party.open }}</b> en el aire</span>
+          {% if party.open %}<span class="chip so-air">opta a <b>{{ party.open }}</b>{{ ' más' if party.safe else '' }}</span>{% endif %}
         </header>
         {{ stamp }}
         <p class="so-says">{{ sentence }}</p>
@@ -118,7 +118,7 @@
         </div>
         {% endif %}
         {% if party.settled %}
-        <p class="so-settled"><b>Sin nada en el aire ({{ party.settled|length }}):</b> {% for item in party.settled %}{{ item.name }} {{ item.safe }}{{ ' · ' if not loop.last }}{% endfor %}.</p>
+        <p class="so-settled"><b>Sólo seguros ({{ party.settled|length }}):</b> {% for item in party.settled %}{{ item.name }} {{ item.safe }}{{ ' · ' if not loop.last }}{% endfor %}.</p>
         {% endif %}
         {{ s.legend() }}
         {{ s.how() }}

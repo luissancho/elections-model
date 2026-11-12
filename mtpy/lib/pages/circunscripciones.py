@@ -95,10 +95,10 @@ def district_views(data: dict) -> list:
     Returns
     -------
     list
-        Dicts with ``id``, ``name``, ``slug``, ``seats``, ``safe``, ``open`` (``max(seats - safe, 0)``),
-        ``contenders`` (open tokens) and ``rows``: one per party with some token or some central seat, with
-        ``name``, ``seats``, ``tokens``, ``safe``, ``open`` and ``expected`` (mean seats), by central seats and then
-        expected seats, both descending.
+        Dicts with ``id``, ``name``, ``slug``, ``seats``, ``safe``, ``open`` (the seats in the air: those nobody has
+        safe, ``max(seats - safe, 0)``) and ``rows``: one per party with some token or some central seat, with
+        ``name``, ``seats``, ``tokens``, ``safe``, ``open`` (its possible seats: the tokens that are not safe) and
+        ``expected`` (mean seats), by central seats and then expected seats, both descending.
     """
     n_sim = data['n_sim']
     views = []
@@ -127,7 +127,6 @@ def district_views(data: dict) -> list:
             'seats': region['seats'],
             'safe': safe,
             'open': max(region['seats'] - safe, 0),
-            'contenders': sum(row['open'] for row in rows),
             'rows': rows,
         })
     return views
@@ -162,21 +161,43 @@ def scope_totals(districts: list) -> dict:
     Returns
     -------
     dict
-        ``seats``, ``safe``, ``open``, ``contenders``, ``live`` (districts with open seats) and ``districts``.
+        ``seats``, ``safe``, ``open`` (seats in the air), ``live`` (districts with seats in the air) and ``districts``.
     """
     return {
         'seats': sum(d['seats'] for d in districts),
         'safe': sum(d['safe'] for d in districts),
         'open': sum(d['open'] for d in districts),
-        'contenders': sum(d['contenders'] for d in districts),
         'live': sum(d['open'] > 0 for d in districts),
         'districts': len(districts),
     }
 
 
+def _join_names(names: list) -> str:
+    """
+    Spanish enumeration of some names.
+
+    Parameters
+    ----------
+    names : list of str
+        Names, in the order to say them.
+
+    Returns
+    -------
+    str
+        ``'A'``, ``'A y B'``, ``'A, B y C'``; «e» instead of «y» before a last name that starts with the sound /i/
+        (``'PP e IU'``).
+    """
+    if len(names) < 2:
+        return ''.join(names)
+    last = names[-1].lower()
+    link = 'e' if last.startswith(('i', 'hi')) else 'y'
+    return '{} {} {}'.format(', '.join(names[:-1]), link, names[-1])
+
+
 def district_sentence(district: dict) -> str:
     """
-    Plain-language summary of a district: how many seats are safe, for whom, and how many contenders share the rest.
+    Plain-language summary of a district: how many seats are safe, for whom, and which parties dispute the seats in
+    the air (those with some possible seat).
 
     Parameters
     ----------
@@ -186,34 +207,31 @@ def district_sentence(district: dict) -> str:
     Returns
     -------
     str
-        The sentence, in Spanish.
+        The sentence, in Spanish. The seats in the air «se los disputan» the parties named; with a single party they
+        «sólo están al alcance de» it, and without any the clause is dropped.
     """
-    seats, safe, left, contenders = district['seats'], district['safe'], district['open'], district['contenders']
+    seats, safe, left = district['seats'], district['safe'], district['open']
     listing = ', '.join('{} {}'.format(row['name'], row['safe']) for row in district['rows'] if row['safe'])
     if left == 0:
         if seats == 1:
             return 'El escaño es seguro ({}).'.format(listing)
         return 'Los {} escaños son seguros ({}).'.format(seats, listing)
-    # The verb agrees with the number of contenders; with none the clause is dropped.
-    if contenders == 0:
+    rivals = [row['name'] for row in district['rows'] if row['open']]
+    single = left == 1
+    if not rivals:
         dispute = ''
-    elif contenders == 1:
-        dispute = 'disputa 1 aspirante'
+    elif len(rivals) == 1:
+        dispute = 'sólo {} al alcance de {}'.format('está' if single else 'están', rivals[0])
     else:
-        dispute = 'disputan {} aspirantes'.format(contenders)
+        dispute = 'se {} disputan {}'.format('lo' if single else 'los', _join_names(rivals))
     if safe == 0:
-        if seats == 1:
-            return 'El escaño no es seguro: se lo {}.'.format(dispute) if dispute else 'El escaño no es seguro.'
-        if dispute:
-            return 'Ninguno de los {} escaños es seguro: se los {}.'.format(seats, dispute)
-        return 'Ninguno de los {} escaños es seguro.'.format(seats)
+        head = 'El escaño no es seguro' if seats == 1 else 'Ninguno de los {} escaños es seguro'.format(seats)
+        return '{}: {}.'.format(head, dispute) if dispute else head + '.'
     how_many = '1 es seguro' if safe == 1 else '{} son seguros'.format(safe)
     sentence = 'De los {} escaños, {} ({}).'.format(seats, how_many, listing)
     if not dispute:
         return sentence
-    if left == 1:
-        return '{} El otro se lo {}.'.format(sentence, dispute)
-    return '{} Los otros {} se los {}.'.format(sentence, left, dispute)
+    return '{} {} {}.'.format(sentence, 'El otro' if single else 'Los otros {}'.format(left), dispute)
 
 
 def _coin_toss_gap(tokens: list) -> float:
@@ -317,7 +335,7 @@ def threshold_label(share: float) -> str:
 
 def tokens_note(row: dict) -> str:
     """
-    Summary of the tokens of a row, beside them: how many safe and how many open.
+    Summary of the tokens of a row, beside them: how many safe seats and how many more the party can win.
 
     Parameters
     ----------
@@ -327,13 +345,13 @@ def tokens_note(row: dict) -> str:
     Returns
     -------
     str
-        ``'2 seguros · 2 en el aire'``, ``'1 seguro'``, ``'1 en el aire'``; ``'—'`` without tokens.
+        ``'2 seguros · opta a 2 más'``, ``'1 seguro'``, ``'opta a 1'``; ``'—'`` without tokens.
     """
     parts = []
     if row['safe']:
         parts.append('1 seguro' if row['safe'] == 1 else '{} seguros'.format(row['safe']))
     if row['open']:
-        parts.append('{} en el aire'.format(row['open']))
+        parts.append('opta a {}{}'.format(row['open'], ' más' if row['safe'] else ''))
     return ' · '.join(parts) or '—'
 
 
@@ -469,14 +487,16 @@ def party_sentence(party: dict) -> str:
     safe, left, count = party['safe'], party['open'], len(party['rows'])
     own = '1 escaño seguro' if safe == 1 else '{} escaños seguros'.format(safe)
     if not left:
-        return 'Tiene {} y ninguno en el aire.'.format(own)
-    more = 'otro' if left == 1 else 'otros {}'.format(left)
+        return 'Tiene {} y no opta a ninguno más.'.format(own)
     where = '1 circunscripción' if count == 1 else '{} circunscripciones'.format(count)
-    sentence = 'Tiene {} y aspira a {} en {}.'.format(own, more, where)
+    if safe:
+        sentence = 'Tiene {} y opta a {} en {}.'.format(own, 'otro' if left == 1 else 'otros {}'.format(left), where)
+    else:
+        sentence = 'No tiene ningún escaño seguro y opta a {} en {}.'.format(left, where)
     return sentence + (' Primero, las más dudosas.' if count > 1 else '')
 
 
-def closest_sentence(shown: int, contenders: int) -> str:
+def closest_sentence(shown: int) -> str:
     """
     Plain-language introduction of the list of the closest seats.
 
@@ -484,8 +504,6 @@ def closest_sentence(shown: int, contenders: int) -> str:
     ----------
     shown : int
         Seats in the list.
-    contenders : int
-        Open tokens of the whole scope.
 
     Returns
     -------
@@ -495,9 +513,8 @@ def closest_sentence(shown: int, contenders: int) -> str:
     if not shown:
         return 'Ningún escaño está en el aire.'
     if shown == 1:
-        return 'El único escaño que está en el aire. La raya marca el 50%.'
-    return ('Los {} escaños más cercanos al cara o cruz, de los {} que están en el aire. '
-            'La raya marca el 50%.').format(shown, contenders)
+        return 'El único escaño posible. La raya marca el 50%.'
+    return 'Los {} escaños más cercanos al cara o cruz. La raya marca el 50%.'.format(shown)
 
 
 def _party_names(data: dict, views: list) -> list:
@@ -600,7 +617,7 @@ def _closest_card(views: list, parties: dict, scope: str, query: str) -> dict:
                for seat in closest_seats(views)]
     return {
         'closest': closest,
-        'sentence': closest_sentence(len(closest), scope_totals(views)['contenders']),
+        'sentence': closest_sentence(len(closest)),
         'page_title': 'Los escaños más reñidos',
     }
 
@@ -780,8 +797,6 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
             {'label': 'Escaños seguros', 'value': totals['safe'], 'unit': 'de {}'.format(totals['seats']),
              'color': None},
             {'label': 'Escaños en el aire', 'value': totals['open'], 'unit': '', 'color': None},
-            {'label': 'Aspirantes', 'value': totals['contenders'], 'unit': 'a esos {}'.format(totals['open']),
-             'color': None},
             {'label': 'Circunscripciones con algo en juego', 'value': totals['live'],
              'unit': 'de {}'.format(totals['districts']), 'color': None},
         ],
