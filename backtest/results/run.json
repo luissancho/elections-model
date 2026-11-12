@@ -1,6 +1,6 @@
 {
- "run_at": "2026-11-06T12:41:39",
- "commit": "e260d10",
+ "run_at": "2026-11-12T17:23:28",
+ "commit": "c1e6516",
  "scope": "es",
  "n_sim": 1000,
  "seed": 42,
@@ -19,6 +19,7 @@
  "config": null,
  "rating_exponent": 1.0,
  "ban": true,
+ "swing": "logistic",
  "recompute_ratings": false,
  "flat_ratings": false,
  "events": [
@@ -36,6 +37,6 @@
   90,
   180
  ],
- "db_polls": 3753,
- "db_last_poll": "2026-11-01"
+ "db_polls": 3772,
+ "db_last_poll": "2026-11-10"
 }
