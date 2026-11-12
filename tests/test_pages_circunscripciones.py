@@ -196,7 +196,8 @@ def test_the_page_does_not_exist_without_the_part_or_with_a_single_district(api,
     assert call(odds_site, '/es/circunscripciones/no-existe')[0] == 404
     status, headers, _ = call(odds_site, '/es/circunscripciones', query='circunscripcion=cadiz&mode=nowcast')
     # the form without JavaScript: on to the address of the district, keeping the mode
-    assert status == 301 and headers['location'] == '/es/circunscripciones/cadiz?mode=nowcast'
+    # with the fragment of the card: on a phone each change of district lands on it, not at the top of the page
+    assert status == 301 and headers['location'] == '/es/circunscripciones/cadiz?mode=nowcast#ficha'
     write_odds(fresh_app.fs, fixture_data('seat-odds'))
     status, page = page_of(api, '/es/circunscripciones')
     assert status == 404 and 'Este run no tiene el desglose escaño a escaño.' in page  # one district
@@ -211,9 +212,11 @@ def test_a_pinned_run_stays_in_every_link_of_the_page_and_the_canonical_drops_it
     query = '?mode=nowcast&amp;run=' + RUN
     assert status == 200
     assert 'href="/es/circunscripciones/guadalajara{}#ficha"'.format(query) in page
-    assert 'href="/es/circunscripciones{}"'.format(query) in page  # the tab of the view
-    assert 'href="/es/circunscripciones{}&amp;partido=pp"'.format(query) in page  # the first party with a token
-    assert 'href="/es/circunscripciones{}&amp;vista=renidos"'.format(query) in page
+    # the tabs of the views land on themselves (`#vistas`), not at the top of the page
+    assert '<nav class="seg lg so-tabs" id="vistas" aria-label="Vistas">' in page
+    assert 'href="/es/circunscripciones{}#vistas"'.format(query) in page  # the tab of the view
+    assert 'href="/es/circunscripciones{}&amp;partido=pp#vistas"'.format(query) in page  # the first party with a token
+    assert 'href="/es/circunscripciones{}&amp;vista=renidos#vistas"'.format(query) in page
     assert 'href="/es{}#tabla"'.format(query) in page  # the index of the event bar
     form = page[page.index('id="district-pick"'):page.index('</form>')]
     assert '<input type="hidden" name="run" value="{}">'.format(RUN) in form and 'value="nowcast"' in form
@@ -221,7 +224,7 @@ def test_a_pinned_run_stays_in_every_link_of_the_page_and_the_canonical_drops_it
     assert '<option value="guadalajara">Guadalajara · 3 escaños · decidida</option>' in form
     assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones/cadiz">' in page
     status, headers, _ = call(odds_site, '/es/circunscripciones', query='mode=nowcast&run={}&circunscripcion=cadiz'.format(RUN))
-    assert status == 301 and headers['location'] == '/es/circunscripciones/cadiz?mode=nowcast&run=' + RUN
+    assert status == 301 and headers['location'] == '/es/circunscripciones/cadiz?mode=nowcast&run={}#ficha'.format(RUN)
 
 
 def test_the_list_sorts_itself_without_javascript_and_the_rows_read_aloud(odds_site):
@@ -229,6 +232,8 @@ def test_the_list_sorts_itself_without_javascript_and_the_rows_read_aloud(odds_s
     # the order by open seats is the order of the markup; the alphabetical one, a position for the CSS
     assert re.findall(r'style="--by-open: (\d+); --by-name: (\d+)"', page) == [('1', '1'), ('2', '3'), ('3', '2')]
     assert 'name="orden" value="az">A–Z' in page and 'class="so-item on" href="/es/circunscripciones/cadiz?' in page
+    # the seats of each item, read aloud with their unit
+    assert '<small title="8 escaños">8<span class="sr-only"> escaños</span></small>' in page
     assert 'aria-label="PP: 2 seguros; 3.º, 80%; 4.º, 7%"' in page and 'aria-label="AA: 1.º, 76%"' in page
     assert '<div class="so-note">2 seguros · 2 en el aire</div>' in page and '<div class="so-note">1 en el aire</div>' in page
     legend = page[page.index('class="so-legend"'):]
@@ -270,12 +275,13 @@ def test_the_event_bar_of_a_subpage_links_the_event_page_and_drops_the_territory
 def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(odds_site):
     status, page = page_of(odds_site, '/es/circunscripciones', 'partido=psoe')
     assert status == 200 and '<title>Demoscopio · Escaños que bailan: PSOE' in page
-    assert re.findall(r'class="so-party-btn[^"]*" href="[^"]*partido=([a-z]+)', page) == ['pp', 'psoe', 'vox', 'aa', 'bng']
+    assert re.findall(r'class="so-party-btn[^"]*" href="[^"]*partido=([a-z]+)#vistas"', page) == [
+        'pp', 'psoe', 'vox', 'aa', 'bng']
     card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
     assert re.findall(r'href="/es/circunscripciones/([a-z-]+)\?mode=forecast#ficha"', card) == ['cadiz', 'la-coruna']
     assert 'Tiene 4 escaños seguros y aspira a otros 3 en 2 circunscripciones.' in card
     assert 'Sin nada en el aire (1):' in card and 'Guadalajara 1' in card
-    assert 'rel="canonical" href="' in page and 'circunscripciones?partido=psoe"' in page
+    assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones?partido=psoe">' in page
     assert 'data-file="demoscopio-escanos-es-psoe.png"' in page and page.count('<details class="how"') == 1
     assert ('<meta name="description" content="Los escaños de PSOE, circunscripción a circunscripción: cuáles tiene '
             'seguros y cuáles están en el aire, según las simulaciones del modelo para Elecciones generales 2026.">') in page
@@ -283,7 +289,7 @@ def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(o
     assert call(odds_site, '/es/circunscripciones', query='partido=nadie')[0] == 404
     kept = page_of(odds_site, '/es/circunscripciones', 'partido=pp&mode=nowcast')[1]
     assert 'href="/es/circunscripciones/cadiz?mode=nowcast#ficha"' in kept
-    assert 'class="so-party-btn on" href="/es/circunscripciones?mode=nowcast&amp;partido=pp"' in kept
+    assert 'class="so-party-btn on" href="/es/circunscripciones?mode=nowcast&amp;partido=pp#vistas"' in kept
     # the district of the path wins over the party
     assert '<title>Demoscopio · Escaños que bailan en Cádiz' in page_of(odds_site, '/es/circunscripciones/cadiz', 'partido=pp')[1]
 
@@ -291,11 +297,17 @@ def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(o
 def test_the_closest_view_ranks_the_open_seats_by_their_distance_to_a_coin_toss(odds_site):
     status, page = page_of(odds_site, '/es/circunscripciones', 'vista=renidos')
     table = page[page.index('id="closest"'):]
-    rows = re.findall(r'<tr>(.*?)</tr>', table[table.index('<tbody>'):])
+    # under 720 px each row stacks in two lines (`display: grid`), so the table carries its ARIA roles
+    assert table.startswith('id="closest" role="table"') and table.count('scope="col" role="columnheader"') == 4
+    rows = re.findall(r'<tr role="row">(.*?)</tr>', table[table.index('<tbody role="rowgroup">'):])
     assert status == 200 and len(rows) == 11
     assert 'Cádiz' in rows[0] and '3.º de PSOE' in rows[0] and '41%' in rows[0] and 'no se lo da' in rows[0]
     assert 'La Coruña' in rows[1] and '1.º de VOX' in rows[1] and 'se lo da' in rows[1] and 'no se lo da' not in rows[1]
-    assert 'circunscripciones?vista=renidos"' in page
+    # the central state is in every row, on every width: no class that hides it on phones, and «Central: » before it
+    # there (`so-narrow` hides only from 720 px up, where the column has its header)
+    central = r'<td class="so-central" role="cell"><span class="so-narrow">Central: </span>(?:no )?se lo da</td>'
+    assert all(re.search(central, row) for row in rows) and not any('so-wide' in row for row in rows)
+    assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones?vista=renidos">' in page
     assert 'Los 11 escaños más cercanos al cara o cruz, de los 11 que están en el aire. La raya marca el 50%.' in page
     assert '<title>Demoscopio · Los escaños más reñidos · Elecciones generales 2026' in page
     assert 'class="seg lg so-tabs"' in page and re.findall(r'<a href="[^"]*"( class="on")', page) == [' class="on"']

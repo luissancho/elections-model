@@ -12,7 +12,8 @@
       {{ m.headline('Escaños que bailan', 'h1') }}
       <p class="so-intro">Qué escaños tiene seguros cada partido en cada circunscripción y cuáles están en el aire, según las {{ n_sim|int }} simulaciones del modelo.</p>
       {{ m.kpis(kpis, id='seat-kpis') }}
-      <nav class="seg lg so-tabs" aria-label="Vistas">
+      {#- each tab and each party button lands on this nav (`#vistas`): on a phone the card is far below the top -#}
+      <nav class="seg lg so-tabs" id="vistas" aria-label="Vistas">
         {% for tab in tabs %}
         <a href="{{ tab.href }}"{% if tab.on %} class="on" aria-current="page"{% endif %}>{{ tab.label }}</a>
         {% endfor %}
@@ -45,7 +46,8 @@
           <nav class="so-items">
             {% for item in districts %}
             <a class="so-item{% if item.slug == district.slug %} on{% endif %}" href="{{ item.href }}" style="--by-open: {{ loop.index }}; --by-name: {{ item.rank_name }}"{% if item.slug == district.slug %} aria-current="page"{% endif %}>
-              <span class="so-name">{{ item.name }} <small title="{{ item.seats }} escaño{{ '' if item.seats == 1 else 's' }}">{{ item.seats }}</small></span>
+              {%- set unit = 'escaño' if item.seats == 1 else 'escaños' %}
+              <span class="so-name">{{ item.name }} <small title="{{ item.seats }} {{ unit }}">{{ item.seats }}<span class="sr-only"> {{ unit }}</span></small></span>
               <span class="pill{% if item.open %} so-air{% endif %}">{{ item.open ~ ' en el aire' if item.open else 'decidida' }}</span>
             </a>
             {% endfor %}
@@ -120,22 +122,25 @@
       <section class="card so-card">
         <p class="so-says">{{ sentence }}</p>
         {% if closest %}
-        <table class="so-table" id="closest">
-          <thead>
-            <tr>
-              <th class="l">Circunscripción</th>
-              <th class="l">Escaño</th>
-              <th class="l so-meter-col">Lo consigue en</th>
-              <th class="so-wide">Reparto central</th>
+        {#- under 720 px each row stacks in two lines (the seat and its meter; the district and the central state, which
+            says «Central: » there because the header is hidden): the rows change their `display`, so the table states
+            its roles -#}
+        <table class="so-table" id="closest" role="table">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th class="l" scope="col" role="columnheader">Circunscripción</th>
+              <th class="l" scope="col" role="columnheader">Escaño</th>
+              <th class="l so-meter-col" scope="col" role="columnheader">Lo consigue en</th>
+              <th scope="col" role="columnheader">Reparto central</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {% for seat in closest %}
-            <tr>
-              <td class="l"><a href="{{ seat.href }}">{{ seat.district }}</a></td>
-              <td class="l b"><span class="so-who"><span class="dot" style="background-color: {{ seat.color }}"></span>{{ seat.k }}.º de {{ seat.party }}</span></td>
-              <td class="l"><div class="so-meter"><div class="so-track" aria-hidden="true"><i style="width: {{ (seat.share * 100)|round(1) }}%; background-color: {{ seat.color }}"></i><u></u></div><b>{{ seat.label }}</b></div></td>
-              <td class="so-wide">{{ 'se lo da' if seat.central else 'no se lo da' }}</td>
+            <tr role="row">
+              <td class="l so-c-where" role="cell"><a href="{{ seat.href }}">{{ seat.district }}</a></td>
+              <td class="l b so-c-seat" role="cell"><span class="so-who"><span class="dot" style="background-color: {{ seat.color }}"></span>{{ seat.k }}.º de {{ seat.party }}</span></td>
+              <td class="l so-c-odds" role="cell"><div class="so-meter"><div class="so-track" aria-hidden="true"><i style="width: {{ (seat.share * 100)|round(1) }}%; background-color: {{ seat.color }}"></i><u></u></div><b>{{ seat.label }}</b></div></td>
+              <td class="so-central" role="cell"><span class="so-narrow">Central: </span>{{ 'se lo da' if seat.central else 'no se lo da' }}</td>
             </tr>
             {% endfor %}
           </tbody>

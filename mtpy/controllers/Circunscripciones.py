@@ -47,9 +47,9 @@ class Circunscripciones(Page):
         ``vista=renidos``), or send the dropdown of districts to the address of
         the one chosen.
 
-        The dropdown (``#district-pick``) submits ``circunscripcion`` with the slug of a district: without
-        JavaScript the browser lands here, and the answer is a 301 to ``/{scope}/circunscripciones/{slug}`` with the
-        rest of the query (``mode``, ``run``).
+        The dropdown (``#district-pick``) submits ``circunscripcion`` with the slug of a district (the browser lands
+        here with or without JavaScript), and the answer is a 301 to ``/{scope}/circunscripciones/{slug}`` with the
+        rest of the query (``mode``, ``run``) and the fragment of the card (``pages.district_href``).
 
         Parameters
         ----------
@@ -71,8 +71,10 @@ class Circunscripciones(Page):
         wanted = self.request.query.get('circunscripcion')
 
         if wanted:
-            return self.redirect('/{}/circunscripciones/{}{}'.format(code, quote(wanted, safe=''),
-                                                                     self.query_without('circunscripcion')))
+            # the address of `district_href`, with the fragment of the card: on a phone the page lands on it
+            rest = self.query_without('circunscripcion')
+
+            return self.redirect(pages.district_href(code, quote(wanted, safe=''), rest))
 
         return self.page(code, party=self.request.query.get('partido') or None,
                          view=self.request.query.get('vista') or None)

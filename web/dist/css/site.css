@@ -1165,7 +1165,29 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-key.safe { background: var(--color-muted); }
 .so-key.open { border: 2px solid var(--color-muted); background: rgba(90, 95, 114, .25); }
 .so-key.out { border-style: dashed; background: none; }
+/* The links of the page land on the card (`#ficha`) or on the tabs of the views (`#vistas`) below the sticky header
+   (56 px, plus the freeze banner when it shows) with a little air; on phones the card also leaves the dropdown of
+   districts in sight (header 52 px, dropdown down to 100 px) */
+#ficha, #vistas { scroll-margin-top: 68px; }
+body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top: 114px; }
+/* Tablet and narrow desktop (720 to 1099 px): beside the list the card keeps its width for the tokens, without the
+   summary of each row (the tokens and their labels say it); the four figures of the head stay in one row */
+@media (max-width: 1099px) {
+  .so-md .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-md .so-note { display: none; }
+}
+@media (min-width: 720px) and (max-width: 1099px) {
+  #seat-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #seat-kpis .kpi:nth-child(n+4) { border-top: 0; }
+  #seat-kpis .kpi:nth-child(4) { background: linear-gradient(var(--color-line), var(--color-line)) left center / 1px 60% no-repeat; }
+}
 @media (max-width: 719px) {
+  #ficha, body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 116px; }
+  #vistas, body:has(#freeze-banner:not([hidden])) #vistas { scroll-margin-top: 68px; }
+  /* the tabs in one line, sliding sideways like the index of the event bar; the party buttons, a block that wraps */
+  .so-tabs { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .seg.so-tabs > a { padding: 7px 10px; font-size: 12.5px; }
+  .so-pills { border-radius: var(--radius); }
   .so-md { grid-template-columns: minmax(0, 1fr); }
   .so-list { display: none; }
   .so-pick { display: flex; }
@@ -1175,8 +1197,9 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
   .so-num { padding: 0 8px; }
 }
 
-/* «Escaños que bailan»: the view of a party and the list of the closest seats */
-.so-pills { margin: 0; }
+/* «Escaños que bailan»: the view of a party and the list of the closest seats; on phones each closest seat stacks in
+   two lines (the seat and its meter; the district and the central state, which says «Central: » there because the
+   header is hidden) */
 .so-pills .so-party-btn { display: inline-flex; align-items: center; gap: 6px; }
 .so-head h2 .dot { margin-right: 8px; }
 .so-grid.so-by-party { grid-template-columns: max-content max-content max-content minmax(0, 1fr) max-content; }
@@ -1194,10 +1217,21 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-track i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; }
 .so-track u { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0, 0, 0, .4); }
 .so-meter b { width: 38px; text-align: right; font-size: 13px; }
+@media (min-width: 720px) {
+  .so-narrow { display: none; }
+}
 @media (max-width: 719px) {
   .so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, 1fr); }
   .so-dname { white-space: normal; padding-right: 4px; }
   .so-wide { display: none; }
+  .so-table, .so-table tbody { display: block; }
+  .so-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .so-table tr { display: grid; grid-template-columns: minmax(0, 1fr) 128px; align-items: center; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--color-line); }
+  .so-table td { display: block; padding: 0; border: 0; white-space: normal; }
+  .so-table .so-c-seat { order: 1; }
+  .so-table .so-c-odds { order: 2; }
+  .so-table .so-c-where { order: 3; font-size: 12.5px; }
+  .so-table .so-central { order: 4; font-size: 12px; color: var(--color-muted); white-space: nowrap; }
 }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */

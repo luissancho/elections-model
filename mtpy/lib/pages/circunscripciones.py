@@ -20,6 +20,8 @@ from .slugs import slugify
 SAFE_SHARE = 0.99
 OPEN_FLOOR = 0.01
 CLOSEST_SHOWN = 40
+CARD_ANCHOR = '#ficha'   # the card of a district or a party
+VIEWS_ANCHOR = '#vistas'  # the tabs of the views
 
 
 def token_label(share: float) -> str:
@@ -426,7 +428,7 @@ def district_href(scope: str, slug: str, query: str = '') -> str:
     str
         ``'/{scope}/circunscripciones/{slug}{query}#ficha'``.
     """
-    return '/{}/circunscripciones/{}{}#ficha'.format(scope, slug, query)
+    return '/{}/circunscripciones/{}{}{}'.format(scope, slug, query, CARD_ANCHOR)
 
 
 def _with_param(query: str, key: str, value: str) -> str:
@@ -740,12 +742,14 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
     # the index links the sections of the event page, keeping the mode and the pinned run
     context['event_bar'] = subpage_event_bar(context)
     base = '/{}/circunscripciones'.format(scope)
-    # the view of a party opens on the first party of the part with some token
+    # the view of a party opens on the first party of the part with some token; the tabs and the party buttons land
+    # on the tabs (`#vistas`): on a phone the card of the view is far below the top of the page
     tabs = [
-        {'key': 'district', 'label': 'Por circunscripción', 'href': base + query},
+        {'key': 'district', 'label': 'Por circunscripción', 'href': base + query + VIEWS_ANCHOR},
         {'key': 'party', 'label': 'Por partido',
-         'href': base + (_with_param(query, 'partido', slugify(names[0])) if names else query)},
-        {'key': 'closest', 'label': 'Los más reñidos', 'href': base + _with_param(query, 'vista', 'renidos')},
+         'href': base + (_with_param(query, 'partido', slugify(names[0])) if names else query) + VIEWS_ANCHOR},
+        {'key': 'closest', 'label': 'Los más reñidos',
+         'href': base + _with_param(query, 'vista', 'renidos') + VIEWS_ANCHOR},
     ]
 
     context.update({
@@ -762,7 +766,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         ],
         'districts': districts,
         'parties': [{'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
-                     'href': base + _with_param(query, 'partido', slugify(name)),
+                     'href': base + _with_param(query, 'partido', slugify(name)) + VIEWS_ANCHOR,
                      'on': shown == 'party' and card['party']['name'] == name} for name in names],
         'tabs': [dict(tab, on=tab['key'] == shown) for tab in tabs],
         'n_sim': data['n_sim'],
