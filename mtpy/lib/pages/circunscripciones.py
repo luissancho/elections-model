@@ -179,19 +179,30 @@ def district_sentence(district: dict) -> str:
     """
     seats, safe, left, contenders = district['seats'], district['safe'], district['open'], district['contenders']
     listing = ', '.join('{} {}'.format(row['name'], row['safe']) for row in district['rows'] if row['safe'])
-    suitors = '{} {}'.format(contenders, 'aspirante' if contenders == 1 else 'aspirantes')
     if left == 0:
         if seats == 1:
             return 'El escaño es seguro ({}).'.format(listing)
         return 'Los {} escaños son seguros ({}).'.format(seats, listing)
+    # The verb agrees with the number of contenders; with none the clause is dropped.
+    if contenders == 0:
+        dispute = ''
+    elif contenders == 1:
+        dispute = 'disputa 1 aspirante'
+    else:
+        dispute = 'disputan {} aspirantes'.format(contenders)
     if safe == 0:
         if seats == 1:
-            return 'El escaño no es seguro: se lo disputan {}.'.format(suitors)
-        return 'Ninguno de los {} escaños es seguro: se los disputan {}.'.format(seats, suitors)
+            return 'El escaño no es seguro: se lo {}.'.format(dispute) if dispute else 'El escaño no es seguro.'
+        if dispute:
+            return 'Ninguno de los {} escaños es seguro: se los {}.'.format(seats, dispute)
+        return 'Ninguno de los {} escaños es seguro.'.format(seats)
     how_many = '1 es seguro' if safe == 1 else '{} son seguros'.format(safe)
-    rest = 'El otro se lo disputan {}.'.format(suitors) if left == 1 else (
-        'Los otros {} se los disputan {}.'.format(left, suitors))
-    return 'De los {} escaños, {} ({}). {}'.format(seats, how_many, listing, rest)
+    sentence = 'De los {} escaños, {} ({}).'.format(seats, how_many, listing)
+    if not dispute:
+        return sentence
+    if left == 1:
+        return '{} El otro se lo {}.'.format(sentence, dispute)
+    return '{} Los otros {} se los {}.'.format(sentence, left, dispute)
 
 
 def _coin_toss_gap(tokens: list) -> float:

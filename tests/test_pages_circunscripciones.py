@@ -99,3 +99,28 @@ def test_closest_seats_are_the_open_ones_nearest_to_a_coin_toss():
         ('La Coruña', 'VOX', 1), ('La Coruña', 'PP', 4), ('Cádiz', 'AA', 1)]
     assert (closest[-1]['party'], closest[-1]['label']) == ('BNG', '1%')
     assert len(pages.closest_seats(pages.district_views(ODDS), limit=4)) == 4
+
+
+def sentence_of(seats, safe_by_party, contenders):
+    safe = sum(safe_by_party.values())
+    return pages.district_sentence({'seats': seats, 'safe': safe, 'open': max(seats - safe, 0), 'contenders': contenders,
+                                    'rows': [{'name': name, 'safe': n} for name, n in safe_by_party.items()]})
+
+
+@pytest.mark.parametrize('seats, safe, contenders, text', [
+    (1, {'PP': 1}, 0, 'El escaño es seguro (PP 1).'),
+    (3, {'PP': 2, 'PSOE': 1}, 0, 'Los 3 escaños son seguros (PP 2, PSOE 1).'),
+    (4, {'PP': 1, 'VOX': 0}, 5, 'De los 4 escaños, 1 es seguro (PP 1). Los otros 3 se los disputan 5 aspirantes.'),
+    (3, {'PP': 1, 'PSOE': 1}, 2, 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro se lo disputan 2 aspirantes.'),
+    (3, {'PP': 1, 'PSOE': 1}, 1, 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro se lo disputa 1 aspirante.'),
+    (4, {'PP': 1, 'PSOE': 1}, 1, 'De los 4 escaños, 2 son seguros (PP 1, PSOE 1). Los otros 2 se los disputa 1 aspirante.'),
+    (3, {'PP': 1, 'PSOE': 1}, 0, 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1).'),
+    (4, {'PP': 0}, 6, 'Ninguno de los 4 escaños es seguro: se los disputan 6 aspirantes.'),
+    (4, {'PP': 0}, 1, 'Ninguno de los 4 escaños es seguro: se los disputa 1 aspirante.'),
+    (4, {'PP': 0}, 0, 'Ninguno de los 4 escaños es seguro.'),
+    (1, {'PP': 0}, 2, 'El escaño no es seguro: se lo disputan 2 aspirantes.'),
+    (1, {'PP': 0}, 1, 'El escaño no es seguro: se lo disputa 1 aspirante.'),
+    (1, {'PP': 0}, 0, 'El escaño no es seguro.'),
+])
+def test_district_sentence_agrees_with_the_number_of_seats_and_contenders(seats, safe, contenders, text):
+    assert sentence_of(seats, safe, contenders) == text
