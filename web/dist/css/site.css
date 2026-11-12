@@ -1071,14 +1071,12 @@ td.blk { font-weight: 700; }
 .herd-page .table-wrap { max-width: 100%; }
 /* the separation by weeks of question 2, at full width above the squares, and the histogram of the shuffles of
    question 3 (both lower on phones) */
-/* the weeks chart grows with its axis: some 195 px a unit from 0.5 to 3 (140 on phones), so the lines under 2
-   keep the room they had when the axis stopped there */
-.qcard .chart#weeks-chart { height: 580px; }
+/* the weeks chart at one fixed height, also on phones: its axis runs from 0.5 to 3 */
+.qcard .chart#weeks-chart { height: 480px; }
 #weeks-chart + .tnote { margin-bottom: var(--space-3); }
 .qcard .chart#chance-chart { height: 260px; }
 @media (max-width: 719px) {
   .herd-bar { grid-template-columns: 6.5rem minmax(0, 1fr) 3.6rem; gap: 6px; font-size: 12px; }
-  .qcard .chart#weeks-chart { height: 440px; }
   .qcard .chart#chance-chart { height: 220px; }
 }
 /* The shy-vote study (/analisis/voto-oculto): the bars of the left at full width and lower on phones, the bars of
