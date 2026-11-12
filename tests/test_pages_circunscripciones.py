@@ -1,7 +1,14 @@
 """La página «Escaños que bailan» (`/{scope}/circunscripciones`): de la parte `seat-odds` a las fichas y sus vistas."""
+import copy
+import os
+import re
+
 import pytest
 
-from mtpy.lib import pages
+from mtpy.lib import bundle, pages, webapi
+from tests.test_api_asgi import call
+from tests.test_pages import api, assert_public_wording, html, initial  # noqa: F401
+from tests.test_webapi_unit import RUN, fixture_data
 
 
 def odds_row(region_id, name, seats, *reach):
@@ -124,3 +131,123 @@ def sentence_of(seats, safe_by_party, contenders):
 ])
 def test_district_sentence_agrees_with_the_number_of_seats_and_contenders(seats, safe, contenders, text):
     assert sentence_of(seats, safe, contenders) == text
+
+
+def write_odds(fs, data=ODDS, modes=bundle.MODES):
+    """Sobrescribe la parte `seat-odds` del run del bundle de prueba."""
+    writer = bundle.BundleWriter(fs)
+    for mode in modes:
+        writer.write_json(bundle.path_part('es', RUN, 'seat-odds', mode), 'seat-odds', data, 'es', run_id=RUN, mode=mode)
+    webapi.site().files.clear()
+
+
+@pytest.fixture
+def odds_site(api, fresh_app):
+    write_odds(fresh_app.fs)
+    return api
+
+
+def page_of(site, path, query=''):
+    status, _, body = call(site, path, query=query)
+    return status, re.sub(r'\s+', ' ', html(body))
+
+
+def test_the_page_opens_on_the_district_with_most_open_seats(odds_site):
+    status, page = page_of(odds_site, '/es/circunscripciones')
+    assert status == 200 and '<h1 class="headline">Escaños que bailan</h1>' in page
+    kpis = page[page.index('class="kpis"'):page.index('class="seg lg so-tabs"')]
+    assert [int(n) for n in re.findall(r'class="v"[^>]*>(\d+)', kpis)] == [14, 5, 11, 2]
+    assert 'de 19' in kpis and 'de 3' in kpis
+    items = re.findall(r'class="so-item[^"]*" href="([^"#?]+)', page)
+    assert items == ['/es/circunscripciones/cadiz', '/es/circunscripciones/la-coruna', '/es/circunscripciones/guadalajara']
+    card = page[page.index('id="ficha"'):]
+    assert 'De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1). Los otros 3 se los disputan 6 aspirantes.' in card
+    assert re.findall(r'class="so-token[^"]*"[^>]*title="([^"]+)"', card)[:3] == [
+        '1.º de PP: seguro', '2.º de PP: seguro', '3.º de PP: lo consigue en el 80% de las simulaciones']
+    assert '<link rel="canonical" href="' in page and page.count('<details class="how"') >= 1
+    assert_public_wording(page, 'circunscripciones')
+
+
+def test_a_district_has_its_own_address_and_never_labels_an_open_seat_as_sure(odds_site):
+    status, page = page_of(odds_site, '/es/circunscripciones/la-coruna')
+    card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
+    # every title of the site starts with its name (`base.html`)
+    assert status == 200 and 'La Coruña' in card and '<title>Demoscopio · Escaños que bailan en La Coruña' in page
+    labels = re.findall(r'<span class="so-pct[^"]*">([^<]+)</span>', card)
+    assert set(labels) == {'30%', '98%', '24%', '37%', '1%'} and not {'99%', '100%', '0%'} & set(labels)
+    assert len(re.findall(r'class="so-token safe"', card)) == 6
+    assert len(re.findall(r'class="so-token open out"', card)) == 3 and len(re.findall(r'class="so-token open"', card)) == 2
+    closed = page_of(odds_site, '/es/circunscripciones/guadalajara')[1]
+    assert 'Los 3 escaños son seguros (PP 1, PSOE 1, VOX 1).' in closed and 'decidida' in closed
+
+
+def test_the_page_follows_the_mode_and_keeps_it_in_its_links(odds_site, fresh_app):
+    nowcast = copy.deepcopy(ODDS)
+    nowcast['rows'][3] = odds_row(11, 'AA', 1, 2500)  # AA's seat in Cádiz: 76% in the election mode, 25% today
+    write_odds(fresh_app.fs, nowcast, modes=('nowcast',))
+    assert '>76%<' in page_of(odds_site, '/es/circunscripciones/cadiz')[1]  # less than 60 days away: forecast
+    today = page_of(odds_site, '/es/circunscripciones/cadiz', 'mode=nowcast')[1]
+    assert '>25%<' in today and '>76%<' not in today
+    assert 'href="/es/circunscripciones/la-coruna?mode=nowcast#ficha"' in today
+    assert 'href="/es?mode=nowcast#territorio"' in today  # the index of the event bar goes back to the event page
+
+
+def test_the_page_does_not_exist_without_the_part_or_with_a_single_district(api, odds_site, fresh_app, tmp_path):
+    assert call(odds_site, '/es/circunscripciones/no-existe')[0] == 404
+    status, headers, _ = call(odds_site, '/es/circunscripciones', query='circunscripcion=cadiz&mode=nowcast')
+    # the form without JavaScript: on to the address of the district, keeping the mode
+    assert status == 301 and headers['location'] == '/es/circunscripciones/cadiz?mode=nowcast'
+    write_odds(fresh_app.fs, fixture_data('seat-odds'))
+    status, page = page_of(api, '/es/circunscripciones')
+    assert status == 404 and 'Este run no tiene el desglose escaño a escaño.' in page  # one district
+    for mode in bundle.MODES:
+        os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'seat-odds', mode)))
+    webapi.site().files.clear()
+    assert call(api, '/es/circunscripciones')[0] == 404  # a run published before the part existed
+
+
+def test_a_pinned_run_stays_in_every_link_of_the_page_and_the_canonical_drops_it(odds_site):
+    status, page = page_of(odds_site, '/es/circunscripciones/cadiz', 'mode=nowcast&run=' + RUN)
+    query = '?mode=nowcast&amp;run=' + RUN
+    assert status == 200
+    assert 'href="/es/circunscripciones/guadalajara{}#ficha"'.format(query) in page
+    assert 'href="/es/circunscripciones{}"'.format(query) in page  # the tab of the view
+    assert 'href="/es/circunscripciones{}&amp;partido=pp"'.format(query) in page  # the first party with a token
+    assert 'href="/es/circunscripciones{}&amp;vista=renidos"'.format(query) in page
+    assert 'href="/es{}#tabla"'.format(query) in page  # the index of the event bar
+    form = page[page.index('id="district-pick"'):page.index('</form>')]
+    assert '<input type="hidden" name="run" value="{}">'.format(RUN) in form and 'value="nowcast"' in form
+    assert '<option value="cadiz" selected>Cádiz · 8 escaños · 3 en el aire</option>' in form
+    assert '<option value="guadalajara">Guadalajara · 3 escaños · decidida</option>' in form
+    assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones/cadiz">' in page
+    status, headers, _ = call(odds_site, '/es/circunscripciones', query='mode=nowcast&run={}&circunscripcion=cadiz'.format(RUN))
+    assert status == 301 and headers['location'] == '/es/circunscripciones/cadiz?mode=nowcast&run=' + RUN
+
+
+def test_the_list_sorts_itself_without_javascript_and_the_rows_read_aloud(odds_site):
+    page = page_of(odds_site, '/es/circunscripciones')[1]
+    # the order by open seats is the order of the markup; the alphabetical one, a position for the CSS
+    assert re.findall(r'style="--by-open: (\d+); --by-name: (\d+)"', page) == [('1', '1'), ('2', '3'), ('3', '2')]
+    assert 'name="orden" value="az">A–Z' in page and 'class="so-item on" href="/es/circunscripciones/cadiz?' in page
+    assert 'aria-label="PP: 2 seguros; 3.º, 80%; 4.º, 7%"' in page and 'aria-label="AA: 1.º, 76%"' in page
+    assert '<div class="so-note">2 seguros · 2 en el aire</div>' in page and '<div class="so-note">1 en el aire</div>' in page
+    legend = page[page.index('class="so-legend"'):]
+    assert 'lo consigue en el 99% o más de las simulaciones' in legend and 'por debajo del 1% no se dibuja' in legend
+    assert 'data-file="demoscopio-escanos-es-cadiz.png"' in page and '/dist/js/pages/circunscripciones.js' in page
+    assert ('<meta name="description" content="Los escaños de Cádiz, uno a uno: cuáles tiene seguros cada partido y cuáles '
+            'están en el aire, según las simulaciones del modelo para Elecciones generales 2026.">') in page
+    assert 'según las 10.000 simulaciones del modelo.' in page
+
+
+def test_the_texts_of_a_row_and_the_link_of_a_district():
+    assert pages.tokens_note({'safe': 2, 'open': 2}) == '2 seguros · 2 en el aire'
+    assert pages.tokens_note({'safe': 1, 'open': 0}) == '1 seguro' and pages.tokens_note({'safe': 0, 'open': 0}) == '—'
+    row = by_name(pages.district_views(ODDS)[1])['PP']  # Guadalajara: one safe seat, the second below 1%
+    assert pages.tokens_reading('PP', row) == 'PP: 1 seguro'
+    assert pages.tokens_reading('B', {'safe': 0, 'tokens': []}) == 'B: ningún escaño llega al 1%'
+    assert (pages.threshold_label(pages.SAFE_SHARE), pages.threshold_label(pages.OPEN_FLOOR)) == ('99%', '1%')
+    assert pages.tint('#1d84ce', 0.2) == 'rgba(29, 132, 206, 0.2)' and pages.tint('#fff', 0.5) == 'rgba(255, 255, 255, 0.5)'
+    assert pages.tint(None, 0.5) == 'rgba(158, 158, 158, 0.5)'  # the grey of the others
+    drawn = pages.drawn_row(by_name(pages.district_views(ODDS)[0])['PP'], 'PP', '#1d84ce')
+    assert [token['fill'] for token in drawn['tokens']][:3] == [None, None, pages.tint('#1d84ce', drawn['tokens'][2]['alpha'])]
+    assert pages.district_href('es', 'la-coruna', '?mode=nowcast') == '/es/circunscripciones/la-coruna?mode=nowcast#ficha'
