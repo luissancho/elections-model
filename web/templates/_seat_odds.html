@@ -1,0 +1,49 @@
+{% import '_macros.html' as m %}
+{#- The tokens of «Escaños que bailan» (`/{scope}/circunscripciones`) and their legend. Import with
+    `{% import '_seat_odds.html' as s with context %}`: the legend reads the `thresholds` of the context
+    (`SAFE_SHARE` and `OPEN_FLOOR`, never literals). -#}
+
+{#- The tokens of a row (`drawn_row`): one per seat the party reaches in at least `OPEN_FLOOR` of the simulations, in
+    seat order. A safe one is a solid square in `color`; an open one, a square tinted with the opacity of its share
+    (`fill`) and bordered in `color`, continuous when the central allocation gives it the seat and dashed when not
+    (`out`), with its percentage under it. The state never depends on the colour alone: the border, the label and the
+    title of each token say it, and the row is read aloud as one image (`reading`). -#}
+{% macro tokens(row, color) -%}
+<span class="so-tokens" role="img" aria-label="{{ row.reading }}">
+  {%- for token in row.tokens -%}
+  {%- if token.safe -%}
+  <span class="so-token safe" title="{{ token.title }}" style="background: {{ color }}"></span>
+  {%- else -%}
+  <span class="so-token open{% if not token.central %} out{% endif %}" title="{{ token.title }}"><i style="border-color: {{ color }}; background: {{ token.fill }}"></i><span class="so-pct">{{ token.label }}</span></span>
+  {%- endif -%}
+  {%- endfor -%}
+</span>
+{%- endmacro %}
+
+{#- The legend of the tokens: the three states, in grey, and what is not drawn. -#}
+{% macro legend() -%}
+<div class="so-legend">
+  <span><i class="so-key safe"></i>seguro: lo consigue en el {{ thresholds.safe }} o más de las simulaciones</span>
+  <span><i class="so-key open"></i>posible, y el reparto central se lo da</span>
+  <span><i class="so-key open out"></i>posible, y el reparto central no se lo da</span>
+  <span>por debajo del {{ thresholds.floor }} no se dibuja</span>
+</div>
+{%- endmacro %}
+
+
+{#- The «Cómo leerlo» of the cards of a district and of a party. -#}
+{% macro how() -%}
+{% call m.how() %}
+<p>
+  Cada ficha es un escaño que el partido puede conseguir en esa circunscripción. Es seguro si lo consigue en
+  el {{ thresholds.safe }} o más de las simulaciones; si lo consigue en menos del {{ thresholds.floor }}, no se
+  dibuja; entre medias es posible y lleva su porcentaje. Los escaños en el aire de una circunscripción son los
+  que no son seguros de nadie: se los reparten los posibles.
+</p>
+<p>
+  La columna «Central» es el reparto central de la página de encuestas: no siempre coincide con lo más
+  probable, y por eso hay escaños posibles que el reparto central da y otros que no. «Seguro» no es una
+  garantía: es lo que dicen las simulaciones.
+</p>
+{% endcall %}
+{%- endmacro %}

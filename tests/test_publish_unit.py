@@ -1798,3 +1798,53 @@ def test_publish_parties_writes_the_global_catalogue_without_run(tmp_path):
     env = writer.read_json(bundle.path_parties())
     assert env['schema'] == 'parties@1' and env['scope'] is None and env['run_id'] is None and env['mode'] is None
     assert [row['name'] for row in env['data']['rows']] == ['PP', 'SUMAR']
+
+
+SEAT_ODDS_COLUMNS = ['region_id', 'region', 'name', 'seats', 'k', 'sims', 'p']
+
+
+def central(sim, madrid, barcelona):
+    """Fija el reparto central de la caché del simulador sintético."""
+    total = [a + b for a, b in zip(madrid, barcelona)]
+    sim.central_table = pd.DataFrame([total, madrid, barcelona], columns=NAMES,
+                                     index=pd.Index(['es', 'Madrid', 'Barcelona'], name='region'))
+
+
+def test_export_seat_odds_counts_by_district_and_party():
+    sim = synthetic_simulator(n_sim=50)
+    central(sim, [3, 2, 1], [2, 2, 0])
+    data, frame = publish.export_seat_odds(sim)
+    data = valid('seat-odds', data)
+    assert data['n_sim'] == 50 and data['parties'] == NAMES
+    assert data['regions'] == [{'id': 28, 'name': 'Madrid', 'seats': 6}, {'id': 8, 'name': 'Barcelona', 'seats': 4}]
+    assert [(r['name'], r['seats']) for r in data['rows'] if r['region_id'] == 28] == [('PP', 3), ('PSOE', 2), ('VOX', 1)]
+    for row in data['rows']:
+        assert set(row) == {'region_id', 'name', 'seats', 'reach'} and isinstance(row['seats'], int)
+        assert row['reach'] == sim.seat_reach(row['region_id'])[row['name']]
+    assert sum(sum(r['reach']) for r in data['rows'] if r['region_id'] == 28) == 50 * 6
+    assert list(frame.columns) == SEAT_ODDS_COLUMNS and len(frame) == sum(len(r['reach']) for r in data['rows'])
+    first = frame.iloc[0]
+    assert (first['region'], first['name'], first['k']) == ('Madrid', 'PP', 1) and first['p'] == round(first['sims'] / 50, 4)
+
+
+def test_export_seat_odds_keeps_a_central_seat_no_simulation_gives_and_drops_the_seatless():
+    sim = synthetic_simulator(n_sim=50)
+    sim.results[:, 2, 2] = 0  # VOX never wins a seat in Barcelona
+    central(sim, [3, 2, 1], [2, 2, 0])
+    assert (8, 'VOX') not in {(r['region_id'], r['name']) for r in publish.export_seat_odds(sim)[0]['rows']}
+    central(sim, [3, 2, 1], [2, 1, 1])
+    rows = {(r['region_id'], r['name']): r for r in valid('seat-odds', publish.export_seat_odds(sim)[0])['rows']}
+    assert rows[(8, 'VOX')] == {'region_id': 8, 'name': 'VOX', 'seats': 1, 'reach': []}
+
+
+def test_export_seat_odds_is_empty_without_a_central_allocation():
+    sim = synthetic_simulator(n_sim=20)
+    sim.params['split'] = False  # the regression mode: `central_result()` is None
+    data, frame = publish.export_seat_odds(sim)
+    assert valid('seat-odds', data) == {'n_sim': 20, 'parties': NAMES, 'regions': [], 'rows': []}
+    assert frame.empty and list(frame.columns) == SEAT_ODDS_COLUMNS
+
+
+def test_seat_odds_is_a_mode_part_written_with_the_others():
+    assert bundle.MODE_PARTS[-3:] == ('scenario', 'seat-odds', 'projection')
+    assert [name for name, _ in publish.forecast.MODE_EXPORTERS] == list(bundle.MODE_PARTS)

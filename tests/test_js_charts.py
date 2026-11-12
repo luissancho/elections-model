@@ -1027,7 +1027,11 @@ def test_weeks_option_colours_each_election_and_marks_the_stretches():
     series = option['series']
     assert series[0]['lineStyle']['color'] == '#e07b39' and series[1]['lineStyle']['color'] == '#2a9d8f'
     assert option['series'][0]['connectNulls'] is True and option['series'][3]['lineStyle']['width'] == 3.5
-    assert option['series'][0]['lineStyle']['width'] == 1.6 and option['series'][0]['data'] == [None, 1.39, 0.82, 0.7]
+    assert option['series'][0]['lineStyle']['width'] == 1.3 and option['series'][0]['data'] == [None, 1.39, 0.82, 0.7]
+    # the past elections faint (whole when pointed at, and in the legend), the mean and the one in progress whole
+    assert series[0]['lineStyle']['opacity'] == 0.45 and series[0]['emphasis']['lineStyle']['opacity'] == 1
+    assert 'opacity' not in series[2]['lineStyle'] and 'opacity' not in series[3]['lineStyle']
+    assert option['legend']['itemStyle']['opacity'] == 1 and option['legend']['lineStyle']['opacity'] == 1
     assert series[3]['lineStyle']['color'] == '#1d4f86' and series[3]['data'] == [1.01, 1.11, 1.06, None]
     assert option['series'][3]['endLabel']['show'] is True
     assert series[2]['lineStyle']['type'] == 'dashed' and series[2]['markLine']['data'][0]['yAxis'] == 1
@@ -1039,14 +1043,19 @@ def test_weeks_option_colours_each_election_and_marks_the_stretches():
     assert all('yAxis' not in point for area in areas for point in area)
     shades = option['xAxis']['splitArea']['areaStyle']['color']
     assert shades[0] == 'rgba(0,0,0,0)' and shades[1] == shades[2] != shades[3] != shades[0]
-    assert option['xAxis']['data'] == ['27-52', '5-7', '3-4', '0-2'] and option['yAxis']['interval'] == 0.5
+    assert option['xAxis']['data'] == ['27-52', '5-7', '3-4', '0-2'] and option['yAxis']['interval'] == 0.25
     assert option['xAxis']['name'] == 'semanas antes de la elección'
-    assert (option['yAxis']['min'], option['yAxis']['max']) == (0, 3)
-    # the colours cycle and the top rises to the next half when a ratio passes `yMax`
+    assert (option['yAxis']['min'], option['yAxis']['max']) == (0.5, 3)
+    assert all(s['clip'] is False for s in series)
+    # the colours cycle; a ratio a little over the top (3.03) is drawn over the edge, one farther raises the top to
+    # the next half, and the bottom goes down to the quarter below a ratio under 0.5
     data['rows'][1]['ratio'] = 3.03
+    data['rows'][3]['ratio'] = 0.4
     option = run_js('wk.weeksOption(%s, {palette: ["#111111"]})' % json.dumps(data))
     assert [s['lineStyle']['color'] for s in option['series'][:2]] == ['#111111', '#111111']
-    assert option['yAxis']['max'] == 3.5
+    assert (option['yAxis']['min'], option['yAxis']['max']) == (0.25, 3) and option['series'][0]['data'][1] == 3.03
+    data['rows'][1]['ratio'] = 3.2
+    assert run_js('wk.weeksOption(%s).yAxis.max' % json.dumps(data)) == 3.5
     # all seven labels show on a phone, and the palette has eight colours before it wraps
     assert option['xAxis']['axisLabel']['interval'] == 0 and option['xAxis']['axisLabel']['fontSize'] == 10
     colours = run_js('wk.PALETTE')

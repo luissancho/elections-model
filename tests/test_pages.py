@@ -104,7 +104,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
 def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href', 'fan',
-                         'districts', 'scenario', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
+                         'districts', 'scenario', 'odds_hrefs', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
     assert data['catalog'] == {'parties': [dict(pages.catalog(data['meta'])['PP'], name='PP')], 'bmaps': data['meta']['bmaps']}
     assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}  # a 52 días: Elección
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
@@ -805,11 +805,14 @@ def test_default_coalition_is_the_first_vs_block_present_in_dist():
     assert pages.default_coalition({'bmaps': {}}, {'vs': [], 'blocks': []}, ['PP']) == []
 
 
-def test_csv_links_cover_the_five_parts_in_order():
+def test_csv_links_cover_the_six_parts_in_order():
     links = pages.csv_links('es', 'nowcast', RUN)
-    assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Reparto central', 'Abanico por horizonte']
+    assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Reparto central', 'Escaños uno a uno por circunscripción', 'Abanico por horizonte']
     assert links[0]['href'] == '/api/v1/forecast/es/nowcast/summary?run={}&format=csv'.format(RUN)
-    assert links[4]['href'] == '/api/v1/forecast/es/fan?run={}&format=csv'.format(RUN)
+    assert links[4]['href'] == '/api/v1/forecast/es/nowcast/seat-odds?run={}&format=csv'.format(RUN)
+    assert links[5]['href'] == '/api/v1/forecast/es/fan?run={}&format=csv'.format(RUN)
+    five = pages.csv_links('es', 'nowcast', RUN, skip=('seat-odds',))
+    assert [l['label'] for l in five] == [l['label'] for l in links if 'uno a uno' not in l['label']] and len(five) == 5
 
 
 DISTRICTS = {
@@ -998,7 +1001,7 @@ def test_event_page_initial_keys(api):
     body = call(api, '/es', query='mode=forecast')[2]
     data = initial(body)
     assert list(data) == ['state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href',
-                          'fan', 'districts', 'scenario', 'runs', 'cards', 'deltas', 'catalog', 'inks']
+                          'fan', 'districts', 'scenario', 'odds_hrefs', 'runs', 'cards', 'deltas', 'catalog', 'inks']
     assert 'dist' not in data and data['dist_href'] == '/api/v1/forecast/es/forecast/dist?run=' + RUN
     assert data['districts']['regions'][0]['id'] == 28 and data['fan'] == fixture_data('fan')
     assert 'PP' in data['inks'] and 'Derecha' in data['inks']
@@ -1285,7 +1288,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert re.search(r'<div class="series-controls" id="pollster-controls" hidden>.*?<label>Encuestadora', page, re.S)
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href', 'fan',
-                         'districts', 'scenario', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
+                         'districts', 'scenario', 'odds_hrefs', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
     assert 'pollster_id' in data['polls']['polls'][0]
 
@@ -2018,7 +2021,7 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters',
+    assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'circunscripciones', 'common', 'elecciones', 'escanos', 'filters',
                      'herd', 'inicio', 'lean', 'metodo', 'promedios', 'shy', 'slugs', 'sondeos']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
@@ -3565,6 +3568,15 @@ def test_metodo_escanos_quotes_the_coverage_only_with_a_backtest(api, fresh_app)
     write_backtest(fresh_app.fs)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
     assert 'el intervalo del 95% del voto contiene el resultado el 96% de las veces a 6 días' in page
+
+
+def test_method_seats_explains_the_safe_and_the_open_seats(api):
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    block = page[page.index('<h3 id="seguros">'):page.index('id="comprobacion"')]
+    assert 'Escaños seguros, posibles y en el aire' in block and '99%' in block and '1%' in block
+    assert 'posible al que sale entre el 1% y el 99%' in block and 'se los reparten los posibles' in block
+    assert 'no es una garantía' in block
+    assert_public_wording(page, 'metodo/escanos')
 
 
 def test_thresholds_and_figures_come_from_the_catalogue_and_the_bundle(api, fresh_app):
@@ -7873,3 +7885,10 @@ def test_sondeo_page_errors_and_pinned_run(api, fresh_app):
     assert 'href="/es?mode=nowcast&amp;run=%s#tabla"' % RUN in page and 'href="/es?mode=nowcast&amp;run=%s#escanos"' % RUN in page
     assert '<link rel="canonical" href="https://demoscopio.es/es/sondeos/2026-10-01/gad3/abc">' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
+
+
+def test_api_serves_the_seat_odds_part_of_a_mode(api):
+    status, _, body = call(api, '/api/v1/forecast/es/forecast/seat-odds')
+    payload = json.loads(body)
+    assert status == 200 and (payload['schema'], payload['mode']) == ('seat-odds@1', 'forecast')
+    assert payload['data'] == fixture_data('seat-odds')

@@ -189,6 +189,11 @@
             </div>
           </div>
           {% endif %}
+          {#- the seats one by one, at the foot of the tables as at the foot of the territory card (Luis, 2026-11-12); only
+              when the run shown has the part with two districts or more (`odds`) -#}
+          {% if odds %}
+          {{ m.seat_odds_link(odds.page) }}
+          {% endif %}
           {#- the distributions open on demand (Luis, 2026-10-30): the button only works with JavaScript, which reveals it -#}
           <button type="button" class="more" id="ridge-toggle" aria-expanded="false" aria-controls="ridge-chart" hidden>Ver las distribuciones</button>
           <div class="chart" id="ridge-chart" role="img" aria-label="Distribución de escaños en las simulaciones, una fila por partido o bloque" hidden></div>
@@ -459,6 +464,15 @@
             </tbody>
           </table>
         </div>
+        {% if odds %}
+        {#- hidden, not absent, when the district shown is not in the part: the script shows it for another one. The keys
+            of `odds.districts` are ints here and strings in the embedded JSON (`odds_hrefs`) -#}
+        {% set odds_href = odds.districts.get(region.id) %}
+        <p class="more"{% if not odds_href %} hidden{% endif %}><a id="region-odds" class="more-link"{% if odds_href %} href="{{ odds_href }}"{% endif %}>Escaño a escaño en {{ region.name }} ›</a></p>
+        {% endif %}
+        {% endif %}
+        {% if odds %}
+        {{ m.seat_odds_link(odds.page) }}
         {% endif %}
         {% call m.how() %}
         <p>

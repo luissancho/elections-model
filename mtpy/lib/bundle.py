@@ -65,7 +65,7 @@ DRY_PREFIX = 'site-dry/v1'
 CONTRACT = 1
 MODES = ('nowcast', 'forecast')
 RUN_PARTS = ('meta', 'headline', 'series', 'polls', 'fan', 'house-effects', 'dispersion', 'weights')
-MODE_PARTS = ('vote', 'summary', 'dist', 'districts', 'scenario', 'projection')
+MODE_PARTS = ('vote', 'summary', 'dist', 'districts', 'scenario', 'seat-odds', 'projection')
 ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data', 'rating-check')
 # The final stretch of an election, in days before it: the window of the `poll-errors` part (the last poll of each
 # house between 6 and 42 days before; the lower bound is the ban) and the one the pages that read the part keep
@@ -147,6 +147,7 @@ SCHEMAS = {
     'dist': {'n_seats': int, 'parties': list, 'seats': list},
     'districts': {'parties': list, 'regions': list, 'rows': list},
     'scenario': {'parties': list, 'rows': list},
+    'seat-odds': {'n_sim': int, 'parties': list, 'regions': list, 'rows': list},
     'projection': {'dates': list, 'groups': dict},
     'analysis-meta': {'scope': str, 'event_date': str, 'events': list, 'n_pollsters': int, 'params': dict,
                       'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'seconds': dict},

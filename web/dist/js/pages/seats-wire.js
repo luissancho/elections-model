@@ -330,6 +330,28 @@ function wireTerritory(initial, catalog) {
 }
 
 /**
+ * Point the link «Escaño a escaño en …» under the detail of a district (`#region-odds`) to the card of `region`, or hide
+ * it when the page «Escaños que bailan» has none for it. The keys of `hrefs` are the ids as text (JSON).
+ *
+ * @param {?object} hrefs district id (text) to the href of its card (`initial.odds_hrefs`)
+ * @param {{id: number, name: string}} region the district drawn
+ */
+function showOddsLink(hrefs, region) {
+  const link = document.getElementById('region-odds');
+  if (!link) {
+    return;
+  }
+  const href = (hrefs || {})[String(region.id)];
+  if (href) {
+    link.href = href;
+    link.textContent = `Escaño a escaño en ${region.name} ›`;
+  } else {
+    link.removeAttribute('href');
+  }
+  link.parentElement.hidden = !href;
+}
+
+/**
  * Wire the detail of one district without reloading the page: changing the select of `#district-form`, or
  * following the link of a province of the territory table, draws its detail in `#region-table` from the embedded
  * `districts` (`regionRows`, `renderRegion`), writes `region=N` in the query (keeping the fragment) and scrolls to
@@ -354,6 +376,7 @@ function wireRegion(initial, catalog) {
       return false;
     }
     renderRegion(table, regionRows(initial.districts, id), region, catalog);
+    showOddsLink(initial.odds_hrefs, region);
     select.value = String(id);
     const params = new URLSearchParams(window.location.search);
     params.set('region', String(id));

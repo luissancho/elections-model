@@ -147,6 +147,9 @@ def test_fixed_page_routes_win_over_the_scope_route():
     assert page_target('/analisis/voto-cera') == ('analisis', 'study')  # the slug has a hyphen
     assert page_target('/es') == ('promedios', 'index')
     assert page_target('/es-md/escanos') == ('redirect', 'seats')  # the old seats page: a 301 to the event page
+    assert page_target('/es/circunscripciones') == ('circunscripciones', 'index')
+    assert page_target('/es-md/circunscripciones/la-coruna') == ('circunscripciones', 'detail')
+    assert page_target('/es/circunscripciones/a/b') is None
     assert page_target('/ES') is None and page_target('/es/') is None and page_target('/es//escanos') is None
 
 

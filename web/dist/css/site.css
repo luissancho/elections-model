@@ -345,8 +345,9 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .card-head { margin-bottom: 10px; }
 /* A card head with something on the right (a pill, a link) */
 .card-head.split-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
-.card-head .more-link { font-size: 13px; font-weight: 600; text-decoration: none; }
-.card-head .more-link:hover { text-decoration: underline; }
+/* also the «more» links at the foot of a card (`p.more`: the entries of «Escaños que bailan» on the event page) */
+.card-head .more-link, .more > .more-link { font-size: 13px; font-weight: 600; text-decoration: none; }
+.card-head .more-link:hover, .more > .more-link:hover { text-decoration: underline; }
 /* A tool at the top right of a card head: the button that downloads the chart as a signed image (`share.js`) */
 .card-head .card-tools { float: right; margin: -2px 0 var(--space-2) var(--space-3); }
 .tool-btn { min-height: 30px; padding: 0 10px; gap: 6px; font-size: 12px; color: var(--color-muted); }
@@ -1070,12 +1071,12 @@ td.blk { font-weight: 700; }
 .herd-page .table-wrap { max-width: 100%; }
 /* the separation by weeks of question 2, at full width above the squares, and the histogram of the shuffles of
    question 3 (both lower on phones) */
-.qcard .chart#weeks-chart { height: 320px; }
+/* the weeks chart at one fixed height, also on phones: its axis runs from 0.5 to 3 */
+.qcard .chart#weeks-chart { height: 480px; }
 #weeks-chart + .tnote { margin-bottom: var(--space-3); }
 .qcard .chart#chance-chart { height: 260px; }
 @media (max-width: 719px) {
   .herd-bar { grid-template-columns: 6.5rem minmax(0, 1fr) 3.6rem; gap: 6px; font-size: 12px; }
-  .qcard .chart#weeks-chart { height: 260px; }
   .qcard .chart#chance-chart { height: 220px; }
 }
 /* The shy-vote study (/analisis/voto-oculto): the bars of the left at full width and lower on phones, the bars of
@@ -1116,6 +1117,118 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .locked { display: grid; place-items: center; min-height: 150px; padding: 18px; border: 2px dashed var(--color-line-strong); border-radius: 12px; background: var(--color-bg); text-align: center; }
 .locked b { display: block; margin-bottom: 4px; font: 800 18px var(--font-head); }
 .locked p { max-width: 60ch; margin: 0; font-size: 13px; color: var(--color-muted); }
+
+/* «Escaños que bailan» (/{scope}/circunscripciones): the tabs of its views; the list of districts beside the card of
+   the chosen one, sorted by the CSS from the radio that is checked (each link carries its two positions, no JS), and
+   the dropdown that takes the place of the list under 720 px; the tokens, one square per seat a party can win (22 px,
+   6 px corners, 4 px apart, wrapping): solid when safe, tinted and bordered when open (2 px, dashed when the central
+   allocation does not give it) with the percentage under it, in bold or in muted ink; and their legend. The amber
+   tint marks what is open, never a party */
+.so-intro { margin-top: 0; font-size: 14.5px; color: var(--color-muted); }
+#seat-kpis .kpi .l { white-space: normal; }
+.so-air { background: #fff4d6; color: var(--color-text); }
+.so-md { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.so-md > * { min-width: 0; }
+.so-list { padding: 12px 8px 8px; }
+.so-sort { margin: 0 6px 10px; }
+.so-items { display: flex; flex-direction: column; gap: 1px; }
+.so-item { order: var(--by-open); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 7px 10px; border-radius: var(--radius-sm); color: var(--color-text); text-decoration: none; }
+.so-list:has(input[value="az"]:checked) .so-item { order: var(--by-name); }
+.so-item:hover { background: var(--color-soft); }
+.so-item.on { background: var(--color-text); color: #fff; }
+.so-item .so-name { font-weight: 600; }
+.so-item small { margin-left: 4px; font-weight: 500; opacity: .65; }
+.so-pick { display: none; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.so-pick select { flex: 1; min-width: 0; }
+.so-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 6px; padding-right: 36px; }
+.so-head h2 { margin: 0; font: 700 20px/1.2 var(--font-head); }
+.so-seats { color: var(--color-muted); }
+.so-head .chip { padding: 3px 10px; border-radius: 999px; font-size: 12.5px; }
+.so-head .chip b { font: 700 14px var(--font-head); }
+.so-says { margin: 0 0 14px; color: var(--color-muted); }
+.so-stamp { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: var(--color-muted); }
+.so-grid { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr) max-content; align-items: center; gap: 6px 4px; }
+.so-h { padding: 0 8px 2px 0; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--color-muted); white-space: nowrap; }
+.so-h.so-c { text-align: center; }
+.so-party { display: flex; align-items: center; padding-right: 10px; font-weight: 700; white-space: nowrap; }
+.so-num { padding: 0 12px; text-align: center; font: 700 18px var(--font-head); }
+.so-tokens { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px; min-width: 0; padding: 3px 0; }
+.so-token { display: block; flex: none; width: 22px; height: 22px; border-radius: 6px; }
+.so-token.open { width: 31px; height: auto; border-radius: 0; text-align: center; }
+.so-token.open i { display: block; box-sizing: border-box; width: 22px; height: 22px; margin: 0 auto; border: 2px solid; border-radius: 6px; }
+.so-token.out i { border-style: dashed; }
+.so-pct { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.so-token.out .so-pct { font-weight: 500; color: var(--color-muted); }
+.so-note { padding-left: 10px; font-size: 12.5px; color: var(--color-muted); white-space: nowrap; }
+.so-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-line); font-size: 12px; color: var(--color-muted); }
+.so-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.so-key { display: inline-block; box-sizing: border-box; width: 16px; height: 16px; border-radius: 5px; }
+.so-key.safe { background: var(--color-muted); }
+.so-key.open { border: 2px solid var(--color-muted); background: rgba(90, 95, 114, .25); }
+.so-key.out { border-style: dashed; background: none; }
+/* The links of the page land on the card (`#ficha`) or on the tabs of the views (`#vistas`) below the sticky header
+   (56 px, plus the freeze banner when it shows) with a little air; on phones the card also leaves the dropdown of
+   districts in sight (header 52 px, dropdown down to 100 px) */
+#ficha, #vistas { scroll-margin-top: 68px; }
+body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top: 114px; }
+/* Tablet and narrow desktop (720 to 1099 px): beside the list the card keeps its width for the tokens, without the
+   summary of each row (the tokens and their labels say it) */
+@media (max-width: 1099px) {
+  .so-md .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-md .so-note { display: none; }
+}
+@media (max-width: 719px) {
+  #ficha, body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 116px; }
+  #vistas, body:has(#freeze-banner:not([hidden])) #vistas { scroll-margin-top: 68px; }
+  /* the tabs in one line, sliding sideways like the index of the event bar; the party buttons, a block that wraps */
+  .so-tabs { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .seg.so-tabs > a { padding: 7px 10px; font-size: 12.5px; }
+  .so-pills { border-radius: var(--radius); }
+  .so-md { grid-template-columns: minmax(0, 1fr); }
+  .so-list { display: none; }
+  .so-pick { display: flex; }
+  .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-note { display: none; }
+  .so-party { padding-right: 4px; white-space: normal; }
+  .so-num { padding: 0 8px; }
+}
+
+/* «Escaños que bailan»: the view of a party and the list of the closest seats; on phones each closest seat stacks in
+   two lines (the seat and its meter; the district and the central state, which says «Central: » there because the
+   header is hidden) */
+.so-pills .so-party-btn { display: inline-flex; align-items: center; gap: 6px; }
+.so-head h2 .dot { margin-right: 8px; }
+.so-grid.so-by-party { grid-template-columns: max-content max-content max-content minmax(0, 1fr) max-content; }
+.so-dname { padding-right: 10px; font-weight: 600; white-space: nowrap; }
+.so-settled { margin: 14px 0 0; font-size: 13px; color: var(--color-muted); }
+.so-table { width: 100%; border-collapse: collapse; }
+.so-table th { padding: 4px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: right; color: var(--color-muted); white-space: nowrap; }
+.so-table td { padding: 6px 8px; border-top: 1px solid var(--color-line); text-align: right; font-variant-numeric: tabular-nums; }
+.so-table th.l, .so-table td.l { text-align: left; }
+.so-table td.b { font-weight: 700; }
+.so-meter-col { width: 36%; }
+.so-who { display: inline-flex; align-items: center; gap: 8px; }
+.so-meter { display: flex; align-items: center; gap: 8px; }
+.so-track { position: relative; flex: 1; min-width: 60px; height: 10px; border-radius: 5px; overflow: hidden; background: var(--color-soft); }
+.so-track i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; }
+.so-track u { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0, 0, 0, .4); }
+.so-meter b { width: 38px; text-align: right; font-size: 13px; }
+@media (min-width: 720px) {
+  .so-narrow { display: none; }
+}
+@media (max-width: 719px) {
+  .so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-dname { white-space: normal; padding-right: 4px; }
+  .so-wide { display: none; }
+  .so-table, .so-table tbody { display: block; }
+  .so-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .so-table tr { display: grid; grid-template-columns: minmax(0, 1fr) 128px; align-items: center; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--color-line); }
+  .so-table td { display: block; padding: 0; border: 0; white-space: normal; }
+  .so-table .so-c-seat { order: 1; }
+  .so-table .so-c-odds { order: 2; }
+  .so-table .so-c-where { order: 3; font-size: 12.5px; }
+  .so-table .so-central { order: 4; font-size: 12px; color: var(--color-muted); white-space: nowrap; }
+}
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {

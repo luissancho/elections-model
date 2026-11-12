@@ -15,6 +15,7 @@ CSV_PARTS = (
     ('dist', 'Escaños por simulación', True),
     ('districts', 'Circunscripciones', True),
     ('scenario', 'Reparto central', True),
+    ('seat-odds', 'Escaños uno a uno por circunscripción', True),
     ('fan', 'Abanico por horizonte', False),
 )
 
@@ -53,7 +54,7 @@ def default_coalition(meta: dict, summary: dict, names: list) -> list:
     return []
 
 
-def csv_links(scope: str, mode: str, run: str) -> list:
+def csv_links(scope: str, mode: str, run: str, skip: tuple = ()) -> list:
     """
     Download links of the seats of the event page.
 
@@ -65,16 +66,19 @@ def csv_links(scope: str, mode: str, run: str) -> list:
         Simulation mode of the mode parts.
     run : str
         Run id the page shows.
+    skip : tuple of str, default ()
+        Parts left out (the run has no ``seat-odds``).
 
     Returns
     -------
     list of dict
-        ``{'label', 'href'}`` for ``summary``, ``dist``, ``districts``, ``scenario`` (with
-        ``mode``) and ``fan`` (without it), all CSV and pinned to ``run``.
+        ``{'label', 'href'}`` for ``summary``, ``dist``, ``districts``, ``scenario``, ``seat-odds`` (with
+        ``mode``) and ``fan`` (without it), all CSV and pinned to ``run``, but those of ``skip``.
     """
     return [
         {'label': label, 'href': api_url(scope, name, mode=mode if by_mode else None, run=run, fmt='csv')}
         for name, label, by_mode in CSV_PARTS
+        if name not in skip
     ]
 
 
@@ -279,14 +283,18 @@ def seats_context(context: dict, region=None) -> dict:
         (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels``
         (``has_communities``) and ``initial_extra``, the members the seats add to the initial data: ``dist_href``
         (the JSON route of the ``dist`` part of the run and mode shown, which the browser asks for after the first
-        drawing: the simulations are too heavy for the page, Luis 2026-11-04), ``fan``, ``districts`` and
-        ``scenario``.
+        drawing: the simulations are too heavy for the page, Luis 2026-11-04), ``fan``, ``districts``,
+        ``scenario`` and ``odds_hrefs`` (district id to the href of its card); ``odds`` (``seat_odds_links``, ``None``
+        without the page «Escaños que bailan»).
 
     Raises
     ------
     HttpError
         404 for a missing part or an unknown district; 400 for an invalid ``region``.
     """
+    # imported here: ``circunscripciones`` imports this module
+    from .circunscripciones import seat_odds_links
+
     region_id = check_region(region)
     full, meta, parties = context['state'], context['meta'], context['catalog']
     scope, mode, run = full['scope'], full['mode'], full['run']
@@ -298,6 +306,7 @@ def seats_context(context: dict, region=None) -> dict:
     regions = districts.get('regions') or []
     current = resolve_region(region_id, regions)
     checked = default_coalition(meta, summary, names)
+    odds = seat_odds_links(scope, run, mode, context['query'])
 
     return {
         'summary': summary,
@@ -306,7 +315,8 @@ def seats_context(context: dict, region=None) -> dict:
              'checked': name in checked}
             for name in names
         ],
-        'csv_links': csv_links(scope, mode, run),
+        'csv_links': csv_links(scope, mode, run, skip=() if odds else ('seat-odds',)),
+        'odds': odds,
         'district_table': district_table(districts, scenario, summary),
         'regions': regions,
         'territory_levels': has_communities(regions),
@@ -317,5 +327,6 @@ def seats_context(context: dict, region=None) -> dict:
             'fan': part(scope, run, 'fan'),
             'districts': districts,
             'scenario': scenario,
+            'odds_hrefs': odds['districts'] if odds else {},
         },
     }

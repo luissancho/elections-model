@@ -80,6 +80,9 @@ ROUTES = [
     ('/{scope}', 'promedios', 'index', ['GET']),
     # the old seats page of a scope (before 2026-11-04): a 301 to its section of the event page
     ('/{scope}/escanos', 'redirect', 'seats', ['GET']),
+    # the seats that dance: the seats of every district, one by one, with the chance that each party wins them
+    ('/{scope}/circunscripciones', 'circunscripciones', 'index', ['GET']),
+    ('/{scope}/circunscripciones/{district}', 'circunscripciones', 'detail', ['GET']),
     # the page of a poll: its day (the last day of its fieldwork), its house and, when it has one, its sponsor
     ('/{scope}/sondeos/{date}/{pollster}', 'sondeos', 'detail', ['GET']),
     ('/{scope}/sondeos/{date}/{pollster}/{sponsor}', 'sondeos', 'detail', ['GET']),
@@ -106,6 +109,9 @@ MESSAGES = {
     'unknown scope': 'Ámbito desconocido.',
     'section not found': 'Página del método no encontrada.',
     'study not found': 'Ese análisis no existe o no está publicado.',
+    'seat odds not published': 'Este run no tiene el desglose escaño a escaño.',
+    'party not found': 'Partido no encontrado.',
+    'invalid view': 'Vista no válida.',
 }
 OTHERS_COLOR = '#9e9e9e'
 # Name of the rest block; the same as ``mtpy.lib.utils.REST_BLOCK``, repeated here because utils pulls statsmodels
@@ -1018,3 +1024,29 @@ def bundle_part(read, *args) -> Optional[dict]:
             return None
 
         raise
+
+
+def subpage_event_bar(context: dict) -> dict:
+    """
+    Event bar of a subpage of the event (the page of a poll, «Escaños que bailan»): its index links the sections of
+    the event page instead of anchors on the same page.
+
+    Parameters
+    ----------
+    context : dict
+        ``common_context`` of an event page (``state``, ``query``, ``event_bar``).
+
+    Returns
+    -------
+    dict
+        A copy of ``event_bar`` whose ``sections`` link ``'/{scope}{query}#{id}'``, keeping the mode and the pinned
+        run; without ``territorio`` when the ``districts`` part of the run shown, in its mode, has no regions, as the
+        event page drops it.
+    """
+    state, query, event = context['state'], context['query'], context['event_bar']
+    scope = state['scope']
+    districts = bundle_part(site().run_file, scope, state['run'], 'districts', state['mode']) or {}
+    missing = set() if districts.get('regions') else {'territorio'}
+
+    return dict(event, sections=[dict(entry, href='/' + scope + query + '#' + entry['id'])
+                                 for entry in event['sections'] if entry['id'] not in missing])
