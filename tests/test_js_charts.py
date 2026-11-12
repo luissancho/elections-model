@@ -1027,7 +1027,11 @@ def test_weeks_option_colours_each_election_and_marks_the_stretches():
     series = option['series']
     assert series[0]['lineStyle']['color'] == '#e07b39' and series[1]['lineStyle']['color'] == '#2a9d8f'
     assert option['series'][0]['connectNulls'] is True and option['series'][3]['lineStyle']['width'] == 3.5
-    assert option['series'][0]['lineStyle']['width'] == 1.6 and option['series'][0]['data'] == [None, 1.39, 0.82, 0.7]
+    assert option['series'][0]['lineStyle']['width'] == 1.3 and option['series'][0]['data'] == [None, 1.39, 0.82, 0.7]
+    # the past elections faint (whole when pointed at, and in the legend), the mean and the one in progress whole
+    assert series[0]['lineStyle']['opacity'] == 0.45 and series[0]['emphasis']['lineStyle']['opacity'] == 1
+    assert 'opacity' not in series[2]['lineStyle'] and 'opacity' not in series[3]['lineStyle']
+    assert option['legend']['itemStyle']['opacity'] == 1 and option['legend']['lineStyle']['opacity'] == 1
     assert series[3]['lineStyle']['color'] == '#1d4f86' and series[3]['data'] == [1.01, 1.11, 1.06, None]
     assert option['series'][3]['endLabel']['show'] is True
     assert series[2]['lineStyle']['type'] == 'dashed' and series[2]['markLine']['data'][0]['yAxis'] == 1
@@ -1039,14 +1043,21 @@ def test_weeks_option_colours_each_election_and_marks_the_stretches():
     assert all('yAxis' not in point for area in areas for point in area)
     shades = option['xAxis']['splitArea']['areaStyle']['color']
     assert shades[0] == 'rgba(0,0,0,0)' and shades[1] == shades[2] != shades[3] != shades[0]
-    assert option['xAxis']['data'] == ['27-52', '5-7', '3-4', '0-2'] and option['yAxis']['interval'] == 0.5
+    assert option['xAxis']['data'] == ['27-52', '5-7', '3-4', '0-2'] and option['yAxis']['interval'] == 0.25
     assert option['xAxis']['name'] == 'semanas antes de la elección'
-    assert (option['yAxis']['min'], option['yAxis']['max']) == (0, 3)
-    # the colours cycle and the top rises to the next half when a ratio passes `yMax`
+    assert (option['yAxis']['min'], option['yAxis']['max']) == (0.5, 2)
+    # the colours cycle; a ratio above the top stays on its edge as a hollow triangle with its value, and the bottom
+    # goes down to the quarter below a ratio under 0.5
     data['rows'][1]['ratio'] = 3.03
-    option = run_js('wk.weeksOption(%s, {palette: ["#111111"]})' % json.dumps(data))
+    data['rows'][3]['ratio'] = 0.4
+    option = run_js('(() => { const o = wk.weeksOption(%s, {palette: ["#111111"]}); '
+                    'o.label = o.series[0].data[1].label.formatter(); return o; })()' % json.dumps(data))
     assert [s['lineStyle']['color'] for s in option['series'][:2]] == ['#111111', '#111111']
-    assert option['yAxis']['max'] == 3.5
+    assert (option['yAxis']['min'], option['yAxis']['max']) == (0.25, 2)
+    clipped = option['series'][0]['data'][1]
+    assert (clipped['value'], clipped['real'], clipped['symbol']) == (2, 3.03, 'triangle')
+    assert clipped['itemStyle'] == {'color': '#fff', 'borderColor': '#111111', 'borderWidth': 1.5, 'opacity': 1}
+    assert option['label'] == '3,03' and option['series'][0]['data'][3] == 0.4
     # all seven labels show on a phone, and the palette has eight colours before it wraps
     assert option['xAxis']['axisLabel']['interval'] == 0 and option['xAxis']['axisLabel']['fontSize'] == 10
     colours = run_js('wk.PALETTE')
@@ -1068,6 +1079,16 @@ def test_weeks_tooltip_gives_each_line_its_value_and_pairs():
     assert last.split('<br>') == ['0-2 semanas', 'Generales 2016: 0,70 (16 parejas)',
                                   'Generales 2023: 1,28 (37 parejas)', 'Media de las 2: 0,99']
     assert end == '2026 · 1,06'
+    # a clipped point gives its real value, in the tooltip and in the end label of the election in progress
+    clipped = json.loads(data)
+    clipped['rows'][1]['ratio'] = 3.03
+    clipped['rows'][10]['ratio'] = 2.4
+    far, end = run_js('(() => { const o = wk.weeksOption(%s); const at = (i) => o.series.map((s, j) => ({seriesName: '
+                      's.name, seriesIndex: j, dataIndex: i, data: s.data[i], value: s.data[i] && s.data[i].value '
+                      '!== undefined ? s.data[i].value : s.data[i], marker: "", axisValue: o.xAxis.data[i]})); '
+                      'return [o.tooltip.formatter(at(1)), o.series[3].endLabel.formatter({data: o.series[3].data[2], '
+                      'value: 2})]; })()' % json.dumps(clipped))
+    assert far.split('<br>')[1] == 'Generales 2016: 3,03 (6 parejas)' and end == '2026 · 2,40'
 
 
 def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():
