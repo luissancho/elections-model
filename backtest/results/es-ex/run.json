@@ -1,6 +1,6 @@
 {
- "run_at": "2026-10-28T16:19:28",
- "commit": "eef919e",
+ "run_at": "2026-11-12T18:29:16",
+ "commit": "4b13555",
  "scope": "es-ex",
  "n_sim": 1000,
  "seed": 42,
@@ -13,7 +13,15 @@
  "composition": null,
  "regional_noise": true,
  "min_events": null,
+ "error_model": "polls",
+ "drift_scale": null,
+ "tail_dof": null,
+ "config": null,
+ "rating_exponent": 1.0,
+ "ban": false,
+ "swing": "logistic",
  "recompute_ratings": false,
+ "flat_ratings": false,
  "events": [
   "2023-05-28",
   "2025-12-21"
