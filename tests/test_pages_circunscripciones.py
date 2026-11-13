@@ -102,7 +102,7 @@ def test_the_party_view_the_closest_seats_and_the_texts_of_the_states():
     assert pages.tokens_note(cadiz['PP']) == '2 seguros · 1 probable' and pages.tokens_note(cadiz['AA']) == '1 probable'
     assert pages.tokens_reading('PP', cadiz['PP']) == 'PP: 2 seguros; 3.º, 80%'
     assert [pages.closest_sentence(n) for n in (0, 1, 8)] == [
-        'No hay ningún escaño probable ni en juego.', 'El único escaño que no es seguro. La raya marca el 50%.',
+        'No hay ningún escaño probable ni en juego.', 'El escaño más cercano al cara o cruz. La raya marca el 50%.',
         'Los 8 escaños más cercanos al cara o cruz. La raya marca el 50%.']
 
 
@@ -139,14 +139,14 @@ def sentence_of(seats, safe_by_party, possible):
     (4, {'PP': 1, 'VOX': 0}, ['PP', 'VOX', 'PSOE'],
      'De los 4 escaños, 1 es seguro (PP 1). Los otros 3 se los disputan PP, VOX y PSOE.'),
     (3, {'PP': 1, 'PSOE': 1}, ['PP', 'PSOE'], 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro se lo disputan PP y PSOE.'),
-    (3, {'PP': 1, 'PSOE': 1}, ['PSOE'], 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). El otro sólo está al alcance de PSOE.'),
-    (4, {'PP': 1, 'PSOE': 1}, ['PP'], 'De los 4 escaños, 2 son seguros (PP 1, PSOE 1). Los otros 2 sólo están al alcance de PP.'),
+    (3, {'PP': 1, 'PSOE': 1}, ['PSOE'], 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1). Para el otro, quien más opciones tiene es PSOE.'),
+    (4, {'PP': 1, 'PSOE': 1}, ['PP'], 'De los 4 escaños, 2 son seguros (PP 1, PSOE 1). Para los otros 2, quien más opciones tiene es PP.'),
     (3, {'PP': 1, 'PSOE': 1}, [], 'De los 3 escaños, 2 son seguros (PP 1, PSOE 1).'),
     (4, {'PP': 0}, ['PP', 'PSOE', 'IU'], 'Ninguno de los 4 escaños es seguro: se los disputan PP, PSOE e IU.'),
-    (4, {'PP': 0}, ['PP'], 'Ninguno de los 4 escaños es seguro: sólo están al alcance de PP.'),
+    (4, {'PP': 0}, ['PP'], 'Ninguno de los 4 escaños es seguro: quien más opciones tiene es PP.'),
     (4, {'PP': 0}, [], 'Ninguno de los 4 escaños es seguro.'),
     (1, {'PP': 0}, ['PP', 'PSOE'], 'El escaño no es seguro: se lo disputan PP y PSOE.'),
-    (1, {'PP': 0}, ['PP'], 'El escaño no es seguro: sólo está al alcance de PP.'),
+    (1, {'PP': 0}, ['PP'], 'El escaño no es seguro: quien más opciones tiene es PP.'),
     (1, {'PP': 0}, [], 'El escaño no es seguro.'),
     (1, {}, [], 'El escaño no es seguro.'),  # a district without any option
     (2, {'A': 3}, [], 'Los 2 escaños son seguros (A 3).'),  # more safe options than seats: never below zero

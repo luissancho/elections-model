@@ -349,7 +349,8 @@ def district_sentence(district: dict) -> str:
     -------
     str
         The sentence, in Spanish. The other ``max(seats - safe, 0)`` seats «se los disputan» the parties named; with a
-        single party they «sólo están al alcance de» it, and without any the clause is dropped.
+        single party, it is the one «quien más opciones tiene» for them (never that nobody else can win them: other
+        parties may reach them below ``PLAY_SHARE``), and without any the clause is dropped.
     """
     seats, safe = district['seats'], district['safe']
     left = max(seats - safe, 0)
@@ -360,20 +361,22 @@ def district_sentence(district: dict) -> str:
         return 'Los {} escaños son seguros ({}).'.format(seats, listing)
     rivals = [row['name'] for row in district['rows'] if row['likely'] or row['play']]
     single = left == 1
-    if not rivals:
-        dispute = ''
-    elif len(rivals) == 1:
-        dispute = 'sólo {} al alcance de {}'.format('está' if single else 'están', rivals[0])
-    else:
-        dispute = 'se {} disputan {}'.format('lo' if single else 'los', _join_names(rivals))
     if safe == 0:
         head = 'El escaño no es seguro' if seats == 1 else 'Ninguno de los {} escaños es seguro'.format(seats)
-        return '{}: {}.'.format(head, dispute) if dispute else head + '.'
+        if not rivals:
+            return head + '.'
+        if len(rivals) == 1:
+            return '{}: quien más opciones tiene es {}.'.format(head, rivals[0])
+        return '{}: se {} disputan {}.'.format(head, 'lo' if single else 'los', _join_names(rivals))
     how_many = '1 es seguro' if safe == 1 else '{} son seguros'.format(safe)
     sentence = 'De los {} escaños, {} ({}).'.format(seats, how_many, listing)
-    if not dispute:
+    if not rivals:
         return sentence
-    return '{} {} {}.'.format(sentence, 'El otro' if single else 'Los otros {}'.format(left), dispute)
+    if len(rivals) == 1:
+        others = 'el otro' if single else 'los otros {}'.format(left)
+        return '{} Para {}, quien más opciones tiene es {}.'.format(sentence, others, rivals[0])
+    others = 'El otro' if single else 'Los otros {}'.format(left)
+    return '{} {} se {} disputan {}.'.format(sentence, others, 'lo' if single else 'los', _join_names(rivals))
 
 
 def _coin_toss_gap(tokens: list) -> float:
@@ -663,7 +666,7 @@ def closest_sentence(shown: int) -> str:
     if not shown:
         return 'No hay ningún escaño probable ni en juego.'
     if shown == 1:
-        return 'El único escaño que no es seguro. La raya marca el 50%.'
+        return 'El escaño más cercano al cara o cruz. La raya marca el 50%.'
     return 'Los {} escaños más cercanos al cara o cruz. La raya marca el 50%.'.format(shown)
 
 
