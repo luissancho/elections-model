@@ -371,23 +371,23 @@ Nada se publicó ni se escribió en S3 ni en la base.
 
 | Criterio | Resultado | Cómo se vio |
 |---|---|---|
-| El borde discontinuo se distingue del continuo | pasa | ampliado píxel a píxel: mapa de 11 px a 1024 y 1280 (densidad 1 y 2) y de 7 px a 360 y 390 (densidad 2 y 3), cuatro o cinco trazos por círculo; columnas de 6 px (360), 10 px (768) y 15 px (1280); fichas de 22 px. En el hemiciclo el trazo escala con el dibujo: a 360 px el círculo mide 5,7 px y el trazo 0,56 px, y el discontinuo se ve punteado, distinto del anillo continuo de los probables; a 1024 y 1280 px (17,5 px) es un discontinuo claro |
+| El borde discontinuo se distingue del continuo | pasa | ampliado píxel a píxel: mapa de 11 px a 1024 y 1280 (densidad 1 y 2) y de 7 px a 360 y 390 (densidad 2 y 3), cuatro o cinco trazos por círculo; columnas de 6 px (360), 10 px (768) y 15 px (1280); fichas de 22 px. En el hemiciclo el trazo escala con el dibujo: a 360 px el círculo abierto mide 5,2 px y su trazo 0,56 px, y el discontinuo se ve punteado, distinto del anillo continuo de los probables; a 1024 y 1280 px (15,8 px, trazo de 1,71) es un discontinuo claro |
 | Ningún círculo por debajo del 99% se ve sólido | pasa | los probables llevan su relleno claro y su borde a todos los tamaños. Al revés, los seguros enseñaban un anillo claro entre relleno y borde en pantallas densas: arreglado (`6183162`) |
-| Nada se desborda | pasa | el ancho de desplazamiento de la página es el de la ventana a los cinco anchos, en las cuatro vistas y en el autonómico. El mapa mide 760 px desde 1024. Ninguna casilla pisa a otra y ningún círculo sale de su casilla a los cinco anchos; Madrid y Barcelona (2 × 2) crecen hacia abajo: Madrid 56 × 85 px a 360 y 146 × 92 a 1280 |
+| Nada se desborda | pasa | el ancho de desplazamiento de la página es el de la ventana a los cinco anchos, en las cuatro vistas y en el autonómico. El mapa mide 760 px desde 1024. Ninguna casilla pisa a otra y ningún círculo sale de su casilla a los cinco anchos; Madrid y Barcelona (2 × 2) crecen hacia abajo: Madrid 56 × 85 px a 360 y 146 × 92 a 1280; Barcelona 56 × 68 y 146 × 79 |
 | Las columnas caben sin barra a 360 px | pasa | ancho de desplazamiento igual al visible: 294 (360), 324 (390), 666 (768), 922 (1024), 1178 (1280) |
-| El hueco del hemiciclo contiene sus tres recuentos | pasa | a 360 y 390 px, con letra de 9,5 px, el bloque mide 77 × 34 px en un hueco de 49 y 54 px de radio: queda dentro, justo; con 11 px tocaría los círculos de dentro (decisión R9 de la construcción, confirmada a ojo). Por encima de 720 px los recuentos crecen con el dibujo (abajo) y quedan dentro: bloque de 165 × 87 px en un hueco de 151 de radio a 1280 |
-| Los dos selectores se combinan y atenúan sin recargar | pasa | a 1280 y 360: PSOE deja 121 círculos enteros y 269 a 0,08; PSOE y En juego, 25 y 365; la página no se recarga y los recuentos no cambian |
-| El conmutador cambia de dibujo | pasa | Columnas cambia título, entradilla, dibujo y nombre de la imagen; Hemiciclo los devuelve |
+| El hueco del hemiciclo contiene sus tres recuentos | pasa | a 360 y 390 px, con letra de 9,5 px, el bloque mide 77 × 34 px en un hueco de 53 y 58 px de radio: queda dentro, justo (visto ampliado). Durante la construcción se probaron 11 px y se salían del hueco a 360 px; aquí no se volvió a probar. Por encima de 720 px los recuentos crecen con el dibujo (abajo) y quedan dentro: bloque de 165 × 87 px en un hueco de 162 px de radio a 1024 y 1280 |
+| Los dos selectores se combinan y atenúan sin recargar | pasa | a 1280 y 360: PSOE deja 121 círculos enteros y 269 a 0,08; PSOE y En juego, 25 y 365; la página no se recarga |
+| El conmutador cambia de dibujo | pasa | Columnas cambia título, dibujo y nombre de la imagen; Hemiciclo los devuelve |
 | Al tocar una casilla cambian ficha, dirección y título | pasa | Cádiz a 1280 y 360: se ve `ficha-cadiz`, la dirección pasa a `/es/circunscripciones/cadiz?mode=forecast` y el título a «Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026», sin recargar ni desplazar |
 | El desplegable del móvil hace lo mismo | pasa | a 360 y 390 px, Guadalajara: ficha, dirección y título siguen sin recargar. El desplegable va por nombre, con «Álava · 4 escaños» |
 | Sin JavaScript: selectores, conmutador y cambio de ficha | pasa | a 360 y 1280 con clics de ratón: los filtros atenúan igual, el conmutador cambia de dibujo y la casilla de Cádiz enseña su ficha; la dirección no cambia (esperado). Los botones de imagen no salen sin JavaScript, como en el resto del sitio |
 | Sin JavaScript: el desplegable envía su formulario y llega a la ficha | pasa a medias | «Ver» se ve y envía `GET /es/circunscripciones?mode=forecast&circunscripcion=cadiz`; el 301 que sigue es del servidor y no existe con ficheros estáticos: lo cubren los tests |
-| Las cuatro imágenes, enteras, con bordes discontinuos, sin selectores ni botones | pasa | mapa, ficha de Cádiz, hemiciclo, columnas y ficha del PSOE (51 filas), descargadas a 360, 390 y 1280 px y miradas una a una. Desde el móvil el hemiciclo salía al ancho de la pantalla (294 px en una imagen de 1.200) y sus recuentos fuera del hueco: arreglado (`f85a59d`) |
+| Las cuatro imágenes, enteras, con bordes discontinuos, sin selectores ni botones | pasa | mapa, ficha de Cádiz, hemiciclo, columnas y ficha del PSOE (43 filas y la línea «Sólo seguros (7)»), descargadas a 360, 390 y 1280 px y miradas una a una. Desde el móvil el hemiciclo salía al ancho de la pantalla (294 px de ancho en una imagen de 1.136) y sus recuentos fuera del hueco: arreglado (`f85a59d`) |
 | Con PSOE y En juego, la imagen del mapa | pasa | lleva la línea «PSOE · En juego» bajo la de la elección, los círculos atenuados, ni selectores ni el borde oscuro de Madrid, y se llama `demoscopio-escanos-es-mapa-psoe-en-juego.png`; con Columnas, `demoscopio-escanos-es-columnas.png` |
 | Tras ir a otra página y volver atrás, línea y nombre coinciden con los radios | pasa | PSOE y En juego, `?vista=renidos` y atrás: la página vuelve de la caché de ida y vuelta (`pageshow` con `persisted`) con los radios, la línea «PSOE · En juego» y el nombre del fichero de antes, y la imagen descargada después es la buena. Al recargar, Chrome no conserva los radios: vuelven a «Todos» y la línea y el nombre con ellos; la dirección de una casilla tocada, recargada, abre su ficha |
 | El autonómico, en rejilla seguida con nombres completos y un hemiciclo con menos filas | pasa | casillas de 150 px o más: 4 columnas a 768 y 1280, 2 a 390 y 1 a 360 (294 px no dan para dos), con «Almería», «Cádiz»…; el hemiciclo tiene 4 filas (10 en `es`) |
 
-**Decisión 4 (la ficha al tocar una casilla).** Con la casilla tocada en el centro de una pantalla de 900 px de alto
+**La ficha al tocar una casilla** (decisión 4 del plan, que pedía medirlo). Con la casilla tocada en el centro de una pantalla de 900 px de alto
 (la página no se desplaza sola):
 
 | Ancho | Casilla | Dónde empieza la ficha | Lo que se ve |
@@ -414,7 +414,7 @@ cambio de borde: la ficha está debajo del mapa, fuera de la pantalla.
 | la página del evento `/es`, hoy en demoscopio.es | 1.019,8 KB | 106,7 KB | — |
 
 Muy por debajo del tope de 150 KB: las 52 fichas se repiten mucho y comprimen 15 a 1. Este documento hablaba de unos
-84 KB para la página del evento; hoy pesa 106,7 KB en gzip de nivel 6 (154 KB tal como la sirve la web).
+84 KB para la página del evento; hoy pesa 106,7 KB en gzip de nivel 6.
 
 ### Arreglos de la comprobación
 
@@ -429,7 +429,7 @@ Muy por debajo del tope de 150 KB: las 52 fichas se repiten mucho y comprimen 15
 - `f85a59d`: html2canvas copia en su copia el tamaño calculado de cada SVG de la página, así que la imagen del
   hemiciclo descargada desde un móvil lo dibujaba a 294 px. El SVG lleva `data-shot-fluid` y `card-image.js`
   (`freeFluidSvgs`) le quita ese tamaño en la copia, para que tome el ancho de la imagen. El hemiciclo sigue siendo
-  SVG (decisión 2 del plan: con este arreglo no hizo falta pasarlo a HTML).
+  SVG: con este arreglo no hizo falta pasarlo a círculos HTML, como preveía el plan si la imagen fallaba.
 
 ### Lo que difiere de este documento
 
@@ -447,8 +447,12 @@ Decisiones del plan, tal como quedaron:
 
 Decididas durante la construcción:
 
-- Los recuentos del centro del hemiciclo van en 9,5 px por debajo de 720 px (el plan decía 11): con 11 tocan los
-  círculos de dentro a 360 px. Sus tres muestras son las grises de la leyenda.
+- Los recuentos del centro del hemiciclo van en 9,5 px por debajo de 720 px (el plan decía 11): con 11 se salían
+  del hueco a 360 px. Sus tres muestras son las grises de la leyenda.
+- El borde de los círculos del hemiciclo no mide 1 px, como dice «El signo»: escala con el dibujo, como en la
+  maqueta (1,6 unidades de las 1.000 del dibujo en los probables y 1,9 en los que están en juego). Mide 0,47 y
+  0,56 px en un móvil de 360 px, 1,07 y 1,27 px a 768 y 1,44 y 1,71 px desde 1024. A 360 px los probables se leen
+  como discos más claros con un hilo de borde; el discontinuo se sigue distinguiendo (se ve punteado).
 - Sin `:has()` (navegadores antiguos) se ven todas las fichas de las circunscripciones, por nombre, y los dos
   dibujos de Partidos sin su conmutador, en vez de ninguna ficha.
 - Si el desplegable elige una circunscripción sin casilla (no debería pasar), envía su formulario como sin
@@ -464,7 +468,7 @@ Diferencias visibles con la maqueta que este documento no recoge:
 - Arriba va la barra del evento del sitio (con su índice y la fecha del run) en lugar del antetítulo de la maqueta, y
   la entradilla no dice «Actualizado el 13 de noviembre».
 - Las tarjetas llevan su botón de imagen.
-- En el móvil, los recuentos del hemiciclo miden 9,5 px (en la maqueta escalaban con el dibujo, hasta unos 7 px), y
+- En el móvil, los recuentos del hemiciclo miden 9,5 px (en la maqueta escalaban con el dibujo y quedaban más pequeños), y
   bajo cada columna las tres cifras van una debajo de otra.
 
 ### Lo que no se pudo comprobar
@@ -478,8 +482,9 @@ Diferencias visibles con la maqueta que este documento no recoge:
 
 ### Lo que queda (Luis)
 
-- Decidir la decisión 4: si al tocar una casilla la página baja hasta la ficha (o la deja asomar), con los datos de
-  arriba.
+- Decidir si al tocar una casilla la página baja hasta la ficha (o la deja asomar), con los datos de arriba.
+- Decidir si el borde de los círculos del hemiciclo sigue escalando con el dibujo o se fija en 1 px en todas las
+  pantallas.
 - Decidir si los selectores del mapa en el móvil se quedan en el control segmentado de 4 filas o se compactan como
   en la maqueta.
 - Revisar los textos, todos provisionales.
