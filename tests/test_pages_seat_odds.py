@@ -288,7 +288,7 @@ def test_the_event_page_carries_the_card_of_the_seats_that_dance(odds_site, fres
     assert re.findall(r'class="so-col" data-col="([^"]+)"', card) == ['PP', 'PSOE', 'VOX', 'AA', 'BNG']
     assert 'Hay 22 opciones para 19 escaños' in card and card.count('<details class="how"') == 1
     assert 'De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1).' in card
-    # the rules of the run, in the head: one per party for the filter, one per district for its card
+    # the rules of the run, in the head: one per party for the filter, one per district for its block
     assert '#seat-odds:has(#mp-psoe:checked) .so-dots i:not(.p-psoe){opacity:.08}' in page
     assert '#seat-odds:has(#d-cadiz:checked) #ficha-cadiz{display:block}' in page
     # its CSV among the downloads of the page
@@ -421,22 +421,22 @@ def test_the_card_and_its_section_come_only_with_something_to_show(odds_site, ap
 
 def test_the_card_switches_its_views_and_its_districts_without_javascript():
     css = site_css()
-    # the radio of the columns hides the map and its card; any other state hides the columns
+    # the radio of the columns hides the map and its blocks; any other state hides the columns
     assert re.search(r'#seat-odds:has\(#sv-cols:checked\) \.so-view-map, '
                      r'#seat-odds:not\(:has\(#sv-cols:checked\)\) \.so-view-cols\s*\{\s*display:\s*none', css)
-    # side by side from 1,200 px of window: the map up to 760 px, the card of the district beside it, without the
+    # side by side from 1,200 px of window: the map up to 760 px, the block of the district beside it, without the
     # summary of each row
     wide = css[css.index('@media (min-width: 1200px)'):]
     wide = wide[:wide.index('\n}')]
     assert re.search(r'\.so-split \{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 760px\) '
                      r'minmax\(0, 1fr\)', wide)
     assert re.search(r'\.so-split \.so-note \{\s*display:\s*none', wide)
-    # the filter of states, one rule per state; every card hidden but the one of the tile checked
+    # the filter of states, one rule per state; every block hidden but the one of the tile checked
     for state in ('safe', 'likely', 'play'):
         assert re.search(r'#seat-odds:has\(#ms-{0}:checked\) \.so-dots i:not\(\.{0}\)\s*\{{\s*opacity:\s*\.08'.format(state),
                          css)
     assert re.search(r'(^|\n)\.so-ficha\s*\{\s*display:\s*none', css)
-    # without `:has()` every card and both views show, and the selector of views, which would do nothing, goes
+    # without `:has()` every block and both views show, and the selector of views, which would do nothing, goes
     fallback = css[css.index('@supports not selector(:has(*))', css.index('.so-ficha')):]
     fallback = fallback[:fallback.index('\n}')]
     assert re.search(r'\.so-ficha\s*\{\s*display:\s*block', fallback) and re.search(r'#so-view\s*\{\s*display:\s*none',
@@ -463,8 +463,8 @@ def test_the_block_of_a_district_lands_below_the_header_and_below_the_banner_onl
 
 
 def test_on_phones_the_block_of_a_district_lands_above_the_tab_bar():
-    # under 720 px the tab bar sticks to the foot of the window (57 px and the safe area): a block the page script
-    # scrolls up from below the map ends above it, not under it
+    # under 720 px the tab bar sticks to the foot of the window (62 px in Chrome, and the safe area): a block the page
+    # script scrolls up from below the map ends above it, with 6 px of air, not under it
     css = site_css()
     narrow = css[css.index('@media (max-width: 719px)', css.index('#seat-odds #district-select')):]
     narrow = narrow[:narrow.index('\n}')]

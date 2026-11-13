@@ -1264,8 +1264,8 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   /* on phones the header (52 px) goes back to the top with the freeze banner, which sticks over it: the block keeps
      its margin, which clears a banner of one line (48 px) */
   body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 68px; }
-  /* the tab bar sticks to the foot of the window (57 px and the safe area): a block scrolled up from below the map
-     ends above it */
+  /* the tab bar sticks to the foot of the window (62 px in Chrome, and the safe area): a block scrolled up from below
+     the map ends above it, with 6 px of air */
   #seat-odds .so-ficha { scroll-margin-bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
 

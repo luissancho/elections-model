@@ -23,8 +23,10 @@ def run_js(expr):
 
 
 def test_the_image_is_named_after_what_is_on_view():
-    assert run_js("s.imageFile('demoscopio-escanos-es-mapa', ['psoe', 'en-juego'])") == 'demoscopio-escanos-es-mapa-psoe-en-juego.png'
-    assert run_js("s.imageFile('demoscopio-escanos-es-mapa', ['', ''])") == 'demoscopio-escanos-es-mapa.png'
+    assert run_js("s.imageFile('demoscopio-escanos-es', ['madrid', 'psoe', 'en-juego'])") == (
+        'demoscopio-escanos-es-madrid-psoe-en-juego.png')
+    assert run_js("s.imageFile('demoscopio-escanos-es', ['cadiz', '', 'seguros'])") == 'demoscopio-escanos-es-cadiz-seguros.png'
+    assert run_js("s.imageFile('demoscopio-escanos-es', ['madrid', '', ''])") == 'demoscopio-escanos-es-madrid.png'
     assert run_js("s.imageFile('demoscopio-escanos-es', ['columnas'])") == 'demoscopio-escanos-es-columnas.png'
     assert run_js("[s.filterLine('PSOE', 'En juego'), s.filterLine('PSOE', ''), s.filterLine('', 'Seguros'), "
                   "s.filterLine('', '')]") == ['PSOE · En juego', 'PSOE', 'Seguros', '']
@@ -56,5 +58,3 @@ def test_the_free_band_is_what_the_bars_stuck_to_the_window_leave():
     assert run_js("s.coveredBand([], [], 844)") == {'top': 0, 'foot': 0}
     assert run_js("s.coveredBand([{top: 0, bottom: 52}], [], 640)") == {'top': 52, 'foot': 0}
     assert run_js("s.coveredBand([{top: -10, bottom: 900}], [{top: -5, bottom: 700}], 640)") == {'top': 640, 'foot': 640}
-    assert run_js("s.imageFile('demoscopio-escanos-es', ['madrid', 'psoe', 'en-juego'])") == (
-        'demoscopio-escanos-es-madrid-psoe-en-juego.png')

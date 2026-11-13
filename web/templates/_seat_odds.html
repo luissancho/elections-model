@@ -83,8 +83,8 @@
 {#- The card «Escaños que bailan» of the event page (`odds`, `seat_odds_card`), in the section `#escanos`: one image
     button, the selector of views (radios `sv`: the map, open, or the columns of the parties; `site.css` shows one with
     `:has()`, and both without it), the view of the map with its two filters (radios `mp` and `ms`), `stamp` (the line
-    of the image: election, estimate and date) and, side by side from 1,200 px, the map and the card of the district
-    chosen (each tile the label of a radio `d`; the `<style>` of the head of the page shows its card), and the view of
+    of the image: election, estimate and date) and, side by side from 1,200 px, the map and the block of the district
+    chosen (each tile the label of a radio `d`; the `<style>` of the head of the page shows its block), and the view of
     the columns; the «Cómo leerlo», once, at the foot. Everything works without JavaScript; the page script names the
     image after what is on view, writes the line of the filters (`#map-filter-line`, for the image only) and reveals
     the dropdown of districts (`#district-select`, under 720 px only). -#}
@@ -145,7 +145,7 @@
         <option value="{{ item.slug }}"{% if item.slug == odds.chosen %} selected{% endif %}>{{ item.name }} · {{ item.seats }} escaño{{ '' if item.seats == 1 else 's' }}</option>
         {% endfor %}
       </select>
-      {#- the card of every district, all hidden but the one of the tile checked (every one without `:has()`) -#}
+      {#- the block of every district, all hidden but the one of the tile checked (every one without `:has()`) -#}
       <div class="so-fichas" id="fichas">
         {% for item in odds.cards %}
         <div class="so-ficha" id="ficha-{{ item.slug }}">

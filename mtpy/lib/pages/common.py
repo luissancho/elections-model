@@ -1039,8 +1039,9 @@ def subpage_event_bar(context: dict) -> dict:
     -------
     dict
         A copy of ``event_bar`` whose ``sections`` link ``'/{scope}{query}#{id}'``, keeping the mode and the pinned
-        run; without ``escanos`` when the ``districts`` part of the run shown, in its mode, has no regions, as the
-        event page drops it.
+        run; without ``escanos`` when the ``districts`` part of the run shown, in its mode, has no regions. The event
+        page itself drops it only when the run has neither the card «Escaños que bailan» nor districts
+        (``promedios_context``); a subpage only looks at the districts.
     """
     state, query, event = context['state'], context['query'], context['event_bar']
     scope = state['scope']

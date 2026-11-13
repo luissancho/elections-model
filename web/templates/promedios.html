@@ -5,9 +5,9 @@
   <script type="module" src="/dist/js/pages/promedios.js"></script>
   {% if seat_odds %}
   {#- the rules of the run of «Escaños que bailan», without JavaScript: the filter of each party dims the circles of the
-      others; the radio of each district shows its card (those of the views and of the filter of states are fixed, in
+      others; the radio of each district shows its block (those of the views and of the filter of states are fixed, in
       `site.css`) -#}
-  <style>{% for item in seat_odds.parties %}#seat-odds:has(#mp-{{ item.slug }}:checked) .so-dots i:not(.p-{{ item.slug }}){opacity:.08}{% endfor %}{% for card in seat_odds.cards %}#seat-odds:has(#d-{{ card.slug }}:checked) #ficha-{{ card.slug }}{display:block}{% endfor %}</style>
+  <style>{% for item in seat_odds.parties %}#seat-odds:has(#mp-{{ item.slug }}:checked) .so-dots i:not(.p-{{ item.slug }}){opacity:.08}{% endfor %}{% for block in seat_odds.cards %}#seat-odds:has(#d-{{ block.slug }}:checked) #ficha-{{ block.slug }}{display:block}{% endfor %}</style>
   {% endif %}
 {% endblock %}
 {% block content %}
