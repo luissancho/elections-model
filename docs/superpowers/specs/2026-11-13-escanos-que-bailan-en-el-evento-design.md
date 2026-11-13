@@ -147,3 +147,126 @@ La página del evento pesa hoy unos 107 KB en gzip. Las 52 fichas, el mapa y las
 Dónde viven las piezas (si el módulo de la página aparte se queda como módulo de la tarjeta o se reparte), el ancla y
 el `id` de la tarjeta, cómo se resuelve el lado a lado en la copia de la imagen (se dibuja a 1.200 px), qué se borra
 de los tests de la página aparte y qué se muda a los de la página del evento, y el reparto del trabajo en tareas.
+
+## Estado al cierre (2026-11-13)
+
+### Lo construido
+
+Rama `escanos-evento`, desde `dev` (`git log --oneline dev..HEAD`):
+
+- El índice pasa a Promedio · Resultados · Escaños · Evolución · Tabla, los anclajes se renombran (`#resultados`,
+  `#escanos`) y la sección del territorio sube detrás de Resultados: `d76a1bb`.
+- La tarjeta «Escaños que bailan» en la sección Escaños, pintada en el servidor, con el selector Provincias /
+  Partidos, el mapa y la ficha lado a lado y las columnas: `fec38fd`.
+- Su script y su imagen (el nombre del fichero y la imagen según lo que está a la vista, el desplegable del móvil y
+  la bajada a la ficha al tocar una casilla en apilado): `ccf142c`.
+- Fuera la página aparte (sus direcciones responden con un 301 a la tarjeta), el hemiciclo de las opciones y la
+  ficha de partido: `65f67f7` (sólo cambia de nombre el módulo y sus tests) y `b534d87`.
+- Arreglos de la comprobación en el navegador (abajo): `439e1fa` y `dd35986`.
+- Este cierre: el commit que lo añade.
+
+### Comprobación en el navegador
+
+Datos reales, sólo leídos: el run 20261113-094116 de `es` (10.000 simulaciones), con todas sus partes de los dos
+modos, su historial, el manifest y el catálogo de partidos bajados de la API pública de demoscopio.es (GET sin
+credenciales). Se escribieron, tal cual, en el paquete de prueba de los tests, en una carpeta temporal fuera del
+repositorio y con el `data/` del worktree, y el arnés de los tests pintó la página del evento: en Pronóstico y en
+Hoy, sin la parte `seat-odds`, con el aviso de congelación y con la parte reducida a las ocho provincias andaluzas y
+sin posiciones de mapa (66 opciones para 60 escaños: 38, 17 y 11). Las páginas se sirvieron en local como ficheros,
+con `/dist` del worktree, la API contestando con los ficheros bajados y la política de seguridad de contenidos de
+`deploy/docker/nginx.conf` en cada respuesta. Se miraron con Chrome 157 headless por el protocolo de DevTools a 360,
+390, 768, 1024, 1199, 1200, 1280 y 1440 px (emulación de móvil y táctil por debajo de 720), con clics, toques y
+teclas de verdad. Sin JavaScript: `setScriptExecutionDisabled`. Las cifras de la tarjeta salen como deben: 390
+opciones para 350 escaños (203 seguras, 103 probables y 84 en juego); en Hoy, 390 (204, 102 y 84). Nada se publicó
+ni se escribió en S3 ni en la base.
+
+| Criterio | Resultado | Cómo se vio |
+|---|---|---|
+| El índice dice Promedio · Resultados · Escaños · Evolución · Tabla y cada entrada baja a su sección | pasa | a 1280 y 390 px, con JavaScript y sin él: cada sección queda bajo la cabecera (a 56 px con la cabecera de 57, a 52 en el móvil). `?seccion=escanos` y `?seccion=resultados` caen en la suya y la dirección pierde `seccion` |
+| Lado a lado desde 1.200 px, apilado por debajo | pasa | a 1.199 px la ficha va debajo del mapa, con el resumen de cada fila (que se va por debajo de 720); a 1.200, al lado y sin él. Igual con JavaScript y sin él, en `es` y en el ámbito sin posiciones |
+| Sin desbordes | pasa | a los ocho anchos, con Madrid y con Barcelona elegidas (Sevilla y Málaga en el ámbito sin posiciones), el ancho de la página es el de la ventana y ningún elemento de la tarjeta pasa de su borde |
+| Vista, filtros y ficha sin recargar, con JavaScript y sin él | pasa | a 1280 y 390 px: Partidos enseña las 7 columnas y esconde el mapa; PSOE deja 121 círculos enteros y 269 atenuados; PSOE y En juego, 25 y 365; Cádiz enseña sólo su ficha; la dirección no cambia |
+| El resto de la página sigue funcionando | pasa | el Hemiciclo, el promedio, la evolución, la calculadora, el abanico y el gráfico de una encuestadora se dibujan a 1280 y 390 px; las tablas tienen sus filas (13 partidos, 3 bloques, el territorio y su detalle, 15 encuestas). La calculadora escribe `#resultados&coalition=…` y un enlace así abre en Resultados con sus partidos marcados, como antes con `#escanos`. Los enlaces del territorio llevan `seccion=escanos#escanos` y su formulario va a `/es#escanos`. Sin JavaScript, la página de `dev` y la de la rama tienen las mismas tablas con las mismas filas: sólo cambian los anclajes. La consola, sin errores ni avisos (salvo los de html2canvas al hacer una imagen) |
+| Al tocar una casilla del norte, la página baja hasta la ficha; con el teclado, no | pasa tras un arreglo | Lugo, Madrid y Barcelona tocadas al pie de la ventana a 360, 390, 768, 1024 y 1199 px: la página baja hasta que la ficha se ve; una ficha más alta que la ventana queda bajo la cabecera (16 px por debajo en el móvil, 11 con el aviso de congelación desde 720). A 1280 no se mueve. La flecha pasa de Lugo a Asturias sin desplazar la página; el desplegable (360 y 390) elige Sevilla sin desplazarla. En el móvil, la ficha acababa debajo de la barra de pestañas: arreglado (`439e1fa`) |
+| Las dos imágenes | pasa | descargadas con el botón y miradas: `demoscopio-escanos-es-barcelona-psoe-en-juego.png` (mapa y ficha lado a lado, sin selectores, con la línea «PSOE · En juego», la de la elección y la firma), `demoscopio-escanos-es-columnas.png` y, desde una ventana de 390 px, `demoscopio-escanos-es-madrid-pp-probables.png`, también lado a lado |
+| Tras ir a otra página y volver, la línea y el nombre coinciden con los radios | pasa | VOX y Seguros, otra página y atrás: Chrome devolvió la página de la caché de ida y vuelta, con los radios, la línea «VOX · Seguros» y `…-madrid-vox-seguros.png` |
+| Las direcciones viejas acaban en la tarjeta | pasa | con el arnés de los tests y el run real: `/es/circunscripciones` → 301 a `/es#escanos`; `/es/circunscripciones/cadiz?mode=nowcast` → `/es?mode=nowcast#escanos`; con `run`, `partido`, `vista` o `circunscripcion` en la query, igual, con `mode` y `run` y nada más. En el navegador, esas direcciones de destino caen en la sección Escaños |
+| Un run sin la parte `seat-odds` | pasa | sin tarjeta, sin ninguna regla suya en la cabecera, con «Escaños» en el índice y sólo «Resultados por territorio» en la sección; el Hemiciclo y la tabla de encuestas funcionan y la consola está limpia |
+
+### Peso
+
+HTML de la página del evento `/es` con el run real, en Pronóstico (KB de 1.000 bytes, gzip de nivel 6, elementos
+contados por el navegador sin JavaScript). «Antes» es el código de `dev` con los mismos datos.
+
+| | Sin comprimir | gzip | Elementos |
+|---|---|---|---|
+| Antes | 1.035,0 KB | 107,2 KB | 3.380 |
+| Después | 1.298,9 KB | 126,3 KB | 6.995 |
+| Diferencia | +263,8 KB | +19,0 KB | +3.615 |
+
+En Hoy, igual: de 106,4 a 125,6 KB en gzip. La tarjeta tiene 3.620 elementos. Este documento calculaba unos 20 KB
+y unos 4.000 elementos; queda por debajo del tope de 30 KB que se puso el plan. Sin la parte, la página pesa
+106,6 KB en gzip.
+
+### Arreglos de la comprobación
+
+- `439e1fa`: en el móvil, la barra de pestañas está pegada abajo y la ficha a la que baja la página al tocar una
+  casilla acababa debajo de ella (en Barcelona a 360 px, la última fila y los porcentajes de FA). La ficha guarda
+  ahora un margen abajo del alto de la barra, como guarda arriba el de la cabecera.
+- `dd35986`: sólo comentarios. Decían que en el móvil el aviso de congelación no se queda pegado arriba; sí se queda,
+  encima de la cabecera.
+
+### Lo que difiere de este documento
+
+Decisiones del plan, tal como quedaron:
+
+1. La tarjeta se llama `seat-odds` por dentro y vive bajo una sola clave del contexto, `seat_odds`.
+2. El módulo de la página aparte pasa a llamarse `seat_odds.py`, y sus tests, `test_pages_seat_odds.py`.
+3. La bajada a la ficha al tocar una casilla sólo ocurre con puntero o dedo (no con el teclado), sólo en apilado y
+   sólo si la ficha no está a la vista: si asoma, la página no se mueve.
+4. La imagen de Provincias se llama `demoscopio-escanos-{scope}-{circunscripción}[-{partido}][-{estado}].png`.
+
+Decidido durante la construcción: la línea de la imagen con la elección, la estimación y la fecha va una vez, encima
+de las dos vistas, para que la lleve también la imagen de las columnas.
+
+Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no recoge:
+
+- «Toca una provincia para ver su detalle.» no cierra la entradilla: va al final de una línea que la maqueta no
+  tiene, bajo el selector de vista y ya de la página aparte, «Cada círculo es una opción de escaño: sólido si es
+  seguro, más claro si es probable y con el borde discontinuo si está en juego.».
+- La leyenda y el pie de las opciones van bajo el mapa, a su ancho, y no a todo el ancho de la tarjeta bajo el mapa y
+  la ficha; la raya vertical entre los dos acaba donde acaba la ficha y no donde acaba el mapa.
+
+### Lo que no se pudo comprobar
+
+- La web detrás de nginx: las páginas se sirvieron como ficheros, aunque con la misma política de seguridad de
+  contenidos. Tampoco otros navegadores (Safari, Firefox) ni móviles de verdad: sólo Chrome headless con emulación.
+- Los 301 en el navegador: con ficheros no hay servidor; se vieron con el arnés de los tests.
+- La salida sin `:has()`: sólo la cubren los tests.
+- Un ámbito autonómico con su parte publicada: ninguno la tiene aún; se usó la de `es` reducida a Andalucía.
+
+### Lo que queda (Luis)
+
+- Los selectores del mapa en el móvil siguen ocupando seis filas (cuatro de partidos y dos de estados), como en la
+  página aparte.
+- La página del evento responde con un error 500 si un bloque de `meta.bmaps.blocks` no tiene fila en el `summary`
+  (`promedios.html`, la leyenda de la tabla de bloques). Ya pasa en `dev`: se reprodujo en los dos quitando la fila
+  de Derecha. El run real lleva las tres filas (Izquierda, Derecha y Otros) en los dos modos, así que hoy no puede
+  pasar.
+- En el móvil, el aviso de congelación se queda pegado arriba y tapa la cabecera (ya pasaba antes de esta rama). Con
+  un aviso de una línea (48 px) la ficha queda bajo él; con uno de dos líneas a 360 px (70 px) la ficha empieza 2 px
+  por debajo de su borde y su nombre se sigue leyendo.
+- Las dos diferencias con la maqueta, arriba, si hay que cambiarlas.
+- Después de desplegar, una comprobación en la web de verdad: abrir `/es#escanos` en un móvil, tocar una provincia y
+  descargar la imagen de la tarjeta. Nadie pudo probarlo detrás de nginx, en otros navegadores ni en móviles de
+  verdad.
+- Fusionar en `dev`, push e imagen nueva de web. No hay que republicar nada.
+
+### Pendientes menores
+
+- Los comentarios de `_seat_odds.html` siguen llamando «card» a la ficha de la circunscripción.
+- `docs/web/contrato.md` conserva, encima de la enmienda que las corrige, las frases viejas sobre `/{scope}/escanos`.
+- El test de la barra del evento de las subpáginas vive en `tests/test_pages_seat_odds.py`.
+- Las redirecciones de las direcciones viejas conservan un `seccion` que traiga la query (`?seccion=tabla` cae en
+  `#tabla`).
+- `Circunscripciones.active = None` ya no se usa.
