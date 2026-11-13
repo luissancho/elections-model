@@ -188,7 +188,7 @@ ni se escribió en S3 ni en la base.
 | Lado a lado desde 1.200 px, apilado por debajo | pasa | a 1.199 px la ficha va debajo del mapa, con el resumen de cada fila (que se va por debajo de 720); a 1.200, al lado y sin él. Igual con JavaScript y sin él, en `es` y en el ámbito sin posiciones |
 | Sin desbordes | pasa | a los ocho anchos, con Madrid y con Barcelona elegidas (Sevilla y Málaga en el ámbito sin posiciones), el ancho de la página es el de la ventana y ningún elemento de la tarjeta pasa de su borde, salvo el botón de la imagen, que va en el margen de la tarjeta como en todas |
 | Vista, filtros y ficha sin recargar, con JavaScript y sin él | pasa | a 1280 y 390 px: Partidos enseña las 7 columnas y esconde el mapa; PSOE deja 121 círculos enteros y 269 atenuados; PSOE y En juego, 25 y 365; Cádiz enseña sólo su ficha; la dirección no cambia |
-| El resto de la página sigue funcionando | pasa | el Hemiciclo, el promedio, la evolución, la calculadora, el abanico y el gráfico de una encuestadora se dibujan a 1280 y 390 px; las tablas tienen sus filas (13 partidos, 3 bloques, el territorio y su detalle, 15 encuestas). La calculadora escribe `#resultados&coalition=…` y un enlace así abre en Resultados con sus partidos marcados, como antes con `#escanos`. Los enlaces del territorio llevan `seccion=escanos#escanos` y su formulario va a `/es#escanos`. Sin JavaScript, la página de `dev` y la de la rama tienen las mismas tablas con las mismas filas: sólo cambian los anclajes. La consola, sin errores ni avisos (salvo los de html2canvas al hacer una imagen) |
+| El resto de la página sigue funcionando | pasa | el Hemiciclo, el promedio, la evolución, la calculadora, el abanico y el gráfico de una encuestadora se dibujan a 1280 y 390 px; las tablas tienen sus filas (13 partidos, 3 bloques, el territorio y su detalle, 15 encuestas). La calculadora escribe `#resultados&coalition=…` y un enlace así abre en Resultados con sus partidos marcados, como antes con `#escanos`. Los enlaces del territorio llevaban entonces `seccion=escanos#escanos` y su formulario iba a `/es#escanos`; la revisión final los cambió a `#districts` (más abajo). Sin JavaScript, la página de `dev` y la de la rama tienen las mismas tablas con las mismas filas: sólo cambian los anclajes. La consola, sin errores ni avisos (salvo los de html2canvas al hacer una imagen) |
 | Al tocar una casilla del norte, la página baja hasta la ficha; con el teclado, no | pasa tras un arreglo | Lugo, Madrid y Barcelona tocadas al pie de la ventana a 360, 390, 768, 1024 y 1199 px: la página baja hasta que la ficha se ve; una ficha más alta que la ventana queda bajo la cabecera (16 px por debajo en el móvil, 11 con el aviso de congelación desde 720). A 1280 no se mueve. La flecha pasa de Lugo a Asturias sin desplazar la página; el desplegable (360 y 390) elige Sevilla sin desplazarla. En el móvil, la ficha acababa debajo de la barra de pestañas: arreglado (`439e1fa`). Y una ficha que caía entera bajo la barra de pestañas contaba como a la vista y la página no se movía: arreglado (`8d25413`, abajo) |
 | Las dos imágenes | pasa | descargadas con el botón y miradas: `demoscopio-escanos-es-barcelona-psoe-en-juego.png` (mapa y ficha lado a lado, sin selectores, con la línea «PSOE · En juego», la de la elección y la firma), `demoscopio-escanos-es-columnas.png` y, desde una ventana de 390 px, `demoscopio-escanos-es-madrid-pp-probables.png`, también lado a lado |
 | Tras ir a otra página y volver, la línea y el nombre coinciden con los radios | pasa | VOX y Seguros, otra página y atrás: Chrome devolvió la página de la caché de ida y vuelta, con los radios, la línea «VOX · Seguros» y `…-madrid-vox-seguros.png` |
@@ -250,8 +250,10 @@ y unos 4.000 elementos; queda por debajo del tope de 30 KB que fijaba el plan. S
   ficha está donde estaba, a la altura del mapa. Madrid en una ventana de 1280 × 560 se queda pegada mientras se baja
   y su última fila se acaba viendo al seguir bajando. Con todas las fichas a la vista (como sin `:has()`) la columna no
   se mueve, y a 1.199 px nada cambia. Una ficha casi tan alta como el mapa sube con él cuando el mapa se acaba: con la
-  última fila del mapa al 60% de una ventana de 720 px, el nombre de Madrid queda 19 px por encima. La copia de la que
-  sale la imagen no se pega: la primera prueba sacó la ficha bajada en la imagen, y eso se arregló en el mismo commit.
+  última fila del mapa al 60% de una ventana de 720 px, el nombre de Madrid queda 19 px por encima del borde de arriba
+  de la ventana, fuera de la vista. Es decir: quien baja mucho en una ventana corta y toca una ficha alta como la de
+  Madrid sigue sin ver su nombre; la columna pegada lo arregla para las demás. La copia de la que sale la imagen no se
+  pega: la primera prueba sacó la ficha bajada en la imagen, y eso se arregló en el mismo commit.
 - `89f91db`: la imagen del mapa conserva el borde oscuro de la casilla elegida, que dice en el mapa de quién es la
   ficha de al lado. Comparada con la imagen de antes, píxel a píxel, sólo cambia la casilla de Barcelona.
 - `0e8aa2e`: el desplegable de circunscripciones del móvil se nombra con su propio atributo (`aria-label`) y no con
@@ -304,7 +306,9 @@ Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no re
 - Los selectores del mapa en el móvil siguen ocupando seis filas (cuatro de partidos y dos de estados), como en la
   página aparte.
 - Los tres cambios de la revisión final son suyos para quedárselos o deshacerlos, y cada uno es pequeño. La columna
-  pegada se deshace quitando las tres reglas de `.so-fichas` del bloque de 1.200 px de `site.css`. El borde de la
+  pegada se deshace quitando, del bloque de 1.200 px de `site.css`, las tres reglas de `.so-fichas` que hablan de
+  `position` y de `top` (la de `sticky`, la del aviso y la de la imagen); la primera regla de `.so-fichas` de ese
+  bloque, la del margen y la raya, se queda, que es la que pone la ficha al lado del mapa. El borde de la
   casilla en la imagen, volviendo a poner las dos reglas `.shot-image .so-tile:has(input:checked)` que se quitaron. Los
   enlaces del territorio, devolviendo `#escanos` a sus enlaces, a su formulario y a `regionHref` y quitando
   `sectionLanding` del scroll de la página.
@@ -332,3 +336,9 @@ Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no re
 - Las redirecciones de las direcciones viejas conservan un `seccion` que traiga la query (`?seccion=tabla` cae en
   `#tabla`).
 - `Circunscripciones.active = None` ya no se usa.
+- Con JavaScript, una dirección con una circunscripción elegida y `#escanos` (se llega a ella eligiendo una provincia
+  en la tabla y pulsando después «Escaños» en el índice) cae, al recargarla o al compartirla, en «Resultados por
+  territorio» y no en lo alto de la sección; sin JavaScript cae en lo alto. Se iguala haciendo que el cambio de
+  destino valga sólo cuando la sección viene en `seccion` (una condición en `sectionLanding`).
+- La tarjeta «Resultados por territorio», cuando se llega a ella por un enlace, queda 1 px bajo la cabecera (lleva
+  el margen de las secciones, 56 px, y la cabecera acaba en 57). No se nota.
