@@ -1142,6 +1142,9 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-num { padding: 0 12px; text-align: center; font: 700 18px var(--font-head); }
 .so-o { display: block; flex: none; box-sizing: border-box; width: var(--o, 22px); height: var(--o, 22px); border: var(--ob, 2px) solid var(--c); border-radius: 50%; background: var(--f, var(--c)); background-clip: padding-box; }
 .so-o.play { border-style: dashed; }
+/* a safe circle is its colour from edge to edge: its fill runs under its border, so that no lighter seam shows
+   between them on dense screens */
+.so-o.safe { background-clip: border-box; }
 .so-tokens { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px; min-width: 0; padding: 3px 0; }
 .so-token { display: block; flex: none; width: 31px; text-align: center; }
 .so-token.safe { width: 22px; }

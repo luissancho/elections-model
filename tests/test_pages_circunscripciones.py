@@ -695,3 +695,11 @@ def test_the_counts_of_the_hemicycle_grow_with_it_and_stay_small_on_phones():
     assert '.so-hemi-core .so-o { --o: 1em; }' in css
     narrow = css[css.index('@media (max-width: 719px)', css.index('.so-hemi {')):]
     assert re.search(r'\.so-hemi-core \{[^}]*font-size:\s*9\.5px', narrow) and '.so-hemi-core .so-o { --o: 8px; }' in narrow
+
+
+def test_a_safe_circle_has_no_seam_between_its_fill_and_its_border():
+    # the fill of the others stops at their border (`padding-box`): it is lighter than the border; a safe circle is
+    # one colour, so its fill runs under its border and the anti-aliased edge between them never shows as a ring
+    css = site_css()
+    assert re.search(r'\.so-o \{[^}]*background-clip:\s*padding-box', css)
+    assert re.search(r'\.so-o\.safe \{\s*background-clip:\s*border-box', css)
