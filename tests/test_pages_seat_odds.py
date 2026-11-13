@@ -461,6 +461,18 @@ def test_the_block_of_a_district_lands_below_the_header_and_below_the_banner_onl
                      narrow)
 
 
+def test_on_phones_the_block_of_a_district_lands_above_the_tab_bar():
+    # under 720 px the tab bar sticks to the foot of the window (57 px and the safe area): a block the page script
+    # scrolls up from below the map ends above it, not under it
+    css = site_css()
+    narrow = css[css.index('@media (max-width: 719px)', css.index('#seat-odds #district-select')):]
+    narrow = narrow[:narrow.index('\n}')]
+    assert re.search(r'#seat-odds \.so-ficha \{\s*scroll-margin-bottom:\s*calc\(68px \+ env\(safe-area-inset-bottom\)\)',
+                     narrow)
+    phones = css[css.index('.tabbar {', css.index('.tabbar { display: none; }') + 1):]
+    assert re.match(r'\.tabbar \{\s*position:\s*sticky;\s*bottom:\s*0', phones)
+
+
 def test_a_part_without_simulations_or_with_a_single_district_takes_down_no_card(odds_site, api, fresh_app):
     assert 'id="seat-odds"' in event_page(odds_site)[1]
     single = fixture_data('seat-odds')

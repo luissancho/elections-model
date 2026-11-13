@@ -1263,6 +1263,9 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   #seat-odds #district-select:not([hidden]) { display: block; width: 100%; max-width: 360px; margin-top: 12px; }
   /* the freeze banner is not sticky on phones (the header is 52 px): the block keeps its margin with it too */
   body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 68px; }
+  /* the tab bar sticks to the foot of the window (57 px and the safe area): a block scrolled up from below the map
+     ends above it */
+  #seat-odds .so-ficha { scroll-margin-bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
