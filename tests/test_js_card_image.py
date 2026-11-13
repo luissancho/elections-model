@@ -84,3 +84,12 @@ def test_free_fluid_svgs_drops_the_screen_size_html2canvas_writes_on_the_marked_
             'return [c.freeFluidSvgs(card), removed]; })()')
     assert run_js(free) == [1, ['width', 'height', 'inline-size', 'block-size']]
     assert run_js('c.freeFluidSvgs({querySelectorAll: () => []})') == 0
+
+
+def test_prepare_clone_frees_the_fluid_svgs_before_it_measures_the_scrollers():
+    """`fitOverflow` mide lo que desborda la copia: el SVG del hemiciclo tiene que haber soltado antes el tamaño de la
+    pantalla que le escribió html2canvas, o la medida sería la del móvil."""
+    source = pathlib.Path(DIST, 'js', 'card-image.js').read_text(encoding='utf-8')
+    body = source[source.index('export async function prepareClone('):]
+    body = body[:body.index('\n}\n')]
+    assert -1 < body.index('freeFluidSvgs(card);') < body.index('fitOverflow(card);')

@@ -19,7 +19,8 @@
     <div id="content" class="stack">
       {{ m.headline('Escaños que bailan', 'h1') }}
       <p class="so-intro">Qué escaños tiene seguros cada partido, cuáles son probables y cuáles están en juego, según las {{ n_sim|int }} simulaciones del modelo.</p>
-      {#- each tab and each party button lands on this nav (`#vistas`): on a phone the card is far below the top -#}
+      {#- each tab lands on this nav (`#vistas`), each party button on the buttons of the parties (`#partidos`): on a
+          phone the card is far below the top -#}
       <nav class="seg lg so-tabs" id="vistas" aria-label="Vistas">
         {% for tab in tabs %}
         <a href="{{ tab.href }}"{% if tab.on %} class="on" aria-current="page"{% endif %}>{{ tab.label }}</a>

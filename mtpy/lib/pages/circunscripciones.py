@@ -16,7 +16,8 @@ from ...core.api import HttpError
 from ..webapi import district_positions, site
 from .common import OTHERS_COLOR, bundle_part, common_context, hemicycle_order, subpage_event_bar
 from .escanos import _sort_name
-from .seat_charts import REST_COLUMN, STATES, column_ticks, hemicycle_layout, map_tiles, party_columns
+from .seat_charts import (REST_COLUMN, STATES, column_ticks, hemicycle_layout, map_tiles, party_columns,
+                          state_counts)
 from .slugs import slugify
 
 SAFE_SHARE = 0.99
@@ -74,7 +75,7 @@ def token_label(share: float) -> str:
     str
         The percentage with the ``%`` attached; never below 25%, nor 99% nor 100%.
     """
-    # the epsilon rounds up the exact halves that the binary floats put a hair below (0.145 * 100 is 14.4999...)
+    # the epsilon rounds up the exact halves that the binary floats put a hair below (0.285 * 100 is 28.4999...)
     return '{}%'.format(min(98, max(25, int(share * 100 + 0.5 + 1e-9))))
 
 
@@ -164,23 +165,6 @@ def seat_tokens(name: str, reach: list, n_sim: int) -> list:
     return tokens
 
 
-def _count_states(tokens: list) -> dict:
-    """
-    How many seat options of each state.
-
-    Parameters
-    ----------
-    tokens : list
-        Options from ``seat_tokens``.
-
-    Returns
-    -------
-    dict
-        One count per state of ``STATES``.
-    """
-    return {state: sum(token['state'] == state for token in tokens) for state in STATES}
-
-
 def district_views(data: dict) -> list:
     """
     One view per district of the ``seat-odds`` part, in the order of the part.
@@ -211,7 +195,7 @@ def district_views(data: dict) -> list:
             rows.append({
                 'name': row['name'],
                 'tokens': tokens,
-                **_count_states(tokens),
+                **state_counts(tokens),
                 'expected': sum(token['share'] for token in tokens),
             })
         rows.sort(key=lambda row: -row['expected'])

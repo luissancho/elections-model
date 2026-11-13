@@ -780,26 +780,29 @@ aplican la misma regla a su propio run; `mode` sigue aceptado en la query para e
 del catálogo da 404 ("Ámbito desconocido.") y uno del catálogo sin pronóstico, el 404 "Este ámbito no tiene
 pronóstico publicado.".
 `/{scope}/escanos` acepta además `region` (solo de la página, no de la API): un entero de `districts.regions`; mal
-formado da 400 y desconocido 404 en HTML. «Escaños que bailan» (enmienda 2026-11-12, controlador `Circunscripciones`)
-es una subpágina del evento, con su barra, su modo y su run: `/{scope}/circunscripciones` (la portada: la ficha de la
-circunscripción con más opciones de escaño en juego) y `/{scope}/circunscripciones/{district}` (la ficha de una; `district` es
-`slugify` de su nombre, `la-coruna`). Las dos aceptan `mode` y `run` como la página del evento; la primera acepta además
-`partido` (`slugify` de las siglas: la vista por partido), `vista` (`partidos`: la pestaña Partidos, con el hemiciclo y las columnas por bloque y sin ficha de partido; `renidos`: «Los más reñidos») y
-`circunscripcion` (lo que envía el desplegable: un 301 a `/{scope}/circunscripciones/{slug}` con el resto de la query
-y el fragmento `#ficha`, para que en el móvil cada cambio caiga en la ficha y no arriba de la página). La ruta de la
-circunscripción gana a `partido` y `vista`, y `partido` gana a `vista`; la canónica quita `mode` y `run` y lo que la
-página no usa: `circunscripcion` siempre, `partido` y `vista` en la ruta de una circunscripción y `vista` cuando gana
-`partido` (conserva `partido` en la vista por partido y `vista` en «Los más reñidos»). Leen la parte `seat-odds` del
-modo con `bundle_part` y no tocan la base; la presencia de la parte se recuerda durante el TTL de los punteros. Errores
-en HTML: 404 `seat odds not published` ("Este run no tiene el desglose escaño a escaño.") si el run mostrado no tiene
-la parte en ese modo, la tiene sin simulaciones (`n_sim` 0) o con menos de dos circunscripciones; 404 `region not
-found` ("Circunscripción no encontrada.") para una circunscripción desconocida; 404 `party not found` ("Partido no
-encontrado.") para unas siglas que no son de un partido con alguna ficha en la parte; 400 `invalid view` ("Vista no
-válida.") para una `vista` distinta de `partidos` y `renidos`; y los de la página del evento (ámbito, `mode`, `run`). Enmienda 2026-11-13: la pestaña Provincias
-pinta las fichas de todas las circunscripciones y cambia entre ellas sin recargar (radios y `:has()`; con JavaScript la
-dirección sigue a la ficha elegida); la página lee `data/es-districts.csv` para las posiciones del mapa (sin ellas,
-las casillas van en una fila por nombre); y la canónica conserva `vista=partidos`, además de `partido` y de
-`vista=renidos`.
+formado da 400 y desconocido 404 en HTML. «Escaños que bailan» (enmienda 2026-11-12, controlador `Circunscripciones`) es
+una subpágina del evento, con su barra, su modo y su run: `/{scope}/circunscripciones` (la portada: la ficha de la
+circunscripción con más opciones de escaño en juego) y `/{scope}/circunscripciones/{district}` (la ficha de una;
+`district` es `slugify` de su nombre, `la-coruna`). Las dos aceptan `mode` y `run` como la página del evento; la primera
+acepta además `partido` (`slugify` de las siglas: la vista por partido), `vista` (`partidos`: la pestaña Partidos, con
+el hemiciclo y las columnas por bloque y sin ficha de partido; `renidos`: «Los más reñidos») y `circunscripcion` (lo que
+envía el desplegable: un 301 a `/{scope}/circunscripciones/{slug}` con el resto de la query y el fragmento `#ficha`,
+para que en el móvil cada cambio caiga en la ficha y no arriba de la página). La ruta de la circunscripción gana a
+`partido` y `vista`, y `partido` gana a `vista`; la canónica quita `mode` y `run` y lo que la página no usa:
+`circunscripcion` siempre, `partido` y `vista` en la ruta de una circunscripción y `vista` cuando gana `partido`. Leen
+la parte `seat-odds` del modo con `bundle_part` y no tocan la base; la presencia de la parte se recuerda durante el TTL
+de los punteros. Errores en HTML: 404 `seat odds not published` ("Este run no tiene el desglose escaño a escaño.") si el
+run mostrado no tiene la parte en ese modo, la tiene sin simulaciones (`n_sim` 0) o con menos de dos circunscripciones;
+404 `region not found` ("Circunscripción no encontrada.") para una circunscripción desconocida; 404 `party not found`
+("Partido no encontrado.") para unas siglas que no son de un partido con alguna opción de escaño en la parte; 400
+`invalid view` ("Vista no válida.") para una `vista` distinta de `partidos` y `renidos`; y los de la página del evento
+(ámbito, `mode`, `run`). Enmienda 2026-11-13: la pestaña Provincias pinta las fichas de todas las circunscripciones y
+cambia entre ellas sin recargar (radios y `:has()`; con JavaScript la dirección, el título y la canónica siguen a la
+ficha elegida); se llama Circunscripciones, y la página dice «circunscripción» en vez de «provincia», cuando alguna
+circunscripción de la parte no es una provincia (su id no es un código INE, de 100 en adelante: Asturias, Baleares,
+Canarias); la página lee `data/es-districts.csv` para las posiciones del mapa (sin ellas, las casillas van en una
+rejilla seguida, por nombre); y la canónica conserva `partido` en la vista por partido y `vista` en la pestaña Partidos
+(`vista=partidos`) y en «Los más reñidos» (`vista=renidos`).
 
 Las **globales** son `/` (Inicio, `Index`: el índice de eventos), `/elecciones`
 (Histórico Errores, `Elecciones`), `/casas` (Ranking Encuestadoras, `Casas`) y `/metodo` (`Metodo`) con sus

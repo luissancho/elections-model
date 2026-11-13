@@ -219,7 +219,6 @@ def test_the_three_views_speak_of_three_states_and_never_of_the_central_allocati
     assert call(odds_site, '/es/circunscripciones', query='partido=up')[0] == 404  # a party without options
 
 
-
 def test_the_map_draws_every_district_as_the_label_of_a_radio_and_every_card_is_on_the_page(odds_site):
     page = page_of(odds_site, '/es/circunscripciones/cadiz')[1]
     assert '<h2>Dónde bailan los escaños, provincia a provincia</h2>' in page
@@ -240,6 +239,10 @@ def test_the_map_draws_every_district_as_the_label_of_a_radio_and_every_card_is_
     # without `:has()` no card stays hidden: every one shows
     css = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert re.search(r'@supports not selector\(:has\(\*\)\)\s*\{\s*\.so-ficha\s*\{\s*display:\s*block', css)
+    # with it, every card is hidden but the one of the tile checked; the filter of states dims the circles of the others
+    assert re.search(r'(^|\n)\.so-ficha\s*\{\s*display:\s*none', css)
+    for state in ('safe', 'likely', 'play'):
+        assert re.search(r'#mapa:has\(#ms-{0}:checked\) \.so-dots i:not\(\.{0}\)\s*\{{\s*opacity:\s*\.08'.format(state), css)
     assert re.findall(r'class="card shot so-card so-ficha" id="ficha-([a-z-]+)"', page) == ['cadiz', 'guadalajara', 'la-coruna']
     assert 'Hay 22 opciones para 19 escaños: a un mismo escaño pueden optar varios partidos.' in page
     assert '<title>Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026</title>' in page
@@ -686,6 +689,9 @@ def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_he
         ('', 'Provincias'), (' class="on" aria-current="page"', 'Partidos'), ('', 'Los más reñidos')]
     assert 'href="/es/circunscripciones?mode=forecast&amp;vista=partidos#vistas"' in page
     assert re.findall(r'name="pf" value="(hemi|cols)"[^>]*?( checked)?>', page) == [('hemi', ' checked'), ('cols', '')]
+    # the switch: the radio of the columns hides the hemicycle, any other state hides the columns
+    assert re.search(r'#grafico:not\(:has\(#pf-cols:checked\)\) \.so-form-cols, '
+                     r'#grafico:has\(#pf-cols:checked\) \.so-form-hemi\s*\{\s*display:\s*none', site_css())
     assert '<h2 class="so-form-hemi">El hemiciclo que baila</h2>' in page
     assert '<h2 class="so-form-cols">Las opciones de escaño de cada partido</h2>' in page
     start = page.index('<svg class="so-hemi-svg"')
@@ -760,3 +766,21 @@ def test_a_safe_circle_has_no_seam_between_its_fill_and_its_border():
     css = site_css()
     assert re.search(r'\.so-o \{[^}]*background-clip:\s*padding-box', css)
     assert re.search(r'\.so-o\.safe \{\s*background-clip:\s*border-box', css)
+
+
+def test_every_element_the_page_script_looks_for_is_in_the_view_that_owns_it(odds_site):
+    # read from the script itself, so that a renamed id or radio on either side fails here and not on a phone
+    script = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'js', 'pages', 'circunscripciones.js'),
+                  encoding='utf-8').read()
+    ids = set(re.findall(r"getElementById\('([\w-]+)'\)", script))
+    names = set(re.findall(r"checkedRadio\('(\w+)'\)", script) + re.findall(r"\.name !== '(\w+)'", script))
+    names |= {name for group in re.findall(r'follow\(\[([^\]]+)\]', script) for name in re.findall(r"'(\w+)'", group)}
+    selectors = re.findall(r"querySelector\('(\w+)\[(\w+)=\"([^\"]+)\"\]'\)", script)
+    assert ids and names and selectors
+    views = [page_of(odds_site, '/es/circunscripciones', query)[1] for query in ('', 'vista=partidos')]
+    for element in ids:
+        assert any('id="{}"'.format(element) in view for view in views), element
+    for name in names:
+        assert any('name="{}"'.format(name) in view for view in views), name
+    for tag, attribute, value in selectors:
+        assert all('<{} {}="{}"'.format(tag, attribute, value) in view for view in views), (tag, attribute, value)

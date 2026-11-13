@@ -4,7 +4,7 @@ The layout of the drawings of «Escaños que bailan» (``/{scope}/circunscripcio
 The functions are pure: they take the views of ``circunscripciones.district_views`` (or the options of
 ``scope_options``) and return plain dicts and lists, with the options still undrawn (the page passes them through
 ``drawn_token``). This module imports nothing from ``circunscripciones``, which imports it: the states of a seat
-option (``STATES``) live here.
+option (``STATES``) and their count (``state_counts``) live here.
 """
 import math
 from typing import Optional
@@ -85,14 +85,14 @@ def map_tiles(districts: list, positions: dict, order: list) -> dict:
     return {'placed': placed, 'tiles': tiles}
 
 
-def _state_counts(options: list) -> dict:
+def state_counts(options: list) -> dict:
     """
     How many seat options of each state.
 
     Parameters
     ----------
     options : list
-        Seat options with ``state``.
+        Seat options with ``state`` (those of ``seat_tokens`` or ``scope_options``).
 
     Returns
     -------
@@ -178,7 +178,7 @@ def hemicycle_layout(options: list, order: list) -> dict:
                               y=round(center_y - place['r'] * math.sin(place['angle']), 1),
                               row=place['row'], angle=place['angle']))
 
-        parties.append({'name': name, **_state_counts(mine)})
+        parties.append({'name': name, **state_counts(mine)})
 
     # the circles never touch: their diameter is 3/4 of the step between two places of a row or between two rows
     arcs = [math.pi * radii[row] / per_row[row] for row in range(rows) if per_row[row]]
@@ -230,7 +230,7 @@ def party_columns(options: list, order: list, blocks: Optional[dict]) -> list:
         mine = sorted((option for option in options if option['party'] in members),
                       key=lambda option: (STATES.index(option['state']), names.index(option['party']),
                                           -option['share']))
-        columns.append({'name': name, 'members': members, **_state_counts(mine), 'options': mine})
+        columns.append({'name': name, 'members': members, **state_counts(mine), 'options': mine})
 
     return columns
 

@@ -3570,7 +3570,7 @@ def test_metodo_escanos_quotes_the_coverage_only_with_a_backtest(api, fresh_app)
     assert 'el intervalo del 95% del voto contiene el resultado el 96% de las veces a 6 días' in page
 
 
-def test_method_seats_explains_the_safe_and_the_open_seats(api):
+def test_method_seats_explains_the_safe_the_likely_and_the_in_play_seats(api):
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
     block = page[page.index('<h3 id="seguros">'):page.index('id="comprobacion"')]
     assert '<h3 id="seguros">Escaños seguros, probables y en juego</h3>' in block

@@ -10,8 +10,9 @@ from .Page import Page
 
 class Circunscripciones(Page):
     """
-    The seats of every district, one by one: which ones each party has safe and which ones are open, with the share
-    of the simulations in which it wins them. A subpage of the event: it follows its mode and its pinned run.
+    The seats of every district, one by one: which ones each party has safe, which ones are likely and which ones
+    are in play, with the share of the simulations in which it wins them. A subpage of the event: it follows its mode
+    and its pinned run.
     """
 
     active = None
