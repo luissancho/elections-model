@@ -162,8 +162,8 @@ Rama `escanos-evento`, desde `dev` (`git log --oneline dev..HEAD`):
   la bajada a la ficha al tocar una casilla en apilado): `ccf142c`.
 - Fuera la página aparte (sus direcciones responden con un 301 a la tarjeta), el hemiciclo de las opciones y la
   ficha de partido: `65f67f7` (sólo cambia de nombre el módulo y sus tests) y `b534d87`.
-- Arreglos de la comprobación en el navegador (abajo): `439e1fa` y `dd35986`.
-- Este cierre: el commit que lo añade.
+- Arreglos de la comprobación en el navegador (abajo): `439e1fa`, `dd35986` y `8d25413`.
+- Este cierre: el commit que lo añade y el que lo pone al día tras la revisión.
 
 ### Comprobación en el navegador
 
@@ -184,10 +184,10 @@ ni se escribió en S3 ni en la base.
 |---|---|---|
 | El índice dice Promedio · Resultados · Escaños · Evolución · Tabla y cada entrada baja a su sección | pasa | a 1280 y 390 px, con JavaScript y sin él: cada sección queda bajo la cabecera (a 56 px con la cabecera de 57, a 52 en el móvil). `?seccion=escanos` y `?seccion=resultados` caen en la suya y la dirección pierde `seccion` |
 | Lado a lado desde 1.200 px, apilado por debajo | pasa | a 1.199 px la ficha va debajo del mapa, con el resumen de cada fila (que se va por debajo de 720); a 1.200, al lado y sin él. Igual con JavaScript y sin él, en `es` y en el ámbito sin posiciones |
-| Sin desbordes | pasa | a los ocho anchos, con Madrid y con Barcelona elegidas (Sevilla y Málaga en el ámbito sin posiciones), el ancho de la página es el de la ventana y ningún elemento de la tarjeta pasa de su borde |
+| Sin desbordes | pasa | a los ocho anchos, con Madrid y con Barcelona elegidas (Sevilla y Málaga en el ámbito sin posiciones), el ancho de la página es el de la ventana y ningún elemento de la tarjeta pasa de su borde, salvo el botón de la imagen, que va en el margen de la tarjeta como en todas |
 | Vista, filtros y ficha sin recargar, con JavaScript y sin él | pasa | a 1280 y 390 px: Partidos enseña las 7 columnas y esconde el mapa; PSOE deja 121 círculos enteros y 269 atenuados; PSOE y En juego, 25 y 365; Cádiz enseña sólo su ficha; la dirección no cambia |
 | El resto de la página sigue funcionando | pasa | el Hemiciclo, el promedio, la evolución, la calculadora, el abanico y el gráfico de una encuestadora se dibujan a 1280 y 390 px; las tablas tienen sus filas (13 partidos, 3 bloques, el territorio y su detalle, 15 encuestas). La calculadora escribe `#resultados&coalition=…` y un enlace así abre en Resultados con sus partidos marcados, como antes con `#escanos`. Los enlaces del territorio llevan `seccion=escanos#escanos` y su formulario va a `/es#escanos`. Sin JavaScript, la página de `dev` y la de la rama tienen las mismas tablas con las mismas filas: sólo cambian los anclajes. La consola, sin errores ni avisos (salvo los de html2canvas al hacer una imagen) |
-| Al tocar una casilla del norte, la página baja hasta la ficha; con el teclado, no | pasa tras un arreglo | Lugo, Madrid y Barcelona tocadas al pie de la ventana a 360, 390, 768, 1024 y 1199 px: la página baja hasta que la ficha se ve; una ficha más alta que la ventana queda bajo la cabecera (16 px por debajo en el móvil, 11 con el aviso de congelación desde 720). A 1280 no se mueve. La flecha pasa de Lugo a Asturias sin desplazar la página; el desplegable (360 y 390) elige Sevilla sin desplazarla. En el móvil, la ficha acababa debajo de la barra de pestañas: arreglado (`439e1fa`) |
+| Al tocar una casilla del norte, la página baja hasta la ficha; con el teclado, no | pasa tras un arreglo | Lugo, Madrid y Barcelona tocadas al pie de la ventana a 360, 390, 768, 1024 y 1199 px: la página baja hasta que la ficha se ve; una ficha más alta que la ventana queda bajo la cabecera (16 px por debajo en el móvil, 11 con el aviso de congelación desde 720). A 1280 no se mueve. La flecha pasa de Lugo a Asturias sin desplazar la página; el desplegable (360 y 390) elige Sevilla sin desplazarla. En el móvil, la ficha acababa debajo de la barra de pestañas: arreglado (`439e1fa`). Y una ficha que caía entera bajo la barra de pestañas contaba como a la vista y la página no se movía: arreglado (`8d25413`, abajo) |
 | Las dos imágenes | pasa | descargadas con el botón y miradas: `demoscopio-escanos-es-barcelona-psoe-en-juego.png` (mapa y ficha lado a lado, sin selectores, con la línea «PSOE · En juego», la de la elección y la firma), `demoscopio-escanos-es-columnas.png` y, desde una ventana de 390 px, `demoscopio-escanos-es-madrid-pp-probables.png`, también lado a lado |
 | Tras ir a otra página y volver, la línea y el nombre coinciden con los radios | pasa | VOX y Seguros, otra página y atrás: Chrome devolvió la página de la caché de ida y vuelta, con los radios, la línea «VOX · Seguros» y `…-madrid-vox-seguros.png` |
 | Las direcciones viejas acaban en la tarjeta | pasa | con el arnés de los tests y el run real: `/es/circunscripciones` → 301 a `/es#escanos`; `/es/circunscripciones/cadiz?mode=nowcast` → `/es?mode=nowcast#escanos`; con `run`, `partido`, `vista` o `circunscripcion` en la query, igual, con `mode` y `run` y nada más. En el navegador, esas direcciones de destino caen en la sección Escaños |
@@ -205,7 +205,7 @@ contados por el navegador sin JavaScript). «Antes» es el código de `dev` con 
 | Diferencia | +263,8 KB | +19,0 KB | +3.615 |
 
 En Hoy, igual: de 106,4 a 125,6 KB en gzip. La tarjeta tiene 3.620 elementos. Este documento calculaba unos 20 KB
-y unos 4.000 elementos; queda por debajo del tope de 30 KB que se puso el plan. Sin la parte, la página pesa
+y unos 4.000 elementos; queda por debajo del tope de 30 KB que fijaba el plan. Sin la parte, la página pesa
 106,6 KB en gzip.
 
 ### Arreglos de la comprobación
@@ -215,6 +215,16 @@ y unos 4.000 elementos; queda por debajo del tope de 30 KB que se puso el plan. 
   ahora un margen abajo del alto de la barra, como guarda arriba el de la cabecera.
 - `dd35986`: sólo comentarios. Decían que en el móvil el aviso de congelación no se queda pegado arriba; sí se queda,
   encima de la cabecera.
+- `8d25413`: la página decidía si la ficha estaba a la vista mirando la ventana entera, y en el móvil la barra de
+  pestañas tapa su pie (62 px a 390 y a 360 px). Una ficha que empezaba bajo esa barra contaba como a la vista y, al
+  tocar la casilla, no pasaba nada que se viera. Ahora cuenta sólo la franja libre entre lo que está pegado arriba (la
+  cabecera, y el aviso de congelación si sale) y lo que está pegado abajo (la barra de pestañas); una barra que no
+  está, no se ve o no va pegada no cuenta. Con los datos del run, tocando Las Palmas con la ficha empezando a 813 px
+  de una ventana de 390 × 844 (la barra empieza en 782), la página baja y la ficha queda en 466–776; a 360 × 640,
+  con la ficha a 609 (la barra en 578), queda en 262–572. Con el aviso de congelación, igual. Con el nombre de la
+  ficha asomando encima de la barra (a 742 y a 538), la página no se mueve, como antes. A 768 px, sin barra de
+  pestañas, nada cambia: no se mueve con la ficha asomando a 994 de 1.024 y baja con ella a 1.044, como antes del
+  arreglo.
 
 ### Lo que difiere de este documento
 
@@ -255,7 +265,8 @@ Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no re
   pasar.
 - En el móvil, el aviso de congelación se queda pegado arriba y tapa la cabecera (ya pasaba antes de esta rama). Con
   un aviso de una línea (48 px) la ficha queda bajo él; con uno de dos líneas a 360 px (70 px) la ficha empieza 2 px
-  por debajo de su borde y su nombre se sigue leyendo.
+  por debajo de su borde y su nombre se sigue leyendo, y las secciones a las que lleva el índice quedan con sus 18 px
+  de arriba bajo el aviso (medido: caen a 52 px y el aviso acaba en 70).
 - Las dos diferencias con la maqueta, arriba, si hay que cambiarlas.
 - Después de desplegar, una comprobación en la web de verdad: abrir `/es#escanos` en un móvil, tocar una provincia y
   descargar la imagen de la tarjeta. Nadie pudo probarlo detrás de nginx, en otros navegadores ni en móviles de
