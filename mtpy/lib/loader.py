@@ -519,6 +519,7 @@ class WikipediaLoader(Core):
 
         self.data = None
         self.polls = None
+        self.new_polls = None
         self.results = None
         self.computed = None
 
@@ -1116,9 +1117,14 @@ class WikipediaLoader(Core):
         return self
 
     def select_series(self, overwrite: bool = False) -> Self:
+        """
+        Keep the polls to save: only those not yet in the database or, with `overwrite`, all of them. Either way
+        `new_polls` holds the polls read that the database does not have yet.
+        """
+        cur_polls = self.m_polls.get_results(query={'filters': self.filters}, formatted=True).set_index(self.m_polls.key)
+        self.new_polls = self.polls.set_index(self.m_polls.key).drop(cur_polls.index, errors='ignore').reset_index()
         if not overwrite:
-            cur_polls = self.m_polls.get_results(query={'filters': self.filters}, formatted=True).set_index(self.m_polls.key)
-            self.polls = self.polls.set_index(self.m_polls.key).drop(cur_polls.index, errors='ignore').reset_index()
+            self.polls = self.new_polls
 
         self.results = self.results.set_index(self.m_results.key[:-1]).loc[self.polls.set_index(self.m_polls.key).index].reset_index()
 

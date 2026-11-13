@@ -87,8 +87,25 @@ class Polls(ScopePipeline):
             result['status'] = 'skipped'
         self.result = result
 
+    def summary(self, chunk, **kwargs):
+        """
+        Build the summary lines of the scope and report them: the result line on the progress line and, below it,
+        one line per new poll (`poll_line`), so that they reach the final summary and the alert too.
+        """
+        lines = self.line_of(chunk, self.result, **kwargs)
+        if isinstance(lines, str):
+            lines = [lines]
+        if self.progress is not None:
+            self.progress.done(lines[0])
+            for line in lines[1:]:
+                self._say(line, 1)
+        return lines[0] if len(lines) == 1 else lines
+
     def line_of(self, chunk, result, **kwargs):
-        """Format the summary line of one scope result, with the count of its warnings."""
+        """
+        Format the summary line of one scope result, with the count of its warnings, followed by one line per new
+        poll (the polls read that the database did not have: saved or, in a dry run, to save).
+        """
         if result['status'] in ('failed', 'skipped'):
             return '{}: polls {} ({})'.format(chunk, result['status'], result['reason']) + notes_suffix(result)
 
@@ -109,4 +126,33 @@ class Polls(ScopePipeline):
                  ((pollsters, 'pollster', 'pollsters'), (sponsors, 'sponsor', 'sponsors')) if n]
         if nouns:
             line += ' · ' + ', '.join(nouns)
-        return line + notes_suffix(result)
+        line += notes_suffix(result)
+        polls = result.get('new') or []
+        if not polls:
+            return line
+        return [line] + [poll_line(chunk, poll) for poll in polls]
+
+
+def poll_line(scope, poll):
+    """
+    Line of one new poll: ``'es: + 40dB / El País, 2026-11-10 → 2026-11-12'``.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the poll.
+    poll : dict
+        ``pollster``, ``sponsor`` (``None`` without one), ``start_date`` and ``end_date`` (`load.new_poll_list`).
+
+    Returns
+    -------
+    str
+        The pollster, the sponsor after ``/`` when there is one and the fieldwork dates (one when they are the
+        same day or the start is unknown).
+    """
+    name = poll['pollster'] or '?'
+    if poll['sponsor']:
+        name += ' / ' + poll['sponsor']
+    start, end = poll['start_date'], poll['end_date']
+    dates = end if not start or start == end else '{} → {}'.format(start, end or '?')
+    return '{}: + {}, {}'.format(scope, name, dates)

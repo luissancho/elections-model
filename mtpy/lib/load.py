@@ -119,6 +119,35 @@ def unmapped_reason(missing: dict[str, list[str]]) -> str:
     )
 
 
+def new_poll_list(polls: Optional[pd.DataFrame]) -> list[dict]:
+    """
+    The polls of a frame as plain dicts, sorted by the last day of fieldwork and pollster.
+
+    Parameters
+    ----------
+    polls : DataFrame or None
+        Polls with ``pollster``, ``sponsor`` (empty when there is none), ``start_date`` and ``end_date``.
+
+    Returns
+    -------
+    list of dict
+        ``{'pollster', 'sponsor', 'start_date', 'end_date'}`` per poll, the dates as ``YYYY-MM-DD`` and
+        ``sponsor`` ``None`` when the poll has none; ``[]`` for ``None`` or an empty frame.
+    """
+    if polls is None or len(polls) == 0:
+        return []
+
+    def day(value):
+        return None if pd.isnull(value) else pd.Timestamp(value).strftime('%Y-%m-%d')
+
+    def name(value):
+        return None if pd.isnull(value) or value == '' else str(value)
+
+    rows = [{'pollster': name(row['pollster']), 'sponsor': name(row['sponsor']), 'start_date': day(row['start_date']),
+             'end_date': day(row['end_date'])} for row in polls.to_dict('records')]
+    return sorted(rows, key=lambda row: (row['end_date'] or '', row['pollster'] or '', row['sponsor'] or ''))
+
+
 def _names(loader, kind: str) -> dict[str, list[str]]:
     """Sorted, de-duplicated names by class that the loader read as `missing` or `skipped`."""
     return {cls: sorted(set(getattr(loader, '{}_{}'.format(cls, kind)))) for cls in NAME_CLASSES}
@@ -176,8 +205,9 @@ def load_polls(
     -------
     dict
         ``status`` (`loaded`, `checked` for a dry run or `failed`), ``action`` (`polls`), ``event_date``,
-        ``n_read`` (polls in the article), ``n_saved`` (polls selected), ``overwrite``, ``missing`` and ``skipped``
-        (names by class), ``added`` (pollsters and sponsors added, or that `force` would add in a dry run),
+        ``n_read`` (polls in the article), ``n_saved`` (polls selected), ``new`` (the polls read that the
+        database did not have, `new_poll_list`: the ones saved, or that would be, with or without ``overwrite``),
+        ``overwrite``, ``missing`` and ``skipped`` (names by class), ``added`` (pollsters and sponsors added, or that `force` would add in a dry run),
         ``seconds`` (per phase and ``total``) and, when failed, ``reason``.
 
     Raises
@@ -193,7 +223,7 @@ def load_polls(
     catalogues = add_catalogue_entries if catalogues is None else catalogues
     seconds, start = {}, time.perf_counter()
     result = {
-        'status': 'loaded', 'action': 'polls', 'event_date': event_date, 'n_read': 0, 'n_saved': 0,
+        'status': 'loaded', 'action': 'polls', 'event_date': event_date, 'n_read': 0, 'n_saved': 0, 'new': [],
         'overwrite': overwrite, 'missing': {cls: [] for cls in NAME_CLASSES},
         'skipped': {cls: [] for cls in NAME_CLASSES}, 'added': {'pollsters': [], 'sponsors': []}, 'seconds': seconds
     }
@@ -266,6 +296,7 @@ def load_polls(
     def select_and_save():
         wiki.select_series(overwrite)
         result['n_saved'] = len(wiki.polls)
+        result['new'] = new_poll_list(wiki.new_polls)
         if save:
             wiki.save_polls(overwrite)
             wiki.save_results(overwrite)

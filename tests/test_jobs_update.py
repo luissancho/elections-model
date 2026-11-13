@@ -178,3 +178,11 @@ def test_update_rejects_an_unknown_mode_before_loading(fresh_app, tmp_path, scop
     with pytest.raises(ValueError, match='compute: unknown mode "x" \\(expected auto, light or full\\)'):
         run(tmp_path, loader=loader, scopes=['es'], mode='x')
     assert loader.calls == []
+
+
+def test_update_lists_the_new_polls_in_the_alert(fresh_app, tmp_path, scopes, events, patched, alerts):
+    run(tmp_path, scopes=['es'])
+    body = alerts[0].splitlines()
+    loaded = next(i for i, line in enumerate(body) if line.startswith('es: polls loaded'))
+    assert body[loaded + 1:loaded + 3] == ['es: + Casa 1, 2026-11-09 → 2026-11-11',
+                                           'es: + Casa 0 / Medio, 2026-11-10 → 2026-11-12']
