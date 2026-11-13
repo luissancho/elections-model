@@ -275,13 +275,6 @@
       </section>
       {% if seat_odds or district_table %}
       <section class="event-section" id="escanos">
-      {% if seat_odds %}
-      {#- «Escaños que bailan»: only when the run shown has the part with simulations and two districts or more
-          (`seat_odds_card`); the line of its image says which election, which estimate and its day -#}
-      {% import '_seat_odds.html' as s %}
-      {% set stamp %}<p class="so-stamp shot-only">{{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %} · {{ title_suffix }} · Actualizado: {{ event_bar.run_at|date }}</p>{% endset %}
-      {{ s.card(seat_odds, stamp) }}
-      {% endif %}
       {% if district_table %}
       {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el reparto central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
         <div class="series-controls" id="territory-controls" hidden>
@@ -398,6 +391,14 @@
         <p>Es un reparto del voto central, no la predicción cerrada de ninguna circunscripción: en las pequeñas, pocos votos cambian un escaño.</p>
         {% endcall %}
       {{ m.card_end() }}
+      {% endif %}
+      {% if seat_odds %}
+      {#- «Escaños que bailan», below the territory table (Luis, 2026-11-13): only when the run shown has the part
+          with simulations and two districts or more (`seat_odds_card`); the line of its image says which election,
+          which estimate and its day -#}
+      {% import '_seat_odds.html' as s %}
+      {% set stamp %}<p class="so-stamp shot-only">{{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %} · {{ title_suffix }} · Actualizado: {{ event_bar.run_at|date }}</p>{% endset %}
+      {{ s.card(seat_odds, stamp) }}
       {% endif %}
       </section>
       {% endif %}

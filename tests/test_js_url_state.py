@@ -54,21 +54,17 @@ def test_section_target():
     assert run_js('u.sectionTarget("", "#escanos&ventana=1a", IDS)') == 'escanos'
     assert run_js('u.sectionTarget("?seccion=nope", "#coalition=PP", IDS)') is None
     assert run_js('u.sectionTarget("", "#territorio&coalition=PP", IDS)') is None  # an anchor of before: none
+    # a card offered as a landing: the page offers «Escaños que bailan» to the addresses of the page that was
+    assert run_js('u.sectionTarget("?mode=nowcast", "#seat-odds", IDS.concat(["seat-odds"]))') == 'seat-odds'
+    assert run_js('u.sectionTarget("", "#seat-odds", IDS)') is None
 
 
-def test_section_landing():
-    # a district asked for in the seats section (the links and the form of the territory table, an old seats address
-    # with a `region`) lands on the territory card, which the section opens with «Escaños que bailan» above
-    assert run_js('u.sectionLanding("escanos", "?mode=forecast&region=8&seccion=escanos", true)') == 'districts'
-    assert run_js('u.sectionLanding("escanos", "?region=8", true)') == 'districts'
-    # without a district, or without the territory card, the top of the section, as before
-    assert run_js('u.sectionLanding("escanos", "?mode=forecast&seccion=escanos", true)') == 'escanos'
-    assert run_js('u.sectionLanding("escanos", "", true)') == 'escanos'
-    assert run_js('u.sectionLanding("escanos", "?region=8&seccion=escanos", false)') == 'escanos'
-    # the other sections never change, with or without a district
-    assert run_js('u.sectionLanding("resultados", "?region=8&seccion=resultados", true)') == 'resultados'
-    assert run_js('u.sectionLanding("tabla", "?region=8", true)') == 'tabla'
-    assert run_js('u.sectionLanding(null, "?region=8", true)') is None
+def test_a_district_asked_for_needs_no_landing_of_its_own():
+    # the seats section opens with the territory table since «Escaños que bailan» went below it (Luis, 2026-11-13): a
+    # district asked for in the section (the links and the form of the table, an old seats address with a `region`)
+    # lands on the section, like any other arrival
+    assert run_js('typeof u.sectionLanding') == 'undefined'
+    assert run_js('u.sectionTarget("?mode=forecast&region=8&seccion=escanos", "#districts", IDS)') == 'escanos'
 
 
 def test_drop_param():

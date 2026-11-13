@@ -202,11 +202,11 @@ def test_the_event_bar_of_a_subpage_links_the_event_page_and_drops_the_seats_sec
 
 
 @pytest.mark.parametrize('path, query, location', [
-    ('/es/circunscripciones', '', '/es#escanos'),
-    ('/es/circunscripciones/cadiz', 'mode=nowcast', '/es?mode=nowcast#escanos'),
+    ('/es/circunscripciones', '', '/es#seat-odds'),
+    ('/es/circunscripciones/cadiz', 'mode=nowcast', '/es?mode=nowcast#seat-odds'),
     ('/es/circunscripciones', 'partido=psoe&vista=partidos&circunscripcion=cadiz&mode=nowcast&run=' + RUN,
-     '/es?mode=nowcast&run=' + RUN + '#escanos'),
-    ('/es/circunscripciones', 'vista=renidos', '/es#escanos'),
+     '/es?mode=nowcast&run=' + RUN + '#seat-odds'),
+    ('/es/circunscripciones', 'vista=renidos', '/es#seat-odds'),
 ])
 def test_the_addresses_of_the_page_that_was_go_to_the_card(odds_site, path, query, location):
     status, headers, _ = call(odds_site, path, query=query)
@@ -222,7 +222,7 @@ def test_the_addresses_of_the_page_that_was_need_a_published_scope_and_not_the_p
     remove_odds(tmp_path)
     for path in ('/es/circunscripciones', '/es/circunscripciones/no-existe'):
         status, headers, _ = call(api, path, query='mode=nowcast')
-        assert status == 301 and headers['location'] == '/es?mode=nowcast#escanos', path
+        assert status == 301 and headers['location'] == '/es?mode=nowcast#seat-odds', path
 
 
 def test_nothing_of_the_page_that_was_is_left():
@@ -276,8 +276,10 @@ def test_the_event_page_carries_the_card_of_the_seats_that_dance(odds_site, fres
     write_event_districts(fresh_app.fs)
     status, page = event_page(odds_site)
     section = page[page.index('<section class="event-section" id="escanos"'):page.index('id="evolucion"')]
-    assert status == 200 and section.index('id="seat-odds"') < section.index('id="districts"')
-    card = section[section.index('id="seat-odds"'):section.index('id="districts"')]
+    # the card goes below «Resultados por territorio» (Luis, 2026-11-13): the section opens with the table
+    assert status == 200 and section.index('id="districts"') < section.index('id="seat-odds"')
+    card = seat_odds_card(section)
+    assert 'id="districts"' not in card
     assert 'Escaños que bailan' in card and 'según las 10.000 simulaciones del modelo.' in card
     assert re.findall(r'name="sv" value="(map|cols)"[^>]*?( checked)?>([^<]+)<', card) == [
         ('map', ' checked', 'Provincias'), ('cols', '', 'Partidos')]
@@ -478,15 +480,16 @@ def test_side_by_side_the_column_of_the_block_stays_in_view_while_the_map_scroll
     assert not re.search(r'\.so-fichas \{[^}]*(position:\s*sticky|[{;]\s*top:)', outside)
 
 
-def test_the_territory_card_lands_below_the_header_like_the_sections():
-    # the links of the territory table land on its card (`#districts`), inside the section: the same margin as the
-    # sections, under the sticky header (and the freeze banner where it sticks under it)
+def test_the_cards_of_the_seats_section_land_below_the_header_like_the_sections():
+    # the links of the territory table land on its card (`#districts`) and the addresses of the page that was land on
+    # «Escaños que bailan» (`#seat-odds`), both inside the section: the same margin as the sections, under the sticky
+    # header (and the freeze banner where it sticks under it)
     css = site_css()
     banner = 'body:has(#freeze-banner:not([hidden]))'
-    assert re.search(r'(^|\n)\.event-section, #districts \{\s*scroll-margin-top:\s*56px', css)
-    assert '{0} .event-section, {0} #districts {{ scroll-margin-top: 102px; }}'.format(banner) in css
-    assert '.event-section, #districts, {0} .event-section, {0} #districts {{ scroll-margin-top: 52px; }}'.format(
-        banner) in css
+    assert re.search(r'(^|\n)\.event-section, #districts, #seat-odds \{\s*scroll-margin-top:\s*56px', css)
+    assert '{0} .event-section, {0} #districts, {0} #seat-odds {{ scroll-margin-top: 102px; }}'.format(banner) in css
+    assert ('.event-section, #districts, #seat-odds, {0} .event-section, {0} #districts, {0} #seat-odds '
+            '{{ scroll-margin-top: 52px; }}').format(banner) in css
 
 
 def test_on_phones_the_block_of_a_district_lands_above_the_tab_bar():
@@ -717,3 +720,17 @@ def test_the_card_is_wired_before_the_page_scrolls_to_its_section():
                   encoding='utf-8').read()
     paint = script[script.index('function paint()'):]
     assert -1 < paint.index('tryDraw(wireSeatOdds') < paint.index('tryDraw(scrollToSection')
+
+
+def test_the_page_lands_on_the_card_when_the_address_asks_for_it():
+    # the addresses of the page that was arrive with `#seat-odds`. The card sits below the territory table, which the
+    # page script redraws on load (by community, with its controls): the jump of the browser to the anchor is left
+    # behind, so the script lands on the card itself, as it does with the sections. And with the table on top of the
+    # section, a district asked for in it needs no landing of its own
+    script = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'js', 'pages', 'promedios.js'),
+                  encoding='utf-8').read()
+    assert 'const landingIds' in script and 'sectionLanding' not in script
+    landing = script[script.index('const landingIds'):]
+    assert "'seat-odds'" in landing[:landing.index(';')]
+    scroll = script[script.index('function scrollToSection()'):]
+    assert 'sectionTarget(search, hash, landingIds())' in scroll[:scroll.index('\n}')]

@@ -23,8 +23,9 @@ class Circunscripciones(Page):
         Target of an address of the page that was: the card «Escaños que bailan» of the event page of ``scope``.
 
         The card opens on its own district (``default_district``): the district of the address is not kept, and neither
-        are the parameters of ``RETIRED_PARAMS``; the rest of the query (``mode``, ``run``) is. The target does not
-        depend on whether the run shown has the card: the event page says what it has.
+        are the parameters of ``RETIRED_PARAMS``; the rest of the query (``mode``, ``run``) is. The anchor is the
+        card's own (``seat-odds``), not the one of its section, which opens with the territory table. The target does
+        not depend on whether the run shown has the card: the event page says what it has.
 
         Parameters
         ----------
@@ -34,9 +35,9 @@ class Circunscripciones(Page):
         Returns
         -------
         str
-            ``'/{scope}{query}#escanos'``.
+            ``'/{scope}{query}#seat-odds'``.
         """
-        return '/{}{}#escanos'.format(scope, self.query_without(*RETIRED_PARAMS))
+        return '/{}{}#seat-odds'.format(scope, self.query_without(*RETIRED_PARAMS))
 
     async def index_action(self, scope: str) -> str:
         """

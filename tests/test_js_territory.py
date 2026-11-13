@@ -156,8 +156,7 @@ def test_region_rows_mirror_python():
 def test_region_href_lands_on_the_seats_section_with_the_district():
     """El enlace de una circunscripción de la tabla, como lo escribe la plantilla: la página del evento en la sección
     «Escaños» (`seccion=escanos`, 2026-11-13; antes `territorio`) y en su tarjeta «Resultados por territorio»
-    (`#districts`, 2026-11-13: la sección abre con «Escaños que bailan», que enseña otra circunscripción), con el modo
-    y, fijado, el run."""
+    (`#districts`, con la que abre la sección desde el 2026-11-13), con el modo y, fijado, el run."""
     state = '{scope: "es", mode: "forecast", run: "20261008-120000", pinned: false}'
     assert run_js('t.regionHref(%s, 28)' % state) == '/es?mode=forecast&region=28&seccion=escanos#districts'
     pinned = '{scope: "es", mode: "nowcast", run: "20261008-120000", pinned: true}'

@@ -230,7 +230,7 @@ export function regionRows(districts, regionId) {
  * Link of a district of the territory table, as the template writes it: the event page on the seats section
  * (`escanos`, which holds «Resultados por territorio») with that district (what the form sends without JavaScript;
  * with it, the click is caught by `wireRegion`). The `#districts` fragment lands a link opened apart (a new window, a
- * modified click) on the territory card, below «Escaños que bailan».
+ * modified click) on the territory card, which the section opens with.
  *
  * @param {object} state the `state` of the initial data (`scope`, `mode`, `run`, `pinned`)
  * @param {number} id district id

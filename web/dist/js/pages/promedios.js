@@ -21,7 +21,7 @@ import {wireSeatsPage} from './seats-wire.js';
 import {wireSeatOdds} from './seat-odds-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, viewCaption, wireAverage} from './series-wire.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
-import {dropParam, sectionLanding, sectionTarget, withSection} from '../url-state.js';
+import {dropParam, sectionTarget, withSection} from '../url-state.js';
 
 /** Size of the hemicycle image: landscape, the hemicycle at the left and its results table at the right. */
 const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
@@ -324,15 +324,21 @@ function wireCardsCarousel() {
 const sectionIds = () => [...document.querySelectorAll('section.event-section[id]')].map((section) => section.id);
 
 /**
+ * Ids the URL can ask the page to land on: its sections and, when the page has it, the card «Escaños que bailan»,
+ * where the addresses of the page it replaced arrive (`#seat-odds`).
+ */
+const landingIds = () => sectionIds().concat(document.getElementById('seat-odds') ? ['seat-odds'] : []);
+
+/**
  * Scroll to the section the URL asks for (`seccion` of the query, which the old seats URLs bring, or a loose token
  * of the fragment such as `#resultados&coalition=PP,VOX`, which the browser does not scroll to by itself), or to the
- * territory card when it asks for the seats section with a district (`sectionLanding`), and drop `seccion` from the
- * query, keeping the fragment.
+ * card «Escaños que bailan» when the fragment asks for it (`landingIds`: the territory table above it has just been
+ * redrawn, so the jump of the browser to the anchor was left behind), and drop `seccion` from the query, keeping the
+ * fragment.
  */
 function scrollToSection() {
   const {pathname, search, hash} = window.location;
-  const target = sectionLanding(sectionTarget(search, hash, sectionIds()), search,
-    Boolean(document.getElementById('districts')));
+  const target = sectionTarget(search, hash, landingIds());
   if (target) {
     document.getElementById(target).scrollIntoView();
   }
