@@ -652,6 +652,8 @@ def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_he
     start = page.index('<svg class="so-hemi-svg"')
     svg = page[start:page.index('</svg>', start)]  # the icons of the header and of the image button come first
     assert 'viewBox="0 20 1000 520" role="img" aria-label="Hemiciclo con las opciones de escaño de cada partido según su probabilidad"' in svg
+    # sized by the stylesheet: the copy of the image lets it take the width of the image (`card-image.js`)
+    assert svg.startswith('<svg class="so-hemi-svg" ') and ' data-shot-fluid>' in svg[:svg.index('<circle')]
     assert svg.count('<circle') == 22 and svg.count('stroke-dasharray') == 4 and svg.count('<title>') == 22
     for count in ('<b>14</b> seguros', '<b>4</b> probables', '<b>4</b> en juego'):
         assert count in page[page.index('class="so-hemi-core"'):]

@@ -41,12 +41,13 @@
 {#- The hemicycle of the seat options (`charts.hemicycle`, `_party_charts`): never the seats of the chamber, so no total
     and no majority. An inline SVG with presentation attributes only, for the image serialises it apart from the
     stylesheet: safe, filled with the colour of its party; likely, the fill of its share and a continuous border;
-    in play, the same with a dashed one. Over its hollow, the three counts of the scope (HTML, `.so-hemi-core`); under
+    in play, the same with a dashed one. Sized by the stylesheet (`data-shot-fluid`: the copy of the image lets it take
+    the width of the image, `card-image.js`). Over its hollow, the three counts of the scope (HTML, `.so-hemi-core`); under
     it, a pill per party with its counts, and the foot. -#}
 {% macro hemicycle(charts, foot) -%}
 {%- set hemi = charts.hemicycle -%}
 <div class="so-hemi">
-  <svg class="so-hemi-svg" viewBox="0 20 1000 520" role="img" aria-label="Hemiciclo con las opciones de escaño de cada partido según su probabilidad">
+  <svg class="so-hemi-svg" viewBox="0 20 1000 520" role="img" aria-label="Hemiciclo con las opciones de escaño de cada partido según su probabilidad" data-shot-fluid>
     {%- for seat in hemi.seats %}
     {%- if seat.state == 'safe' %}
     <circle cx="{{ seat.x }}" cy="{{ seat.y }}" r="{{ hemi.radius }}" fill="{{ seat.color }}"><title>{{ seat.title }}</title></circle>
