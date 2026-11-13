@@ -573,7 +573,7 @@ Cosas sabidas y dejadas para más adelante; ninguna se ve mal hoy en pantalla.
 
 ### Retoques de Luis tras la fusión (2026-11-13)
 
-Cuatro cambios pedidos por Luis al ver la página; donde no coinciden con lo de arriba, mandan éstos.
+Cambios pedidos por Luis al ver la página; donde no coinciden con lo de arriba, mandan éstos.
 
 - **El resumen de cada fila, junto a sus círculos.** En las fichas de circunscripción y de partido, «2 seguros · 1
   probable» va detrás de los círculos y no en el borde derecho de la tarjeta: la columna de los círculos ocupa lo que
@@ -585,6 +585,8 @@ Cuatro cambios pedidos por Luis al ver la página; donde no coinciden con lo de 
   opciones), no en la última que queda por debajo.
 - **La ficha del partido, por orden alfabético** de circunscripción (antes, de más a menos dudosa). La línea «Sólo
   seguros» sigue de más a menos escaños.
-- **«Los más reñidos» pasa a llamarse «Los más disputados»**, y su columna «Lo consigue en», «Probabilidad». La
-  dirección no cambia (`?vista=renidos`). La tabla sigue ordenada como estaba: primero la opción cuya probabilidad
-  está más cerca del 50%, y así las 40 más cercanas entre las que no son seguras.
+- **Fuera la pestaña «Los más reñidos»** (que llegó a llamarse «Los más disputados»): «lía más de lo que informa».
+  Cada fila era la opción de un solo partido, sin decir contra quién se juega el escaño, y lo que Luis esperaba (qué
+  partidos se juegan cada escaño y con qué porcentajes) sólo sale limpio de los datos de hoy donde queda un único
+  escaño por decidir (8 circunscripciones el 13-11); hacerlo bien pide publicar los repartos completos. La página se
+  queda con dos pestañas, Provincias y Partidos, y las direcciones `?vista=renidos` responden con un 301 a la página.

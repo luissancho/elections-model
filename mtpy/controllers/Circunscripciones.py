@@ -7,6 +7,9 @@ from urllib.parse import quote
 from ..lib import pages
 from .Page import Page
 
+# «Los más reñidos», a tab of the first versions of the page (in production on 2026-11-13): its addresses go to the page
+RETIRED_VIEW = 'renidos'
+
 
 class Circunscripciones(Page):
     """
@@ -31,8 +34,7 @@ class Circunscripciones(Page):
         party : str, optional
             Slug of the party of the view by party (``partido``); it wins over ``view``.
         view : str, optional
-            ``partidos`` for the chart of the parties without the card of a party, ``renidos`` for the list of the
-            closest seats (``vista``).
+            ``partidos`` for the chart of the parties without the card of a party (``vista``).
 
         Returns
         -------
@@ -55,12 +57,13 @@ class Circunscripciones(Page):
     async def index_action(self, scope: str) -> str:
         """
         Render the page on the district with most options in play (or on the chart of the parties and the card of the
-        party of ``partido``, the chart of the parties of ``vista=partidos`` or the closest seats of
-        ``vista=renidos``), or send the dropdown of districts to the address of the one chosen.
+        party of ``partido``, or the chart of the parties of ``vista=partidos``), or send the dropdown of districts
+        to the address of the one chosen.
 
         The dropdown (``#district-pick``) submits ``circunscripcion`` with the slug of a district (the browser lands
         here with or without JavaScript), and the answer is a 301 to ``/{scope}/circunscripciones/{slug}`` with the
-        rest of the query (``mode``, ``run``) and the fragment of the card (``pages.district_href``).
+        rest of the query (``mode``, ``run``) and the fragment of the card (``pages.district_href``). An address of
+        the retired view (``vista=renidos``) gets a 301 to the same address without it.
 
         Parameters
         ----------
@@ -86,6 +89,9 @@ class Circunscripciones(Page):
             rest = self.query_without('circunscripcion')
 
             return self.redirect(pages.district_href(code, quote(wanted, safe=''), rest))
+
+        if self.request.query.get('vista') == RETIRED_VIEW:
+            return self.redirect('/{}/circunscripciones{}'.format(code, self.query_without('vista')))
 
         return self.page(code, party=self.request.query.get('partido') or None,
                          view=self.request.query.get('vista') or None)

@@ -1,6 +1,6 @@
 """
 The seats that dance (``/{scope}/circunscripciones``): from the ``seat-odds`` part to the seat options of every district
-and the views built on them (per district, per party, the closest seats).
+and the views built on them (per district, per party).
 
 A *seat option* is the k-th seat of a party in a district, reached by a simulation when the party wins ``k`` seats or
 more there. Its share of the simulations sets its state: *safe* from ``SAFE_SHARE``, *likely* from ``LIKELY_SHARE``
@@ -26,7 +26,6 @@ LIKELY_SHARE = 0.75
 PLAY_SHARE = 0.25
 # the word of each state, singular and plural: the texts of the module and the chips of the page (`state_words`)
 STATE_WORDS = {'safe': ('seguro', 'seguros'), 'likely': ('probable', 'probables'), 'play': ('en juego', 'en juego')}
-CLOSEST_SHOWN = 40
 CARD_ANCHOR = '#ficha'   # the cards of the districts (their wrapper) or the card of a party
 VIEWS_ANCHOR = '#vistas'  # the tabs of the views
 PARTIES_ANCHOR = '#partidos'  # the buttons of the parties, under the chart of the parties
@@ -450,30 +449,6 @@ def party_view(districts: list, name: str) -> dict:
     return {'name': name, **totals, 'rows': rows, 'settled': settled}
 
 
-def closest_seats(districts: list, limit: int = CLOSEST_SHOWN) -> list:
-    """
-    The seat options not safe nearest to a coin toss.
-
-    Parameters
-    ----------
-    districts : list
-        Views from ``district_views``.
-    limit : int, default CLOSEST_SHOWN
-        Maximum number of options returned.
-
-    Returns
-    -------
-    list
-        Dicts with ``district``, ``slug``, ``party``, ``k``, ``share``, ``label`` and ``state``, nearest to 50% first.
-    """
-    seats = [
-        {'district': district['name'], 'slug': district['slug'], 'party': row['name'], 'k': token['k'],
-         'share': token['share'], 'label': token['label'], 'state': token['state']}
-        for district in districts for row in district['rows'] for token in row['tokens'] if token['state'] != 'safe'
-    ]
-    return sorted(seats, key=lambda seat: abs(seat['share'] - 0.5))[:limit]
-
-
 def threshold_label(share: float) -> str:
     """
     A threshold as the texts of the page write it.
@@ -661,27 +636,6 @@ def party_sentence(party: dict) -> str:
         noun = '' if parts else (' escaño' if count == 1 else ' escaños')
         parts.append('{}{} {}'.format(count, noun, _state_word(state, count)))
     return 'Tiene {}.'.format(_join_names(parts)) if parts else ''
-
-
-def closest_sentence(shown: int) -> str:
-    """
-    Plain-language introduction of the list of the closest seats.
-
-    Parameters
-    ----------
-    shown : int
-        Seat options in the list.
-
-    Returns
-    -------
-    str
-        The sentence, in Spanish.
-    """
-    if not shown:
-        return 'No hay ningún escaño probable ni en juego.'
-    if shown == 1:
-        return 'El escaño más cercano al cara o cruz. La raya marca el 50%.'
-    return 'Los {} escaños más cercanos al cara o cruz. La raya marca el 50%.'.format(shown)
 
 
 def _party_names(data: dict, views: list) -> list:
@@ -918,33 +872,6 @@ def _results_order(scope: str, run: str, mode: str) -> list:
     return [row['name'] for row in result_rows(summary or {})]
 
 
-def _closest_card(views: list, parties: dict, scope: str, query: str) -> dict:
-    """
-    The part of the context specific to the list of the closest seats.
-
-    Parameters
-    ----------
-    views : list
-        Views from ``district_views``.
-    parties : dict
-        Catalogue of the scope (name to ``color``).
-    scope, query : str
-        Scope code and ``event_query`` of the page, for the link of each district.
-
-    Returns
-    -------
-    dict
-        ``closest`` (``closest_seats`` with ``color`` and ``href``), ``sentence`` and ``page_title``.
-    """
-    closest = [dict(seat, color=parties[seat['party']]['color'], href=district_href(scope, seat['slug'], query))
-               for seat in closest_seats(views)]
-    return {
-        'closest': closest,
-        'sentence': closest_sentence(len(closest)),
-        'page_title': 'Los escaños más disputados',
-    }
-
-
 def published_seat_odds(scope: str, run: str, mode: str) -> Optional[dict]:
     """
     The ``seat-odds`` part of a run when the page «Escaños que bailan» exists for it.
@@ -1032,16 +959,15 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         Slug (``slugify``) of the acronym of a party with some seat option: the view of the parties with the card of
         that party.
     view : str, optional
-        ``'partidos'``: the view of the parties without the card of a party; ``'renidos'``: the list of the closest
-        seats. ``party`` wins over it. Without any of the three, the view of ``default_district``, under the title of
-        the page itself (``landing``).
+        ``'partidos'``: the view of the parties without the card of a party. ``party`` wins over it. Without any of
+        the three, the view of ``default_district``, under the title of the page itself (``landing``).
 
     Returns
     -------
     dict
         ``common_context`` of an event page, its ``event_bar['sections']`` linking the sections of the event page
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``view``
-        (``'district'``, ``'party'`` or ``'closest'``), ``landing`` (none of ``district``, ``party`` and ``view``
+        (``'district'`` or ``'party'``), ``landing`` (none of ``district``, ``party`` and ``view``
         given), ``totals`` (``scope_totals``), ``foot`` (``options_sentence`` of the totals), ``districts``
         (``district_views`` sorted by name with accents folded, each with ``href``, ``district_href`` keeping the
         query), ``parties`` (the parties with some option, in the order of the part: ``name``, ``slug``,
@@ -1049,9 +975,9 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         filter of the map and those buttons) and the data of the view: ``district`` (the chosen one), ``grid``,
         ``cards`` and ``map_image_file`` (``_provinces_view``), or ``charts`` (``_party_charts``) and ``party``
         (``None`` without ``party``; otherwise ``party_view`` with ``fullname``, ``color`` and the rows ``drawn_row``
-        with the ``href`` of their district, ``sentence`` and ``image_file``), or ``closest`` (``closest_seats`` with
-        ``color`` and ``href``) and ``sentence``; ``tabs`` (``key``, ``label``, ``href`` keeping the query and
-        landing on the tabs, the one of the parties on ``?vista=partidos``, and ``on`` of the three views), ``n_sim``,
+        with the ``href`` of their district, ``sentence`` and ``image_file``); ``tabs`` (``key``, ``label``, ``href``
+        keeping the query and landing on the tabs, the one of the parties on ``?vista=partidos``, and ``on`` of the
+        two views), ``n_sim``,
         ``thresholds`` (``safe``, ``likely`` and ``play``, ``threshold_label`` of ``SAFE_SHARE``, ``LIKELY_SHARE``
         and ``PLAY_SHARE``, for the legend and the «Cómo leerlo»), ``state_words`` (``STATE_WORDS``, for the chips
         and the filter of states), ``district_word`` (``'provincia'`` when ``districts_are_provinces``,
@@ -1064,7 +990,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         404 ``seat odds not published`` when the run shown has no ``seat-odds`` part in the mode (or one without
         simulations, or with fewer than two districts: ``published_seat_odds``); 404 ``region not found`` for an
         unknown ``district``; 404 ``party not found`` when ``party`` is not a party of the part with some option; 400
-        ``invalid view`` for a ``view`` other than ``partidos`` and ``renidos``; those of ``common_context``.
+        ``invalid view`` for a ``view`` other than ``partidos``; those of ``common_context``.
     """
     context = common_context(state, None, event=True)
     full, query, parties = context['state'], context['query'], context['catalog']
@@ -1099,10 +1025,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         charts = _party_charts(views, names, _results_order(scope, run, mode), blocks, parties, scope)
         shown, card = 'party', {'party': None, 'charts': charts, 'page_title': 'Escaños que bailan, partido a partido'}
     elif view is not None:
-        if view != 'renidos':
-            raise HttpError(400, 'invalid view')
-
-        shown, card = 'closest', _closest_card(views, parties, scope, query)
+        raise HttpError(400, 'invalid view')
     else:
         # the address of the page itself: it is shared as the page, not as its default district (which changes
         # between runs); the card shown is still that district's
@@ -1119,8 +1042,6 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         {'key': 'district', 'label': 'Provincias' if provinces else 'Circunscripciones',
          'href': base + query + VIEWS_ANCHOR},
         {'key': 'party', 'label': 'Partidos', 'href': base + _with_param(query, 'vista', 'partidos') + VIEWS_ANCHOR},
-        {'key': 'closest', 'label': 'Los más disputados',
-         'href': base + _with_param(query, 'vista', 'renidos') + VIEWS_ANCHOR},
     ]
 
     totals = scope_totals(views)

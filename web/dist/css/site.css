@@ -1273,36 +1273,16 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas, #mapa, #grafico, #pa
   .so-num { padding: 0 8px; }
 }
 
-/* «Escaños que bailan»: the view of a party and the list of the closest seats; on phones each closest seat stacks in
-   two lines (the seat and its meter; the district under them) */
+/* «Escaños que bailan»: the card of a party */
 .so-pills .so-party-btn { display: inline-flex; align-items: center; gap: 6px; }
 .so-head h2 .dot { margin-right: 8px; }
 .so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, max-content) max-content; }
 .so-dname { padding-right: 10px; font-weight: 600; white-space: nowrap; }
 .so-settled { margin: 14px 0 0; font-size: 13px; color: var(--color-muted); }
-.so-table { width: 100%; border-collapse: collapse; }
-.so-table th { padding: 4px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: right; color: var(--color-muted); white-space: nowrap; }
-.so-table td { padding: 6px 8px; border-top: 1px solid var(--color-line); text-align: right; font-variant-numeric: tabular-nums; }
-.so-table th.l, .so-table td.l { text-align: left; }
-.so-table td.b { font-weight: 700; }
-.so-meter-col { width: 36%; }
-.so-who { display: inline-flex; align-items: center; gap: 8px; }
-.so-meter { display: flex; align-items: center; gap: 8px; }
-.so-track { position: relative; flex: 1; min-width: 60px; height: 10px; border-radius: 5px; overflow: hidden; background: var(--color-soft); }
-.so-track i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; }
-.so-track u { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0, 0, 0, .4); }
-.so-meter b { width: 38px; text-align: right; font-size: 13px; }
 @media (max-width: 719px) {
   .so-grid.so-by-party { grid-template-columns: max-content minmax(0, 1fr); }
   .so-dname { white-space: normal; padding-right: 4px; }
   .so-wide { display: none; }
-  .so-table, .so-table tbody { display: block; }
-  .so-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .so-table tr { display: grid; grid-template-columns: minmax(0, 1fr) 128px; align-items: center; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--color-line); }
-  .so-table td { display: block; padding: 0; border: 0; white-space: normal; }
-  .so-table .so-c-seat { order: 1; }
-  .so-table .so-c-odds { order: 2; }
-  .so-table .so-c-where { order: 3; grid-column: 1 / -1; font-size: 12.5px; }
 }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */

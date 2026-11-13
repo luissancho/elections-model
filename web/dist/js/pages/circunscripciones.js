@@ -4,7 +4,7 @@
 // (`history.replaceState`, no reload, no scroll), the dropdown of the phones checks a tile instead of submitting its
 // form, the images of the map and of the chart are named after what is on view (`seat-odds.js`) and the line of the
 // image of the map says its filters; and it wires the download of each card as an image (`card-image.js`). It runs on
-// the three views, so every element it looks for may be missing.
+// both views, so every element it looks for may be missing.
 import {wireCardImages} from '../card-image.js';
 import {canonicalFor, filterLine, imageFile} from '../seat-odds.js';
 import {mountWhenReady, showError, tryDraw} from './common.js';
