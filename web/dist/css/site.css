@@ -1249,9 +1249,6 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
    sits under it, the freeze banner */
 #seat-odds .so-ficha { scroll-margin-top: 68px; }
 body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 114px; }
-/* the copy the image is drawn from leaves out the label of the dropdown: html2canvas ignores its clip and would draw
-   its pixel above the map */
-#seat-odds.shot-image .sr-only { display: none; }
 @media (min-width: 1200px) {
   #seat-odds .so-split { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 1fr); gap: 0 28px; align-items: start; }
   #seat-odds .so-split .so-map { margin: 14px 0 8px; }

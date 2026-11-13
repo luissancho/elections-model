@@ -138,9 +138,9 @@
         {% endif %}
       </div>
       {#- the dropdown of districts, by name: only with JavaScript (the script reveals it and checks the tile of the
-          district chosen) and under 720 px; without it the tiles are the selector -#}
-      <label for="district-select" class="sr-only">{{ odds.district_word|capitalize }}</label>
-      <select id="district-select" hidden>
+          district chosen) and under 720 px; without it the tiles are the selector. Its name is its own attribute: a
+          label would be read loose where the dropdown does not show -#}
+      <select id="district-select" aria-label="{{ odds.district_word|capitalize }}" hidden>
         {% for item in odds.cards %}
         <option value="{{ item.slug }}"{% if item.slug == odds.chosen %} selected{% endif %}>{{ item.name }} · {{ item.seats }} escaño{{ '' if item.seats == 1 else 's' }}</option>
         {% endfor %}

@@ -613,12 +613,13 @@ def test_the_card_carries_what_its_script_needs_to_name_its_image_and_pick_a_dis
     assert 'id="ms-play" data-slug="en-juego" data-label="En juego"' in card
     assert 'id="sv-map" data-slug=""' in card and 'id="sv-cols" data-slug="columnas"' in card
     # the dropdown of the phones, hidden until the script reveals it: every district by name, the one open chosen,
-    # with a label in the word of the card
-    select = card[card.index('<select id="district-select" hidden>'):card.index('</select>')]
+    # named in the word of the districts by its own attribute (no label of its own, which a screen reader would read
+    # loose where the dropdown does not show)
+    select = card[card.index('<select id="district-select"'):card.index('</select>')]
     assert re.findall(r'<option value="([a-z-]+)"( selected)?>([^<]+)</option>', select) == [
         ('cadiz', '', 'Cádiz · 8 escaños'), ('guadalajara', '', 'Guadalajara · 3 escaños'),
         ('la-coruna', ' selected', 'La Coruña · 8 escaños')]
-    assert '<label for="district-select" class="sr-only">Provincia</label>' in card
+    assert '<select id="district-select" aria-label="Provincia" hidden>' in card and 'for="district-select"' not in card
     # the copy the image is drawn from hides the selector of views and both filters (never removes them: the rules of
     # `:has()` read their radios), and the tile chosen loses its dark border
     css = site_css()
@@ -629,6 +630,8 @@ def test_the_card_carries_what_its_script_needs_to_name_its_image_and_pick_a_dis
                      r'border:\s*1px solid var\(--color-line-strong\)', css)
     # nor does it say to tap a tile: the hint of the lede stays on the page
     assert re.search(r'\.shot-image \.so-hint\s*\{\s*display:\s*none', css)
+    # the card has no hidden label left for the image to hide
+    assert '#seat-odds.shot-image .sr-only' not in css
     # the lede of the card is styled in the card only
     assert re.search(r'(^|\n)#seat-odds \.so-lede\s*\{', css) and not re.search(r'(^|\n)\.so-lede\s*\{', css)
 
@@ -640,7 +643,7 @@ def test_a_card_whose_districts_are_not_provinces_says_circunscripcion(odds_site
                                   rows=ODDS['rows'] + [odds_row(101, 'PP', 1, 10000, 5000)]))
     page = event_page(odds_site)[1]
     card = seat_odds_card(page)
-    assert '<label for="district-select" class="sr-only">Circunscripción</label>' in card
+    assert '<select id="district-select" aria-label="Circunscripción" hidden>' in card
     assert re.findall(r'id="sv-map"[^>]*>([^<]+)<', card) == ['Circunscripciones']
     # a district without a tile in the catalogue: the tiles go in a row, and their group is named as the view
     assert '<div class="so-map so-map-loose" role="radiogroup" aria-label="Circunscripciones">' in card
