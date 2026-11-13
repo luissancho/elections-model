@@ -1245,8 +1245,8 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 #seat-odds .so-head h3 { margin: 0; font: 700 20px/1.2 var(--font-head); }
 #seat-odds .so-fichas { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-line); }
 #seat-odds #district-select { display: none; }
-/* the page script scrolls a block taller than the window to its top: below the sticky header, and the freeze banner
-   (sticky too, except on phones) */
+/* the page script scrolls a block taller than the window to its top: below the sticky header and, where the header
+   sits under it, the freeze banner */
 #seat-odds .so-ficha { scroll-margin-top: 68px; }
 body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 114px; }
 /* the copy the image is drawn from leaves out the label of the dropdown: html2canvas ignores its clip and would draw
@@ -1261,7 +1261,8 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
 }
 @media (max-width: 719px) {
   #seat-odds #district-select:not([hidden]) { display: block; width: 100%; max-width: 360px; margin-top: 12px; }
-  /* the freeze banner is not sticky on phones (the header is 52 px): the block keeps its margin with it too */
+  /* on phones the header (52 px) goes back to the top with the freeze banner, which sticks over it: the block keeps
+     its margin, which clears a banner of one line (48 px) */
   body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 68px; }
   /* the tab bar sticks to the foot of the window (57 px and the safe area): a block scrolled up from below the map
      ends above it */

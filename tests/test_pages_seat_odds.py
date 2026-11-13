@@ -450,7 +450,8 @@ def test_the_card_switches_its_views_and_its_districts_without_javascript():
 
 def test_the_block_of_a_district_lands_below_the_header_and_below_the_banner_only_where_it_sticks():
     # the page script scrolls a block into view: below the sticky header (56 px) and the freeze banner when it shows;
-    # on phones the banner is not sticky and the header is 52 px, so the block keeps its 68 px with the banner too
+    # on phones the header (52 px) goes back to the top with the banner, which sticks over it, so the block keeps its
+    # 68 px with the banner too (they clear a banner of one line, 48 px)
     css = site_css()
     assert re.search(r'(^|\n)#seat-odds \.so-ficha \{\s*scroll-margin-top:\s*68px', css)
     assert re.search(r'(^|\n)body:has\(#freeze-banner:not\(\[hidden\]\)\) #seat-odds \.so-ficha \{\s*'
