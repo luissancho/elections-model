@@ -1214,13 +1214,14 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-plist > span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--color-soft); font-size: 12.5px; }
 .so-plist .dot, .so-wlabels .dot { margin: 0; }
 .so-plist em { font-style: normal; color: var(--color-muted); }
-/* The columns of the seat options: 7 circles a row (`--wn`) stacked from the bottom up, a mark every 50 options and
+/* The columns of the seat options: 7 circles a row (`--wn`) stacked from the bottom up, a mark every 50 options (the
+   chart is as tall as the last one, `--top`, which sits above the tallest column) and
    the name and counts of each column under it; wider than the card, they slide sideways. The circle (`--wsq`, its gap
    a fifth of it) grows with the window up to 15 px, so that seven columns (six parties and «Otros») fit the card from
    720 px up: they take 58 px + 57.4 circles, the card leaves 100vw - 102 px, less 16 px of a scrollbar */
 .so-cols { --wsq: clamp(9px, (100vw - 176px) / 58, 15px); --wgap: calc(var(--wsq) / 5); --wn: 7; overflow-x: auto; }
 .so-waffle, .so-wlabels { display: flex; justify-content: space-around; gap: 4px; min-width: max-content; padding-left: 34px; }
-.so-waffle { position: relative; align-items: flex-end; margin-top: 18px; border-bottom: 1.5px solid var(--color-text); }
+.so-waffle { position: relative; align-items: flex-end; min-height: calc(var(--top, 0) / var(--wn) * (var(--wsq) + var(--wgap))); margin-top: 18px; border-bottom: 1.5px solid var(--color-text); }
 .so-col { --o: var(--wsq); --ob: 1px; position: relative; z-index: 1; display: flex; flex: none; flex-wrap: wrap-reverse; align-content: flex-start; gap: var(--wgap); }
 .so-col, .so-wlabels > div { width: calc(var(--wn) * var(--wsq) + (var(--wn) - 1) * var(--wgap)); }
 .so-tick { position: absolute; left: 34px; right: 0; border-top: 1px solid var(--color-line-strong); }

@@ -234,7 +234,7 @@ def party_columns(options: list, order: list, blocks: Optional[dict]) -> list:
 
 def column_ticks(columns: list) -> list:
     """
-    The marks of the axis of the columns: one every 50 seat options.
+    The marks of the axis of the columns: one every 50 seat options, the last one above the tallest column.
 
     Parameters
     ----------
@@ -244,8 +244,10 @@ def column_ticks(columns: list) -> list:
     Returns
     -------
     list
-        ``[50, 100, ...]`` up to the size of the tallest column; empty when it holds fewer than 50.
+        ``[50, 100, ...]`` up to the first mark at or above the size of the tallest column (``[50, 100, 150]`` for
+        141 options), so that every column ends under a mark; empty without options.
     """
     tallest = max((len(column['options']) for column in columns), default=0)
+    top = -(-tallest // 50) * 50
 
-    return list(range(50, tallest + 1, 50))
+    return list(range(50, top + 1, 50))

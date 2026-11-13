@@ -581,6 +581,8 @@ Cuatro cambios pedidos por Luis al ver la página; donde no coinciden con lo de 
 - **Las columnas, en el orden de la tabla «Resultados»** de la página del evento (por escaños y después por voto), con
   «Otros» al final. Siguen siendo una por partido de los bloques Izquierda y Derecha; lo que cambia es que ya no van
   bloque a bloque. El 13-11: PP, PSOE, VOX, FA, SALF, UP y Otros.
+- **El eje de las columnas acaba en la raya de encima de la columna más alta** (la de 150 cuando el PP tiene 141
+  opciones), no en la última que queda por debajo.
 - **La ficha del partido, por orden alfabético** de circunscripción (antes, de más a menos dudosa). La línea «Sólo
   seguros» sigue de más a menos escaños.
 - **«Los más reñidos» pasa a llamarse «Los más disputados»**, y su columna «Lo consigue en», «Probabilidad». La

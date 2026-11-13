@@ -75,4 +75,14 @@ def test_the_columns_follow_the_order_given_with_the_rest_last_and_fall_back_to_
     bare = pages.party_columns(options, ODDS['parties'], None)
     assert [c['name'] for c in bare] == ['PP', 'PSOE', 'VOX', 'AA', 'BNG']
     assert pages.party_columns(options, ODDS['parties'], {'Derecha': ['PP']}) == bare  # the blocks of the test bundle
-    assert pages.column_ticks(columns) == [] and pages.column_ticks([{'options': [0] * 121}, {'options': [0] * 49}]) == [50, 100]
+
+
+def test_the_axis_of_the_columns_ends_with_the_mark_above_the_tallest_one():
+    # a mark every 50 options, up to the first one at or above the tallest column: PP's 141 options sit under a 150
+    ticks = pages.column_ticks
+    assert ticks([{'options': [0] * 141}, {'options': [0] * 121}, {'options': [0] * 2}]) == [50, 100, 150]
+    assert ticks([{'options': [0] * 100}]) == [50, 100] and ticks([{'options': [0] * 101}]) == [50, 100, 150]
+    assert ticks([{'options': [0] * 8}]) == [50] and ticks([{'options': [0] * 50}]) == [50]
+    assert ticks([]) == [] and ticks([{'options': []}]) == []  # nothing to measure: no axis
+    columns = pages.party_columns(pages.scope_options(pages.district_views(ODDS)), ODDS['parties'], None)
+    assert ticks(columns) == [50]

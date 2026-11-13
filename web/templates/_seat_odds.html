@@ -72,13 +72,14 @@
 
 {#- The columns of the seat options (`charts.columns`): one per party of the blocks Izquierda and Derecha and the rest,
     «Otros», or one per party when the run has no blocks. Each stacks its circles from the bottom up (`wrap-reverse`):
-    the safe ones, then the likely ones and those in play. A mark every 50 options (`charts.ticks`); under each
+    the safe ones, then the likely ones and those in play. A mark every 50 options (`charts.ticks`), the last one above
+    the tallest column (`--top`: the chart is as tall as that mark); under each
     column, its name and its counts (one under the other on phones, `.so-sep`): the stacks are decoration for a screen
     reader, the labels carry the figures. Wider than the card, it slides sideways (`data-shot-fit`: the image
     widens). -#}
 {% macro columns(charts) -%}
 <div class="so-cols" data-shot-fit>
-  <div class="so-waffle">
+  <div class="so-waffle"{% if charts.ticks %} style="--top: {{ charts.ticks[-1] }}"{% endif %}>
     {%- for value in charts.ticks %}
     <div class="so-tick" style="bottom: calc({{ value }} / var(--wn) * (var(--wsq) + var(--wgap)))"><span>{{ value }}</span></div>
     {%- endfor %}

@@ -791,6 +791,16 @@ def test_the_card_of_a_party_lists_its_districts_by_name(odds_site):
     assert re.findall(r'<div class="so-dname"><a href="[^"]*">([^<]+)</a>', card) == ['Cádiz', 'La Coruña']
 
 
+def test_the_columns_chart_makes_room_for_the_top_mark_of_its_axis(odds_site):
+    page = page_of(odds_site, '/es/circunscripciones', 'vista=partidos')[1]
+    waffle = page[page.index('class="so-waffle"'):page.index('class="so-wlabels"')]
+    # the tallest column of the test bundle has 8 options: one mark, at 50, above it; the chart is as tall as that mark
+    assert waffle.startswith('class="so-waffle" style="--top: 50">')
+    assert re.findall(r'class="so-tick" style="bottom: calc\((\d+) / var\(--wn\)', waffle) == ['50']
+    assert re.search(r'\.so-waffle \{[^}]*min-height:\s*calc\(var\(--top, 0\) / var\(--wn\) \* '
+                     r'\(var\(--wsq\) \+ var\(--wgap\)\)\)', site_css())
+
+
 def test_the_long_titles_of_the_cards_wrap_beside_their_accent_bar():
     # the site's `.card-head h2` wraps its text under the bar when it does not fit a line (phones); not on this page
     assert re.search(r'\.so-card \.card-head h2\s*\{\s*flex-wrap:\s*nowrap', site_css())
