@@ -484,7 +484,7 @@ def test_the_results_card_links_the_page_at_the_foot_of_its_tables(odds_site, ap
     # the same link as the territory card, under the tables of «Resultados» and above its distributions (Luis, 2026-11-12)
     write_event_districts(fresh_app.fs)
     link = ('<p class="more"><a class="more-link" href="/es/circunscripciones?mode=nowcast">'
-            'Escaños que bailan: los seguros y los que están en el aire ›</a></p>')
+            'Escaños que bailan: seguros, probables y en juego ›</a></p>')
     page = page_of(odds_site, '/es', 'mode=nowcast')[1]
     results = page[page.index('id="seats"'):page.index('id="coalition"')]
     assert results.count(link) == 1 and page.count(link) == 2  # here and at the foot of the territory card

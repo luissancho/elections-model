@@ -3573,9 +3573,10 @@ def test_metodo_escanos_quotes_the_coverage_only_with_a_backtest(api, fresh_app)
 def test_method_seats_explains_the_safe_and_the_open_seats(api):
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
     block = page[page.index('<h3 id="seguros">'):page.index('id="comprobacion"')]
-    assert 'Escaños seguros, posibles y en el aire' in block and '99%' in block and '1%' in block
-    assert 'posible al que sale entre el 1% y el 99%' in block and 'se los reparten los posibles' in block
-    assert 'no es una garantía' in block
+    assert '<h3 id="seguros">Escaños seguros, probables y en juego</h3>' in block
+    assert 'probable al que sale entre el 75% y el 99%' in block and 'el que sale entre el 25% y el 75%' in block
+    assert 'las opciones suman más que los escaños' in block and 'no es una garantía' in block
+    assert not [word for word in ('posible', 'en el aire', 'reparto central', 'descartado') if word in block]
     assert_public_wording(page, 'metodo/escanos')
 
 

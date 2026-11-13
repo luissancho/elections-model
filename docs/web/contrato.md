@@ -781,10 +781,10 @@ del catálogo da 404 ("Ámbito desconocido.") y uno del catálogo sin pronóstic
 pronóstico publicado.".
 `/{scope}/escanos` acepta además `region` (solo de la página, no de la API): un entero de `districts.regions`; mal
 formado da 400 y desconocido 404 en HTML. «Escaños que bailan» (enmienda 2026-11-12, controlador `Circunscripciones`)
-es una subpágina del evento, con su barra, su modo y su run: `/{scope}/circunscripciones` (la ficha de la
-circunscripción con más escaños en el aire) y `/{scope}/circunscripciones/{district}` (la ficha de una; `district` es
+es una subpágina del evento, con su barra, su modo y su run: `/{scope}/circunscripciones` (la portada: la ficha de la
+circunscripción con más opciones de escaño en juego) y `/{scope}/circunscripciones/{district}` (la ficha de una; `district` es
 `slugify` de su nombre, `la-coruna`). Las dos aceptan `mode` y `run` como la página del evento; la primera acepta además
-`partido` (`slugify` de las siglas: la vista por partido), `vista` (sólo `renidos`: «Los más reñidos») y
+`partido` (`slugify` de las siglas: la vista por partido), `vista` (`partidos`: la pestaña Partidos, con el hemiciclo y las columnas por bloque y sin ficha de partido; `renidos`: «Los más reñidos») y
 `circunscripcion` (lo que envía el desplegable: un 301 a `/{scope}/circunscripciones/{slug}` con el resto de la query
 y el fragmento `#ficha`, para que en el móvil cada cambio caiga en la ficha y no arriba de la página). La ruta de la
 circunscripción gana a `partido` y `vista`, y `partido` gana a `vista`; la canónica quita `mode` y `run` y lo que la
@@ -795,7 +795,11 @@ en HTML: 404 `seat odds not published` ("Este run no tiene el desglose escaño a
 la parte en ese modo, la tiene sin simulaciones (`n_sim` 0) o con menos de dos circunscripciones; 404 `region not
 found` ("Circunscripción no encontrada.") para una circunscripción desconocida; 404 `party not found` ("Partido no
 encontrado.") para unas siglas que no son de un partido con alguna ficha en la parte; 400 `invalid view` ("Vista no
-válida.") para una `vista` distinta de `renidos`; y los de la página del evento (ámbito, `mode`, `run`).
+válida.") para una `vista` distinta de `partidos` y `renidos`; y los de la página del evento (ámbito, `mode`, `run`). Enmienda 2026-11-13: la pestaña Provincias
+pinta las fichas de todas las circunscripciones y cambia entre ellas sin recargar (radios y `:has()`; con JavaScript la
+dirección sigue a la ficha elegida); la página lee `data/es-districts.csv` para las posiciones del mapa (sin ellas,
+las casillas van en una fila por nombre); y la canónica conserva `vista=partidos`, además de `partido` y de
+`vista=renidos`.
 
 Las **globales** son `/` (Inicio, `Index`: el índice de eventos), `/elecciones`
 (Histórico Errores, `Elecciones`), `/casas` (Ranking Encuestadoras, `Casas`) y `/metodo` (`Metodo`) con sus
