@@ -782,9 +782,12 @@ pronóstico publicado.".
 `/{scope}/escanos` acepta además `region` (solo de la página, no de la API): un entero de `districts.regions`; mal
 formado da 400 y desconocido 404 en HTML. Enmienda 2026-11-13: desde el 2026-11-04 Escaños es una sección de
 `/{scope}`, que acepta `region`, y `/{scope}/escanos` responde con un 301 a `/{scope}?…&seccion=resultados`
-(`seccion=escanos` si trae `region`). La página del evento tiene cinco secciones con ancla, en este orden
-(`pages.EVENT_SECTIONS`): `#promedio`, `#resultados` (el hemiciclo, los resultados y la calculadora de mayorías),
-`#escanos` («Escaños que bailan» y, debajo, «Resultados por territorio»), `#evolucion` y `#tabla`; `#territorio` y
+(`seccion=escanos` si trae `region`; con JavaScript, la página baja entonces a la tarjeta «Resultados por
+territorio», `#districts`, y no a lo alto de la sección, que abre con «Escaños que bailan»; los enlaces y el
+formulario de esa tabla llevan `seccion=escanos` y `#districts`). La página del evento tiene cinco secciones con
+ancla, en este orden (`pages.EVENT_SECTIONS`): `#promedio`, `#resultados` (el hemiciclo, los resultados y la
+calculadora de mayorías), `#escanos` («Escaños que bailan» y, debajo, «Resultados por territorio»), `#evolucion` y
+`#tabla`; `#territorio` y
 `seccion=territorio` dejan de existir, sin apaño para los enlaces viejos. «Escaños que bailan» es una tarjeta de
 `#escanos` (`id="seat-odds"`) que sólo se pinta si el run mostrado tiene la parte `seat-odds` en su modo, con
 simulaciones (`n_sim` mayor que 0) y dos circunscripciones o más (`published_seat_odds`); si no, no hay tarjeta, ni

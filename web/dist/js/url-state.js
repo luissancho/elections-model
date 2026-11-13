@@ -75,6 +75,24 @@ export function sectionTarget(search, hash, ids) {
 }
 
 /**
+ * Where to land for a section asked for: the territory card (`districts`) when the section is the seats one
+ * (`escanos`), the query names a district (`region`: the links and the form of the territory table, an old seats
+ * address) and the page has that card, since the section opens with «Escaños que bailan», which shows another
+ * district; else the section itself.
+ *
+ * @param {string|null} section the section asked for (`sectionTarget`)
+ * @param {string} search the query string (`location.search`)
+ * @param {boolean} hasDistricts whether the page has the territory card
+ * @returns {string|null} the id to scroll to, null when no section is asked for
+ */
+export function sectionLanding(section, search, hasDistricts) {
+  if (section === 'escanos' && hasDistricts && new URLSearchParams(search || '').has('region')) {
+    return 'districts';
+  }
+  return section;
+}
+
+/**
  * Remove a parameter from a query string.
  *
  * @param {string} search the query string (`location.search`)

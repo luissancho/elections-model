@@ -56,6 +56,21 @@ def test_section_target():
     assert run_js('u.sectionTarget("", "#territorio&coalition=PP", IDS)') is None  # an anchor of before: none
 
 
+def test_section_landing():
+    # a district asked for in the seats section (the links and the form of the territory table, an old seats address
+    # with a `region`) lands on the territory card, which the section opens with «Escaños que bailan» above
+    assert run_js('u.sectionLanding("escanos", "?mode=forecast&region=8&seccion=escanos", true)') == 'districts'
+    assert run_js('u.sectionLanding("escanos", "?region=8", true)') == 'districts'
+    # without a district, or without the territory card, the top of the section, as before
+    assert run_js('u.sectionLanding("escanos", "?mode=forecast&seccion=escanos", true)') == 'escanos'
+    assert run_js('u.sectionLanding("escanos", "", true)') == 'escanos'
+    assert run_js('u.sectionLanding("escanos", "?region=8&seccion=escanos", false)') == 'escanos'
+    # the other sections never change, with or without a district
+    assert run_js('u.sectionLanding("resultados", "?region=8&seccion=resultados", true)') == 'resultados'
+    assert run_js('u.sectionLanding("tabla", "?region=8", true)') == 'tabla'
+    assert run_js('u.sectionLanding(null, "?region=8", true)') is None
+
+
 def test_drop_param():
     assert run_js('u.dropParam("?mode=forecast&seccion=escanos", "seccion")') == '?mode=forecast'
     assert run_js('u.dropParam("?seccion=escanos", "seccion")') == ''

@@ -478,6 +478,17 @@ def test_side_by_side_the_column_of_the_block_stays_in_view_while_the_map_scroll
     assert not re.search(r'\.so-fichas \{[^}]*(position:\s*sticky|[{;]\s*top:)', outside)
 
 
+def test_the_territory_card_lands_below_the_header_like_the_sections():
+    # the links of the territory table land on its card (`#districts`), inside the section: the same margin as the
+    # sections, under the sticky header (and the freeze banner where it sticks under it)
+    css = site_css()
+    banner = 'body:has(#freeze-banner:not([hidden]))'
+    assert re.search(r'(^|\n)\.event-section, #districts \{\s*scroll-margin-top:\s*56px', css)
+    assert '{0} .event-section, {0} #districts {{ scroll-margin-top: 102px; }}'.format(banner) in css
+    assert '.event-section, #districts, {0} .event-section, {0} #districts {{ scroll-margin-top: 52px; }}'.format(
+        banner) in css
+
+
 def test_on_phones_the_block_of_a_district_lands_above_the_tab_bar():
     # under 720 px the tab bar sticks to the foot of the window (62 px in Chrome, and the safe area): a block the page
     # script scrolls up from below the map ends above it, with 6 px of air, not under it

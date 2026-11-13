@@ -21,7 +21,7 @@ import {wireSeatsPage} from './seats-wire.js';
 import {wireSeatOdds} from './seat-odds-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, viewCaption, wireAverage} from './series-wire.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
-import {dropParam, sectionTarget, withSection} from '../url-state.js';
+import {dropParam, sectionLanding, sectionTarget, withSection} from '../url-state.js';
 
 /** Size of the hemicycle image: landscape, the hemicycle at the left and its results table at the right. */
 const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
@@ -325,12 +325,14 @@ const sectionIds = () => [...document.querySelectorAll('section.event-section[id
 
 /**
  * Scroll to the section the URL asks for (`seccion` of the query, which the old seats URLs bring, or a loose token
- * of the fragment such as `#resultados&coalition=PP,VOX`, which the browser does not scroll to by itself) and drop
- * `seccion` from the query, keeping the fragment.
+ * of the fragment such as `#resultados&coalition=PP,VOX`, which the browser does not scroll to by itself), or to the
+ * territory card when it asks for the seats section with a district (`sectionLanding`), and drop `seccion` from the
+ * query, keeping the fragment.
  */
 function scrollToSection() {
   const {pathname, search, hash} = window.location;
-  const target = sectionTarget(search, hash, sectionIds());
+  const target = sectionLanding(sectionTarget(search, hash, sectionIds()), search,
+    Boolean(document.getElementById('districts')));
   if (target) {
     document.getElementById(target).scrollIntoView();
   }

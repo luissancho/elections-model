@@ -126,9 +126,10 @@ familias de páginas:
 
 Redirecciones 301 (`Page.redirect`, desde `Redirect.py` y, para `/?scope=`, desde `Index`; `cache-control: no-store`, sin cuerpo, conservando el resto de la query):
 `/?scope=X` → `/X` (`/` sin `scope` es el Inicio); `/promedio` → `/X` (`/es` sin `scope`); `/X/escanos` →
-`/X?…&seccion=resultados`, o `seccion=escanos` si trae `region` (404 si `X` no está publicado; el `Location` nunca
-lleva `#`, así el navegador conserva el fragmento del enlace, como `#coalition=PP,VOX`, y la página hace scroll a la
-sección de `seccion` y lo quita de la URL); `/escanos` va directo a ese mismo destino, sin encadenar dos 301;
+`/X?…&seccion=resultados`, o `seccion=escanos` si trae `region`, y entonces la página baja a «Resultados por
+territorio» (`#districts`), como los enlaces y el formulario de su tabla (404 si `X` no está publicado; el
+`Location` nunca lleva `#`, así el navegador conserva el fragmento del enlace, como `#coalition=PP,VOX`, y la página
+hace scroll a la sección de `seccion` y lo quita de la URL); `/escanos` va directo a ese mismo destino, sin encadenar dos 301;
 `/X/circunscripciones` y `/X/circunscripciones/{circunscripción}` (la página aparte de «Escaños que bailan», retirada
 el 2026-11-13; controlador `Circunscripciones`) → `/X?…#escanos`, sin `partido`, `vista` ni `circunscripcion` (404
 si `X` no está publicado); `/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301

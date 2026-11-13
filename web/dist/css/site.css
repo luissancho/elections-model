@@ -177,9 +177,10 @@ svg[hidden] { display: none; }
 .evbar > h2 small { display: block; margin-top: 3px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-muted); }
 .event-index { grid-area: tabs; justify-self: start; }
 /* Sections of the event page: anchors of the index, unseen wrappers of their cards that land under the sticky
-   header (56 px; 52 px on phones, plus the freeze banner when it shows) */
-.event-section { scroll-margin-top: 56px; }
-body:has(#freeze-banner:not([hidden])) .event-section { scroll-margin-top: 102px; }
+   header (56 px; 52 px on phones, plus the freeze banner when it shows); so does the territory card, where the links
+   of its table land (`#districts`) */
+.event-section, #districts { scroll-margin-top: 56px; }
+body:has(#freeze-banner:not([hidden])) .event-section, body:has(#freeze-banner:not([hidden])) #districts { scroll-margin-top: 102px; }
 .evbar .run { grid-area: run; justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .evbar .run small { font-size: 11.5px; color: var(--color-muted); }
 
@@ -1340,7 +1341,7 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   }
   .evbar > h2 { font-size: 22px; }
   .event-index { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
-  .event-section, body:has(#freeze-banner:not([hidden])) .event-section { scroll-margin-top: 52px; }
+  .event-section, #districts, body:has(#freeze-banner:not([hidden])) .event-section, body:has(#freeze-banner:not([hidden])) #districts { scroll-margin-top: 52px; }
   .evbar .run { justify-self: start; align-items: flex-start; }
 
   .hero-t { font-size: 32px; margin: var(--space-2) 0; }

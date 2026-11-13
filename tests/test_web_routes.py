@@ -184,7 +184,9 @@ def test_event_page_js_finds_its_elements_and_shares_the_seats_wiring():
     imported by the event page, the only page left of the two it once served."""
     names = ('promedios.html', 'base.html', '_polls_table.html', '_event_bar.html', '_seat_odds.html')
     text = ''.join(open(os.path.join(TEMPLATES, name), encoding='utf-8').read() for name in names)
-    ids = set(re.findall(r'id="([\w-]+)"', text)) | set(re.findall(r"download_button\('([\w-]+)'", text))
+    # the ids the macros write: the download buttons and the cards (`card_start`, the territory card `districts`)
+    ids = (set(re.findall(r'id="([\w-]+)"', text)) | set(re.findall(r"download_button\('([\w-]+)'", text))
+           | set(re.findall(r"card_start\('([\w-]+)'", text)))
     pages = os.path.join(DIST, 'js', 'pages')
     missing = []
     for name in ('promedios.js', 'seats-wire.js', 'evolution-wire.js', 'series-wire.js', 'polls-wire.js',
