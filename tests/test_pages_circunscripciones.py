@@ -149,6 +149,7 @@ def sentence_of(seats, safe_by_party, possible):
     (1, {'PP': 0}, ['PP'], 'El escaño no es seguro: sólo está al alcance de PP.'),
     (1, {'PP': 0}, [], 'El escaño no es seguro.'),
     (1, {}, [], 'El escaño no es seguro.'),  # a district without any option
+    (2, {'A': 3}, [], 'Los 2 escaños son seguros (A 3).'),  # more safe options than seats: never below zero
 ])
 def test_district_sentence_names_the_parties_that_dispute_the_seats_not_safe(seats, safe, possible, text):
     # the seats nobody has safe go to the parties with some likely option or some option in play
@@ -215,9 +216,52 @@ def test_the_three_views_speak_of_three_states_and_never_of_the_central_allocati
     assert call(odds_site, '/es/circunscripciones', query='partido=up')[0] == 404  # a party without options
 
 
+
+def test_the_map_draws_every_district_as_the_label_of_a_radio_and_every_card_is_on_the_page(odds_site):
+    page = page_of(odds_site, '/es/circunscripciones/cadiz')[1]
+    assert '<h2>Dónde bailan los escaños, provincia a provincia</h2>' in page
+    grid = page[page.index('class="so-map"'):page.index('class="so-legend"')]
+    assert re.findall(r'name="d" value="([a-z-]+)"', grid) == ['la-coruna', 'guadalajara', 'cadiz']  # by row and column
+    assert re.findall(r'name="d" value="([a-z-]+)"[^>]* checked', grid) == ['cadiz']
+    assert 'title="Cádiz · 8 escaños" style="grid-column: 4 / span 1; grid-row: 9 / span 1"' in grid
+    assert '<span class="so-ab">CA</span>' in grid and 'aria-label="Cádiz, 8 escaños"' in grid
+    assert grid.count('class="so-o ') == 22 and grid.count('class="so-o play p-') == 4
+    assert '<i class="so-o safe p-pp" style="--c: #1d84ce" title="1.º de PP: seguro"></i>' in grid
+    assert re.findall(r'name="mp" value="([a-z-]+)"', page) == ['all', 'pp', 'psoe', 'vox', 'aa', 'bng']  # never UP
+    states = page[page.index('id="map-state"'):page.index('class="so-map"')]
+    assert re.findall(r'>([^<>]+) <small>(\d+)</small>', states) == [
+        ('Todos', '22'), ('Seguros', '14'), ('Probables', '4'), ('En juego', '4')]
+    # the rules of the run: one per party for the filter, one per district for its card
+    assert '#mapa:has(#mp-psoe:checked) .so-dots i:not(.p-psoe){opacity:.08}' in page
+    assert '#provincias:has(#d-cadiz:checked) #ficha-cadiz{display:block}' in page
+    assert re.findall(r'class="card shot so-card so-ficha" id="ficha-([a-z-]+)"', page) == ['cadiz', 'guadalajara', 'la-coruna']
+    assert 'Hay 22 opciones para 19 escaños: a un mismo escaño pueden optar varios partidos.' in page
+    assert '<title>Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026</title>' in page
+    landing = page_of(odds_site, '/es/circunscripciones')[1]
+    assert re.findall(r'name="d" value="([a-z-]+)"[^>]* checked', landing) == ['la-coruna']
+    text = visible_text(page[page.index('id="content"'):])
+    assert not [word for word in RETIRED if word in text]
+    assert_public_wording(page, 'provincias')
+
+
+def test_the_map_without_positions_and_the_foot_without_more_options_than_seats(odds_site, fresh_app, monkeypatch):
+    monkeypatch.setattr('mtpy.lib.pages.circunscripciones.district_positions', lambda scope: {})
+    page = page_of(odds_site, '/es/circunscripciones')[1]
+    loose = page[page.index('class="so-map so-map-loose"'):page.index('class="so-legend"')]
+    assert re.findall(r'<span class="so-ab">([^<]+)</span>', loose) == ['Cádiz', 'Guadalajara', 'La Coruña']
+    assert 'grid-column' not in loose
+    monkeypatch.undo()
+    safe_only = dict(ODDS, rows=[odds_row(row['region_id'], row['name'], row['seats'], *[n for n in row['reach'] if n >= 9900])
+                                 for row in ODDS['rows']])
+    write_odds(fresh_app.fs, safe_only)  # 14 options for 19 seats, and districts where nobody disputes what is left
+    page = page_of(odds_site, '/es/circunscripciones/cadiz')[1]
+    assert 'opciones para' not in page and 'De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1).' in page
+    assert 'se los disputan' not in page
+
 def test_a_district_card_draws_a_circle_per_option_and_labels_only_those_not_safe(odds_site):
     status, page = page_of(odds_site, '/es/circunscripciones/la-coruna')
-    card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
+    start = page.index('id="ficha-la-coruna"')
+    card = page[start:page.index('class="so-legend"', start)]
     # every title of the site starts with its name (`base.html`)
     assert status == 200 and 'La Coruña' in card and '<title>Demoscopio · Escaños que bailan en La Coruña' in page
     labels = re.findall(r'<span class="so-pct">([^<]+)</span>', card)
@@ -227,8 +271,10 @@ def test_a_district_card_draws_a_circle_per_option_and_labels_only_those_not_saf
     assert re.findall(r'<i class="so-o [a-z]+" [^>]*title="([^"]+)"', card)[:3] == [
         '1.º de PP: seguro', '2.º de PP: seguro', '3.º de PP: seguro']
     assert '<i class="so-o safe" style="--c: #1d84ce" title="1.º de PP: seguro"></i>' in card  # solid: no fill
-    assert '<link rel="canonical" href="' in page and page.count('<details class="how"') == 1
-    closed = page_of(odds_site, '/es/circunscripciones/guadalajara')[1]
+    assert '<link rel="canonical" href="' in page and page.count('<details class="how"') == 3  # one per card
+    page = page_of(odds_site, '/es/circunscripciones/guadalajara')[1]
+    start = page.index('id="ficha-guadalajara"')
+    closed = page[start:page.index('</section>', start)]
     assert 'Los 3 escaños son seguros (PP 1, PSOE 1, VOX 1).' in closed
     assert '<span class="chip so-chip safe"><b>3</b> seguros</span>' in closed and 'so-chip likely' not in closed
 
@@ -243,14 +289,15 @@ def test_the_landing_is_shared_as_the_page_and_each_view_has_its_description(odd
             'son probables y cuáles están en juego, según las simulaciones del modelo para Elecciones generales '
             '2026.">') in page
     assert 'data-file="demoscopio-escanos-es-la-coruna.png"' in page and '/dist/js/pages/circunscripciones.js' in page
+    assert 'data-file="demoscopio-escanos-es-mapa.png"' in page
     assert 'aria-label="VOX: 1.º, 37%"' in page and '<div class="so-note">1 en juego</div>' in page
     cadiz = page_of(odds_site, '/es/circunscripciones/cadiz')[1]
     assert '<title>Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026</title>' in cadiz
     assert ('<meta name="description" content="Los escaños de Cádiz, uno a uno: cuáles tiene seguros cada partido, '
             'cuáles son probables y cuáles están en juego, según las simulaciones del modelo para Elecciones '
             'generales 2026.">') in cadiz
-    # the dropdown sits right above the card, at every width
-    assert cadiz.index('id="district-pick"') < cadiz.index('id="ficha"') and 'aria-label="Circunscripciones"' not in cadiz
+    # the dropdown sits between the map and the cards (it only shows under 720 px)
+    assert cadiz.index('id="mapa"') < cadiz.index('id="district-pick"') < cadiz.index('id="ficha"')
 
 
 def test_the_page_follows_the_mode_and_keeps_it_in_its_links(odds_site, fresh_app):
@@ -298,6 +345,13 @@ def test_a_pinned_run_stays_in_every_link_of_the_page_and_the_canonical_drops_it
     assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones/cadiz">' in page
     status, headers, _ = call(odds_site, '/es/circunscripciones', query='mode=nowcast&run={}&circunscripcion=cadiz'.format(RUN))
     assert status == 301 and headers['location'] == '/es/circunscripciones/cadiz?mode=nowcast&run={}#ficha'.format(RUN)
+
+
+def test_the_positions_of_the_map_come_from_the_catalogue(api):
+    positions = webapi.district_positions('es')
+    assert len(positions) == 52 and positions[31] == {'abbr': 'NA', 'col': 6, 'row': 0, 'w': 1, 'h': 1}
+    assert positions[28] == {'abbr': 'M', 'col': 4, 'row': 3, 'w': 2, 'h': 2} and webapi.district_positions('es-an') == {}
+    assert all(type(positions[28][key]) is int for key in ('col', 'row', 'w', 'h'))
 
 
 def test_the_texts_of_a_row_and_the_link_of_a_district():
@@ -497,15 +551,17 @@ def test_two_renders_of_the_event_page_without_the_part_read_it_once(odds_site, 
 
 
 def test_the_image_of_both_cards_says_the_election_the_estimate_and_its_date(odds_site):
-    for query in ('', 'partido=psoe'):
+    for query, cards in (('', ('mapa', 'ficha-la-coruna')), ('partido=psoe', ('ficha',))):
         page = page_of(odds_site, '/es/circunscripciones', query)[1]
         suffix = re.search(r'<span class="pill brand">([^<]+)</span>', page).group(1)  # the pill of the event bar
-        card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
-        stamp = re.search(r'<p class="so-stamp shot-only">([^<]+)</p>', card)
-        # only in the image (`.card:not(.shot-image) .shot-only` is hidden): the same district exists in the general
-        # and in a regional scope, and the figures change every day
-        assert stamp and stamp.group(1).startswith('Elecciones generales 2026 · {} · Actualizado: '.format(suffix))
-        assert re.search(r' · Actualizado: \d', stamp.group(1))  # the day the run was computed, written out
+        for card_id in cards:
+            start = page.index('id="{}"'.format(card_id))
+            card = page[start:page.index('class="so-legend"', start)]
+            stamp = re.search(r'<p class="so-stamp shot-only">([^<]+)</p>', card)
+            # only in the image (`.card:not(.shot-image) .shot-only` is hidden): the same district exists in the
+            # general and in a regional scope, and the figures change every day
+            assert stamp and stamp.group(1).startswith('Elecciones generales 2026 · {} · Actualizado: '.format(suffix))
+            assert re.search(r' · Actualizado: \d', stamp.group(1))  # the day the run was computed, written out
 
 
 @pytest.mark.parametrize('path, query, canonical', [
@@ -529,7 +585,8 @@ def test_the_party_wins_over_the_view_and_the_errors_and_units_read_well(odds_si
     # one meaning per word: the legend says the three states with their bands, each with its own sample circle
     for query in ('', 'partido=pp'):
         page = page_of(odds_site, '/es/circunscripciones', query)[1]
-        legend = page[page.index('class="so-legend"'):page.index('<details class="how"')]
+        start = page.index('class="so-legend"')
+        legend = page[start:page.index('</div>', start)]
         assert re.findall(r'<i class="so-o (safe|likely|play)" aria-hidden="true"></i>([^<]+)</span>', legend) == [
             ('safe', 'Seguro: 99% o más'), ('likely', 'Probable: del 75% al 99%'), ('play', 'En juego: del 25% al 75%')]
 

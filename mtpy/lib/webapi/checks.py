@@ -25,6 +25,8 @@ CSV_PARTS = bundle.RUN_PARTS[2:]
 MODE_PARTS = bundle.MODE_PARTS
 RUN_PARTS = bundle.RUN_PARTS
 MODES = bundle.MODES
+# the tile of a district on the map of «Escaños que bailan»: the first three, required
+TILE_COLUMNS = ('abbr', 'map_col', 'map_row', 'map_w', 'map_h')
 
 
 _CATALOGUE = TTLCache(DEFAULT_TTL)
@@ -88,6 +90,54 @@ def catalogue() -> pd.DataFrame:
     _CATALOGUE.ttl = settings()['cache_ttl']
 
     return _CATALOGUE.get('catalogue', lambda: data.read_csv('es-scopes.csv').set_index('scode'))
+
+
+def district_positions(scope: str) -> dict:
+    """
+    Tiles of the districts of a scope on the map of «Escaños que bailan» (``data/es-districts.csv``), cached with
+    the TTL of ``catalogue``.
+
+    The catalogue is read with ``keep_default_na=False``: the abbreviation of Navarra is «NA», which pandas would
+    take for a missing value.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict
+        ``{region_id: {'abbr': str, 'col': int, 'row': int, 'w': int, 'h': int}}`` for the districts of the scope
+        with ``abbr``, ``map_col`` and ``map_row`` filled (``w`` and ``h`` are 1 when ``map_w`` and ``map_h`` are
+        empty); ``{}`` when the app has no data directory, the file lacks the columns or none is filled.
+    """
+    data = App.get_().data
+
+    if data is None:
+        return {}
+
+    _CATALOGUE.ttl = settings()['cache_ttl']
+
+    def load():
+        districts = data.read_csv('es-districts.csv', keep_default_na=False, na_values=[''])
+
+        if not set(TILE_COLUMNS) <= set(districts.columns):
+            return {}
+
+        filled = districts[list(TILE_COLUMNS[:3])].notnull().all(axis=1)
+        placed = districts.loc[(districts['scope'] == scope) & filled]
+
+        return {
+            int(row.region_id): {
+                'abbr': str(row.abbr), 'col': int(row.map_col), 'row': int(row.map_row),
+                'w': int(row.map_w) if pd.notnull(row.map_w) else 1,
+                'h': int(row.map_h) if pd.notnull(row.map_h) else 1,
+            }
+            for row in placed.itertuples()
+        }
+
+    return _CATALOGUE.get(('districts', scope), load)
 
 
 def scope_codes() -> list:

@@ -2022,7 +2022,7 @@ def test_pages_package_layout():
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
     assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'circunscripciones', 'common', 'elecciones', 'escanos', 'filters',
-                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'shy', 'slugs', 'sondeos']
+                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'seat_charts', 'shy', 'slugs', 'sondeos']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'

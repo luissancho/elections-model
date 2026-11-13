@@ -41,7 +41,10 @@ def get_districts(scope: Optional[str] = None) -> pd.DataFrame:
     -------
     pd.DataFrame
         One row per district: `scope`, `region_id`, `name`, `slug`, `ine_code`, `reg_code`, `population`,
-        `seats` and `aliases`.
+        `seats`, `aliases` and the tile of the district on the map of «Escaños que bailan»: `abbr`, `map_col`,
+        `map_row` (from 0), `map_w` and `map_h` (1 when empty), filled only in the scope `es`. The web reads the
+        tiles with `webapi.district_positions`, which keeps the «NA» of Navarra as an abbreviation: read as here,
+        pandas takes it for a missing value.
     """
     districts = App.get_().data.read_csv('es-districts.csv')
     if scope is not None:

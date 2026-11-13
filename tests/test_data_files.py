@@ -90,6 +90,26 @@ def test_districts_catalogue_is_valid():
     assert (d.loc[d['region_id'] != 100, 'population'] > 0).all()
 
 
+def test_the_districts_of_es_have_a_map_tile_each_and_no_two_overlap():
+    # «NA» (Navarra) is an abbreviation, not a missing value
+    d = pd.read_csv(os.path.join(DATA, 'es-districts.csv'), keep_default_na=False, na_values=[''])
+    es, tiled = d.loc[d['scope'] == 'es'], ['abbr', 'map_col', 'map_row', 'map_w', 'map_h']
+    assert es[tiled[:3]].notnull().all().all() and es['abbr'].is_unique
+    assert es.set_index('region_id').loc[31, 'abbr'] == 'NA'
+    assert d.loc[d['scope'] != 'es', tiled].isnull().all().all()
+    cells = {}
+    for row in es.itertuples():
+        width, height = (int(v) if pd.notnull(v) else 1 for v in (row.map_w, row.map_h))
+        for col in range(int(row.map_col), int(row.map_col) + width):
+            for line in range(int(row.map_row), int(row.map_row) + height):
+                assert 0 <= col < 10 and (col, line) not in cells, (row.name, cells.get((col, line)))
+                cells[(col, line)] = row.name
+    tile = es.set_index('region_id')
+    assert tuple(tile.loc[28, tiled]) == ('M', 4, 3, 2, 2) and tuple(tile.loc[8, tiled]) == ('B', 8, 1, 2, 2)
+    assert tuple(tile.loc[46, tiled]) == ('V', 7, 5, 2, 1) and tuple(tile.loc[11, tiled[:3]]) == ('CA', 3, 8)
+    assert tuple(tile.loc[15, tiled[:3]]) == ('C', 0, 0) and tuple(tile.loc[52, tiled[:3]]) == ('ML', 6, 8)
+
+
 def test_regions_use_ine_codes():
     """M11: una sola numeración de comunidades en `data/` (la del INE)."""
     regions = pd.read_csv(os.path.join(DATA, 'es-regions.csv')).set_index('code')

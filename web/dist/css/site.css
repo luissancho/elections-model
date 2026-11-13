@@ -1118,13 +1118,13 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .locked b { display: block; margin-bottom: 4px; font: 800 18px var(--font-head); }
 .locked p { max-width: 60ch; margin: 0; font-size: 13px; color: var(--color-muted); }
 
-/* «Escaños que bailan» (/{scope}/circunscripciones): the tabs of its views; the dropdown of districts right above the
-   card of the chosen one; the seat options, one circle per seat a party can win (`.so-o`, 22 px with a 2 px border in
-   the cards, 4 px apart, wrapping): solid in the colour of the party when safe, filled with the opacity of its share
-   (`--f`) and bordered in its colour when not, the border continuous when likely and dashed when in play, with the
-   percentage under it, in bold or in muted ink; and their legend, the three states in grey */
+/* «Escaños que bailan» (/{scope}/circunscripciones): the tabs of its views; the dropdown of districts between the map
+   and the cards, under 720 px only; the seat options, one circle per seat a party can win (`.so-o`, 22 px with a 2 px
+   border in the cards, 4 px apart, wrapping): solid in the colour of the party when safe, filled with the opacity of
+   its share (`--f`) and bordered in its colour when not, the border continuous when likely and dashed when in play,
+   with the percentage under it, in bold or in muted ink; and their legend, the three states in grey */
 .so-intro { margin-top: 0; font-size: 14.5px; color: var(--color-muted); }
-.so-pick { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.so-pick { display: none; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
 .so-pick select { flex: 1; min-width: 0; max-width: 360px; }
 .so-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 6px; padding-right: 36px; }
 .so-head h2 { margin: 0; font: 700 20px/1.2 var(--font-head); }
@@ -1153,20 +1153,48 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-legend .so-o { --o: 15px; --ob: 1px; --c: var(--color-muted); }
 .so-legend .so-o.likely { --f: rgba(90, 95, 114, .55); }
 .so-legend .so-o.play { --f: rgba(90, 95, 114, .16); }
-/* The links of the page land on the card (`#ficha`) or on the tabs of the views (`#vistas`) below the sticky header
-   (56 px, plus the freeze banner when it shows) with a little air; the card also leaves the dropdown of districts
-   above it in sight (about 38 px and the 16 px of the stack; on phones, header 52 px and dropdown down to 100 px) */
-#vistas { scroll-margin-top: 68px; }
-#ficha { scroll-margin-top: 120px; }
-body:has(#freeze-banner:not([hidden])) #vistas { scroll-margin-top: 114px; }
-body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 166px; }
+.so-foot { margin: 10px 0 0; font-size: 12.5px; color: var(--color-muted); }
+/* The map of the districts: a grid of 10 columns, each district a tile in the cell of the catalogue
+   (`district_positions`), growing down with its options; a scope without positions lays its tiles in a row, by name,
+   as wide as fit from 150 px. Each tile is the label of a radio (`d`, hidden like those of `.seg`): the one checked
+   has a dark border and the `<style>` of the head shows its card (`.so-ficha`). The filters of party and state dim
+   the circles that do not match; those of the parties are in that `<style>`, one per party of the run */
+.so-filters { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.so-filter small { font-weight: 500; opacity: .7; }
+.so-map { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: start; gap: 7px; max-width: 760px; margin: 14px auto 8px; }
+.so-map-loose { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.so-tile { position: relative; display: block; min-width: 0; padding: 4px 4px 6px; border: 1px solid var(--color-line-strong); border-radius: 8px; background: var(--color-bg); cursor: pointer; }
+.so-tile:hover { border-color: var(--color-muted); }
+.so-tile input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+/* the border of the one checked grows by 1 px: the padding gives it back, so that its circles do not move */
+.so-tile:has(input:checked) { padding: 3px 3px 5px; border: 2px solid var(--color-text); background: var(--color-card); }
+.so-tile:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.so-ab { display: block; font-size: 11.5px; font-weight: 700; line-height: 1.5; text-align: center; color: var(--color-muted); }
+.so-tile:has(input:checked) .so-ab { color: var(--color-text); }
+.so-dots { --o: 11px; --ob: 1px; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+#mapa:has(#ms-safe:checked) .so-dots i:not(.safe) { opacity: .08; }
+#mapa:has(#ms-likely:checked) .so-dots i:not(.likely) { opacity: .08; }
+#mapa:has(#ms-play:checked) .so-dots i:not(.play) { opacity: .08; }
+.so-ficha { display: none; }
+/* The links of the page land on the map (`#mapa`), the cards (`#ficha`) or the tabs of the views (`#vistas`) below
+   the sticky header (56 px, plus the freeze banner when it shows) with a little air; on phones the cards also leave
+   the dropdown of districts above them in sight (header 52 px, dropdown down to 100 px) */
+#ficha, #vistas, #mapa { scroll-margin-top: 68px; }
+body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas, #mapa) { scroll-margin-top: 114px; }
 @media (max-width: 719px) {
   #ficha, body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 116px; }
-  #vistas, body:has(#freeze-banner:not([hidden])) #vistas { scroll-margin-top: 68px; }
+  #vistas, #mapa, body:has(#freeze-banner:not([hidden])) :is(#vistas, #mapa) { scroll-margin-top: 68px; }
+  .so-pick { display: flex; }
+  .so-map { gap: 3px; margin: 12px 0 6px; }
+  .so-tile { padding: 2px 2px 3px; border-radius: 5px; }
+  .so-tile:has(input:checked) { padding: 1px 1px 2px; }
+  .so-ab { font-size: 8.5px; line-height: 1.4; }
+  .so-map-loose .so-ab { font-size: 11.5px; }
+  .so-dots { --o: 7px; gap: 1.5px; }
   /* the tabs in one line, sliding sideways like the index of the event bar; the party buttons, a block that wraps */
   .so-tabs { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .seg.so-tabs > a { padding: 7px 10px; font-size: 12.5px; }
-  .so-pills { border-radius: var(--radius); }
+  .so-pills, .so-filter { border-radius: var(--radius); }
   .so-grid { grid-template-columns: max-content minmax(0, 1fr); }
   .so-note { display: none; }
   .so-party { padding-right: 4px; white-space: normal; }

@@ -2,7 +2,8 @@
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
-``backtest``, ``analisis``, ``sondeos``, ``circunscripciones``, with the view models of the CERA study in ``cera``),
+``backtest``, ``analisis``, ``sondeos``, ``circunscripciones``, with the view models of the CERA study in ``cera`` and
+the layout of the drawings of ``circunscripciones`` in ``seat_charts``),
 plus ``common`` (routes, messages, environment and shared context) and ``filters`` (formatting filters). This facade
 re-exports every public name, so callers use ``pages.<name>``.
 
@@ -36,12 +37,13 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
                          last_results, horizon_tables, majority_of, mark_shown, model_last, MODEL_ROW, party_blocks,
                          poll_error_parts, published_events, resolve_event, run_less_colours, shown_parties, split_sides,
                          table_blocks, with_abs, with_model_row, year_range)
-from .circunscripciones import (CLOSEST_SHOWN, LIKELY_SHARE, PLAY_SHARE, SAFE_SHARE, STATES, closest_seats,
+from .circunscripciones import (CLOSEST_SHOWN, LIKELY_SHARE, PLAY_SHARE, SAFE_SHARE, closest_seats,
                                 closest_sentence, default_district, district_href, district_sentence, district_views,
                                 drawn_row, drawn_token, options_sentence, party_sentence, party_view,
-                                published_seat_odds, scope_totals, seat_odds_context, seat_odds_links, seat_state,
-                                seat_tokens, state_text, threshold_label, tint, token_alpha, token_label, tokens_note,
-                                tokens_reading)
+                                published_seat_odds, scope_options, scope_totals, seat_odds_context, seat_odds_links,
+                                seat_state, seat_tokens, state_text, threshold_label, tint, token_alpha, token_label,
+                                tokens_note, tokens_reading)
+from .seat_charts import STATES, map_tiles
 from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, has_communities, region_rows, resolve_region,
                       seats_context)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,

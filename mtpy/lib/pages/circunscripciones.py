@@ -13,19 +13,19 @@ from typing import Optional
 from urllib.parse import urlencode
 
 from ...core.api import HttpError
-from ..webapi import site
+from ..webapi import district_positions, site
 from .common import OTHERS_COLOR, bundle_part, common_context, subpage_event_bar
 from .escanos import _sort_name
+from .seat_charts import STATES, map_tiles
 from .slugs import slugify
 
 SAFE_SHARE = 0.99
 LIKELY_SHARE = 0.75
 PLAY_SHARE = 0.25
-STATES = ('safe', 'likely', 'play')  # the states of a seat option, from the surest
 # the word of each state, singular and plural: the texts of the module and the chips of the page (`state_words`)
 STATE_WORDS = {'safe': ('seguro', 'seguros'), 'likely': ('probable', 'probables'), 'play': ('en juego', 'en juego')}
 CLOSEST_SHOWN = 40
-CARD_ANCHOR = '#ficha'   # the card of a district or a party
+CARD_ANCHOR = '#ficha'   # the cards of the districts (their wrapper) or the card of a party
 VIEWS_ANCHOR = '#vistas'  # the tabs of the views
 
 
@@ -230,6 +230,25 @@ def scope_totals(districts: list) -> dict:
     totals = {key: sum(d[key] for d in districts) for key in ('seats',) + STATES}
     totals['options'] = sum(totals[state] for state in STATES)
     return totals
+
+
+def scope_options(districts: list) -> list:
+    """
+    Every seat option of a scope.
+
+    Parameters
+    ----------
+    districts : list
+        Views from ``district_views``.
+
+    Returns
+    -------
+    list
+        The options of ``seat_tokens``, each with ``party`` and ``district`` (its name), in the order of the districts
+        and of their rows.
+    """
+    return [dict(token, party=row['name'], district=district['name'])
+            for district in districts for row in district['rows'] for token in row['tokens']]
 
 
 def options_sentence(options: int, seats: int) -> str:
@@ -665,28 +684,83 @@ def _party_names(data: dict, views: list) -> list:
     return [name for name in data.get('parties') or [] if name in drawn]
 
 
-def _district_card(chosen: dict, parties: dict) -> dict:
+def _image_file(scope: str, slug: str) -> str:
     """
-    The part of the context specific to the view of a district.
+    Name of the image of a card of the page.
 
     Parameters
     ----------
-    chosen : dict
-        The district (``district_views`` with ``href``).
+    scope : str
+        Scope code.
+    slug : str
+        What the card shows: a district, a party, the map.
+
+    Returns
+    -------
+    str
+        ``'demoscopio-escanos-{scope}-{slug}.png'``.
+    """
+    return 'demoscopio-escanos-{}-{}.png'.format(scope, slug)
+
+
+def _district_card(district: dict, parties: dict, scope: str) -> dict:
+    """
+    The card of a district.
+
+    Parameters
+    ----------
+    district : dict
+        A view from ``district_views``.
     parties : dict
         Catalogue of the scope (name to ``color``).
+    scope : str
+        Scope code, for the name of its image.
 
     Returns
     -------
     dict
-        ``district`` (its rows drawn with the colour of each party), ``sentence``, ``page_title`` and ``image_slug``.
+        A copy of ``district`` with its rows drawn with the colour of each party (``drawn_row``), ``sentence``
+        (``district_sentence``) and ``image_file``.
     """
-    rows = [drawn_row(row, row['name'], parties[row['name']]['color']) for row in chosen['rows']]
+    rows = [drawn_row(row, row['name'], parties[row['name']]['color']) for row in district['rows']]
+    return dict(district, rows=rows, sentence=district_sentence(district),
+                image_file=_image_file(scope, district['slug']))
+
+
+def _provinces_view(chosen: dict, districts: list, data: dict, parties: dict, scope: str) -> dict:
+    """
+    The part of the context specific to the view of the districts: the map and the card of every district.
+
+    Parameters
+    ----------
+    chosen : dict
+        The district of the address, or ``default_district``.
+    districts : list
+        Views from ``district_views``, sorted by name.
+    data : dict
+        Data of the ``seat-odds`` part (its ``parties``, the order of the options of a tile).
+    parties : dict
+        Catalogue of the scope (name to ``color``).
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict
+        ``district`` (``chosen``), ``grid`` (``map_tiles`` with the ``district_positions`` of the scope, each option
+        drawn with the colour of its party, ``drawn_token``, and with ``party_slug``), ``cards`` (``_district_card`` of
+        every district, by name), ``page_title`` and ``map_image_file``.
+    """
+    grid = map_tiles(districts, district_positions(scope), data.get('parties') or [])
+    tiles = [dict(tile, options=[dict(drawn_token(option, parties[option['party']]['color']),
+                                      party_slug=slugify(option['party'])) for option in tile['options']])
+             for tile in grid['tiles']]
     return {
-        'district': dict(chosen, rows=rows),
-        'sentence': district_sentence(chosen),
+        'district': chosen,
+        'grid': dict(grid, tiles=tiles),
+        'cards': [_district_card(district, parties, scope) for district in districts],
         'page_title': 'Escaños que bailan en {}'.format(chosen['name']),
-        'image_slug': chosen['slug'],
+        'map_image_file': _image_file(scope, 'mapa'),
     }
 
 
@@ -845,17 +919,18 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         ``common_context`` of an event page, its ``event_bar['sections']`` linking the sections of the event page
         (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``view``
         (``'district'``, ``'party'`` or ``'closest'``), ``landing`` (none of ``district``, ``party`` and ``view``
-        given), ``totals`` (``scope_totals``), ``districts`` (``district_views`` sorted by name with accents folded,
-        each with ``href``, ``district_href`` keeping the query), ``sentence`` and the data of the view: ``district``
-        (the chosen one, its rows ``drawn_row`` with the colour of each party), or ``parties`` (the buttons: ``name``,
-        ``fullname``, ``color``, ``href`` keeping the query and landing on the tabs, ``on``) and ``party``
-        (``party_view`` with ``fullname``, ``color`` and the rows ``drawn_row`` with the ``href`` of their district),
-        or ``closest`` (``closest_seats`` with ``color`` and ``href``); ``tabs`` (``key``, ``label``, ``href`` keeping
-        the query and landing on the tabs, and ``on`` of the three views), ``n_sim``, ``thresholds`` (``safe``,
-        ``likely`` and ``play``, ``threshold_label`` of ``SAFE_SHARE``, ``LIKELY_SHARE`` and ``PLAY_SHARE``, for the
-        legend and the «Cómo leerlo»), ``state_words`` (``STATE_WORDS``, for the chips), ``page_title``
-        (``'Escaños que bailan'`` on the landing), ``image_file`` (of the card of a district or a party) and
-        ``image_sign``.
+        given), ``totals`` (``scope_totals``), ``foot`` (``options_sentence`` of the totals), ``districts``
+        (``district_views`` sorted by name with accents folded, each with ``href``, ``district_href`` keeping the
+        query), ``parties`` (the parties with some option, in the order of the part: ``name``, ``slug``,
+        ``fullname``, ``color``, ``href`` keeping the query and landing on the tabs, ``on``; the filter of the map
+        and the buttons of the view of a party) and the data of the view: ``district`` (the chosen one), ``grid``,
+        ``cards`` and ``map_image_file`` (``_provinces_view``), or ``party`` (``party_view`` with ``fullname``,
+        ``color`` and the rows ``drawn_row`` with the ``href`` of their district), ``sentence`` and ``image_file``,
+        or ``closest`` (``closest_seats`` with ``color`` and ``href``) and ``sentence``; ``tabs`` (``key``,
+        ``label``, ``href`` keeping the query and landing on the tabs, and ``on`` of the three views), ``n_sim``,
+        ``thresholds`` (``safe``, ``likely`` and ``play``, ``threshold_label`` of ``SAFE_SHARE``, ``LIKELY_SHARE``
+        and ``PLAY_SHARE``, for the legend and the «Cómo leerlo»), ``state_words`` (``STATE_WORDS``, for the chips
+        and the filter of states), ``page_title`` (``'Escaños que bailan'`` on the landing) and ``image_sign``.
 
     Raises
     ------
@@ -886,7 +961,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         if chosen is None:
             raise HttpError(404, 'region not found')
 
-        shown, card = 'district', _district_card(chosen, parties)
+        shown, card = 'district', _provinces_view(chosen, districts, data, parties, scope)
     elif party is not None:
         if party not in by_slug:
             raise HttpError(404, 'party not found')
@@ -899,8 +974,8 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         shown, card = 'closest', _closest_card(views, parties, scope, query)
     else:
         # the address of the page itself: it is shared as the page, not as its default district (which changes
-        # between runs); the card and its image stay that district's
-        shown, card = 'district', dict(_district_card(default_district(districts), parties),
+        # between runs); the card shown is still that district's
+        shown, card = 'district', dict(_provinces_view(default_district(districts), districts, data, parties, scope),
                                        page_title='Escaños que bailan')
 
     # the index links the sections of the event page, keeping the mode and the pinned run
@@ -916,12 +991,15 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
          'href': base + _with_param(query, 'vista', 'renidos') + VIEWS_ANCHOR},
     ]
 
+    totals = scope_totals(views)
     context.update({
         'view': shown,
         'landing': district is None and party is None and view is None,
-        'totals': scope_totals(views),
+        'totals': totals,
+        'foot': options_sentence(totals['options'], totals['seats']),
         'districts': districts,
-        'parties': [{'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
+        'parties': [{'name': name, 'slug': slugify(name), 'fullname': parties[name]['fullname'],
+                     'color': parties[name]['color'],
                      'href': base + _with_param(query, 'partido', slugify(name)) + VIEWS_ANCHOR,
                      'on': shown == 'party' and card['party']['name'] == name} for name in names],
         'tabs': [dict(tab, on=tab['key'] == shown) for tab in tabs],
@@ -935,6 +1013,6 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
     context.update(card)
 
     if image_slug:
-        context['image_file'] = 'demoscopio-escanos-{}-{}.png'.format(scope, image_slug)
+        context['image_file'] = _image_file(scope, image_slug)
 
     return context
