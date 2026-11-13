@@ -621,13 +621,12 @@ def test_the_card_carries_what_its_script_needs_to_name_its_image_and_pick_a_dis
         ('la-coruna', ' selected', 'La Coruña · 8 escaños')]
     assert '<select id="district-select" aria-label="Provincia" hidden>' in card and 'for="district-select"' not in card
     # the copy the image is drawn from hides the selector of views and both filters (never removes them: the rules of
-    # `:has()` read their radios), and the tile chosen loses its dark border
+    # `:has()` read their radios); the tile chosen keeps its dark border, which says on the map whose block is beside it
     css = site_css()
     assert all('so-filter' in re.search(r'<fieldset class="([^"]+)" id="{}"'.format(name), card).group(1)
                for name in ('so-view', 'map-party', 'map-state'))
     assert re.search(r'\.shot-image \.so-filter\s*\{\s*display:\s*none', css)
-    assert re.search(r'\.shot-image \.so-tile:has\(input:checked\)\s*\{[^}]*'
-                     r'border:\s*1px solid var\(--color-line-strong\)', css)
+    assert not re.search(r'\.shot-image \.so-tile:has\(input:checked\)', css)
     # nor does it say to tap a tile: the hint of the lede stays on the page
     assert re.search(r'\.shot-image \.so-hint\s*\{\s*display:\s*none', css)
     # the card has no hidden label left for the image to hide
