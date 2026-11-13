@@ -47,6 +47,9 @@ def test_states_follow_the_three_thresholds_to_the_exact_count():
         0.475, 0.16, None)
     assert edges[0]['title'] == '1.º de X: seguro'
     assert edges[3]['title'] == '4.º de X: lo consigue en el 75% de las simulaciones'
+    assert pages.option_title(4, 'PSOE', '51%', 'Alicante') == (
+        '4.º de PSOE en Alicante: lo consigue en el 51% de las simulaciones')
+    assert pages.option_title(1, 'PSOE', None, 'Cádiz') == '1.º de PSOE en Cádiz: seguro'
     assert pages.seat_tokens('X', [], 10000) == [] and 'central' not in edges[0] and not hasattr(pages, 'OPEN_FLOOR')
 
 
@@ -687,6 +690,17 @@ def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_he
     # sized by the stylesheet: the copy of the image lets it take the width of the image (`card-image.js`)
     assert svg.startswith('<svg class="so-hemi-svg" ') and ' data-shot-fluid>' in svg[:svg.index('<circle')]
     assert svg.count('<circle') == 22 and svg.count('stroke-dasharray') == 4 and svg.count('<title>') == 22
+    # a chart of the whole scope: each circle names its district, or «4.º de PSOE» would read as its fourth seat overall
+    titles = re.findall(r'<title>([^<]+)</title>', svg)
+    assert '1.º de PSOE en Cádiz: seguro' in titles
+    assert '3.º de PSOE en Cádiz: lo consigue en el 41% de las simulaciones' in titles
+    assert all(re.fullmatch(r'\d+\.º de [A-Z]+ en (Cádiz|Guadalajara|La Coruña): .+', title) for title in titles)
+    # 22 options: a circle of radius 22, its strokes and the radius of those not safe scaled from the 9.7 of the mockup
+    # (22 / 9.7 times 1.6, 1.9 and 0.9), so that their outer edge stays at that of the safe ones
+    assert ' r="22" fill="#' in svg and ' r="21.1" ' not in svg
+    assert re.search(r' r="20\.0" fill="rgba\([^"]+\)" stroke="#[0-9a-f]+" stroke-width="3\.6">', svg)
+    assert re.search(r' r="20\.0" fill="rgba\([^"]+\)" stroke="#[0-9a-f]+" stroke-width="4\.3" '
+                     r'stroke-dasharray="7\.0 5\.7">', svg)
     for count in ('<b>14</b> seguros', '<b>4</b> probables', '<b>4</b> en juego'):
         assert count in page[page.index('class="so-hemi-core"'):]
     # the order of the hemicycle (`hemicycle_order`): the test catalogue only gives a block to PP (Derecha), so the
@@ -697,6 +711,11 @@ def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_he
             'pueden optar varios partidos.') in page
     # the blocks of the test bundle are incomplete: one column per party and no «Otros»
     assert re.findall(r'class="so-col" data-col="([^"]+)"', page) == ['PP', 'PSOE', 'VOX', 'AA', 'BNG']
+    # the circles of the columns are decoration: the labels under them carry the figures; their titles name the district
+    assert len(re.findall(r'class="so-col" data-col="[^"]+" aria-hidden="true">', page)) == 5
+    cols = page[page.index('class="so-cols"'):page.index('class="so-wlabels"')]
+    assert 'title="1.º de PP en La Coruña: seguro"' in cols and 'title="1.º de PP: ' not in cols
+    assert 'title="1.º de VOX en La Coruña: lo consigue en el 37% de las simulaciones"' in cols
     assert 'href="/es/circunscripciones?mode=forecast&amp;partido=psoe#partidos"' in page and 'id="ficha"' not in page
     assert '350' not in visible_text(page[page.index('id="grafico"'):page.index('id="partidos"')])  # never the chamber
     assert 'mayoría' not in page[page.index('id="grafico"'):page.index('id="partidos"')]

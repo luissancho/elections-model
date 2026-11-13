@@ -31,8 +31,9 @@ PARTIES_ANCHOR = '#partidos'  # the buttons of the parties, under the chart of t
 # the catalogue (`data/es-districts.csv`) keeps the INE code (1 to 52) of a province as the id of its district and
 # numbers every other district from 100 (`tests/test_data_files.py` asserts it)
 FIRST_NON_PROVINCE_ID = 100
-# the strokes of the hemicycle for a circle of radius 9.7 (390 options): those of the mockup, scaled with the radius
-HEMICYCLE_STROKES = {'radius': 9.7, 'likely': 1.6, 'play': 1.9, 'dash': (3.1, 2.5)}
+# the strokes of the hemicycle for a circle of radius 9.7 (390 options), and how much smaller the circles not safe
+# are: those of the mockup, scaled with the radius
+HEMICYCLE_STROKES = {'radius': 9.7, 'inset': 0.9, 'likely': 1.6, 'play': 1.9, 'dash': (3.1, 2.5)}
 
 
 def seat_state(share: float) -> Optional[str]:
@@ -100,6 +101,32 @@ def token_alpha(state: str, share: float) -> Optional[float]:
     return round(0.06 + 0.20 * (share - PLAY_SHARE) / (LIKELY_SHARE - PLAY_SHARE), 3)
 
 
+def option_title(k: int, party: str, label: Optional[str], district: Optional[str] = None) -> str:
+    """
+    The title of a seat option: which seat, of whom and how likely.
+
+    Parameters
+    ----------
+    k : int
+        Seat of the party (1 for its first).
+    party : str
+        Party name.
+    label : str or None
+        ``token_label`` of the option; ``None`` when safe.
+    district : str, optional
+        Name of its district, for the charts of a whole scope (in a tile or a card the district is already given).
+
+    Returns
+    -------
+    str
+        ``'3.º de PP: lo consigue en el 78% de las simulaciones'``, ``'2.º de PP: seguro'``; with ``district``,
+        ``'4.º de PSOE en Alicante: lo consigue en el 51% de las simulaciones'``.
+    """
+    what = 'seguro' if label is None else 'lo consigue en el {} de las simulaciones'.format(label)
+    where = ' en {}'.format(district) if district else ''
+    return '{}.º de {}{}: {}'.format(k, party, where, what)
+
+
 def seat_tokens(name: str, reach: list, n_sim: int) -> list:
     """
     Seat options of a party in a district: one per seat it reaches in at least ``PLAY_SHARE`` of the simulations.
@@ -117,7 +144,7 @@ def seat_tokens(name: str, reach: list, n_sim: int) -> list:
     -------
     list
         One dict per option, in seat order: ``k``, ``share``, ``state`` (``seat_state``), ``label`` and ``alpha``
-        (``None`` when safe) and ``title``.
+        (``None`` when safe) and ``title`` (``option_title``).
     """
     tokens = []
     for k, count in enumerate(reach, start=1):
@@ -125,16 +152,14 @@ def seat_tokens(name: str, reach: list, n_sim: int) -> list:
         state = seat_state(share)
         if state is None:
             continue
-        safe = state == 'safe'
-        label = None if safe else token_label(share)
-        what = 'seguro' if safe else 'lo consigue en el {} de las simulaciones'.format(label)
+        label = None if state == 'safe' else token_label(share)
         tokens.append({
             'k': k,
             'share': share,
             'state': state,
             'label': label,
             'alpha': token_alpha(state, share),
-            'title': '{}.º de {}: {}'.format(k, name, what),
+            'title': option_title(k, name, label),
         })
     return tokens
 
@@ -836,14 +861,15 @@ def _hemicycle_strokes(radius: float) -> dict:
     Returns
     -------
     dict
-        ``open_radius`` (0.9 less than ``radius``), ``likely`` and ``play`` (the widths of the continuous and the
-        dashed border) and ``dash`` (the ``stroke-dasharray`` of the dashed one), those of ``HEMICYCLE_STROKES``
-        scaled with ``radius`` and rounded to 1 decimal.
+        ``open_radius`` (``radius`` less ``HEMICYCLE_STROKES['inset']``, so that the outer edge of their border stays
+        at that of a safe circle), ``likely`` and ``play`` (the widths of the continuous and the dashed border) and
+        ``dash`` (the ``stroke-dasharray`` of the dashed one), those of ``HEMICYCLE_STROKES`` scaled with ``radius``
+        and rounded to 1 decimal.
     """
     scale = radius / HEMICYCLE_STROKES['radius']
 
     return {
-        'open_radius': round(radius - 0.9, 1),
+        'open_radius': round(radius - HEMICYCLE_STROKES['inset'] * scale, 1),
         'likely': round(HEMICYCLE_STROKES['likely'] * scale, 1),
         'play': round(HEMICYCLE_STROKES['play'] * scale, 1),
         'dash': ' '.join(str(round(length * scale, 1)) for length in HEMICYCLE_STROKES['dash']),
@@ -872,13 +898,16 @@ def _party_charts(views: list, names: list, order: list, blocks: Optional[dict],
     Returns
     -------
     dict
-        ``hemicycle`` (``hemicycle_layout`` in the order of ``hemicycle_order``, its seats drawn with the colour of
+        The options of both carry the ``option_title`` with their district. ``hemicycle`` (``hemicycle_layout`` in
+        the order of ``hemicycle_order``, its seats drawn with the colour of
         their party, ``drawn_token``, its parties with ``color`` and ``fullname``, and ``_hemicycle_strokes``),
         ``columns`` (``party_columns``, each with ``color``, ``None`` for ``REST_COLUMN``, and its options drawn),
         ``ticks`` (``column_ticks``), ``rest`` (``name`` and ``color`` of the parties of ``REST_COLUMN``, empty
         without it) and ``image_file``.
     """
-    options = scope_options(views)
+    # a chart of the whole scope: the title of each circle names its district
+    options = [dict(option, title=option_title(option['k'], option['party'], option['label'], option['district']))
+               for option in scope_options(views)]
     layout = hemicycle_layout(options, hemicycle_order(names, parties))
     seats = [drawn_token(seat, parties[seat['party']]['color']) for seat in layout['seats']]
     listed = [dict(item, color=parties[item['name']]['color'], fullname=parties[item['name']]['fullname'])
