@@ -1253,6 +1253,12 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   #seat-odds .so-fichas { margin-top: 14px; padding: 0 0 0 28px; border-top: 0; border-left: 1px solid var(--color-line); }
   #seat-odds .so-split .so-grid { grid-template-columns: max-content minmax(0, 1fr); }
   #seat-odds .so-split .so-note { display: none; }
+  /* the column of the block stays in view while the map scrolls (the grid aligns it to the top, so it is as tall as
+     its block and can travel): below the sticky header, and below the freeze banner when it shows */
+  #seat-odds .so-fichas { position: sticky; top: 68px; }
+  body:has(#freeze-banner:not([hidden])) #seat-odds .so-fichas { top: 114px; }
+  /* not in the copy the image is drawn from: html2canvas would draw the column where the scroll of the page left it */
+  #seat-odds.shot-image .so-fichas { position: static; }
 }
 @media (max-width: 719px) {
   #seat-odds #district-select:not([hidden]) { display: block; width: 100%; max-width: 360px; margin-top: 12px; }

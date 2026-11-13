@@ -462,6 +462,22 @@ def test_the_block_of_a_district_lands_below_the_header_and_below_the_banner_onl
                      narrow)
 
 
+def test_side_by_side_the_column_of_the_block_stays_in_view_while_the_map_scrolls():
+    # from 1,200 px the column of the block sticks below the header (68 px), and below the freeze banner too when it
+    # shows (114 px), so that its name stays in view when the reader scrolls down to the southern tiles; only there
+    css = site_css()
+    wide = css[css.rindex('@media (min-width: 1200px)', 0, css.index('#seat-odds .so-split {')):]
+    wide = wide[:wide.index('\n}')]
+    assert re.search(r'(^|\n)\s*#seat-odds \.so-fichas \{[^}]*position:\s*sticky;[^}]*top:\s*68px', wide)
+    assert re.search(r'body:has\(#freeze-banner:not\(\[hidden\]\)\) #seat-odds \.so-fichas \{\s*top:\s*114px', wide)
+    assert css.count('position: sticky; top: 68px') == wide.count('position: sticky; top: 68px') == 1
+    # the copy the image is drawn from does not stick: html2canvas would draw the column where the scroll of the page
+    # left it, below the top of the map
+    assert re.search(r'#seat-odds\.shot-image \.so-fichas \{\s*position:\s*static', wide)
+    outside = css.replace(wide, '')
+    assert not re.search(r'\.so-fichas \{[^}]*(position:\s*sticky|[{;]\s*top:)', outside)
+
+
 def test_on_phones_the_block_of_a_district_lands_above_the_tab_bar():
     # under 720 px the tab bar sticks to the foot of the window (62 px in Chrome, and the safe area): a block the page
     # script scrolls up from below the map ends above it, with 6 px of air, not under it
