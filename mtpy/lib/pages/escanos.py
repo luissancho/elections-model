@@ -292,8 +292,8 @@ def seats_context(context: dict, region=None) -> dict:
     HttpError
         404 for a missing part or an unknown district; 400 for an invalid ``region``.
     """
-    # imported here: ``circunscripciones`` imports this module
-    from .circunscripciones import seat_odds_card
+    # imported here: ``seat_odds`` imports this module
+    from .seat_odds import seat_odds_card
 
     region_id = check_region(region)
     full, meta, parties = context['state'], context['meta'], context['catalog']

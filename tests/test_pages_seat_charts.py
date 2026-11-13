@@ -2,7 +2,7 @@
 from collections import Counter
 
 from mtpy.lib import pages
-from tests.test_pages_circunscripciones import ODDS
+from tests.test_pages_seat_odds import ODDS
 
 POSITIONS = {11: {'abbr': 'CA', 'col': 3, 'row': 8, 'w': 1, 'h': 1}, 19: {'abbr': 'GU', 'col': 6, 'row': 3, 'w': 1, 'h': 1},
              15: {'abbr': 'C', 'col': 0, 'row': 0, 'w': 1, 'h': 1}}

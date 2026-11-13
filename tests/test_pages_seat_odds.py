@@ -250,7 +250,7 @@ def test_the_map_draws_every_district_as_the_label_of_a_radio_and_every_card_is_
 
 
 def test_the_map_without_positions_and_the_foot_without_more_options_than_seats(odds_site, fresh_app, monkeypatch):
-    monkeypatch.setattr('mtpy.lib.pages.circunscripciones.district_positions', lambda scope: {})
+    monkeypatch.setattr('mtpy.lib.pages.seat_odds.district_positions', lambda scope: {})
     page = page_of(odds_site, '/es/circunscripciones')[1]
     loose = page[page.index('class="so-map so-map-loose"'):page.index('class="so-legend"')]
     assert re.findall(r'<span class="so-ab">([^<]+)</span>', loose) == ['Cádiz', 'Guadalajara', 'La Coruña']
