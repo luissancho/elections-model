@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% set event_year = ' ' ~ event_bar.year if event_bar.year else '' %}
 {% block title %}{{ page_title }} · {{ event_bar.title }}{{ event_year }}{% endblock %}
-{% block description %}{% if view == 'party' %}Los escaños de {{ party.name }}, circunscripción a circunscripción: cuáles tiene seguros y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'closest' %}Los escaños más reñidos de {{ event_bar.title }}{{ event_year }}: los más cercanos al cara o cruz, según las simulaciones del modelo.{% elif landing %}Qué escaños tiene seguros cada partido en cada circunscripción y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% else %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido y cuáles están en el aire, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endif %}{% endblock %}
+{% block description %}{% if view == 'party' %}Los escaños de {{ party.name }}, circunscripción a circunscripción: cuáles tiene seguros, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'closest' %}Los escaños más reñidos de {{ event_bar.title }}{{ event_year }}: los más cercanos al cara o cruz, según las simulaciones del modelo.{% elif landing %}Qué escaños tiene seguros cada partido en cada circunscripción, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% else %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endif %}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/circunscripciones.js"></script>
 {% endblock %}
@@ -13,8 +13,7 @@
 {% set stamp %}<p class="so-stamp shot-only">{{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %} · {{ title_suffix }} · Actualizado: {{ event_bar.run_at|date }}</p>{% endset %}
     <div id="content" class="stack">
       {{ m.headline('Escaños que bailan', 'h1') }}
-      <p class="so-intro">Qué escaños tiene seguros cada partido en cada circunscripción y cuáles están en el aire, según las {{ n_sim|int }} simulaciones del modelo.</p>
-      {{ m.kpis(kpis, id='seat-kpis') }}
+      <p class="so-intro">Qué escaños tiene seguros cada partido, cuáles son probables y cuáles están en juego, según las {{ n_sim|int }} simulaciones del modelo.</p>
       {#- each tab and each party button lands on this nav (`#vistas`): on a phone the card is far below the top -#}
       <nav class="seg lg so-tabs" id="vistas" aria-label="Vistas">
         {% for tab in tabs %}
@@ -22,8 +21,8 @@
         {% endfor %}
       </nav>
       {% if view == 'district' %}
-      {#- phones (under 720 px): a dropdown in place of the list; without JavaScript its «Ver» button submits it and the
-          server answers with the address of the district (`Circunscripciones.index_action`) -#}
+      {#- the dropdown of districts, by name, right above the card; without JavaScript its «Ver» button submits it and
+          the server answers with the address of the district (`Circunscripciones.index_action`) -#}
       <form id="district-pick" class="so-pick" method="get" action="/{{ state.scope }}/circunscripciones">
         <input type="hidden" name="mode" value="{{ state.mode }}">
         {% if state.pinned %}
@@ -32,59 +31,34 @@
         <label for="district-select">Circunscripción</label>
         <select name="circunscripcion" id="district-select">
           {% for item in districts %}
-          <option value="{{ item.slug }}"{% if item.slug == district.slug %} selected{% endif %}>{{ item.name }} · {{ item.seats }} escaño{{ '' if item.seats == 1 else 's' }} · {{ item.open ~ ' en el aire' if item.open else 'decidida' }}</option>
+          <option value="{{ item.slug }}"{% if item.slug == district.slug %} selected{% endif %}>{{ item.name }} · {{ item.seats }} escaño{{ '' if item.seats == 1 else 's' }}</option>
           {% endfor %}
         </select>
         <button type="submit" class="nojs-only">Ver</button>
       </form>
-      <div class="so-md">
-        {#- the list sorts itself without JavaScript: each link carries its two positions and the CSS reads the radio
-            that is checked (`.so-list:has(...)`) -#}
-        <aside class="card so-list" aria-label="Circunscripciones">
-          <fieldset class="seg so-sort">
-            <legend>Orden de la lista</legend>
-            <label><input type="radio" name="orden" value="aire" checked>Más en el aire</label>
-            <label><input type="radio" name="orden" value="az">A–Z</label>
-          </fieldset>
-          <nav class="so-items">
-            {% for item in districts %}
-            <a class="so-item{% if item.slug == district.slug %} on{% endif %}" href="{{ item.href }}" style="--by-open: {{ loop.index }}; --by-name: {{ item.rank_name }}"{% if item.slug == district.slug %} aria-current="page"{% endif %}>
-              {%- set unit = 'escaño' if item.seats == 1 else 'escaños' %}
-              <span class="so-name">{{ item.name }} <small title="{{ item.seats }} {{ unit }}">{{ item.seats }}<span class="sr-only"> {{ unit }}</span></small></span>
-              <span class="pill{% if item.open %} so-air{% endif %}">{{ item.open ~ ' en el aire' if item.open else 'decidida' }}</span>
-            </a>
-            {% endfor %}
-          </nav>
-        </aside>
-        {#- the card to share: what the image of `card-image.js` draws -#}
-        <section class="card shot so-card" id="ficha">
-          {{ m.card_image_button(image_file, image_sign) }}
-          <header class="so-head">
-            <h2>{{ district.name }}</h2>
-            <span class="so-seats">{{ district.seats }} escaño{{ '' if district.seats == 1 else 's' }}</span>
-            <span class="chip"><b>{{ district.safe }}</b> seguro{{ '' if district.safe == 1 else 's' }}</span>
-            {% if district.open %}
-            <span class="chip so-air"><b>{{ district.open }}</b> en el aire</span>
-            {% endif %}
-          </header>
-          {{ stamp }}
-          <p class="so-says">{{ sentence }}</p>
-          <div class="so-grid">
-            <div class="so-h">Partido</div>
-            <div class="so-h so-c">Central</div>
-            <div class="so-h">Escaño a escaño</div>
-            <div class="so-h so-note"></div>
-            {% for row in district.rows %}
-            <div class="so-party" title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</div>
-            <div class="so-num" title="Escaños de {{ row.name }} en el reparto central">{{ row.seats }}</div>
-            {{ s.tokens(row, row.color) }}
-            <div class="so-note">{{ row.note }}</div>
-            {% endfor %}
-          </div>
-          {{ s.legend() }}
-          {{ s.how() }}
-        </section>
-      </div>
+      {#- the card to share: what the image of `card-image.js` draws -#}
+      <section class="card shot so-card" id="ficha">
+        {{ m.card_image_button(image_file, image_sign) }}
+        <header class="so-head">
+          <h2>{{ district.name }}</h2>
+          <span class="so-seats">{{ district.seats }} escaño{{ '' if district.seats == 1 else 's' }}</span>
+          {{ s.chips(district) }}
+        </header>
+        {{ stamp }}
+        <p class="so-says">{{ sentence }}</p>
+        <div class="so-grid">
+          <div class="so-h">Partido</div>
+          <div class="so-h">Escaño a escaño</div>
+          <div class="so-h so-note"></div>
+          {% for row in district.rows %}
+          <div class="so-party" title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</div>
+          {{ s.tokens(row) }}
+          <div class="so-note">{{ row.note }}</div>
+          {% endfor %}
+        </div>
+        {{ s.legend() }}
+        {{ s.how() }}
+      </section>
       {% elif view == 'party' %}
       <nav class="seg so-pills" aria-label="Partidos">
         {% for item in parties %}
@@ -95,9 +69,7 @@
         {{ m.card_image_button(image_file, image_sign) }}
         <header class="so-head">
           <h2><span class="dot" style="background-color: {{ party.color }}"></span>{{ party.fullname }}</h2>
-          <span class="so-seats">{{ party.seats }} escaño{{ '' if party.seats == 1 else 's' }} en el reparto central</span>
-          <span class="chip"><b>{{ party.safe }}</b> seguro{{ '' if party.safe == 1 else 's' }}</span>
-          {% if party.open %}<span class="chip so-air">opta a <b>{{ party.open }}</b>{{ ' más' if party.safe else '' }}</span>{% endif %}
+          {{ s.chips(party) }}
         </header>
         {{ stamp }}
         <p class="so-says">{{ sentence }}</p>
@@ -105,14 +77,12 @@
         <div class="so-grid so-by-party">
           <div class="so-h">Circunscripción</div>
           <div class="so-h so-c so-wide">Escaños</div>
-          <div class="so-h so-c">Central</div>
           <div class="so-h">Escaño a escaño</div>
           <div class="so-h so-note"></div>
           {% for row in party.rows %}
           <div class="so-dname"><a href="{{ row.href }}">{{ row.district.name }}</a></div>
           <div class="so-num so-wide" title="Escaños de la circunscripción">{{ row.district.seats }}</div>
-          <div class="so-num" title="Escaños de {{ party.name }} en el reparto central">{{ row.seats }}</div>
-          {{ s.tokens(row, row.color) }}
+          {{ s.tokens(row) }}
           <div class="so-note">{{ row.note }}</div>
           {% endfor %}
         </div>
@@ -127,16 +97,14 @@
       <section class="card so-card">
         <p class="so-says">{{ sentence }}</p>
         {% if closest %}
-        {#- under 720 px each row stacks in two lines (the seat and its meter; the district and the central state, which
-            says «Central: » there because the header is hidden): the rows change their `display`, so the table states
-            its roles -#}
+        {#- under 720 px each row stacks in two lines (the seat and its meter; the district under them): the rows change
+            their `display`, so the table states its roles -#}
         <table class="so-table" id="closest" role="table">
           <thead role="rowgroup">
             <tr role="row">
               <th class="l" scope="col" role="columnheader">Circunscripción</th>
               <th class="l" scope="col" role="columnheader">Escaño</th>
               <th class="l so-meter-col" scope="col" role="columnheader">Lo consigue en</th>
-              <th scope="col" role="columnheader">Reparto central</th>
             </tr>
           </thead>
           <tbody role="rowgroup">
@@ -145,7 +113,6 @@
               <td class="l so-c-where" role="cell"><a href="{{ seat.href }}">{{ seat.district }}</a></td>
               <td class="l b so-c-seat" role="cell"><span class="so-who"><span class="dot" style="background-color: {{ seat.color }}"></span>{{ seat.k }}.º de {{ seat.party }}</span></td>
               <td class="l so-c-odds" role="cell"><div class="so-meter"><div class="so-track" aria-hidden="true"><i style="width: {{ (seat.share * 100)|round(1) }}%; background-color: {{ seat.color }}"></i><u></u></div><b>{{ seat.label }}</b></div></td>
-              <td class="so-central" role="cell"><span class="so-narrow">Central: </span>{{ 'se lo da' if seat.central else 'no se lo da' }}</td>
             </tr>
             {% endfor %}
           </tbody>

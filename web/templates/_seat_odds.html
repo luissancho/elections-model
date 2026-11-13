@@ -1,32 +1,40 @@
 {% import '_macros.html' as m %}
-{#- The tokens of «Escaños que bailan» (`/{scope}/circunscripciones`) and their legend. Import with
-    `{% import '_seat_odds.html' as s with context %}`: the legend reads the `thresholds` of the context
-    (`SAFE_SHARE` and `OPEN_FLOOR`, never literals). -#}
+{#- The seat options of «Escaños que bailan» (`/{scope}/circunscripciones`), their counts and their legend. Import with
+    `{% import '_seat_odds.html' as s with context %}`: the legend and the «Cómo leerlo» read the `thresholds` of the
+    context (`SAFE_SHARE`, `LIKELY_SHARE` and `PLAY_SHARE`, never literals) and the chips its `state_words`. -#}
 
-{#- The tokens of a row (`drawn_row`): one per seat the party reaches in at least `OPEN_FLOOR` of the simulations, in
-    seat order. A safe one is a solid square in `color`; an open one, a square tinted with the opacity of its share
-    (`fill`) and bordered in `color`, continuous when the central allocation gives it the seat and dashed when not
-    (`out`), with its percentage under it. The state never depends on the colour alone: the border, the label and the
-    title of each token say it, and the row is read aloud as one image (`reading`). -#}
-{% macro tokens(row, color) -%}
+{#- One seat option as a circle (`drawn_token`): in the colour of its party (`--c`), solid when safe, with the fill of
+    its share (`--f`) when not, its border continuous when likely and dashed when in play (`site.css`). `extra` adds
+    classes (the small sizes of the map and the charts). The state never depends on the colour alone: the border and
+    the title say it. -#}
+{% macro circle(token, extra='') -%}
+<i class="so-o {{ token.state }}{% if extra %} {{ extra }}{% endif %}" style="--c: {{ token.color }}{% if token.fill %}; --f: {{ token.fill }}{% endif %}" title="{{ token.title }}"></i>
+{%- endmacro %}
+
+{#- The options of a row (`drawn_row`), in seat order: each its circle and, when not safe, its percentage under it
+    (bold when likely, in muted ink when in play). The row is read aloud as one image (`reading`). -#}
+{% macro tokens(row) -%}
 <span class="so-tokens" role="img" aria-label="{{ row.reading }}">
   {%- for token in row.tokens -%}
-  {%- if token.safe -%}
-  <span class="so-token safe" title="{{ token.title }}" style="background: {{ color }}"></span>
-  {%- else -%}
-  <span class="so-token open{% if not token.central %} out{% endif %}" title="{{ token.title }}"><i style="border-color: {{ color }}; background: {{ token.fill }}"></i><span class="so-pct">{{ token.label }}</span></span>
-  {%- endif -%}
+  <span class="so-token {{ token.state }}">{{ circle(token) }}{% if token.state != 'safe' %}<span class="so-pct">{{ token.label }}</span>{% endif %}</span>
   {%- endfor -%}
 </span>
 {%- endmacro %}
 
-{#- The legend of the tokens: the three states, in grey, and what is not drawn. -#}
+{#- One chip per state with some option of a district or a party (`safe`, `likely`, `play`): «5 seguros», with the
+    words of the context (`state_words`). -#}
+{% macro chips(item) -%}
+{%- for state, words in state_words.items() if item[state] -%}
+<span class="chip so-chip {{ state }}"><b>{{ item[state] }}</b> {{ words[0 if item[state] == 1 else 1] }}</span>
+{% endfor -%}
+{%- endmacro %}
+
+{#- The legend of the circles: the three states with their bands, each with a sample in grey. -#}
 {% macro legend() -%}
 <div class="so-legend">
-  <span><i class="so-key safe"></i>seguro: lo consigue en el {{ thresholds.safe }} o más de las simulaciones</span>
-  <span><i class="so-key open"></i>posible, y el reparto central se lo da</span>
-  <span><i class="so-key open out"></i>posible, y el reparto central no se lo da</span>
-  <span>por debajo del {{ thresholds.floor }} no se dibuja</span>
+  <span><i class="so-o safe" aria-hidden="true"></i>Seguro: {{ thresholds.safe }} o más</span>
+  <span><i class="so-o likely" aria-hidden="true"></i>Probable: del {{ thresholds.likely }} al {{ thresholds.safe }}</span>
+  <span><i class="so-o play" aria-hidden="true"></i>En juego: del {{ thresholds.play }} al {{ thresholds.likely }}</span>
 </div>
 {%- endmacro %}
 
@@ -35,15 +43,10 @@
 {% macro how() -%}
 {% call m.how() %}
 <p>
-  Cada ficha es un escaño que el partido puede conseguir en esa circunscripción. Es seguro si lo consigue en
-  el {{ thresholds.safe }} o más de las simulaciones; si lo consigue en menos del {{ thresholds.floor }}, no se
-  dibuja; entre medias es posible y lleva su porcentaje. Los escaños en el aire de una circunscripción son los
-  que no son seguros de nadie: se los reparten los posibles.
-</p>
-<p>
-  La columna «Central» es el reparto central de la página de encuestas: no siempre coincide con lo más
-  probable, y por eso hay escaños posibles que el reparto central da y otros que no. «Seguro» no es una
-  garantía: es lo que dicen las simulaciones.
+  Cada círculo es un escaño que el partido puede conseguir en esa circunscripción. Es seguro si lo consigue en
+  el {{ thresholds.safe }} o más de las simulaciones, probable si lo consigue entre el {{ thresholds.likely }} y
+  el {{ thresholds.safe }} y está en juego entre el {{ thresholds.play }} y el {{ thresholds.likely }}. Los que no
+  son seguros llevan su porcentaje. «Seguro» no es una garantía: es lo que dicen las simulaciones.
 </p>
 {% endcall %}
 {%- endmacro %}

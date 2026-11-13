@@ -1118,28 +1118,14 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .locked b { display: block; margin-bottom: 4px; font: 800 18px var(--font-head); }
 .locked p { max-width: 60ch; margin: 0; font-size: 13px; color: var(--color-muted); }
 
-/* «Escaños que bailan» (/{scope}/circunscripciones): the tabs of its views; the list of districts beside the card of
-   the chosen one, sorted by the CSS from the radio that is checked (each link carries its two positions, no JS), and
-   the dropdown that takes the place of the list under 720 px; the tokens, one square per seat a party can win (22 px,
-   6 px corners, 4 px apart, wrapping): solid when safe, tinted and bordered when open (2 px, dashed when the central
-   allocation does not give it) with the percentage under it, in bold or in muted ink; and their legend. The amber
-   tint marks what is open, never a party */
+/* «Escaños que bailan» (/{scope}/circunscripciones): the tabs of its views; the dropdown of districts right above the
+   card of the chosen one; the seat options, one circle per seat a party can win (`.so-o`, 22 px with a 2 px border in
+   the cards, 4 px apart, wrapping): solid in the colour of the party when safe, filled with the opacity of its share
+   (`--f`) and bordered in its colour when not, the border continuous when likely and dashed when in play, with the
+   percentage under it, in bold or in muted ink; and their legend, the three states in grey */
 .so-intro { margin-top: 0; font-size: 14.5px; color: var(--color-muted); }
-#seat-kpis .kpi .l { white-space: normal; }
-.so-air { background: #fff4d6; color: var(--color-text); }
-.so-md { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
-.so-md > * { min-width: 0; }
-.so-list { padding: 12px 8px 8px; }
-.so-sort { margin: 0 6px 10px; }
-.so-items { display: flex; flex-direction: column; gap: 1px; }
-.so-item { order: var(--by-open); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 7px 10px; border-radius: var(--radius-sm); color: var(--color-text); text-decoration: none; }
-.so-list:has(input[value="az"]:checked) .so-item { order: var(--by-name); }
-.so-item:hover { background: var(--color-soft); }
-.so-item.on { background: var(--color-text); color: #fff; }
-.so-item .so-name { font-weight: 600; }
-.so-item small { margin-left: 4px; font-weight: 500; opacity: .65; }
-.so-pick { display: none; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
-.so-pick select { flex: 1; min-width: 0; }
+.so-pick { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.so-pick select { flex: 1; min-width: 0; max-width: 360px; }
 .so-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 6px; padding-right: 36px; }
 .so-head h2 { margin: 0; font: 700 20px/1.2 var(--font-head); }
 .so-seats { color: var(--color-muted); }
@@ -1147,36 +1133,33 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-head .chip b { font: 700 14px var(--font-head); }
 .so-says { margin: 0 0 14px; color: var(--color-muted); }
 .so-stamp { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: var(--color-muted); }
-.so-grid { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr) max-content; align-items: center; gap: 6px 4px; }
+.so-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 6px 4px; }
 .so-h { padding: 0 8px 2px 0; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--color-muted); white-space: nowrap; }
 .so-h.so-c { text-align: center; }
 .so-party { display: flex; align-items: center; padding-right: 10px; font-weight: 700; white-space: nowrap; }
 .so-num { padding: 0 12px; text-align: center; font: 700 18px var(--font-head); }
+.so-o { display: block; flex: none; box-sizing: border-box; width: var(--o, 22px); height: var(--o, 22px); border: var(--ob, 2px) solid var(--c); border-radius: 50%; background: var(--f, var(--c)); background-clip: padding-box; }
+.so-o.play { border-style: dashed; }
 .so-tokens { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px; min-width: 0; padding: 3px 0; }
-.so-token { display: block; flex: none; width: 22px; height: 22px; border-radius: 6px; }
-.so-token.open { width: 31px; height: auto; border-radius: 0; text-align: center; }
-.so-token.open i { display: block; box-sizing: border-box; width: 22px; height: 22px; margin: 0 auto; border: 2px solid; border-radius: 6px; }
-.so-token.out i { border-style: dashed; }
+.so-token { display: block; flex: none; width: 31px; text-align: center; }
+.so-token.safe { width: 22px; }
+.so-token .so-o { margin: 0 auto; }
 .so-pct { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.so-token.out .so-pct { font-weight: 500; color: var(--color-muted); }
+.so-token.play .so-pct { font-weight: 500; color: var(--color-muted); }
 .so-note { padding-left: 10px; font-size: 12.5px; color: var(--color-muted); white-space: nowrap; }
 .so-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-line); font-size: 12px; color: var(--color-muted); }
 .so-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.so-key { display: inline-block; box-sizing: border-box; width: 16px; height: 16px; border-radius: 5px; }
-.so-key.safe { background: var(--color-muted); }
-.so-key.open { border: 2px solid var(--color-muted); background: rgba(90, 95, 114, .25); }
-.so-key.out { border-style: dashed; background: none; }
+/* the samples of the legend: the grey of the muted ink (#5a5f72) at a share inside each band (87% and 50%) */
+.so-legend .so-o { --o: 15px; --ob: 1px; --c: var(--color-muted); }
+.so-legend .so-o.likely { --f: rgba(90, 95, 114, .55); }
+.so-legend .so-o.play { --f: rgba(90, 95, 114, .16); }
 /* The links of the page land on the card (`#ficha`) or on the tabs of the views (`#vistas`) below the sticky header
-   (56 px, plus the freeze banner when it shows) with a little air; on phones the card also leaves the dropdown of
-   districts in sight (header 52 px, dropdown down to 100 px) */
-#ficha, #vistas { scroll-margin-top: 68px; }
-body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top: 114px; }
-/* Tablet and narrow desktop (720 to 1099 px): beside the list the card keeps its width for the tokens, without the
-   summary of each row (the tokens and their labels say it) */
-@media (max-width: 1099px) {
-  .so-md .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
-  .so-md .so-note { display: none; }
-}
+   (56 px, plus the freeze banner when it shows) with a little air; the card also leaves the dropdown of districts
+   above it in sight (about 38 px and the 16 px of the stack; on phones, header 52 px and dropdown down to 100 px) */
+#vistas { scroll-margin-top: 68px; }
+#ficha { scroll-margin-top: 120px; }
+body:has(#freeze-banner:not([hidden])) #vistas { scroll-margin-top: 114px; }
+body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 166px; }
 @media (max-width: 719px) {
   #ficha, body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 116px; }
   #vistas, body:has(#freeze-banner:not([hidden])) #vistas { scroll-margin-top: 68px; }
@@ -1184,21 +1167,17 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top:
   .so-tabs { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .seg.so-tabs > a { padding: 7px 10px; font-size: 12.5px; }
   .so-pills { border-radius: var(--radius); }
-  .so-md { grid-template-columns: minmax(0, 1fr); }
-  .so-list { display: none; }
-  .so-pick { display: flex; }
-  .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-grid { grid-template-columns: max-content minmax(0, 1fr); }
   .so-note { display: none; }
   .so-party { padding-right: 4px; white-space: normal; }
   .so-num { padding: 0 8px; }
 }
 
 /* «Escaños que bailan»: the view of a party and the list of the closest seats; on phones each closest seat stacks in
-   two lines (the seat and its meter; the district and the central state, which says «Central: » there because the
-   header is hidden) */
+   two lines (the seat and its meter; the district under them) */
 .so-pills .so-party-btn { display: inline-flex; align-items: center; gap: 6px; }
 .so-head h2 .dot { margin-right: 8px; }
-.so-grid.so-by-party { grid-template-columns: max-content max-content max-content minmax(0, 1fr) max-content; }
+.so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, 1fr) max-content; }
 .so-dname { padding-right: 10px; font-weight: 600; white-space: nowrap; }
 .so-settled { margin: 14px 0 0; font-size: 13px; color: var(--color-muted); }
 .so-table { width: 100%; border-collapse: collapse; }
@@ -1213,11 +1192,8 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top:
 .so-track i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; }
 .so-track u { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0, 0, 0, .4); }
 .so-meter b { width: 38px; text-align: right; font-size: 13px; }
-@media (min-width: 720px) {
-  .so-narrow { display: none; }
-}
 @media (max-width: 719px) {
-  .so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-grid.so-by-party { grid-template-columns: max-content minmax(0, 1fr); }
   .so-dname { white-space: normal; padding-right: 4px; }
   .so-wide { display: none; }
   .so-table, .so-table tbody { display: block; }
@@ -1226,8 +1202,7 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top:
   .so-table td { display: block; padding: 0; border: 0; white-space: normal; }
   .so-table .so-c-seat { order: 1; }
   .so-table .so-c-odds { order: 2; }
-  .so-table .so-c-where { order: 3; font-size: 12.5px; }
-  .so-table .so-central { order: 4; font-size: 12px; color: var(--color-muted); white-space: nowrap; }
+  .so-table .so-c-where { order: 3; grid-column: 1 / -1; font-size: 12.5px; }
 }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
