@@ -48,10 +48,14 @@ Sólo estas palabras, cada una con un significado:
 La probabilidad es `reach[k-1] / n_sim`, comparada sin redondear. Las constantes son de la página.
 
 Desaparecen de la página, de sus textos y de sus tests: «posible», «en el aire», «aspirantes», «reparto central» y
+«Central». Se refiere a los textos de la página, no a los nombres: Asturias tiene una circunscripción que se llama
 «Central». `OPEN_FLOOR` (1%) deja de existir: el suelo es `PLAY_SHARE`.
 
 Las opciones suman más que los escaños (390 para 350 en el run del 13-11: 203 seguras, 103 probables, 84 en
-juego): a cada escaño en juego optan dos o tres partidos. La página lo dice una vez, al pie de cada gráfico.
+juego): a un mismo escaño pueden optar varios partidos. La página lo dice una vez, al pie de cada gráfico, con una
+frase que depende de las cifras: «Hay 390 opciones para 350 escaños: a un mismo escaño pueden optar varios
+partidos.» si las opciones superan a los escaños; si no, el pie no lleva esa frase. (En la maqueta decía «optan dos
+o tres partidos»: el 13-11 son 187 opciones no seguras para 147 escaños no seguros, así que era decir de más.)
 
 ## El signo: el círculo
 
@@ -89,15 +93,25 @@ Una tarjeta con el mapa y, debajo, la ficha de la circunscripción elegida.
   selectores se combinan. Los recuentos no cambian con el partido elegido.
 - **Mapa**: una rejilla de 10 columnas. Cada circunscripción es una casilla con su abreviatura y sus opciones,
   ordenadas por partido (orden del run) y, dentro, por estado y por `k`. Las casillas crecen hacia abajo según lo
-  que contengan. La elegida lleva borde oscuro. Cada casilla es un enlace a la ficha de su circunscripción.
+  que contengan. La elegida lleva borde oscuro. Al tocar una casilla cambia la ficha de debajo **sin recargar la
+  página**, como en la maqueta (ver «La ficha, en el sitio»).
   - Círculos de 11 px con 2 px de separación; en pantallas estrechas, 7 px y 1,5 px. En escritorio el mapa no pasa
     de 760 px de ancho.
   - La posición y la abreviatura de cada circunscripción salen del catálogo (ver «Datos»). Un ámbito sin posiciones
-    pinta las casillas seguidas, por nombre, en la misma rejilla.
-- **Leyenda** de los tres estados con sus tramos. **Pie**: «Hay 390 opciones para 350 escaños: a cada escaño en
-  juego optan dos o tres partidos.» (con las cifras del run).
+    (los autonómicos) pinta las casillas seguidas, por nombre, con el **nombre completo** de la circunscripción como
+    rótulo y en una rejilla de casillas más anchas (las que quepan con un mínimo de 150 px), no en las diez
+    columnas.
+- **Leyenda** de los tres estados con sus tramos. **Pie**: la frase de las opciones y los escaños (ver
+  «Vocabulario»).
 - **Desplegable** de circunscripciones en pantallas estrechas, como hoy, pero ordenado por nombre y con el texto
   «Cádiz · 8 escaños».
+- **La ficha, en el sitio.** La página lleva pintadas las fichas de todas las circunscripciones y enseña sólo la
+  elegida. Cada casilla del mapa es la etiqueta de un radio; el servidor marca el de la circunscripción de la
+  dirección (o la elegida por defecto) y el CSS enseña su ficha y resalta su casilla (radios y `:has()`, sin
+  JavaScript). Con JavaScript, además, la dirección cambia a la de la circunscripción tocada sin recargar, y el
+  desplegable hace lo mismo; sin él, la dirección no cambia al tocar y el desplegable sigue enviando su formulario
+  (el 301 de hoy). Las direcciones de cada circunscripción siguen existiendo y abren la página con su ficha.
+  El título y la descripción son los de la circunscripción de la dirección.
 - **Ficha** de la circunscripción: nombre, escaños y una pastilla por estado con opciones («5 seguros», «3
   probables», «1 en juego»); la frase; una fila por partido con sus círculos de 22 px y sus porcentajes, y a la
   derecha el resumen («2 seguros · 1 probable»; se omite en pantallas estrechas); la leyenda y el «Cómo leerlo».
@@ -126,8 +140,7 @@ juego.»
   a menos probabilidad).
 - En el hueco central, los tres recuentos con su signo: «203 seguros», «103 probables», «84 en juego».
 - Debajo, una pastilla por partido con sus tres recuentos («PSOE 66 · 30 · 25»).
-- Pie: «Tras cada partido: seguros · probables · en juego. Hay 390 opciones para 350 escaños: a cada escaño en
-  juego optan dos o tres partidos.»
+- Pie: «Tras cada partido: seguros · probables · en juego.» y la frase de las opciones y los escaños.
 
 **Columnas.** Título «Las opciones de escaño de cada partido». Entradilla: «Cada círculo es una opción de escaño en
 alguna provincia. Abajo, los seguros; encima, los probables y los que están en juego.»
@@ -159,8 +172,11 @@ imagen con la elección y la fecha, y el botón de imagen de cada tarjeta. Se a�
 Partidos sin ficha de partido). Sin circunscripción en la dirección se elige la que más opciones en juego tiene (a
 igualdad, más escaños y después el nombre).
 
-Llevan botón de imagen la tarjeta del mapa, la del hemiciclo o las columnas (la que esté a la vista), la ficha de
-la circunscripción y la del partido.
+Llevan botón de imagen la tarjeta del mapa, la del hemiciclo o las columnas, la ficha de la circunscripción y la
+del partido. **La imagen recoge lo que está a la vista** (como en las demás tarjetas de la web): el partido y el
+estado elegidos en el mapa, el Hemiciclo o las Columnas, la ficha visible. Sale **sin las filas de selectores** y,
+cuando el partido o el estado no son «Todos», con una línea que lo dice («PSOE · En juego») y con ello en el nombre
+del fichero.
 
 ## Textos (provisionales: los revisa Luis)
 
@@ -258,8 +274,16 @@ Para el gráfico de partidos:
   | 7 | 21 H (2), 41 SE (3), 29 MA (4), 18 GR (5), 4 AL (6) |
   | 8 | 38 TF (0), 35 GC (1), 11 CA (3), 51 CE (5), 52 ML (6) |
 
-- Los bloques de las columnas salen de `meta.bmaps.blocks` del run (`Izquierda`, `Derecha` y el bloque del resto,
-  `REST_BLOCK`). Si el run no trae esos dos bloques, cada partido con opciones lleva su columna y no hay «Otros».
+- Los bloques de las columnas salen de `meta.bmaps.blocks` del run: o trae `Izquierda`, `Derecha` y `Otros` (con
+  todos los demás partidos simulados), o no existe (`web_blocks` de `mtpy/lib/utils.py`). Si no existe, cada partido
+  con opciones lleva su columna y no hay «Otros».
+- El orden del hemiciclo sale del `block` de cada partido en el catálogo (Izquierda, Separatista, Regionalista,
+  Derecha), no de `bmaps`.
+- La web ya lee los CSV del catálogo en `data/` al servir (`mtpy/lib/webapi/checks.py`) y la imagen los lleva.
+  Añadir columnas al CSV no afecta a la copia del catálogo en la base: `save_catalogues` se queda sólo con las
+  columnas que conoce el modelo, así que no hace falta ningún ALTER.
+- Peso: la página de `es` lleva las 52 fichas. Se mide en gzip en la comprobación final y se anota (la página del
+  evento pesa unos 84 KB).
 
 ## Pruebas
 
@@ -272,11 +296,15 @@ Para el gráfico de partidos:
   dentro de cada partido ninguna opción menos probable queda en una fila más interior que otra más probable; con
   pocas opciones (un ámbito autonómico) sigue saliendo un hemiciclo.
 - Columnas: los partidos de Izquierda y Derecha con su columna, el resto en «Otros»; el caso sin bloques.
-- Página: las tres pestañas pintadas; ninguna de las palabras retiradas en el texto visible de las tres;
+- Página: las tres pestañas pintadas; la ficha de la circunscripción de la dirección marcada y las demás
+  presentes y ocultas; ninguna de las palabras retiradas en los textos de la página (los nombres de circunscripción
+  no cuentan) en las tres;
   `assert_public_wording`; los 404 y el 400 de siempre; el enlace del evento con su texto nuevo; el método.
 - Navegador, con un run real, a 360, 390, 768, 1024 y 1280 px: el borde discontinuo se distingue en el mapa y en
-  el hemiciclo; nada se desborda; los selectores y el conmutador funcionan sin recargar; las cuatro imágenes se
-  descargan enteras y con los bordes discontinuos.
+  el hemiciclo; nada se desborda; los selectores, el conmutador y el cambio de ficha al tocar una casilla
+  funcionan sin recargar y también con JavaScript desactivado; las cuatro imágenes se descargan enteras, con los
+  bordes discontinuos, sin selectores y con la línea del partido y el estado elegidos; un ámbito autonómico con
+  varias circunscripciones se ve bien sin posiciones de mapa.
 
 ## Decisiones mías (para que Luis las revise)
 
@@ -295,7 +323,12 @@ Para el gráfico de partidos:
 9. El desplegable del móvil, por nombre.
 10. Los selectores y el conmutador sin JavaScript, con recuentos fijos.
 11. Los ámbitos autonómicos, sin posiciones de mapa por ahora.
-12. Todos los textos.
+12. Todos los textos, incluida la frase del pie, que en la maqueta decía «optan dos o tres partidos» y aquí dice
+    «a un mismo escaño pueden optar varios partidos» (y no sale si las opciones no superan a los escaños).
+13. La ficha cambia en el sitio al tocar una casilla (todas las fichas van en la página), en vez de recargar con un
+    enlace como en la primera versión.
+14. La imagen descargada recoge lo que está a la vista, sin selectores y diciendo el partido y el estado elegidos.
+15. En los ámbitos autonómicos las casillas llevan el nombre completo y son más anchas.
 
 ## Lo que queda al constructor
 
