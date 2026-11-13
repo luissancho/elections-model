@@ -567,6 +567,31 @@ def test_the_image_of_both_cards_says_the_election_the_estimate_and_its_date(odd
             assert re.search(r' · Actualizado: \d', stamp.group(1))  # the day the run was computed, written out
 
 
+def test_the_cards_carry_what_the_script_needs_to_name_their_images_and_change_the_address(odds_site):
+    page = page_of(odds_site, '/es/circunscripciones')[1]
+    assert 'id="mapa" data-file-base="demoscopio-escanos-es-mapa"' in page
+    assert page.count('data-file="demoscopio-escanos-es-mapa.png"') == 1
+    assert re.findall(r'data-file="demoscopio-escanos-es-([a-z-]+)\.png"', page) == ['mapa', 'cadiz', 'guadalajara', 'la-coruna']
+    assert '<p class="so-filter-line shot-only" id="map-filter-line" hidden></p>' in page
+    assert 'id="mp-all" data-slug="" data-label=""' in page and 'id="mp-psoe" data-slug="psoe" data-label="PSOE"' in page
+    assert 'id="ms-play" data-slug="en-juego" data-label="En juego"' in page
+    assert ('id="d-cadiz" data-href="/es/circunscripciones/cadiz?mode=forecast" '
+            'data-title="Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026"') in page
+    # the title the script writes is the one the server renders for that district
+    cadiz_title = re.search(r'<title>([^<]+)</title>', page_of(odds_site, '/es/circunscripciones/cadiz')[1]).group(1)
+    assert 'data-title="{}"'.format(cadiz_title) in page
+    assert page.count('class="so-stamp shot-only"') == 1 + 3  # the map and every district card
+    parties = page_of(odds_site, '/es/circunscripciones', 'vista=partidos')[1]
+    assert 'id="grafico" data-file-base="demoscopio-escanos-es"' in parties
+    assert 'data-file="demoscopio-escanos-es-hemiciclo.png"' in parties
+    assert 'id="pf-hemi" data-slug="hemiciclo"' in parties and 'id="pf-cols" data-slug="columnas"' in parties
+    pinned = page_of(odds_site, '/es/circunscripciones', 'mode=nowcast&run=' + RUN)[1]
+    assert 'data-href="/es/circunscripciones/cadiz?mode=nowcast&amp;run={}"'.format(RUN) in pinned
+    # the copy the image is drawn from hides the selectors and never removes them: the filter lives in their radios
+    css = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    assert re.search(r'\.shot-image \.so-filter\s*\{\s*display:\s*none', css)
+
+
 @pytest.mark.parametrize('path, query, canonical', [
     # the route of a district ignores the party, the view and the dropdown
     ('/es/circunscripciones/cadiz', 'partido=pp&vista=x&circunscripcion=', '/es/circunscripciones/cadiz'),
