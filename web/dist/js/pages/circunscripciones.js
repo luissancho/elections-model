@@ -1,12 +1,12 @@
 // Page «Escaños que bailan» (`/{scope}/circunscripciones`): the server draws everything, and radios with `:has()` do
 // the rest without JavaScript (the card of the tile checked, the two filters of the map, the switch of the chart of
-// the parties). The script adds what CSS cannot: the address and the title follow the tile checked
+// the parties). The script adds what CSS cannot: the address, the title and the canonical follow the tile checked
 // (`history.replaceState`, no reload, no scroll), the dropdown of the phones checks a tile instead of submitting its
 // form, the images of the map and of the chart are named after what is on view (`seat-odds.js`) and the line of the
 // image of the map says its filters; and it wires the download of each card as an image (`card-image.js`). It runs on
 // the three views, so every element it looks for may be missing.
 import {wireCardImages} from '../card-image.js';
-import {filterLine, imageFile} from '../seat-odds.js';
+import {canonicalFor, filterLine, imageFile} from '../seat-odds.js';
 import {mountWhenReady, showError, tryDraw} from './common.js';
 
 /**
@@ -73,9 +73,26 @@ function follow(names, sync) {
 }
 
 /**
- * The address and the title of the page follow the tile checked (`d`), without reloading nor scrolling: the
- * `data-href` and `data-title` of its radio; the dropdown of the phones shows the same district. The title and the
- * dropdown go first, so they follow even when the browser refuses to replace the address.
+ * Point the canonical of the page (and its `og:url`) at the address of a tile, as the server writes it for that
+ * address (`canonicalFor`); a page without them is left as it is.
+ *
+ * @param {string} href the `data-href` of the radio of the tile
+ */
+function followCanonical(href) {
+  const link = document.querySelector('link[rel="canonical"]');
+  if (link && link.href) {
+    link.href = canonicalFor(link.href, href);
+  }
+  const og = document.querySelector('meta[property="og:url"]');
+  if (og && og.content) {
+    og.content = canonicalFor(og.content, href);
+  }
+}
+
+/**
+ * The address, the title and the canonical of the page follow the tile checked (`d`), without reloading nor
+ * scrolling: the `data-href` and `data-title` of its radio; the dropdown of the phones shows the same district. The
+ * title, the dropdown and the canonical go first, so they follow even when the browser refuses to replace the address.
  */
 function wireDistricts() {
   document.addEventListener('change', (event) => {
@@ -91,6 +108,7 @@ function wireDistricts() {
       select.value = radio.value;
     }
     if (radio.dataset.href) {
+      followCanonical(radio.dataset.href);
       try {
         history.replaceState(null, '', radio.dataset.href);
       } catch (error) {

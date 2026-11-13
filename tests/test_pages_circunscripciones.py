@@ -282,7 +282,8 @@ def test_a_part_with_a_district_that_is_not_a_province_says_circunscripcion(odds
     assert re.findall(r'<a href="[^"]*"[^>]*>(Circunscripciones|Partidos|Los más reñidos)</a>', page) == [
         'Circunscripciones', 'Partidos', 'Los más reñidos']
     assert '<h2>Dónde bailan los escaños, circunscripción a circunscripción</h2>' in page
-    assert ('con el borde discontinuo si está en juego. Toca una circunscripción para ver su detalle.') in page
+    assert ('con el borde discontinuo si está en juego. <span class="so-hint">Toca una circunscripción para ver su '
+            'detalle.</span>') in page
     parties = page_of(odds_site, '/es/circunscripciones', 'vista=partidos')[1]
     assert 'Cada círculo es una opción de escaño de ese partido en alguna circunscripción. En el núcleo' in parties
     assert 'Cada círculo es una opción de escaño en alguna circunscripción. Abajo, los seguros' in parties
@@ -625,6 +626,9 @@ def test_the_cards_carry_what_the_script_needs_to_name_their_images_and_change_t
     # the copy the image is drawn from hides the selectors and never removes them: the filter lives in their radios
     css = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert re.search(r'\.shot-image \.so-filter\s*\{\s*display:\s*none', css)
+    # nor does it say to tap a tile: the hint of the lead stays on the page
+    assert '<span class="so-hint">Toca una provincia para ver su detalle.</span></p>' in page
+    assert re.search(r'\.shot-image \.so-hint\s*\{\s*display:\s*none', css)
 
 
 @pytest.mark.parametrize('path, query, canonical', [

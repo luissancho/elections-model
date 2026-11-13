@@ -35,7 +35,7 @@
           {{ m.card_image_button(map_image_file, image_sign) }}
           <header class="card-head">
             <h2>Dónde bailan los escaños, {{ district_word }} a {{ district_word }}</h2>
-            <p class="lead">Cada círculo es una opción de escaño: sólido si es seguro, más claro si es probable y con el borde discontinuo si está en juego. Toca una {{ district_word }} para ver su detalle.</p>
+            <p class="lead">Cada círculo es una opción de escaño: sólido si es seguro, más claro si es probable y con el borde discontinuo si está en juego. <span class="so-hint">Toca una {{ district_word }} para ver su detalle.</span></p>
           </header>
           {#- the two filters dim the circles that do not match (`site.css` and the `<style>` of the head); they
               combine, and their counts are those of the scope whatever the party -#}

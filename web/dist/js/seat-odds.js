@@ -1,5 +1,6 @@
-// Pure helpers of the page «Escaños que bailan» (`/{scope}/circunscripciones`): the name of the image of a card and
-// the line that says the filters of the map, after what is on view. No imports, so node tests them as they are.
+// Pure helpers of the page «Escaños que bailan» (`/{scope}/circunscripciones`): the name of the image of a card, the
+// line that says the filters of the map, after what is on view, and the canonical of the tile checked. No imports, so
+// node tests them as they are.
 
 /**
  * Name of the image of a card: its base and the parts of what is on view that are not empty, joined by `-`.
@@ -22,4 +23,16 @@ export function imageFile(base, parts) {
  */
 export function filterLine(party, state) {
   return [party, state].filter(Boolean).join(' · ');
+}
+
+/**
+ * The canonical of the address of a tile: the origin of the canonical of the page and the path of the tile, without
+ * its query (the mode and the run, which the canonical never keeps) nor its fragment.
+ *
+ * @param {string} current the canonical of the page, absolute (`https://demoscopio.es/es/circunscripciones`)
+ * @param {string} href the `data-href` of the radio of the tile (`/es/circunscripciones/cadiz?mode=forecast`)
+ * @returns {string} the canonical of the tile (`https://demoscopio.es/es/circunscripciones/cadiz`)
+ */
+export function canonicalFor(current, href) {
+  return new URL(current).origin + href.split(/[?#]/)[0];
 }
