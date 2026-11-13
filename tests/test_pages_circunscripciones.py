@@ -345,7 +345,7 @@ def test_the_page_follows_the_mode_and_keeps_it_in_its_links(odds_site, fresh_ap
     assert '>76%<' in page_of(odds_site, '/es/circunscripciones/cadiz')[1]  # less than 60 days away: forecast
     today = page_of(odds_site, '/es/circunscripciones/cadiz', 'mode=nowcast')[1]
     assert '>25%<' in today and '>76%<' not in today
-    assert 'href="/es?mode=nowcast#territorio"' in today  # the index of the event bar goes back to the event page
+    assert 'href="/es?mode=nowcast#escanos"' in today  # the index of the event bar goes back to the event page
     # the districts linked by the card of a party keep the mode
     party = page_of(odds_site, '/es/circunscripciones', 'partido=psoe&mode=nowcast')[1]
     assert '<div class="so-dname"><a href="/es/circunscripciones/la-coruna?mode=nowcast#ficha">La Coruña</a>' in party
@@ -415,18 +415,18 @@ def test_the_texts_of_a_row_and_the_link_of_a_district():
     assert pages.district_href('es', 'la-coruna', '?mode=nowcast') == '/es/circunscripciones/la-coruna?mode=nowcast#ficha'
 
 
-def test_the_event_bar_of_a_subpage_links_the_event_page_and_drops_the_territory_without_districts(api, tmp_path):
+def test_the_event_bar_of_a_subpage_links_the_event_page_and_drops_the_seats_section_without_districts(api, tmp_path):
     """The helper shared by the page of a poll and this page: neither page's tests reach a run without districts."""
     context = pages.common_context({'scope': 'es', 'mode': 'nowcast', 'run': RUN}, None, event=True)
     bar = pages.subpage_event_bar(context)
     query = '?mode=nowcast&run=' + RUN
     assert [entry['href'] for entry in bar['sections']] == [
-        '/es' + query + '#' + key for key in ('promedio', 'escanos', 'evolucion', 'territorio', 'tabla')]
+        '/es' + query + '#' + key for key in ('promedio', 'resultados', 'escanos', 'evolucion', 'tabla')]
     assert context['event_bar']['sections'][0]['href'] == '#promedio'  # a copy: the bar of the context is untouched
     os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'districts', 'nowcast')))
     webapi.site().files.clear()
     assert [entry['id'] for entry in pages.subpage_event_bar(context)['sections']] == [
-        'promedio', 'escanos', 'evolucion', 'tabla']
+        'promedio', 'resultados', 'evolucion', 'tabla']
 
 
 def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(odds_site):
@@ -504,11 +504,11 @@ def test_the_event_page_links_the_page_and_the_card_of_the_district_shown(odds_s
     write_event_districts(fresh_app.fs)
     status, _, body = call(odds_site, '/es', query='mode=nowcast')
     page = re.sub(r'\s+', ' ', html(body))
-    territory = page[page.index('id="territorio"'):page.index('id="tabla"')]
+    territory = page[page.index('<section class="event-section" id="escanos"'):page.index('id="evolucion"')]
     assert status == 200 and 'href="/es/circunscripciones?mode=nowcast"' in territory and 'Escaños que bailan' in territory
     assert re.search(r'<a id="region-odds"[^>]*href="/es/circunscripciones/[a-z-]+\?mode=nowcast#ficha"', territory)
     assert initial(body)['odds_hrefs']['11'] == '/es/circunscripciones/cadiz?mode=nowcast#ficha'
-    assert 'seat-odds' in page[page.index('id="escanos"'):]  # its CSV among the downloads
+    assert 'seat-odds' in page[page.index('id="tabla"'):]  # its CSV among the downloads
     remove_odds(tmp_path)
     status, bare = page_of(api, '/es')
     assert status == 200 and '/es/circunscripciones' not in bare and 'region-odds' not in bare and 'seat-odds' not in bare

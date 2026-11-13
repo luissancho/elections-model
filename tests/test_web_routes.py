@@ -197,3 +197,21 @@ def test_event_page_js_finds_its_elements_and_shares_the_seats_wiring():
     assert 'function wireCoalition' not in text and 'function wireTerritory' not in text
     assert not os.path.exists(os.path.join(pages, 'escanos.js'))
     assert not os.path.exists(os.path.join(TEMPLATES, 'escanos.html'))
+
+
+OLD_SECTION_ANCHORS = re.compile(r"""#territorio|seccion=territorio|['"]territorio['"]""")
+
+
+def test_no_file_points_at_the_territory_anchor_of_before():
+    """La sección «Territorio» de la página del evento pasó a «Escaños» (`#escanos`) el 2026-11-13, sin apaño para los
+    enlaces viejos: ninguna plantilla, script ni módulo de `mtpy` escribe ya `#territorio`, `seccion=territorio` ni
+    `'territorio'` como identificador de sección (el título «Resultados por territorio» y la palabra suelta, sí)."""
+    found = []
+    for base in (TEMPLATES, os.path.join(DIST, 'js'), os.path.join(ROOT, 'mtpy')):
+        for folder, _, files in os.walk(base):
+            for name in files:
+                if name.endswith(('.py', '.html', '.js')):
+                    path = os.path.join(folder, name)
+                    with open(path, encoding='utf-8') as fh:
+                        found += [(os.path.relpath(path, ROOT), hit) for hit in OLD_SECTION_ANCHORS.findall(fh.read())]
+    assert found == []

@@ -966,7 +966,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
     -------
     dict
         ``common_context`` of an event page, its ``event_bar['sections']`` linking the sections of the event page
-        (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``view``
+        (``'/{scope}{query}#{id}'``, without ``escanos`` when the run has no districts), plus ``view``
         (``'district'`` or ``'party'``), ``landing`` (none of ``district``, ``party`` and ``view``
         given), ``totals`` (``scope_totals``), ``foot`` (``options_sentence`` of the totals), ``districts``
         (``district_views`` sorted by name with accents folded, each with ``href``, ``district_href`` keeping the

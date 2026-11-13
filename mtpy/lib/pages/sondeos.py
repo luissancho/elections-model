@@ -606,7 +606,7 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     -------
     dict
         ``common_context`` of an event page, its ``event_bar['sections']`` linking the sections of the event page
-        (``'/{scope}{query}#{id}'``, without ``territorio`` when the run has no districts), plus ``poll``,
+        (``'/{scope}{query}#{id}'``, without ``escanos`` when the run has no districts), plus ``poll``,
         ``poll_title``, ``house`` (``name``, ``href``, ``type``), ``fieldwork`` (``fieldwork_text``), ``sample_text``
         (``sample_text``), ``poll_date``,
         ``event_label`` (the event and its date), ``rating_badge`` (``rating_badge``, under it in the card), ``kpis``

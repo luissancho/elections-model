@@ -323,7 +323,7 @@ const sectionIds = () => [...document.querySelectorAll('section.event-section[id
 
 /**
  * Scroll to the section the URL asks for (`seccion` of the query, which the old seats URLs bring, or a loose token
- * of the fragment such as `#escanos&coalition=PP,VOX`, which the browser does not scroll to by itself) and drop
+ * of the fragment such as `#resultados&coalition=PP,VOX`, which the browser does not scroll to by itself) and drop
  * `seccion` from the query, keeping the fragment.
  */
 function scrollToSection() {

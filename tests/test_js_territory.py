@@ -151,3 +151,13 @@ def test_region_rows_mirror_python():
     out = run_js('t.regionRows(d, 8)', districts)
     assert [r['name'] for r in out] == ['D', 'B', 'A', 'C'] and out == region_rows(districts, 8)
     assert run_js('t.regionRows(d, 99)', districts) == []
+
+
+def test_region_href_lands_on_the_seats_section_with_the_district():
+    """El enlace de una circunscripción de la tabla, como lo escribe la plantilla: la página del evento en la sección
+    «Escaños» (`seccion=escanos#escanos`, 2026-11-13; antes `territorio`), con el modo y, fijado, el run."""
+    state = '{scope: "es", mode: "forecast", run: "20261008-120000", pinned: false}'
+    assert run_js('t.regionHref(%s, 28)' % state) == '/es?mode=forecast&region=28&seccion=escanos#escanos'
+    pinned = '{scope: "es", mode: "nowcast", run: "20261008-120000", pinned: true}'
+    assert run_js('t.regionHref(%s, 8)' % pinned) == \
+        '/es?mode=nowcast&run=20261008-120000&region=8&seccion=escanos#escanos'

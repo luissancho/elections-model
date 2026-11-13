@@ -120,8 +120,8 @@ def test_nowcast_and_pinned_run_are_reflected(api):
     assert 'name="mode"' not in bar and '<span class="pill event-run">Run del 8 oct 2026</span>' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
     # the mode and the run travel in the links and the form of the districts; the index only has anchors
-    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=28&amp;seccion=territorio#territorio"'.format(RUN) in page
-    assert '<a href="#escanos">Escaños</a>' in bar
+    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=28&amp;seccion=escanos#escanos"'.format(RUN) in page
+    assert '<a href="#resultados">Resultados</a>' in bar and '<a href="#escanos">Escaños</a>' in bar
 
 
 def test_freeze_banner_and_attribution(api, fresh_app):
@@ -199,7 +199,7 @@ def test_event_pages_live_under_the_scope_and_default_to_the_forecast_near_the_e
     assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026</title>' in page
     assert 'pronóstico para el 29 nov 2026' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
     assert 'estimación a' not in page and '<input type="hidden" name="mode" value="forecast">' in page
-    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=territorio#territorio"' in page and 'id="controls"' not in page
+    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=escanos#escanos"' in page and 'id="controls"' not in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
     status, _, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     assert status == 200 and 'estimación a' in html(body) and 'Run del 8 oct 2026' in html(body)
@@ -234,12 +234,13 @@ def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_def
     ('/promedio', '', '/es'),
     # the old seats pages go straight to the section of the event page: the query stays, ``seccion`` says where to
     # scroll and the ``Location`` has no fragment, so the browser keeps the one of the link (``#coalition=...``)
-    ('/escanos', 'scope=es&region=28', '/es?region=28&seccion=territorio'),
-    ('/es/escanos', 'mode=forecast', '/es?mode=forecast&seccion=escanos'),
-    ('/es/escanos', '', '/es?seccion=escanos'),
-    ('/es/escanos', 'seccion=tabla', '/es?seccion=escanos'),  # an old ``seccion`` gives way to the seats one
-    ('/escanos', '', '/es?seccion=escanos'),  # without scope: the first published one
-    ('/es/escanos', 'mode=nowcast&run=' + RUN + '&region=8', '/es?mode=nowcast&run=' + RUN + '&region=8&seccion=territorio'),
+    # (the results with the hemicycle, ``resultados``; the detail of a district, ``escanos``)
+    ('/escanos', 'scope=es&region=28', '/es?region=28&seccion=escanos'),
+    ('/es/escanos', 'mode=forecast', '/es?mode=forecast&seccion=resultados'),
+    ('/es/escanos', '', '/es?seccion=resultados'),
+    ('/es/escanos', 'seccion=tabla', '/es?seccion=resultados'),  # an old ``seccion`` gives way to the seats one
+    ('/escanos', '', '/es?seccion=resultados'),  # without scope: the first published one
+    ('/es/escanos', 'mode=nowcast&run=' + RUN + '&region=8', '/es?mode=nowcast&run=' + RUN + '&region=8&seccion=escanos'),
     ('/modelo', 'scope=es', '/metodo/backtest?scope=es'),
     ('/modelo', '', '/metodo/backtest'),
 ])
@@ -292,9 +293,9 @@ def test_event_bar_days_text():
     assert info['title'] == 'Elecciones generales' and info['days_text'] == 'Faltan 47 días'
     assert info['year'] == '2026'
     assert info['sections'] == [{'id': 'promedio', 'label': 'Promedio', 'href': '#promedio'},
+                                {'id': 'resultados', 'label': 'Resultados', 'href': '#resultados'},
                                 {'id': 'escanos', 'label': 'Escaños', 'href': '#escanos'},
                                 {'id': 'evolucion', 'label': 'Evolución', 'href': '#evolucion'},
-                                {'id': 'territorio', 'label': 'Territorio', 'href': '#territorio'},
                                 {'id': 'tabla', 'label': 'Tabla', 'href': '#tabla'}]
     assert pages.event_info('es', meta, state, today=date(2026, 11, 29), scopes=scopes)['days_text'] == 'Jornada electoral'
     assert pages.event_info('es', meta, state, today=date(2026, 12, 2), scopes=scopes)['days_text'] == 'Celebradas hace 3 días'
@@ -308,7 +309,7 @@ def test_event_info_counts_one_day_and_unknown_dates_and_lists_the_sections():
     info = pages.event_info('es', {'event_date': '2026-11-29'}, state, today=date(2026, 11, 28), scopes=scopes)
     assert info['days_text'] == 'Falta 1 día' and 'form_action' not in info and info['href'] == '/es'
     # the index of sections links anchors of the same page: the mode and the run stay in the URL as they are
-    assert [entry['href'] for entry in info['sections']] == ['#promedio', '#escanos', '#evolucion', '#territorio', '#tabla']
+    assert [entry['href'] for entry in info['sections']] == ['#promedio', '#resultados', '#escanos', '#evolucion', '#tabla']
     assert 'tabs' not in info
     unknown = pages.event_info('es', {}, state, today=date(2026, 11, 28), scopes=scopes)
     assert unknown['days_left'] is None and unknown['days_text'] is None and unknown['year'] is None
@@ -405,10 +406,10 @@ def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fre
     # form without JS) are views of the same page: one canonical per scope, not one per district (Luis, 2026-11-05)
     status, headers, body = call(api, '/es', query='region=28&mode=forecast')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
-    status, headers, body = call(api, '/es', query='mode=forecast&region=28&seccion=territorio')
+    status, headers, body = call(api, '/es', query='mode=forecast&region=28&seccion=escanos')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
     assert '<meta property="og:url" content="https://demoscopio.es/es">' in html(body)
-    status, headers, body = call(api, '/es', query='seccion=escanos')
+    status, headers, body = call(api, '/es', query='seccion=resultados')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
     status, headers, body = call(api, '/metodo', query='scope=es')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/metodo?scope=es">' in html(body)
@@ -754,7 +755,7 @@ def test_event_page_explains_the_fan_and_the_evolution_and_closes_with_the_metho
     assert 'bloque con más probabilidad de mayoría absoluta' not in page  # sin titular desde 2026-10-14
     fan = page[page.index('id="fan"'):page.index('id="downloads"')]
     assert 'deriva' in fan and 'horizonte 0' in fan and 'no es una predicción de trayectoria' in fan
-    evolution = page[page.index('id="evolution"'):page.index('id="districts"')]
+    evolution = page[page.index('id="evolution"'):page.index('id="pollster"')]
     assert 'run' in evolution and 'hueco' in evolution and 'id="evolution-changes"' in evolution and 'no es una serie de sondeos' in evolution
     assert '¿Cómo simulamos los escaños?' in page and 'href="/elecciones?scope=es"' in page
     assert 'href="/casas?scope=es"' in page
@@ -766,7 +767,8 @@ def test_event_page_explains_the_fan_and_the_evolution_and_closes_with_the_metho
 
 def test_event_page_hides_the_seat_distributions_behind_a_button_and_puts_the_evolution_after_the_calculator(api):
     """Luis, 2026-10-30: las curvas del reparto se abren con un botón (la tarjeta de resultados queda en la tabla) y
-    «Evolución de las actualizaciones» va debajo de «Calculadora de mayorías»."""
+    «Evolución de las actualizaciones» va debajo de «Calculadora de mayorías» (desde el 2026-11-13, con «Resultados
+    por territorio» en medio)."""
     page = html(call(api, '/es')[2])
     card = page[page.index('<section class="card" id="seats"'):page.index('<section class="card" id="coalition"')]
     toggle = re.search(r'<button[^>]*id="ridge-toggle"[^>]*>([^<]*)</button>', card)
@@ -775,7 +777,7 @@ def test_event_page_hides_the_seat_distributions_behind_a_button_and_puts_the_ev
     assert re.search(r'<div class="chart" id="ridge-chart"[^>]*\bhidden\b', card)
     assert card.index('id="ridge-toggle"') < card.index('id="ridge-chart"')
     assert 'Ver las distribuciones' in re.sub(r'\s+', ' ', card[card.index('class="how"'):])  # the text names the button
-    order = [page.index('<section class="card" id="%s"' % name) for name in ('seats', 'coalition', 'evolution', 'districts', 'fan', 'downloads')]
+    order = [page.index('<section class="card" id="%s"' % name) for name in ('seats', 'coalition', 'districts', 'evolution', 'fan', 'downloads')]
     assert order == sorted(order)
 
 
@@ -844,12 +846,12 @@ def test_event_page_districts_default_to_the_largest_and_link_the_rows(api, fres
     page = html(call(api, '/es', query='mode=forecast')[2])
     assert 'id="districts"' in page and '<option value="28" selected>Madrid</option>' in page
     assert 'Madrid · 37 escaños' in page  # caption del detalle
-    assert 'href="/es?mode=forecast&amp;region=8&amp;seccion=territorio#territorio"' in page
+    assert 'href="/es?mode=forecast&amp;region=8&amp;seccion=escanos#escanos"' in page
     assert '<td title="6–8">7</td>' in page and '<td title="14–18">16</td>' in page
     assert '<td>TOTAL</td>' in page and '140' in page and '<th scope="col" data-key="total">Total</th>' in page
     page = html(call(api, '/es', query='mode=forecast&region=8')[2])
     assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
-    assert '<form id="district-form" method="get" action="/es#territorio">' in page
+    assert '<form id="district-form" method="get" action="/es#escanos">' in page
     assert 'name="scope"' not in page  # el ámbito va en la ruta
 
 
@@ -900,17 +902,17 @@ def test_event_page_district_form_keeps_the_pinned_run(api, fresh_app):
     write_districts(fresh_app.fs)
     page = html(call(api, '/es', query='mode=forecast&run=' + RUN)[2])
     assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 1  # sólo el formulario de circunscripción
-    assert 'href="/es?mode=forecast&amp;run={}&amp;region=8&amp;seccion=territorio#territorio"'.format(RUN) in page
+    assert 'href="/es?mode=forecast&amp;run={}&amp;region=8&amp;seccion=escanos#escanos"'.format(RUN) in page
 
 
 # Página del evento unida (2026-11-04): Promedios y Escaños en `/{scope}`, una sola página por secciones con ancla
-# (Promedio · Escaños · Evolución · Territorio · Tabla) y sin duplicados.
+# (Promedio · Resultados · Escaños · Evolución · Tabla desde el 2026-11-13) y sin duplicados.
 
 EVENT_SECTION_CARDS = (
     ('promedio', ('series',)),
-    ('escanos', ('hemicycle-card', 'seats', 'coalition')),
+    ('resultados', ('hemicycle-card', 'seats', 'coalition')),
+    ('escanos', ('districts',)),
     ('evolucion', ('evolution', 'pollster')),
-    ('territorio', ('districts',)),
     ('tabla', ('polls', 'fan', 'downloads')),
 )
 
@@ -940,7 +942,7 @@ def test_event_page_merges_promedios_and_escanos_in_order(api):
         assert gone not in page, gone
     # el único selector Partidos / Bloques es el del hemiciclo; la tabla de bloques espera oculta
     assert 'name="rview" value="partidos" checked' in page and 'name="sview"' not in page
-    seats = sections['escanos']
+    seats = sections['resultados']
     assert '<div id="seats-parties">' in seats and '<div id="seats-blocks" hidden>' in seats
     assert 'id="ridge-toggle"' in seats and 'id="ridge-chart"' in seats and 'id="coalition-result"' in seats
     assert re.search(r'<h2>Resultados <span class="pill">', seats)
@@ -956,13 +958,29 @@ def test_event_page_title_and_index(api):
     bar = page[page.index('id="event-bar"'):page.index('<main')]
     index = re.search(r'<nav class="seg lg event-index" aria-label="Secciones de la página">(.*?)</nav>', bar, re.S).group(1)
     assert re.findall(r'<a href="#(\w+)">([^<]+)</a>', index) == [
-        ('promedio', 'Promedio'), ('escanos', 'Escaños'), ('evolucion', 'Evolución'), ('territorio', 'Territorio'),
+        ('promedio', 'Promedio'), ('resultados', 'Resultados'), ('escanos', 'Escaños'), ('evolucion', 'Evolución'),
         ('tabla', 'Tabla')]
     assert 'aria-current' not in index and 'href="/es/escanos' not in bar
     info = pages.event_info('es', {'event_date': '2026-11-29'}, {'scope': 'es', 'mode': 'forecast', 'run': RUN,
                                                                  'pinned': False}, scopes=[{'code': 'es', 'name': 'España'}])
     assert 'tabs' not in info and info['sections'][0] == {'id': 'promedio', 'label': 'Promedio', 'href': '#promedio'}
     assert [entry['id'] for entry in info['sections']] == [name for name, _ in pages.EVENT_SECTIONS]
+
+
+def test_the_event_page_index_says_results_and_seats_and_no_anchor_of_before_is_left(events_site):
+    status, _, body = call(events_site, '/es', query='mode=forecast')
+    page = re.sub(r'\s+', ' ', html(body))
+    index = page[page.index('class="seg lg event-index"'):]
+    assert re.findall(r'<a href="#([a-z]+)"[^>]*>([^<]+)</a>', index[:index.index('</nav>')]) == [
+        ('promedio', 'Promedio'), ('resultados', 'Resultados'), ('escanos', 'Escaños'), ('evolucion', 'Evolución'),
+        ('tabla', 'Tabla')]
+    assert re.findall(r'<section class="event-section" id="([a-z]+)"', page) == [
+        'promedio', 'resultados', 'escanos', 'evolucion', 'tabla']
+    results = page[page.index('id="resultados"'):page.index('<section class="event-section" id="escanos"')]
+    assert all('id="{}"'.format(card) in results for card in ('hemicycle-card', 'seats', 'coalition'))
+    seats = page[page.index('<section class="event-section" id="escanos"'):page.index('id="evolucion"')]
+    assert 'id="districts"' in seats and 'seccion=escanos#escanos' in seats and 'action="/es#escanos"' in seats
+    assert not [old for old in ('#territorio', 'id="territorio"', 'seccion=territorio') if old in page]
 
 
 def test_event_page_results_table_columns(events_site, api):
@@ -1038,8 +1056,8 @@ def test_event_page_index_skips_missing_sections(api, fresh_app):
     write_districts(fresh_app.fs, districts={'parties': ['PP'], 'regions': [], 'rows': []},
                     scenario={'simulation': 0, 'parties': ['PP'], 'rows': [{'region_id': 0, 'region': 'es-md', 'seats': [70]}]})
     page = html(call(api, '/es')[2])
-    assert 'id="territorio"' not in page and 'href="#territorio"' not in page and 'id="districts"' not in page
-    assert 'href="#tabla"' in page and 'href="#escanos"' in page
+    assert 'id="escanos"' not in page and 'href="#escanos"' not in page and 'id="districts"' not in page
+    assert 'href="#tabla"' in page and 'href="#resultados"' in page
     assert call(api, '/es', query='region=28')[0] == 404
 
 
@@ -1059,15 +1077,15 @@ def test_event_page_region(api, fresh_app):
     assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
     form = page[page.index('<form id="district-form"'):]
     form = form[:form.index('</form>')]
-    assert form.startswith('<form id="district-form" method="get" action="/es#territorio">')
+    assert form.startswith('<form id="district-form" method="get" action="/es#escanos">')
     assert '<input type="hidden" name="mode" value="forecast">' in form
-    assert '<input type="hidden" name="seccion" value="territorio">' in form and 'name="run"' not in form
-    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=territorio#territorio"' in page
+    assert '<input type="hidden" name="seccion" value="escanos">' in form and 'name="run"' not in form
+    assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=escanos#escanos"' in page
     page = html(call(api, '/es', query='mode=nowcast&run=' + RUN)[2])
     form = page[page.index('<form id="district-form"'):]
     form = form[:form.index('</form>')]
     assert '<input type="hidden" name="run" value="{}">'.format(RUN) in form and 'value="nowcast"' in form
-    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=8&amp;seccion=territorio#territorio"'.format(RUN) in page
+    assert 'href="/es?mode=nowcast&amp;run={}&amp;region=8&amp;seccion=escanos#escanos"'.format(RUN) in page
     assert '<option value="28" selected>' in page  # the largest district by default
 
 
@@ -1096,7 +1114,7 @@ def test_event_page_texts(api):
     assert evolution.index('id="evolution-metric"') < evolution.index('id="evolution-view"')
     assert 'hueco' in evolution and 'no es una serie de sondeos' in evolution.lower()
     assert 'Voto' in evolution and 'escaños' in evolution
-    seats = re.sub(r'\s+', ' ', sections['escanos'])
+    seats = re.sub(r'\s+', ' ', sections['resultados'])
     assert 'P(escaño)' in seats and 'P(primero)' in seats and 'Ver las distribuciones' in seats
     # below 1100 px the results table goes under the hemicycle: its «Cómo leerlo» names it, not its place
     assert 'la tabla de resultados da el rango de cada partido' in seats and 'de al lado' not in seats
@@ -1123,7 +1141,7 @@ def test_regional_scope_renders_every_page(api, fresh_app):
     assert status == 200 and 'Elecciones autonómicas · Madrid' in html(body)
     assert 'name="coalition" value="PP" checked' in html(body) and 'id="districts"' not in html(body)
     status, headers, body = call(api, '/es-md/escanos')
-    assert status == 301 and headers['location'] == '/es-md?seccion=escanos'
+    assert status == 301 and headers['location'] == '/es-md?seccion=resultados'
 
 
 def test_district_table_and_region_rows():
@@ -1279,7 +1297,7 @@ def test_promedios_central_block_is_the_hemicycle_and_one_results_card_with_rang
 def test_promedios_orders_the_story_and_carries_the_controls(api):
     page = html(call(api, '/es')[2])
     order = [page.index(marker) for marker in ('id="series"', 'id="hemicycle-card"', 'id="seats"', 'id="coalition"',
-                                              'id="evolution"', 'id="pollster"', 'id="districts"', 'id="polls"', 'id="fan"',
+                                              'id="districts"', 'id="evolution"', 'id="pollster"', 'id="polls"', 'id="fan"',
                                               'id="downloads"', 'id="closing"')]
     assert order == sorted(order)
     assert 'name="window" value="all" checked' in page.replace('\n', ' ') and 'value="3m"' in page and 'value="1a"' in page
@@ -3549,7 +3567,7 @@ def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
     table = table[:table.index('</table>')]
     assert '<th scope="row">Canarias</th> <td>15%</td> <td>4%</td>' in table
     assert '<th scope="row">Comunidad Valenciana</th> <td>–</td> <td>5%</td>' in table
-    assert 'href="/es#escanos"' in page and 'href="/es/escanos"' not in page
+    assert 'href="/es#resultados"' in page and 'href="/es#escanos"' not in page and 'href="/es/escanos"' not in page
     assert 'página de escaños' not in page and 'el «Abanico de voto por horizonte» de la página de encuestas' in page
     assert 'id="metodo-nav"' in page and 'aria-current="page"' in page
     changed = webapi.catalogue().copy()
@@ -4343,7 +4361,7 @@ def test_home_hero_is_the_national_scope_with_its_figures(api):
     assert 'Derecha 135' in bar
     # con p < 0,5 el chip va en gris: "Sin mayoría clara · Derecha 41%" (D4); con p >= 0,5, `.chip.ok`
     assert '<span class="chip">Sin mayoría clara <small>· Derecha 41,0%</small></span>' in flat
-    assert 'href="/es">Ver el promedio' in page and 'class="btn" href="/es#escanos">Escaños' in page
+    assert 'href="/es">Ver el promedio' in page and 'class="btn" href="/es#resultados">Escaños' in page
     assert 'Actualizado: 8 oct 2026 · 120 sondeos de 15 encuestadoras' in page
     assert 'id="hemicycle-mini"' in page and '/dist/js/pages/inicio.js' in page
     data = initial(call(api, '/')[2])
@@ -4385,7 +4403,7 @@ def test_home_hero_falls_back_to_the_first_published_scope(api, fresh_app, tmp_p
     assert 'class="flag"' not in page and 'Parlamento · 350 escaños · ' in page
     assert 'Pronóstico para Madrid' in page  # el run del fixture está a 52 días: Elección
     assert 'id="auto-rows"' not in page  # el único ámbito publicado es el hero
-    assert 'class="btn" href="/es-md#escanos">Escaños' in page
+    assert 'class="btn" href="/es-md#resultados">Escaños' in page
     assert 'href="/es-md"' in re.search(r'<nav class="tabbar".*?</nav>', page, re.S).group(0)
 
 
@@ -7883,7 +7901,8 @@ def test_sondeo_page_errors_and_pinned_run(api, fresh_app):
     status, _, body = call(api, '/es/sondeos/2026-10-01/gad3/abc', query='mode=nowcast&run=' + RUN)
     page = html(body)
     assert status == 200 and 'GAD3 para ABC' in page
-    assert 'href="/es?mode=nowcast&amp;run=%s#tabla"' % RUN in page and 'href="/es?mode=nowcast&amp;run=%s#escanos"' % RUN in page
+    assert 'href="/es?mode=nowcast&amp;run=%s#tabla"' % RUN in page and 'href="/es?mode=nowcast&amp;run=%s#resultados"' % RUN in page
+    assert 'href="/es?mode=nowcast&amp;run=%s#escanos"' % RUN in page  # the fixture run has districts
     assert '<link rel="canonical" href="https://demoscopio.es/es/sondeos/2026-10-01/gad3/abc">' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
 

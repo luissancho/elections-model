@@ -11,7 +11,7 @@ import {histogramOption, renderHistogram} from '../charts/histogram.js';
 import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
 import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked, stackedOption} from '../charts/stacked.js';
-import {canGroup, regionRows, sortTerritory, territoryRows} from '../territory.js';
+import {canGroup, regionHref, regionRows, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead, renderRegion} from './territory-dom.js';
 import {
   coalitionCaption, coalitionLocationHash, coalitionSeats, coalitionText, loadDist, parseCoalition, summarize,
@@ -65,7 +65,7 @@ function partyBar(initial, dist, catalog, colors) {
  * (`coalitionText`), the bar of the central allocation (the marked parties first, in colour, and the rest after
  * them in grey) and the histogram of the marked parties, marked at their central seats, with its caption
  * (`coalitionCaption`) on load and on every change. Only a change rewrites the fragment, and only its own key and,
- * with parties marked, the section token `escanos` (`coalitionLocationHash`), so a shared link opens on the
+ * with parties marked, the section token `resultados` (`coalitionLocationHash`), so a shared link opens on the
  * calculator and the state of the average survives. The download button (disabled without
  * parties marked) draws the chip, the bar and the histogram of the moment, the parties in the subtitle and in the
  * file name.
@@ -256,19 +256,6 @@ const CAPTION = {
     + 'las provincias de la comunidad.',
   pct: 'Voto estimado en cada territorio; en CCAA, la media ponderada por los votos de la elección anterior.',
 };
-
-/**
- * Link of a district of the territory table, as the template writes it: the event page on the territory section
- * with that district (what the form sends without JavaScript; with it, the click is caught by `wireRegion`). The
- * `#territorio` fragment lands a link opened apart (a new window, a modified click) on the section.
- *
- * @param {object} state the `state` of the initial data (`scope`, `mode`, `run`, `pinned`)
- * @param {number} id district id
- * @returns {string} the URL
- */
-function regionHref({scope, mode, run, pinned}, id) {
-  return `/${scope}?mode=${mode}${pinned ? `&run=${run}` : ''}&region=${id}&seccion=territorio#territorio`;
-}
 
 /**
  * Wire "Resultados por territorio": rebuild the table of the central allocation from the embedded `districts`,

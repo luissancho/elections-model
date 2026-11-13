@@ -33,12 +33,14 @@ PAGES = (
     {'href': '/analisis', 'label': 'Análisis'},
     {'href': '/metodo', 'label': 'Método'},
 )
-# Index of the event page (2026-11-04): ``(id, label)`` of each section, in page order; the ids are the public anchors
+# Index of the event page (2026-11-04): ``(id, label)`` of each section, in page order; the ids are the public anchors.
+# Since 2026-11-13 ``resultados`` holds the hemicycle, the results table and the majority calculator, and ``escanos``
+# the seats by district (what was ``territorio``, now right after the results); no alias is kept for the old anchors
 EVENT_SECTIONS = (
     ('promedio', 'Promedio'),
+    ('resultados', 'Resultados'),
     ('escanos', 'Escaños'),
     ('evolucion', 'Evolución'),
-    ('territorio', 'Territorio'),
     ('tabla', 'Tabla'),
 )
 # Bottom tab bar of the phones: five entries with an icon of the sprite (``_svg.html``), ``event`` being the event page
@@ -1040,13 +1042,13 @@ def subpage_event_bar(context: dict) -> dict:
     -------
     dict
         A copy of ``event_bar`` whose ``sections`` link ``'/{scope}{query}#{id}'``, keeping the mode and the pinned
-        run; without ``territorio`` when the ``districts`` part of the run shown, in its mode, has no regions, as the
+        run; without ``escanos`` when the ``districts`` part of the run shown, in its mode, has no regions, as the
         event page drops it.
     """
     state, query, event = context['state'], context['query'], context['event_bar']
     scope = state['scope']
     districts = bundle_part(site().run_file, scope, state['run'], 'districts', state['mode']) or {}
-    missing = set() if districts.get('regions') else {'territorio'}
+    missing = set() if districts.get('regions') else {'escanos'}
 
     return dict(event, sections=[dict(entry, href='/' + scope + query + '#' + entry['id'])
                                  for entry in event['sections'] if entry['id'] not in missing])

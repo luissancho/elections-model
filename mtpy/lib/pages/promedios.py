@@ -769,7 +769,7 @@ def promedios_context(state: dict, region=None) -> dict:
     Returns
     -------
     dict
-        ``common_context`` of an event page, its ``event_bar['sections']`` without ``territorio`` when the run has no
+        ``common_context`` of an event page, its ``event_bar['sections']`` without ``escanos`` when the run has no
         districts (``tabla`` stays without polls: it also holds the fan and the downloads), plus the keys of
         ``seats_context`` (but ``initial_extra``), ``headline`` (the headline of the mode), ``result_rows`` and ``block_result_rows`` (the
         one results table of the summary, with its probabilities and its differences against the last election),
@@ -839,9 +839,9 @@ def promedios_context(state: dict, region=None) -> dict:
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)
     context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
-    # the index offers only the sections the page renders: all but the territory without districts (the table section
-    # always holds the fan and the downloads)
-    missing = {'territorio'} if not context['district_table'] else set()
+    # the index offers only the sections the page renders: all but the seats by district without districts (the table
+    # section always holds the fan and the downloads)
+    missing = {'escanos'} if not context['district_table'] else set()
     context['event_bar'] = dict(context['event_bar'], sections=[
         entry for entry in context['event_bar']['sections'] if entry['id'] not in missing])
     run_parties = [party['name'] for party in meta.get('parties') or []]
