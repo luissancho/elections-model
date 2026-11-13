@@ -354,7 +354,7 @@ Rama `escanos-mapas` (`git log --oneline dev..HEAD`):
 - Enlace de la página del evento, apartado del método y contrato: `eda21ac`.
 - Arreglos de la comprobación en el navegador (abajo): `c11a511`, `0d84443`, `6183162`, `f85a59d`.
 - Arreglos de la revisión final (abajo, en «Lo que difiere de este documento»): `77c9473`, `8a19dfa`, `5240b63`,
-  `4c4dc32`, `4cb7709`.
+  `4c4dc32`, `4cb7709`, y `10c0e5c`, que sólo devuelve a su orden una lista de importaciones.
 - Este cierre: el commit que lo añade, y el que lo pone al día tras la revisión final.
 
 ### Comprobación en el navegador
@@ -530,8 +530,10 @@ Diferencias visibles con la maqueta que este documento no recoge:
 - Decidir si los selectores del mapa en el móvil se quedan en el control segmentado de 4 filas o se compactan como
   en la maqueta.
 - Revisar los textos, todos provisionales. En particular, la frase nueva de un solo partido («Para el otro, quien más
-  opciones tiene es PSOE.», arriba) es mía y es suya para reescribirla.
-- Tres textos que señaló la revisión final y que nadie cambió:
+  opciones tiene es PSOE.», arriba) se escribió en la revisión final sin pasar por Luis: es suya para reescribirla.
+- Cuatro textos que señaló la revisión final y que nadie cambió:
+  - El «Cómo leerlo» de las fichas dice «Cada círculo es un escaño que el partido puede conseguir», y el resto de la
+    página llama a eso «opción de escaño».
   - El método dice «Como a un escaño en juego suelen optar dos o tres partidos», que es lo que este documento llamó
     decir demasiado para el pie: en el run del 13 de noviembre hay 187 opciones que no son seguras para 147 escaños
     que no son seguros.
@@ -558,7 +560,9 @@ Cosas sabidas y dejadas para más adelante; ninguna se ve mal hoy en pantalla.
 - La función anidada que lee las posiciones del mapa del catálogo no tiene docstring.
 - Ningún test fija la descripción de `?vista=partidos`, ni que un botón de partido conserve un run fijado.
 - El script de la página no tiene un test automático de su comportamiento: sólo el del contrato con el marcado (que
-  cada id y cada grupo de radios que busca existe en la vista que lo tiene).
+  cada id y cada grupo de radios que busca existe en alguna de las dos vistas, no en la vista concreta que lo tiene).
+- Si la dirección del sitio estuviera configurada sin `https://`, el cambio de la canónica al tocar una casilla
+  fallaría y la dirección dejaría de seguir a la casilla. Con la configuración de hoy no puede pasar.
 - Al cambiar de casilla cambia una ficha más abajo sin avisar a un lector de pantalla, y el nombre accesible de una
   casilla («La Coruña, 8 escaños») no contiene su etiqueta visible («C»).
 - Cada una de las 52 direcciones de circunscripción sirve el mismo documento con otra ficha elegida, y un buscador
