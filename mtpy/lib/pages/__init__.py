@@ -40,8 +40,8 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
 from .circunscripciones import (LIKELY_SHARE, PLAY_SHARE, SAFE_SHARE, default_district, district_href,
                                 district_sentence, district_views, districts_are_provinces, drawn_row, drawn_token,
                                 option_title, options_sentence, party_sentence, party_view, published_seat_odds,
-                                scope_options, scope_totals, seat_odds_context, seat_odds_links, seat_state,
-                                seat_tokens, state_text, threshold_label, tint, token_alpha, token_label,
+                                scope_options, scope_totals, seat_odds_card, seat_odds_context, seat_odds_links,
+                                seat_state, seat_tokens, state_text, threshold_label, tint, token_alpha, token_label,
                                 tokens_note, tokens_reading)
 from .seat_charts import STATES, column_ticks, hemicycle_layout, map_tiles, party_columns
 from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, has_communities, region_rows, resolve_region,

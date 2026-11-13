@@ -345,9 +345,8 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .card-head { margin-bottom: 10px; }
 /* A card head with something on the right (a pill, a link) */
 .card-head.split-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
-/* also the «more» links at the foot of a card (`p.more`: the entries of «Escaños que bailan» on the event page) */
-.card-head .more-link, .more > .more-link { font-size: 13px; font-weight: 600; text-decoration: none; }
-.card-head .more-link:hover, .more > .more-link:hover { text-decoration: underline; }
+.card-head .more-link { font-size: 13px; font-weight: 600; text-decoration: none; }
+.card-head .more-link:hover { text-decoration: underline; }
 /* A tool at the top right of a card head: the button that downloads the chart as a signed image (`share.js`) */
 .card-head .card-tools { float: right; margin: -2px 0 var(--space-2) var(--space-3); }
 .tool-btn { min-height: 30px; padding: 0 10px; gap: 6px; font-size: 12px; color: var(--color-muted); }
@@ -1197,10 +1196,13 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
    (`.so-form-hemi`, `.so-form-cols`) */
 #grafico:not(:has(#pf-cols:checked)) .so-form-cols, #grafico:has(#pf-cols:checked) .so-form-hemi { display: none; }
 /* without `:has()` every card shows, by name (the filters and the mark of the tile chosen do nothing there), and both
-   charts of the parties, without their switch */
+   charts of the parties, without their switch; in the card of the event page, both views without their selector, and
+   the cards of the districts one under the other */
 @supports not selector(:has(*)) {
   .so-ficha { display: block; }
   #chart-form { display: none; }
+  #so-view { display: none; }
+  #seat-odds .so-ficha + .so-ficha { margin-top: 22px; }
 }
 /* The hemicycle of the seat options: an SVG up to 900 px wide, the three counts of the scope over its hollow (the
    centre of the arcs is 20 units above its bottom, 3.85% of its height), and a pill per party under it. The counts
@@ -1283,6 +1285,34 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas, #mapa, #grafico, #pa
   .so-grid.so-by-party { grid-template-columns: max-content minmax(0, 1fr); }
   .so-dname { white-space: normal; padding-right: 4px; }
   .so-wide { display: none; }
+}
+
+/* «Escaños que bailan» on the event page (`#seat-odds`, the macro `card` of `_seat_odds.html`): the radio `sv` shows
+   the view of the map or that of the columns, each element keeping its own display; the filter of states dims the
+   circles of the others (the filter of the parties and the card of each district are in the `<style>` of the head,
+   one rule per party and per district of the run). The card of a district is a block of the card, not a card: below
+   the map, a line above it; from 1,200 px of window, the map (up to 760 px) on the left and the card on the right, a
+   line between them and its rows without their summary (the chips of its head give the totals). The dropdown of
+   districts only shows under 720 px, and only once the page script reveals it */
+#seat-odds:has(#sv-cols:checked) .so-view-map, #seat-odds:not(:has(#sv-cols:checked)) .so-view-cols { display: none; }
+#seat-odds:has(#ms-safe:checked) .so-dots i:not(.safe) { opacity: .08; }
+#seat-odds:has(#ms-likely:checked) .so-dots i:not(.likely) { opacity: .08; }
+#seat-odds:has(#ms-play:checked) .so-dots i:not(.play) { opacity: .08; }
+#seat-odds .so-views { margin-bottom: 12px; }
+.so-lede { margin: 0 0 10px; font-size: 13.5px; color: var(--color-muted); }
+#seat-odds .so-head { padding-right: 0; }
+#seat-odds .so-head h3 { margin: 0; font: 700 20px/1.2 var(--font-head); }
+#seat-odds .so-fichas { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-line); }
+#seat-odds #district-select { display: none; }
+@media (min-width: 1200px) {
+  #seat-odds .so-split { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 1fr); gap: 0 28px; align-items: start; }
+  #seat-odds .so-split .so-map { margin: 14px 0 8px; }
+  #seat-odds .so-fichas { margin-top: 14px; padding: 0 0 0 28px; border-top: 0; border-left: 1px solid var(--color-line); }
+  #seat-odds .so-split .so-grid { grid-template-columns: max-content minmax(0, 1fr); }
+  #seat-odds .so-split .so-note { display: none; }
+}
+@media (max-width: 719px) {
+  #seat-odds #district-select:not([hidden]) { display: block; width: 100%; max-width: 360px; margin-top: 12px; }
 }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */

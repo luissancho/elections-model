@@ -104,7 +104,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
 def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href', 'fan',
-                         'districts', 'scenario', 'odds_hrefs', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
+                         'districts', 'scenario', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
     assert data['catalog'] == {'parties': [dict(pages.catalog(data['meta'])['PP'], name='PP')], 'bmaps': data['meta']['bmaps']}
     assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}  # a 52 días: Elección
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
@@ -1019,7 +1019,7 @@ def test_event_page_initial_keys(api):
     body = call(api, '/es', query='mode=forecast')[2]
     data = initial(body)
     assert list(data) == ['state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href',
-                          'fan', 'districts', 'scenario', 'odds_hrefs', 'runs', 'cards', 'deltas', 'catalog', 'inks']
+                          'fan', 'districts', 'scenario', 'runs', 'cards', 'deltas', 'catalog', 'inks']
     assert 'dist' not in data and data['dist_href'] == '/api/v1/forecast/es/forecast/dist?run=' + RUN
     assert data['districts']['regions'][0]['id'] == 28 and data['fan'] == fixture_data('fan')
     assert 'PP' in data['inks'] and 'Derecha' in data['inks']
@@ -1306,7 +1306,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert re.search(r'<div class="series-controls" id="pollster-controls" hidden>.*?<label>Encuestadora', page, re.S)
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href', 'fan',
-                         'districts', 'scenario', 'odds_hrefs', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
+                         'districts', 'scenario', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
     assert 'pollster_id' in data['polls']['polls'][0]
 

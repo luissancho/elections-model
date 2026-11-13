@@ -500,75 +500,92 @@ def remove_odds(tmp_path):
     webapi.site().manifest_cache_clear()  # the presence of the part is remembered under the TTL of the pointers
 
 
-def test_the_event_page_links_the_page_and_the_card_of_the_district_shown(odds_site, api, fresh_app, tmp_path):
+def event_page(site, query='mode=forecast'):
+    status, _, body = call(site, '/es', query=query)
+    return status, re.sub(r'\s+', ' ', html(body))
+
+
+def test_the_event_page_carries_the_card_of_the_seats_that_dance(odds_site, fresh_app):
     write_event_districts(fresh_app.fs)
-    status, _, body = call(odds_site, '/es', query='mode=nowcast')
-    page = re.sub(r'\s+', ' ', html(body))
-    territory = page[page.index('<section class="event-section" id="escanos"'):page.index('id="evolucion"')]
-    assert status == 200 and 'href="/es/circunscripciones?mode=nowcast"' in territory and 'Escaños que bailan' in territory
-    assert re.search(r'<a id="region-odds"[^>]*href="/es/circunscripciones/[a-z-]+\?mode=nowcast#ficha"', territory)
-    assert initial(body)['odds_hrefs']['11'] == '/es/circunscripciones/cadiz?mode=nowcast#ficha'
-    assert 'seat-odds' in page[page.index('id="tabla"'):]  # its CSV among the downloads
+    status, page = event_page(odds_site)
+    section = page[page.index('<section class="event-section" id="escanos"'):page.index('id="evolucion"')]
+    assert status == 200 and section.index('id="seat-odds"') < section.index('id="districts"')
+    card = section[section.index('id="seat-odds"'):section.index('id="districts"')]
+    assert 'Escaños que bailan' in card and 'según las 10.000 simulaciones del modelo.' in card
+    assert re.findall(r'name="sv" value="(map|cols)"[^>]*?( checked)?>([^<]+)<', card) == [
+        ('map', ' checked', 'Provincias'), ('cols', '', 'Partidos')]
+    assert re.findall(r'name="d" value="([a-z-]+)"', card) == ['la-coruna', 'guadalajara', 'cadiz']
+    assert re.findall(r'name="d" value="([a-z-]+)"[^>]* checked', card) == ['la-coruna']  # most options in play
+    assert re.findall(r'class="so-ficha" id="ficha-([a-z-]+)"', card) == ['cadiz', 'guadalajara', 'la-coruna']
+    assert re.findall(r'name="mp" value="([a-z-]+)"', card) == ['all', 'pp', 'psoe', 'vox', 'aa', 'bng']
+    assert re.findall(r'class="so-col" data-col="([^"]+)"', card) == ['PP', 'PSOE', 'VOX', 'AA', 'BNG']
+    assert 'Hay 22 opciones para 19 escaños' in card and card.count('<details class="how"') == 1
+    assert 'De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1).' in card
+    # the rules of the run, in the head: one per party for the filter, one per district for its card
+    assert '#seat-odds:has(#mp-psoe:checked) .so-dots i:not(.p-psoe){opacity:.08}' in page
+    assert '#seat-odds:has(#d-cadiz:checked) #ficha-cadiz{display:block}' in page
+    # what did not come along, and what it replaces
+    gone = ('so-hemi', 'so-pills', 'id="partidos"', '/circunscripciones', 'region-odds', 'odds_hrefs', 'reñid')
+    assert not [piece for piece in gone if piece in page]
+    text = visible_text(card)
+    assert not [word for word in RETIRED + ('disputados',) if word in text]
+    assert_public_wording(page, 'evento con la tarjeta')
+    # nothing of the card collides with the rest of the page
+    ids = re.findall(r'\sid="([^"]+)"', page)
+    assert len(ids) == len(set(ids)), [name for name in set(ids) if ids.count(name) > 1]
+    for name in ('sv', 'mp', 'ms', 'd'):
+        assert page.count('name="{}"'.format(name)) == card.count('name="{}"'.format(name)) > 0
+
+
+def test_the_card_and_its_section_come_only_with_something_to_show(odds_site, api, fresh_app, tmp_path):
+    # the part without a territory table (the test bundle has one: its districts go): the section with the card
+    # alone, and its entry in the index
+    write_event_districts(fresh_app.fs, {'parties': ['PP'], 'regions': [], 'rows': []})
+    status, page = event_page(odds_site)
+    section = page[page.index('<section class="event-section" id="escanos"'):page.index('id="evolucion"')]
+    assert 'id="seat-odds"' in section and 'id="districts"' not in section and '<a href="#escanos"' in page
+    # a territory table without the part (a pinned run older than the part): the table alone, no rule of the card
+    write_event_districts(fresh_app.fs)
     remove_odds(tmp_path)
-    status, bare = page_of(api, '/es')
-    assert status == 200 and '/es/circunscripciones' not in bare and 'region-odds' not in bare and 'seat-odds' not in bare
+    status, page = event_page(api)
+    assert status == 200 and 'id="districts"' in page and 'id="seat-odds"' not in page and '#seat-odds:has' not in page
 
 
-def test_the_results_card_links_the_page_at_the_foot_of_its_tables(odds_site, api, fresh_app, tmp_path):
-    # the same link as the territory card, under the tables of «Resultados» and above its distributions (Luis, 2026-11-12)
-    write_event_districts(fresh_app.fs)
-    link = ('<p class="more"><a class="more-link" href="/es/circunscripciones?mode=nowcast">'
-            'Escaños que bailan: seguros, probables y en juego ›</a></p>')
-    page = page_of(odds_site, '/es', 'mode=nowcast')[1]
-    results = page[page.index('id="seats"'):page.index('id="coalition"')]
-    assert results.count(link) == 1 and page.count(link) == 2  # here and at the foot of the territory card
-    assert results.rindex('</table>') < results.index(link) < results.index('id="ridge-toggle"')
-    remove_odds(tmp_path)
-    bare = page_of(api, '/es')[1]
-    assert 'circunscripciones' not in bare[bare.index('id="seats"'):bare.index('id="coalition"')]
+def test_the_card_switches_its_views_and_its_districts_without_javascript():
+    css = site_css()
+    # the radio of the columns hides the map and its card; any other state hides the columns
+    assert re.search(r'#seat-odds:has\(#sv-cols:checked\) \.so-view-map, '
+                     r'#seat-odds:not\(:has\(#sv-cols:checked\)\) \.so-view-cols\s*\{\s*display:\s*none', css)
+    # side by side from 1,200 px of window: the map up to 760 px, the card of the district beside it, without the
+    # summary of each row
+    wide = css[css.index('@media (min-width: 1200px)'):]
+    wide = wide[:wide.index('\n}')]
+    assert re.search(r'\.so-split \{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 760px\) '
+                     r'minmax\(0, 1fr\)', wide)
+    assert re.search(r'\.so-split \.so-note \{\s*display:\s*none', wide)
+    # the filter of states, one rule per state; every card hidden but the one of the tile checked
+    for state in ('safe', 'likely', 'play'):
+        assert re.search(r'#seat-odds:has\(#ms-{0}:checked\) \.so-dots i:not\(\.{0}\)\s*\{{\s*opacity:\s*\.08'.format(state),
+                         css)
+    assert re.search(r'(^|\n)\.so-ficha\s*\{\s*display:\s*none', css)
+    # without `:has()` every card and both views show, and the selector of views, which would do nothing, goes
+    fallback = css[css.index('@supports not selector(:has(*))', css.index('.so-ficha')):]
+    fallback = fallback[:fallback.index('\n}')]
+    assert re.search(r'\.so-ficha\s*\{\s*display:\s*block', fallback) and re.search(r'#so-view\s*\{\s*display:\s*none',
+                                                                                   fallback)
+    assert 'so-view-map' not in fallback and 'so-view-cols' not in fallback  # hidden only through `:has()`
+    # the dropdown of districts only under 720 px, and only once the script reveals it
+    assert re.search(r'#seat-odds #district-select\s*\{\s*display:\s*none', css)
+    narrow = css[css.index('@media (max-width: 719px)', css.index('#seat-odds #district-select')):]
+    assert re.search(r'#seat-odds #district-select:not\(\[hidden\]\)\s*\{\s*display:\s*block', narrow)
 
 
-def test_the_links_of_the_event_page_keep_a_pinned_run(odds_site, fresh_app):
-    write_event_districts(fresh_app.fs)
-    status, _, body = call(odds_site, '/es', query='mode=nowcast&run=' + RUN)
-    page = re.sub(r'\s+', ' ', html(body))
-    assert status == 200 and 'href="/es/circunscripciones?mode=nowcast&amp;run={}"'.format(RUN) in page
-    hrefs = initial(body)['odds_hrefs']
-    assert hrefs['11'] == '/es/circunscripciones/cadiz?mode=nowcast&run={}#ficha'.format(RUN)
-    assert all('run={}#ficha'.format(RUN) in href for href in hrefs.values()) and len(hrefs) == 3
-
-
-def test_the_link_of_a_district_without_card_is_hidden_and_a_single_district_gives_no_links(odds_site, api, fresh_app):
-    # the detail shows a district that is not in the part: its link is there, hidden and without href, for the script
-    soria = {'id': 42, 'name': 'Soria', 'seats': 2}
-    districts = dict(DISTRICTS, regions=DISTRICTS['regions'] + [dict(soria, community=None, votes=1000)],
-                     rows=DISTRICTS['rows'] + [dict(DISTRICTS['rows'][0], region_id=42, region='Soria')])
-    write_event_districts(fresh_app.fs, districts)
-    page = page_of(odds_site, '/es', 'region=42')[1]
-    assert '<p class="more" hidden><a id="region-odds" class="more-link">Escaño a escaño en Soria ›</a></p>' in page
-    assert 'href="/es/circunscripciones?mode=forecast"' in page  # the link to the page stays
-    write_odds(fresh_app.fs, fixture_data('seat-odds'))  # one district: no page, so no links
-    status, bare = page_of(api, '/es')
-    assert status == 200 and '/es/circunscripciones' not in bare and 'region-odds' not in bare and 'seat-odds' not in bare
-
-
-def test_the_links_of_the_event_page_do_not_compute_the_tokens(odds_site, fresh_app, monkeypatch):
-    def fail(data):
-        raise AssertionError('district_views called')
-
-    monkeypatch.setattr('mtpy.lib.pages.circunscripciones.district_views', fail)
-    links = pages.seat_odds_links('es', RUN, 'forecast', '?mode=forecast')
-    assert links == {'page': '/es/circunscripciones?mode=forecast',
-                     'districts': {11: '/es/circunscripciones/cadiz?mode=forecast#ficha',
-                                   19: '/es/circunscripciones/guadalajara?mode=forecast#ficha',
-                                   15: '/es/circunscripciones/la-coruna?mode=forecast#ficha'}}
-
-
-def test_a_part_without_simulations_takes_down_no_page(odds_site, api, fresh_app):
+def test_a_part_without_simulations_takes_down_no_card(odds_site, api, fresh_app):
+    assert 'id="seat-odds"' in event_page(odds_site)[1]
     write_odds(fresh_app.fs, dict(ODDS, n_sim=0))
     assert pages.published_seat_odds('es', RUN, 'forecast') is None
-    status, page = page_of(api, '/es')
-    assert status == 200 and '/es/circunscripciones' not in page and 'seat-odds' not in page
+    status, page = event_page(api)
+    assert status == 200 and 'seat-odds' not in page  # neither the card, nor its rules, nor its CSV
     status, page = page_of(api, '/es/circunscripciones')
     assert status == 404 and 'Este run no tiene el desglose escaño a escaño.' in page
 
@@ -580,10 +597,11 @@ def test_two_renders_of_the_event_page_without_the_part_read_it_once(odds_site, 
     assert call(api, '/es')[0] == 200 and call(api, '/es')[0] == 200
     assert [name for method, name in fs.names if 'seat-odds' in name] == [
         ('/'.join((bundle.PREFIX, bundle.path_part('es', RUN, 'seat-odds', 'forecast'))))]
-    # with the part, its bytes come from the LRU: the second render reads nothing of it
+    # with the part, its bytes come from the LRU: the second render, card and all, reads nothing of it
     write_odds(fresh_app.fs)
     fs = counting(fresh_app)
-    assert call(api, '/es')[0] == 200 and call(api, '/es')[0] == 200
+    renders = [call(api, '/es') for _ in range(2)]
+    assert all(status == 200 and b'id="seat-odds"' in body for status, _, body in renders)
     assert len([name for method, name in fs.names if 'seat-odds' in name]) == 1
 
 

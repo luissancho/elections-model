@@ -3,6 +3,12 @@
 {% block description %}Encuestas, promedio de sondeos y escaños previstos por partido, bloque y circunscripción, con la probabilidad de mayoría absoluta, de {{ event_bar.title }}.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/promedios.js"></script>
+  {% if seat_odds %}
+  {#- the rules of the run of «Escaños que bailan», without JavaScript: the filter of each party dims the circles of the
+      others; the radio of each district shows its card (those of the views and of the filter of states are fixed, in
+      `site.css`) -#}
+  <style>{% for item in seat_odds.parties %}#seat-odds:has(#mp-{{ item.slug }}:checked) .so-dots i:not(.p-{{ item.slug }}){opacity:.08}{% endfor %}{% for card in seat_odds.cards %}#seat-odds:has(#d-{{ card.slug }}:checked) #ficha-{{ card.slug }}{display:block}{% endfor %}</style>
+  {% endif %}
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
@@ -189,11 +195,6 @@
             </div>
           </div>
           {% endif %}
-          {#- the seats one by one, at the foot of the tables as at the foot of the territory card (Luis, 2026-11-12); only
-              when the run shown has the part with two districts or more (`odds`) -#}
-          {% if odds %}
-          {{ m.seat_odds_link(odds.page) }}
-          {% endif %}
           {#- the distributions open on demand (Luis, 2026-10-30): the button only works with JavaScript, which reveals it -#}
           <button type="button" class="more" id="ridge-toggle" aria-expanded="false" aria-controls="ridge-chart" hidden>Ver las distribuciones</button>
           <div class="chart" id="ridge-chart" role="img" aria-label="Distribución de escaños en las simulaciones, una fila por partido o bloque" hidden></div>
@@ -272,8 +273,16 @@
       {% include '_house_changes.html' %}
       {% endif %}
       </section>
-      {% if district_table %}
+      {% if seat_odds or district_table %}
       <section class="event-section" id="escanos">
+      {% if seat_odds %}
+      {#- «Escaños que bailan»: only when the run shown has the part with simulations and two districts or more
+          (`seat_odds_card`); the line of its image says which election, which estimate and its day -#}
+      {% import '_seat_odds.html' as s %}
+      {% set stamp %}<p class="so-stamp shot-only">{{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %} · {{ title_suffix }} · Actualizado: {{ event_bar.run_at|date }}</p>{% endset %}
+      {{ s.card(seat_odds, stamp) }}
+      {% endif %}
+      {% if district_table %}
       {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el reparto central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
         <div class="series-controls" id="territory-controls" hidden>
           {% if territory_levels %}
@@ -369,15 +378,6 @@
             </tbody>
           </table>
         </div>
-        {% if odds %}
-        {#- hidden, not absent, when the district shown is not in the part: the script shows it for another one. The keys
-            of `odds.districts` are ints here and strings in the embedded JSON (`odds_hrefs`) -#}
-        {% set odds_href = odds.districts.get(region.id) %}
-        <p class="more"{% if not odds_href %} hidden{% endif %}><a id="region-odds" class="more-link"{% if odds_href %} href="{{ odds_href }}"{% endif %}>Escaño a escaño en {{ region.name }} ›</a></p>
-        {% endif %}
-        {% endif %}
-        {% if odds %}
-        {{ m.seat_odds_link(odds.page) }}
         {% endif %}
         {% call m.how() %}
         <p>
@@ -398,6 +398,7 @@
         <p>Es un reparto del voto central, no la predicción cerrada de ninguna circunscripción: en las pequeñas, pocos votos cambian un escaño.</p>
         {% endcall %}
       {{ m.card_end() }}
+      {% endif %}
       </section>
       {% endif %}
       <section class="event-section" id="evolucion">

@@ -5,8 +5,9 @@ and the views built on them (per district, per party).
 A *seat option* is the k-th seat of a party in a district, reached by a simulation when the party wins ``k`` seats or
 more there. Its share of the simulations sets its state: *safe* from ``SAFE_SHARE``, *likely* from ``LIKELY_SHARE``
 and *in play* from ``PLAY_SHARE``; below ``PLAY_SHARE`` it is neither drawn nor counted. The shares are compared
-unrounded. All functions above ``seat_odds_context`` are pure: they take the data of the part and return plain dicts
-and lists; the context adds on top of them what the page needs (links, colours, the texts of each row).
+unrounded. The public functions down to ``drawn_row`` are pure: they take the data of the part and return plain dicts
+and lists; ``published_seat_odds`` reads the part, and the card of the event page (``seat_odds_card``) and the context
+of the page add on top of them what each needs (links, colours, the texts of each row).
 """
 import re
 from typing import Optional
@@ -686,17 +687,18 @@ def _district_card(district: dict, parties: dict, scope: str) -> dict:
     district : dict
         A view from ``district_views``.
     parties : dict
-        Catalogue of the scope (name to ``color``).
+        Catalogue of the scope (name to ``color`` and ``fullname``).
     scope : str
         Scope code, for the name of its image.
 
     Returns
     -------
     dict
-        A copy of ``district`` with its rows drawn with the colour of each party (``drawn_row``), ``sentence``
-        (``district_sentence``) and ``image_file``.
+        A copy of ``district`` with its rows drawn with the colour of each party (``drawn_row``) and its
+        ``fullname``, ``sentence`` (``district_sentence``) and ``image_file``.
     """
-    rows = [drawn_row(row, row['name'], parties[row['name']]['color']) for row in district['rows']]
+    rows = [dict(drawn_row(row, row['name'], parties[row['name']]['color']), fullname=parties[row['name']]['fullname'])
+            for row in district['rows']]
     return dict(district, rows=rows, sentence=district_sentence(district),
                 image_file=_image_file(scope, district['slug']))
 
@@ -907,6 +909,85 @@ def published_seat_odds(scope: str, run: str, mode: str) -> Optional[dict]:
         return None
 
     return data
+
+
+def seat_odds_card(scope: str, run: str, mode: str, meta: dict, parties: dict, summary: dict,
+                   sign: str) -> Optional[dict]:
+    """
+    The card «Escaños que bailan» of the event page (``/{scope}``, section ``escanos``): the map with the card of every
+    district beside it, and the columns of the parties.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    run : str
+        Run id the event page shows.
+    mode : str
+        Simulation mode.
+    meta : dict
+        Data of the ``meta`` part of the run (``bmaps.blocks``, for the columns).
+    parties : Catalog
+        Catalogue of the scope (name to ``color``, ``fullname`` and ``block``).
+    summary : dict
+        Data of the ``summary`` part of the mode: the columns follow the order of its table of results
+        (``result_rows``).
+    sign : str
+        Signature of the image of the card (``'{site_host} · {author_handle}'``).
+
+    Returns
+    -------
+    dict or None
+        ``None`` when the run has no card (``published_seat_odds``). Otherwise ``n_sim``, ``totals``
+        (``scope_totals``), ``foot`` (``options_sentence`` of the totals), ``thresholds`` (``threshold_label`` of
+        ``SAFE_SHARE``, ``LIKELY_SHARE`` and ``PLAY_SHARE``), ``state_words`` (``STATE_WORDS``), ``district_word``
+        (``'provincia'`` when ``districts_are_provinces``, ``'circunscripción'`` otherwise), ``view_label`` (the label
+        of the view of the map: ``'Provincias'`` or ``'Circunscripciones'``), ``parties`` (those with some option, in
+        the order of the part: ``name``, ``slug``, ``fullname``, ``color``; the filter of the map), ``grid`` and
+        ``cards`` (``_provinces_view``: the tiles of the map and the card of every district, by name), ``chosen``
+        (the ``slug`` of ``default_district``), ``columns``, ``ticks`` and ``rest`` (``_party_charts``, in the order
+        of ``result_rows(summary)``, the title of each circle naming its district), ``image_base``
+        (``'demoscopio-escanos-{scope}'``), ``image_file`` (the image of the map with the card of ``chosen``) and
+        ``image_sign``.
+    """
+    data = published_seat_odds(scope, run, mode)
+
+    if data is None:
+        return None
+
+    views = district_views(data)
+    districts = sorted(views, key=lambda view: _sort_name(view['name']))
+    chosen = default_district(districts)
+    provinces = districts_are_provinces(data['regions'])
+    names = _party_names(data, views)
+    order = [row['name'] for row in result_rows(summary)]
+    blocks = ((meta or {}).get('bmaps') or {}).get('blocks')
+    shown = _provinces_view(chosen, districts, data, parties, scope)
+    charts = _party_charts(views, names, order, blocks, parties, scope)
+    totals = scope_totals(views)
+    image_base = 'demoscopio-escanos-{}'.format(scope)
+
+    return {
+        'n_sim': data['n_sim'],
+        'totals': totals,
+        'foot': options_sentence(totals['options'], totals['seats']),
+        'thresholds': {'safe': threshold_label(SAFE_SHARE), 'likely': threshold_label(LIKELY_SHARE),
+                       'play': threshold_label(PLAY_SHARE)},
+        'state_words': STATE_WORDS,
+        'district_word': 'provincia' if provinces else 'circunscripción',
+        'view_label': 'Provincias' if provinces else 'Circunscripciones',
+        'parties': [{'name': name, 'slug': slugify(name), 'fullname': parties[name]['fullname'],
+                     'color': parties[name]['color']} for name in names],
+        'grid': shown['grid'],
+        'cards': shown['cards'],
+        'chosen': chosen['slug'],
+        'columns': charts['columns'],
+        'ticks': charts['ticks'],
+        'rest': charts['rest'],
+        'image_base': image_base,
+        'image_file': '{}-{}.png'.format(image_base, chosen['slug']),
+        'image_sign': sign,
+    }
 
 
 def seat_odds_links(scope: str, run: str, mode: str, query: str) -> Optional[dict]:

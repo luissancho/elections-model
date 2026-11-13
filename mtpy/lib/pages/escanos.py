@@ -283,9 +283,9 @@ def seats_context(context: dict, region=None) -> dict:
         (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels``
         (``has_communities``) and ``initial_extra``, the members the seats add to the initial data: ``dist_href``
         (the JSON route of the ``dist`` part of the run and mode shown, which the browser asks for after the first
-        drawing: the simulations are too heavy for the page, Luis 2026-11-04), ``fan``, ``districts``,
-        ``scenario`` and ``odds_hrefs`` (district id to the href of its card); ``odds`` (``seat_odds_links``, ``None``
-        without the page «Escaños que bailan»).
+        drawing: the simulations are too heavy for the page, Luis 2026-11-04), ``fan``, ``districts`` and
+        ``scenario``; ``seat_odds`` (``seat_odds_card``, the card «Escaños que bailan», ``None`` when the run shown
+        has none; its CSV is offered only with it).
 
     Raises
     ------
@@ -293,7 +293,7 @@ def seats_context(context: dict, region=None) -> dict:
         404 for a missing part or an unknown district; 400 for an invalid ``region``.
     """
     # imported here: ``circunscripciones`` imports this module
-    from .circunscripciones import seat_odds_links
+    from .circunscripciones import seat_odds_card
 
     region_id = check_region(region)
     full, meta, parties = context['state'], context['meta'], context['catalog']
@@ -306,7 +306,8 @@ def seats_context(context: dict, region=None) -> dict:
     regions = districts.get('regions') or []
     current = resolve_region(region_id, regions)
     checked = default_coalition(meta, summary, names)
-    odds = seat_odds_links(scope, run, mode, context['query'])
+    sign = '{} · {}'.format(context['site_host'], context['author_handle'])
+    odds = seat_odds_card(scope, run, mode, meta, parties, summary, sign)
 
     return {
         'summary': summary,
@@ -316,7 +317,7 @@ def seats_context(context: dict, region=None) -> dict:
             for name in names
         ],
         'csv_links': csv_links(scope, mode, run, skip=() if odds else ('seat-odds',)),
-        'odds': odds,
+        'seat_odds': odds,
         'district_table': district_table(districts, scenario, summary),
         'regions': regions,
         'territory_levels': has_communities(regions),
@@ -327,6 +328,5 @@ def seats_context(context: dict, region=None) -> dict:
             'fan': part(scope, run, 'fan'),
             'districts': districts,
             'scenario': scenario,
-            'odds_hrefs': odds['districts'] if odds else {},
         },
     }

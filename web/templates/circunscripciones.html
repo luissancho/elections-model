@@ -66,7 +66,7 @@
             <label class="so-tile" title="{{ tile.name }} · {{ seats_text }}"{% if grid.placed %} style="grid-column: {{ tile.col + 1 }} / span {{ tile.w }}; grid-row: {{ tile.row + 1 }} / span {{ tile.h }}"{% endif %}><input type="radio" name="d" value="{{ tile.slug }}" id="d-{{ tile.slug }}" data-href="/{{ state.scope }}/circunscripciones/{{ tile.slug }}{{ query }}" data-title="{{ site_title }} · Escaños que bailan en {{ tile.name }} · {{ event_bar.title }}{{ event_year }}" aria-label="{{ tile.name }}, {{ seats_text }}"{% if tile.slug == district.slug %} checked{% endif %}><span class="so-ab">{{ tile.label }}</span><span class="so-dots" aria-hidden="true">{% for option in tile.options %}{{ s.circle(option, 'p-' ~ option.party_slug) }}{% endfor %}</span></label>
             {% endfor %}
           </div>
-          {{ s.legend() }}
+          {{ s.legend(thresholds) }}
           {% if foot %}
           <p class="so-foot">{{ foot }}</p>
           {% endif %}
@@ -96,7 +96,7 @@
             <header class="so-head">
               <h2>{{ card.name }}</h2>
               <span class="so-seats">{{ card.seats }} escaño{{ '' if card.seats == 1 else 's' }}</span>
-              {{ s.chips(card) }}
+              {{ s.chips(card, state_words) }}
             </header>
             {{ stamp }}
             <p class="so-says">{{ card.sentence }}</p>
@@ -110,8 +110,8 @@
               <div class="so-note">{{ row.note }}</div>
               {% endfor %}
             </div>
-            {{ s.legend() }}
-            {{ s.how() }}
+            {{ s.legend(thresholds) }}
+            {{ s.how(thresholds) }}
           </section>
           {% endfor %}
         </div>
@@ -138,7 +138,7 @@
           {{ s.hemicycle(charts, foot) }}
         </div>
         <div class="so-form-cols">
-          {{ s.columns(charts) }}
+          {{ s.columns(charts, none, thresholds) }}
         </div>
       </section>
       <nav class="seg so-pills" id="partidos" aria-label="Partidos">
@@ -151,7 +151,7 @@
         {{ m.card_image_button(image_file, image_sign) }}
         <header class="so-head">
           <h2><span class="dot" style="background-color: {{ party.color }}"></span>{{ party.fullname }}</h2>
-          {{ s.chips(party) }}
+          {{ s.chips(party, state_words) }}
         </header>
         {{ stamp }}
         <p class="so-says">{{ sentence }}</p>
@@ -172,8 +172,8 @@
         {% if party.settled %}
         <p class="so-settled"><b>Sólo seguros ({{ party.settled|length }}):</b> {% for item in party.settled %}{{ item.name }} {{ item.safe }}{{ ' · ' if not loop.last }}{% endfor %}.</p>
         {% endif %}
-        {{ s.legend() }}
-        {{ s.how() }}
+        {{ s.legend(thresholds) }}
+        {{ s.how(thresholds) }}
       </section>
       {% endif %}
       {% endif %}
