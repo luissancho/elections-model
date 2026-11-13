@@ -684,3 +684,14 @@ def site_css():
 def test_the_long_titles_of_the_cards_wrap_beside_their_accent_bar():
     # the site's `.card-head h2` wraps its text under the bar when it does not fit a line (phones); not on this page
     assert re.search(r'\.so-card \.card-head h2\s*\{\s*flex-wrap:\s*nowrap', site_css())
+
+
+def test_the_counts_of_the_hemicycle_grow_with_it_and_stay_small_on_phones():
+    css = site_css()
+    # as in the mockup (22 units of its 1000: 20 px at 900 px), from 12 px; 9.5 px under 720 px, inside a hollow
+    # some 100 px wide on a 360 px phone
+    assert re.search(r'\.so-hemi \{[^}]*container-type:\s*inline-size', css)
+    assert re.search(r'\.so-hemi-core \{[^}]*font-size:\s*clamp\(12px, 2\.2cqi, 20px\)', css)
+    assert '.so-hemi-core .so-o { --o: 1em; }' in css
+    narrow = css[css.index('@media (max-width: 719px)', css.index('.so-hemi {')):]
+    assert re.search(r'\.so-hemi-core \{[^}]*font-size:\s*9\.5px', narrow) and '.so-hemi-core .so-o { --o: 8px; }' in narrow
