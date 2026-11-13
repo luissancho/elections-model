@@ -1,10 +1,11 @@
 // The event page (`/{scope}`, «Encuestas»): the poll average with its window, party and block views (wired by
 // `series-wire.js`, shared with the detail of a past election), the hemicycle with the one Partidos/Bloques switch of
-// the results, the seats (`seats-wire.js`: calculator, distributions, territory and fan), the evolution of the updates
-// in vote or seats, one house against the average and the filterable, sortable table of all the polls, drawn from the
-// data embedded by the server. The state of the controls lives in the URL fragment, each control rewriting only its
-// own keys (`url-state.js`); the index of the sections scrolls in place and a `seccion` of the query (the old seats
-// URLs) scrolls to its section on load.
+// the results, the seats (`seats-wire.js`: calculator, distributions, territory and fan), the card «Escaños que
+// bailan» (`seat-odds-wire.js`: the name of its image, the dropdown of the phones and the scroll to the block of a
+// district), the evolution of the updates in vote or seats, one house against the average and the filterable, sortable
+// table of all the polls, drawn from the data embedded by the server. The state of the controls lives in the URL
+// fragment, each control rewriting only its own keys (`url-state.js`); the index of the sections scrolls in place and
+// a `seccion` of the query (the old seats URLs) scrolls to its section on load.
 import {Catalog} from '../catalog.js';
 import {parseSeriesHash} from '../blocks.js';
 import {hemicycleOption, renderHemicycle} from '../charts/hemicycle.js';
@@ -17,6 +18,7 @@ import {wireEvolution} from './evolution-wire.js';
 import {wireHouseChanges} from './house-changes-wire.js';
 import {wirePollsTable} from './polls-wire.js';
 import {wireSeatsPage} from './seats-wire.js';
+import {wireSeatOdds} from './seat-odds-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, viewCaption, wireAverage} from './series-wire.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
 import {dropParam, sectionTarget, withSection} from '../url-state.js';
@@ -322,13 +324,21 @@ function wireCardsCarousel() {
 const sectionIds = () => [...document.querySelectorAll('section.event-section[id]')].map((section) => section.id);
 
 /**
+ * Ids the URL can ask the page to land on: its sections and, when the page has it, the card «Escaños que bailan»,
+ * where the addresses of the page it replaced arrive (`#seat-odds`).
+ */
+const landingIds = () => sectionIds().concat(document.getElementById('seat-odds') ? ['seat-odds'] : []);
+
+/**
  * Scroll to the section the URL asks for (`seccion` of the query, which the old seats URLs bring, or a loose token
- * of the fragment such as `#escanos&coalition=PP,VOX`, which the browser does not scroll to by itself) and drop
+ * of the fragment such as `#resultados&coalition=PP,VOX`, which the browser does not scroll to by itself), or to the
+ * card «Escaños que bailan» when the fragment asks for it (`landingIds`: the territory table above it has just been
+ * redrawn; Chrome holds the anchor through that by itself, and this covers a browser that does not), and drop
  * `seccion` from the query, keeping the fragment.
  */
 function scrollToSection() {
   const {pathname, search, hash} = window.location;
-  const target = sectionTarget(search, hash, sectionIds());
+  const target = sectionTarget(search, hash, landingIds());
   if (target) {
     document.getElementById(target).scrollIntoView();
   }
@@ -387,6 +397,9 @@ function paint() {
   tryDraw(() => paintEvolution(initial, catalog), 'the evolution');
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');
   tryDraw(wireSectionIndex, 'the index of the sections');
+  // the card of the seats that dance before the scroll: under 720 px it reveals its dropdown of districts, which would
+  // push the sections below it down once the page had landed on one of them
+  tryDraw(wireSeatOdds, 'the seats that dance');
   tryDraw(scrollToSection, 'the section of the URL');
 }
 

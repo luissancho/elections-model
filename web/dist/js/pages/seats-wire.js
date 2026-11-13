@@ -11,7 +11,7 @@ import {histogramOption, renderHistogram} from '../charts/histogram.js';
 import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
 import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked, stackedOption} from '../charts/stacked.js';
-import {canGroup, regionRows, sortTerritory, territoryRows} from '../territory.js';
+import {canGroup, regionHref, regionRows, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead, renderRegion} from './territory-dom.js';
 import {
   coalitionCaption, coalitionLocationHash, coalitionSeats, coalitionText, loadDist, parseCoalition, summarize,
@@ -65,7 +65,7 @@ function partyBar(initial, dist, catalog, colors) {
  * (`coalitionText`), the bar of the central allocation (the marked parties first, in colour, and the rest after
  * them in grey) and the histogram of the marked parties, marked at their central seats, with its caption
  * (`coalitionCaption`) on load and on every change. Only a change rewrites the fragment, and only its own key and,
- * with parties marked, the section token `escanos` (`coalitionLocationHash`), so a shared link opens on the
+ * with parties marked, the section token `resultados` (`coalitionLocationHash`), so a shared link opens on the
  * calculator and the state of the average survives. The download button (disabled without
  * parties marked) draws the chip, the bar and the histogram of the moment, the parties in the subtitle and in the
  * file name.
@@ -258,19 +258,6 @@ const CAPTION = {
 };
 
 /**
- * Link of a district of the territory table, as the template writes it: the event page on the territory section
- * with that district (what the form sends without JavaScript; with it, the click is caught by `wireRegion`). The
- * `#territorio` fragment lands a link opened apart (a new window, a modified click) on the section.
- *
- * @param {object} state the `state` of the initial data (`scope`, `mode`, `run`, `pinned`)
- * @param {number} id district id
- * @returns {string} the URL
- */
-function regionHref({scope, mode, run, pinned}, id) {
-  return `/${scope}?mode=${mode}${pinned ? `&run=${run}` : ''}&region=${id}&seccion=territorio#territorio`;
-}
-
-/**
  * Wire "Resultados por territorio": rebuild the table of the central allocation from the embedded `districts`,
  * `scenario` and `summary` for the chosen level (CCAA or province) and mode (seats or vote), sortable from its
  * headers. The server draws the province-by-seats table; this replaces it and shows the controls.
@@ -330,28 +317,6 @@ function wireTerritory(initial, catalog) {
 }
 
 /**
- * Point the link «Escaño a escaño en …» under the detail of a district (`#region-odds`) to the card of `region`, or hide
- * it when the page «Escaños que bailan» has none for it. The keys of `hrefs` are the ids as text (JSON).
- *
- * @param {?object} hrefs district id (text) to the href of its card (`initial.odds_hrefs`)
- * @param {{id: number, name: string}} region the district drawn
- */
-function showOddsLink(hrefs, region) {
-  const link = document.getElementById('region-odds');
-  if (!link) {
-    return;
-  }
-  const href = (hrefs || {})[String(region.id)];
-  if (href) {
-    link.href = href;
-    link.textContent = `Escaño a escaño en ${region.name} ›`;
-  } else {
-    link.removeAttribute('href');
-  }
-  link.parentElement.hidden = !href;
-}
-
-/**
  * Wire the detail of one district without reloading the page: changing the select of `#district-form`, or
  * following the link of a province of the territory table, draws its detail in `#region-table` from the embedded
  * `districts` (`regionRows`, `renderRegion`), writes `region=N` in the query (keeping the fragment) and scrolls to
@@ -376,7 +341,6 @@ function wireRegion(initial, catalog) {
       return false;
     }
     renderRegion(table, regionRows(initial.districts, id), region, catalog);
-    showOddsLink(initial.odds_hrefs, region);
     select.value = String(id);
     const params = new URLSearchParams(window.location.search);
     params.set('region', String(id));

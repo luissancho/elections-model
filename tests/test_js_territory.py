@@ -151,3 +151,21 @@ def test_region_rows_mirror_python():
     out = run_js('t.regionRows(d, 8)', districts)
     assert [r['name'] for r in out] == ['D', 'B', 'A', 'C'] and out == region_rows(districts, 8)
     assert run_js('t.regionRows(d, 99)', districts) == []
+
+
+def test_region_href_lands_on_the_seats_section_with_the_district():
+    """El enlace de una circunscripción de la tabla, como lo escribe la plantilla: la página del evento en la sección
+    «Escaños» (`seccion=escanos`, 2026-11-13; antes `territorio`) y en su tarjeta «Resultados por territorio»
+    (`#districts`, con la que abre la sección desde el 2026-11-13), con el modo y, fijado, el run."""
+    state = '{scope: "es", mode: "forecast", run: "20261008-120000", pinned: false}'
+    assert run_js('t.regionHref(%s, 28)' % state) == '/es?mode=forecast&region=28&seccion=escanos#districts'
+    pinned = '{scope: "es", mode: "nowcast", run: "20261008-120000", pinned: true}'
+    assert run_js('t.regionHref(%s, 8)' % pinned) == \
+        '/es?mode=nowcast&run=20261008-120000&region=8&seccion=escanos#districts'
+
+
+def test_the_detail_of_a_district_no_longer_links_the_page_that_was():
+    """«Escaños que bailan» es una tarjeta de la misma sección (2026-11-13): el detalle del territorio pierde su enlace
+    «Escaño a escaño en…» y el script, el código que lo apuntaba a cada circunscripción."""
+    wire = pathlib.Path(ROOT, 'web', 'dist', 'js', 'pages', 'seats-wire.js').read_text(encoding='utf-8')
+    assert not [name for name in ('region-odds', 'odds_hrefs', 'showOddsLink', 'Escaño a escaño') if name in wire]

@@ -38,9 +38,10 @@ class Redirect(Page):
         """
         Target of an old seats page: the event page of ``scope``, scrolled to its seats.
 
-        The query is kept but ``scope`` and ``seccion``, and ``seccion`` goes last: ``territorio`` with a ``region``
-        (the detail of a district), ``escanos`` otherwise. The location has no fragment, so the browser keeps the one
-        of the link (``#coalition=PP,VOX``); the page scrolls to ``seccion`` and drops it (``url-state.js``).
+        The query is kept but ``scope`` and ``seccion``, and ``seccion`` goes last: ``escanos`` with a ``region`` (the
+        detail of a district, in the seats by district), ``resultados`` otherwise (the hemicycle and the results). The
+        location has no fragment, so the browser keeps the one of the link (``#coalition=PP,VOX``); the page scrolls to
+        ``seccion`` and drops it (``url-state.js``).
 
         Parameters
         ----------
@@ -52,7 +53,7 @@ class Redirect(Page):
         str
             ``'/{scope}?...&seccion=...'``.
         """
-        section = 'territorio' if self.request.query.get('region') else 'escanos'
+        section = 'escanos' if self.request.query.get('region') else 'resultados'
         params = [(key, value) for key, value in self.request.query.items() if key not in ('scope', 'seccion')]
 
         return '/' + scope + '?' + urlencode(params + [('seccion', section)])

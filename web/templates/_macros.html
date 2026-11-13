@@ -66,12 +66,6 @@
 <details class="how"><summary>Cómo leerlo</summary><div class="how-body">{{ caller() }}</div></details>
 {%- endmacro %}
 
-{#- The link of the event page to «Escaños que bailan» (`/{scope}/circunscripciones`), the same at the foot of the tables of
-    «Resultados» and at the foot of the territory card; `href` keeps the mode and the pinned run (`seat_odds_links`). -#}
-{% macro seat_odds_link(href) -%}
-<p class="more"><a class="more-link" href="{{ href }}">Escaños que bailan: seguros, probables y en juego ›</a></p>
-{%- endmacro %}
-
 {#- The page headline: one line, outside any card, with the situation in plain words and live figures; `tag`
     'h1' makes it the title of the page. -#}
 {% macro headline(text, tag='p') -%}
