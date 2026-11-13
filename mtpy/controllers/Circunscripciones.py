@@ -10,8 +10,9 @@ from .Page import Page
 
 class Circunscripciones(Page):
     """
-    The seats of every district, one by one: which ones each party has safe and which ones are open, with the share
-    of the simulations in which it wins them. A subpage of the event: it follows its mode and its pinned run.
+    The seats of every district, one by one: which ones each party has safe, which ones are likely and which ones
+    are in play, with the share of the simulations in which it wins them. A subpage of the event: it follows its mode
+    and its pinned run.
     """
 
     active = None
@@ -30,7 +31,8 @@ class Circunscripciones(Page):
         party : str, optional
             Slug of the party of the view by party (``partido``); it wins over ``view``.
         view : str, optional
-            ``renidos`` for the list of the closest seats (``vista``).
+            ``partidos`` for the chart of the parties without the card of a party, ``renidos`` for the list of the
+            closest seats (``vista``).
 
         Returns
         -------
@@ -52,9 +54,9 @@ class Circunscripciones(Page):
 
     async def index_action(self, scope: str) -> str:
         """
-        Render the page on the district with most open seats (or on the party of ``partido``, or the closest seats of
-        ``vista=renidos``), or send the dropdown of districts to the address of
-        the one chosen.
+        Render the page on the district with most options in play (or on the chart of the parties and the card of the
+        party of ``partido``, the chart of the parties of ``vista=partidos`` or the closest seats of
+        ``vista=renidos``), or send the dropdown of districts to the address of the one chosen.
 
         The dropdown (``#district-pick``) submits ``circunscripcion`` with the slug of a district (the browser lands
         here with or without JavaScript), and the answer is a 301 to ``/{scope}/circunscripciones/{slug}`` with the

@@ -1118,28 +1118,16 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .locked b { display: block; margin-bottom: 4px; font: 800 18px var(--font-head); }
 .locked p { max-width: 60ch; margin: 0; font-size: 13px; color: var(--color-muted); }
 
-/* «Escaños que bailan» (/{scope}/circunscripciones): the tabs of its views; the list of districts beside the card of
-   the chosen one, sorted by the CSS from the radio that is checked (each link carries its two positions, no JS), and
-   the dropdown that takes the place of the list under 720 px; the tokens, one square per seat a party can win (22 px,
-   6 px corners, 4 px apart, wrapping): solid when safe, tinted and bordered when open (2 px, dashed when the central
-   allocation does not give it) with the percentage under it, in bold or in muted ink; and their legend. The amber
-   tint marks what is open, never a party */
+/* «Escaños que bailan» (/{scope}/circunscripciones): the tabs of its views; the dropdown of districts between the map
+   and the cards, under 720 px only; the seat options, one circle per seat a party can win (`.so-o`, 22 px with a 2 px
+   border in the cards, 4 px apart, wrapping): solid in the colour of the party when safe, filled with the opacity of
+   its share (`--f`) and bordered in its colour when not, the border continuous when likely and dashed when in play,
+   with the percentage under it, in bold or in muted ink; and their legend, the three states in grey */
 .so-intro { margin-top: 0; font-size: 14.5px; color: var(--color-muted); }
-#seat-kpis .kpi .l { white-space: normal; }
-.so-air { background: #fff4d6; color: var(--color-text); }
-.so-md { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
-.so-md > * { min-width: 0; }
-.so-list { padding: 12px 8px 8px; }
-.so-sort { margin: 0 6px 10px; }
-.so-items { display: flex; flex-direction: column; gap: 1px; }
-.so-item { order: var(--by-open); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 7px 10px; border-radius: var(--radius-sm); color: var(--color-text); text-decoration: none; }
-.so-list:has(input[value="az"]:checked) .so-item { order: var(--by-name); }
-.so-item:hover { background: var(--color-soft); }
-.so-item.on { background: var(--color-text); color: #fff; }
-.so-item .so-name { font-weight: 600; }
-.so-item small { margin-left: 4px; font-weight: 500; opacity: .65; }
+/* the long titles of the map and of the columns wrap beside their accent bar on phones, never under it */
+.so-card .card-head h2 { flex-wrap: nowrap; }
 .so-pick { display: none; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
-.so-pick select { flex: 1; min-width: 0; }
+.so-pick select { flex: 1; min-width: 0; max-width: 360px; }
 .so-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 6px; padding-right: 36px; }
 .so-head h2 { margin: 0; font: 700 20px/1.2 var(--font-head); }
 .so-seats { color: var(--color-muted); }
@@ -1147,58 +1135,148 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-head .chip b { font: 700 14px var(--font-head); }
 .so-says { margin: 0 0 14px; color: var(--color-muted); }
 .so-stamp { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: var(--color-muted); }
-.so-grid { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr) max-content; align-items: center; gap: 6px 4px; }
+.so-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 6px 4px; }
 .so-h { padding: 0 8px 2px 0; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--color-muted); white-space: nowrap; }
 .so-h.so-c { text-align: center; }
 .so-party { display: flex; align-items: center; padding-right: 10px; font-weight: 700; white-space: nowrap; }
 .so-num { padding: 0 12px; text-align: center; font: 700 18px var(--font-head); }
+.so-o { display: block; flex: none; box-sizing: border-box; width: var(--o, 22px); height: var(--o, 22px); border: var(--ob, 2px) solid var(--c); border-radius: 50%; background: var(--f, var(--c)); background-clip: padding-box; }
+.so-o.play { border-style: dashed; }
+/* a safe circle is its colour from edge to edge: its fill runs under its border, so that no lighter seam shows
+   between them on dense screens */
+.so-o.safe { background-clip: border-box; }
 .so-tokens { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px; min-width: 0; padding: 3px 0; }
-.so-token { display: block; flex: none; width: 22px; height: 22px; border-radius: 6px; }
-.so-token.open { width: 31px; height: auto; border-radius: 0; text-align: center; }
-.so-token.open i { display: block; box-sizing: border-box; width: 22px; height: 22px; margin: 0 auto; border: 2px solid; border-radius: 6px; }
-.so-token.out i { border-style: dashed; }
+.so-token { display: block; flex: none; width: 31px; text-align: center; }
+.so-token.safe { width: 22px; }
+.so-token .so-o { margin: 0 auto; }
 .so-pct { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.so-token.out .so-pct { font-weight: 500; color: var(--color-muted); }
+.so-token.play .so-pct { font-weight: 500; color: var(--color-muted); }
 .so-note { padding-left: 10px; font-size: 12.5px; color: var(--color-muted); white-space: nowrap; }
 .so-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-line); font-size: 12px; color: var(--color-muted); }
 .so-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.so-key { display: inline-block; box-sizing: border-box; width: 16px; height: 16px; border-radius: 5px; }
-.so-key.safe { background: var(--color-muted); }
-.so-key.open { border: 2px solid var(--color-muted); background: rgba(90, 95, 114, .25); }
-.so-key.out { border-style: dashed; background: none; }
-/* The links of the page land on the card (`#ficha`) or on the tabs of the views (`#vistas`) below the sticky header
-   (56 px, plus the freeze banner when it shows) with a little air; on phones the card also leaves the dropdown of
-   districts in sight (header 52 px, dropdown down to 100 px) */
-#ficha, #vistas { scroll-margin-top: 68px; }
-body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top: 114px; }
-/* Tablet and narrow desktop (720 to 1099 px): beside the list the card keeps its width for the tokens, without the
-   summary of each row (the tokens and their labels say it) */
-@media (max-width: 1099px) {
-  .so-md .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
-  .so-md .so-note { display: none; }
+/* the samples of the legend and of the core of the hemicycle: the grey of the muted ink (#5a5f72) at a share inside
+   each band (87% and 50%) */
+.so-legend .so-o, .so-hemi-core .so-o { --ob: 1px; --c: var(--color-muted); }
+.so-legend .so-o { --o: 15px; }
+.so-hemi-core .so-o { --o: 1em; }
+:is(.so-legend, .so-hemi-core) .so-o.likely { --f: rgba(90, 95, 114, .55); }
+:is(.so-legend, .so-hemi-core) .so-o.play { --f: rgba(90, 95, 114, .16); }
+.so-foot { margin: 10px 0 0; font-size: 12.5px; color: var(--color-muted); }
+/* The map of the districts: a grid of 10 columns, each district a tile in the cell of the catalogue
+   (`district_positions`), growing down with its options; a scope without positions lays its tiles in a row, by name,
+   as wide as fit from 150 px. Each tile is the label of a radio (`d`, hidden like those of `.seg`): the one checked
+   has a dark border and the `<style>` of the head shows its card (`.so-ficha`). The filters of party and state dim
+   the circles that do not match; those of the parties are in that `<style>`, one per party of the run */
+.so-filters { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.so-filter small { font-weight: 500; opacity: .7; }
+.so-map { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: start; gap: 7px; max-width: 760px; margin: 14px auto 8px; }
+.so-map-loose { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.so-tile { position: relative; display: block; min-width: 0; padding: 4px 4px 6px; border: 1px solid var(--color-line-strong); border-radius: 8px; background: var(--color-bg); cursor: pointer; }
+.so-tile:hover { border-color: var(--color-muted); }
+.so-tile input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+/* the border of the one checked grows by 1 px: the padding gives it back, so that its circles do not move */
+.so-tile:has(input:checked) { padding: 3px 3px 5px; border: 2px solid var(--color-text); background: var(--color-card); }
+.so-tile:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.so-ab { display: block; font-size: 11.5px; font-weight: 700; line-height: 1.5; text-align: center; color: var(--color-muted); }
+.so-tile:has(input:checked) .so-ab { color: var(--color-text); }
+.so-dots { --o: 11px; --ob: 1px; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+#mapa:has(#ms-safe:checked) .so-dots i:not(.safe) { opacity: .08; }
+#mapa:has(#ms-likely:checked) .so-dots i:not(.likely) { opacity: .08; }
+#mapa:has(#ms-play:checked) .so-dots i:not(.play) { opacity: .08; }
+.so-ficha { display: none; }
+/* The copy the image of a card is drawn from (`card-image.js`): the rows of the filters and the switch of the chart
+   are hidden, never removed (every rule of `:has()` reads their radios), and a line says the filters on
+   (`#map-filter-line`, written by the page script); the hint to tap a tile goes, and the tile chosen loses its dark
+   border */
+.so-filter-line { margin: 0 0 8px; font: 700 15px var(--font-head); }
+.shot-image .so-filter { display: none; }
+.shot-image .so-hint { display: none; }
+.shot-image .so-tile:has(input:checked) { padding: 4px 4px 6px; border: 1px solid var(--color-line-strong); background: var(--color-bg); }
+.shot-image .so-tile:has(input:checked) .so-ab { color: var(--color-muted); }
+/* The chart of the parties: the radio `pf` shows the hemicycle or the columns, each element keeping its own display
+   (`.so-form-hemi`, `.so-form-cols`) */
+#grafico:not(:has(#pf-cols:checked)) .so-form-cols, #grafico:has(#pf-cols:checked) .so-form-hemi { display: none; }
+/* without `:has()` every card shows, by name (the filters and the mark of the tile chosen do nothing there), and both
+   charts of the parties, without their switch */
+@supports not selector(:has(*)) {
+  .so-ficha { display: block; }
+  #chart-form { display: none; }
 }
+/* The hemicycle of the seat options: an SVG up to 900 px wide, the three counts of the scope over its hollow (the
+   centre of the arcs is 20 units above its bottom, 3.85% of its height), and a pill per party under it. The counts
+   grow with the drawing, as in the mockup (22 units of its 1000: 20 px at 900 px), from 12 px */
+.so-hemi { position: relative; max-width: 900px; margin: 10px auto 0; container-type: inline-size; }
+.so-hemi-svg { display: block; width: 100%; height: auto; }
+.so-hemi-core { position: absolute; left: 50%; bottom: 3.85%; display: flex; flex-direction: column; gap: .25em; transform: translateX(-50%); font-size: clamp(12px, 2.2cqi, 20px); line-height: 1.3; color: var(--color-muted); white-space: nowrap; }
+.so-hemi-core span { display: inline-flex; align-items: center; gap: .5em; }
+.so-hemi-core b { color: var(--color-text); }
+.so-plist { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 8px; margin-top: 10px; }
+.so-plist > span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--color-soft); font-size: 12.5px; }
+.so-plist .dot, .so-wlabels .dot { margin: 0; }
+.so-plist em { font-style: normal; color: var(--color-muted); }
+/* The columns of the seat options: 7 circles a row (`--wn`) stacked from the bottom up, a mark every 50 options and
+   the name and counts of each column under it; wider than the card, they slide sideways. The circle (`--wsq`, its gap
+   a fifth of it) grows with the window up to 15 px, so that seven columns (six parties and «Otros») fit the card from
+   720 px up: they take 58 px + 57.4 circles, the card leaves 100vw - 102 px, less 16 px of a scrollbar */
+.so-cols { --wsq: clamp(9px, (100vw - 176px) / 58, 15px); --wgap: calc(var(--wsq) / 5); --wn: 7; overflow-x: auto; }
+.so-waffle, .so-wlabels { display: flex; justify-content: space-around; gap: 4px; min-width: max-content; padding-left: 34px; }
+.so-waffle { position: relative; align-items: flex-end; margin-top: 18px; border-bottom: 1.5px solid var(--color-text); }
+.so-col { --o: var(--wsq); --ob: 1px; position: relative; z-index: 1; display: flex; flex: none; flex-wrap: wrap-reverse; align-content: flex-start; gap: var(--wgap); }
+.so-col, .so-wlabels > div { width: calc(var(--wn) * var(--wsq) + (var(--wn) - 1) * var(--wgap)); }
+.so-tick { position: absolute; left: 34px; right: 0; border-top: 1px solid var(--color-line-strong); }
+.so-tick span { position: absolute; left: -34px; top: -9px; width: 28px; text-align: right; font-size: 12px; color: var(--color-faint); }
+.so-wlabels { margin-top: 8px; }
+.so-wlabels > div { flex: none; text-align: center; }
+.so-wlabels b { display: inline-flex; align-items: center; gap: 6px; font: 700 15px var(--font-head); }
+.so-wlabels small { display: block; font-size: 11.5px; line-height: 1.3; color: var(--color-muted); }
+.so-rest { white-space: nowrap; }
+/* The links of the page land on the map (`#mapa`), the cards (`#ficha`), the tabs of the views (`#vistas`), the chart
+   of the parties (`#grafico`) or their buttons (`#partidos`) below the sticky header (56 px, plus the freeze banner
+   when it shows) with a little air; on phones the cards also leave the dropdown of districts above them in sight
+   (header 52 px, dropdown down to 100 px) */
+#ficha, #vistas, #mapa, #grafico, #partidos { scroll-margin-top: 68px; }
+body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas, #mapa, #grafico, #partidos) { scroll-margin-top: 114px; }
 @media (max-width: 719px) {
   #ficha, body:has(#freeze-banner:not([hidden])) #ficha { scroll-margin-top: 116px; }
-  #vistas, body:has(#freeze-banner:not([hidden])) #vistas { scroll-margin-top: 68px; }
+  #vistas, #mapa, #grafico, #partidos,
+  body:has(#freeze-banner:not([hidden])) :is(#vistas, #mapa, #grafico, #partidos) { scroll-margin-top: 68px; }
+  /* the counts of the hemicycle stay inside its hollow, some 110 px wide and 55 px high on a 360 px phone */
+  .so-hemi-core { gap: 0; font-size: 9.5px; line-height: 1.2; }
+  .so-hemi-core span { gap: 4px; }
+  .so-hemi-core .so-o { --o: 8px; }
+  /* 5 circles a row: seven columns (six parties and «Otros») fit a 360 px phone, their names with the dot above and
+     their counts one under the other */
+  .so-cols { --wsq: 6px; --wgap: 1px; --wn: 5; }
+  .so-waffle, .so-wlabels { gap: 3px; padding-left: 24px; }
+  .so-tick { left: 24px; }
+  .so-tick span { left: -26px; font-size: 10px; }
+  .so-wlabels > div { width: 35px; }
+  .so-wlabels b { flex-direction: column; gap: 2px; font-size: 10.5px; }
+  .so-wlabels .dot { width: 7px; height: 7px; }
+  .so-wlabels small { font-size: 9.5px; line-height: 1.2; }
+  .so-wlabels .so-sep { display: block; height: 0; overflow: hidden; }
+  .so-pick { display: flex; }
+  .so-map { gap: 3px; margin: 12px 0 6px; }
+  .so-tile { padding: 2px 2px 3px; border-radius: 5px; }
+  .so-tile:has(input:checked) { padding: 1px 1px 2px; }
+  .so-ab { font-size: 8.5px; line-height: 1.4; }
+  .so-map-loose .so-ab { font-size: 11.5px; }
+  .so-dots { --o: 7px; gap: 1.5px; }
   /* the tabs in one line, sliding sideways like the index of the event bar; the party buttons, a block that wraps */
   .so-tabs { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .seg.so-tabs > a { padding: 7px 10px; font-size: 12.5px; }
-  .so-pills { border-radius: var(--radius); }
-  .so-md { grid-template-columns: minmax(0, 1fr); }
-  .so-list { display: none; }
-  .so-pick { display: flex; }
-  .so-grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-pills, .so-filter { border-radius: var(--radius); }
+  .so-grid { grid-template-columns: max-content minmax(0, 1fr); }
   .so-note { display: none; }
   .so-party { padding-right: 4px; white-space: normal; }
   .so-num { padding: 0 8px; }
 }
 
 /* «Escaños que bailan»: the view of a party and the list of the closest seats; on phones each closest seat stacks in
-   two lines (the seat and its meter; the district and the central state, which says «Central: » there because the
-   header is hidden) */
+   two lines (the seat and its meter; the district under them) */
 .so-pills .so-party-btn { display: inline-flex; align-items: center; gap: 6px; }
 .so-head h2 .dot { margin-right: 8px; }
-.so-grid.so-by-party { grid-template-columns: max-content max-content max-content minmax(0, 1fr) max-content; }
+.so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, 1fr) max-content; }
 .so-dname { padding-right: 10px; font-weight: 600; white-space: nowrap; }
 .so-settled { margin: 14px 0 0; font-size: 13px; color: var(--color-muted); }
 .so-table { width: 100%; border-collapse: collapse; }
@@ -1213,11 +1291,8 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top:
 .so-track i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; }
 .so-track u { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0, 0, 0, .4); }
 .so-meter b { width: 38px; text-align: right; font-size: 13px; }
-@media (min-width: 720px) {
-  .so-narrow { display: none; }
-}
 @media (max-width: 719px) {
-  .so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, 1fr); }
+  .so-grid.so-by-party { grid-template-columns: max-content minmax(0, 1fr); }
   .so-dname { white-space: normal; padding-right: 4px; }
   .so-wide { display: none; }
   .so-table, .so-table tbody { display: block; }
@@ -1226,8 +1301,7 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas) { scroll-margin-top:
   .so-table td { display: block; padding: 0; border: 0; white-space: normal; }
   .so-table .so-c-seat { order: 1; }
   .so-table .so-c-odds { order: 2; }
-  .so-table .so-c-where { order: 3; font-size: 12.5px; }
-  .so-table .so-central { order: 4; font-size: 12px; color: var(--color-muted); white-space: nowrap; }
+  .so-table .so-c-where { order: 3; grid-column: 1 / -1; font-size: 12.5px; }
 }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */

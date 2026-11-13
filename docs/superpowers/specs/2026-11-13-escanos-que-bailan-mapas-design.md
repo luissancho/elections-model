@@ -336,3 +336,237 @@ Los nombres de funciones y clases; si el hemiciclo es HTML posicionado o SVG en 
 borde discontinuo en la imagen descargada y en el móvil); el CSS exacto a partir de la maqueta; cómo se resuelve
 el tamaño de los círculos del hemiciclo en pantallas estrechas; qué se borra del código de la primera versión y
 qué se adapta; el reparto del trabajo en tareas.
+
+## Estado al cierre (2026-11-13)
+
+### Lo construido
+
+Rama `escanos-mapas` (`git log --oneline dev..HEAD`):
+
+- Tres estados (seguro, probable, en juego), el círculo como signo y fuera el reparto central y la tira de cifras:
+  `3dd8008`.
+- Mapa de provincias con sus dos selectores, fichas que cambian en el sitio y posiciones de las 52 circunscripciones
+  en el catálogo: `a93d33b`; sin `:has()` se ven todas las fichas en vez de ninguna: `18f8165`.
+- Pestaña Partidos (`?vista=partidos`) con el hemiciclo, las columnas por bloque y su conmutador: `09bdd89`; el
+  círculo de las columnas crece con la ventana hasta 15 px: `2a5f408`.
+- Imágenes de las cuatro tarjetas con lo que está a la vista y dirección que cambia al tocar una casilla: `0f0c5d1`,
+  `024829f`.
+- Enlace de la página del evento, apartado del método y contrato: `eda21ac`.
+- Arreglos de la comprobación en el navegador (abajo): `c11a511`, `0d84443`, `6183162`, `f85a59d`.
+- Arreglos de la revisión final (abajo, en «Lo que difiere de este documento»): `77c9473`, `8a19dfa`, `5240b63`,
+  `4c4dc32`, `4cb7709`, y `10c0e5c`, que sólo devuelve a su orden una lista de importaciones.
+- Este cierre: el commit que lo añade, y el que lo pone al día tras la revisión final.
+
+### Comprobación en el navegador
+
+Datos reales, sólo leídos: el run 20261113-094116 de `es` (10.000 simulaciones), con sus partes `meta` y `seat-odds`
+de los dos modos bajadas de la API pública de demoscopio.es (GET sin credenciales). Se escribieron en el paquete de
+prueba de los tests, en una carpeta temporal fuera del repositorio, con el `data/` del worktree; el arnés de los
+tests pintó cada dirección (las 52 circunscripciones, `?vista=partidos`, `?vista=renidos`, `?partido=psoe` y
+`?partido=pp`) y las páginas se sirvieron en local como ficheros, con `/dist` del worktree. Se miraron con Chrome 157
+headless por el protocolo de DevTools a 360, 390, 768, 1024 y 1280 px (emulación de móvil y táctil por debajo de
+720), a densidad 2, y a densidad 1, 2 y 3 para el borde discontinuo. Sin JavaScript: `setScriptExecutionDisabled` y
+clics de ratón de verdad. Las cifras del run salen como dice este documento: 390 opciones para 350 escaños (203
+seguras, 103 probables, 84 en juego). Ningún ámbito autonómico publica aún la parte: el autonómico se miró con la de
+`es` reducida a las ocho provincias andaluzas y sin posiciones de mapa (66 opciones para 60 escaños: 38, 17 y 11).
+Nada se publicó ni se escribió en S3 ni en la base.
+
+| Criterio | Resultado | Cómo se vio |
+|---|---|---|
+| El borde discontinuo se distingue del continuo | pasa | ampliado píxel a píxel: mapa de 11 px a 1024 y 1280 (densidad 1 y 2) y de 7 px a 360 y 390 (densidad 2 y 3), cuatro o cinco trazos por círculo; columnas de 6 px (360), 10 px (768) y 15 px (1280); fichas de 22 px. En el hemiciclo el trazo escala con el dibujo: a 360 px el círculo abierto mide 5,2 px y su trazo 0,56 px, y el discontinuo se ve punteado, distinto del anillo continuo de los probables; a 1024 y 1280 px (15,8 px, trazo de 1,71) es un discontinuo claro |
+| Ningún círculo por debajo del 99% se ve sólido | pasa | los probables llevan su relleno claro y su borde a todos los tamaños. Al revés, los seguros enseñaban un anillo claro entre relleno y borde en pantallas densas: arreglado (`6183162`) |
+| Nada se desborda | pasa | el ancho de desplazamiento de la página es el de la ventana a los cinco anchos, en las cuatro vistas y en el autonómico. El mapa mide 760 px desde 1024. Ninguna casilla pisa a otra y ningún círculo sale de su casilla a los cinco anchos; Madrid y Barcelona (2 × 2) crecen hacia abajo: Madrid 56 × 85 px a 360 y 146 × 92 a 1280; Barcelona 56 × 68 y 146 × 79 |
+| Las columnas caben sin barra a 360 px | pasa | ancho de desplazamiento igual al visible: 294 (360), 324 (390), 666 (768), 922 (1024), 1178 (1280) |
+| El hueco del hemiciclo contiene sus tres recuentos | pasa | a 360 y 390 px, con letra de 9,5 px, el bloque mide 77 × 34 px en un hueco de 53 y 58 px de radio: queda dentro, justo (visto ampliado). Durante la construcción se probaron 11 px y se salían del hueco a 360 px; aquí no se volvió a probar. Por encima de 720 px los recuentos crecen con el dibujo (abajo) y quedan dentro: bloque de 165 × 87 px en un hueco de 162 px de radio a 1024 y 1280 |
+| Los dos selectores se combinan y atenúan sin recargar | pasa | a 1280 y 360: PSOE deja 121 círculos enteros y 269 a 0,08; PSOE y En juego, 25 y 365; la página no se recarga |
+| El conmutador cambia de dibujo | pasa | Columnas cambia título, dibujo y nombre de la imagen; Hemiciclo los devuelve |
+| Al tocar una casilla cambian ficha, dirección y título | pasa | Cádiz a 1280 y 360: se ve `ficha-cadiz`, la dirección pasa a `/es/circunscripciones/cadiz?mode=forecast` y el título a «Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026», sin recargar ni desplazar |
+| El desplegable del móvil hace lo mismo | pasa | a 360 y 390 px, Guadalajara: ficha, dirección y título siguen sin recargar. El desplegable va por nombre, con «Álava · 4 escaños» |
+| Sin JavaScript: selectores, conmutador y cambio de ficha | pasa | a 360 y 1280 con clics de ratón: los filtros atenúan igual, el conmutador cambia de dibujo y la casilla de Cádiz enseña su ficha; la dirección no cambia (esperado). Los botones de imagen no salen sin JavaScript, como en el resto del sitio |
+| Sin JavaScript: el desplegable envía su formulario y llega a la ficha | pasa a medias | «Ver» se ve y envía `GET /es/circunscripciones?mode=forecast&circunscripcion=cadiz`; el 301 que sigue es del servidor y no existe con ficheros estáticos: lo cubren los tests |
+| Las cuatro imágenes, enteras, con bordes discontinuos, sin selectores ni botones | pasa | mapa, ficha de Cádiz, hemiciclo, columnas y ficha del PSOE (43 filas y la línea «Sólo seguros (7)»), descargadas a 360, 390 y 1280 px y miradas una a una. Desde el móvil el hemiciclo salía al ancho de la pantalla (294 px de ancho en una imagen de 1.136) y sus recuentos fuera del hueco: arreglado (`f85a59d`) |
+| Con PSOE y En juego, la imagen del mapa | pasa | lleva la línea «PSOE · En juego» bajo la de la elección, los círculos atenuados, ni selectores ni el borde oscuro de Madrid, y se llama `demoscopio-escanos-es-mapa-psoe-en-juego.png`; con Columnas, `demoscopio-escanos-es-columnas.png` |
+| Tras ir a otra página y volver atrás, línea y nombre coinciden con los radios | pasa | PSOE y En juego, `?vista=renidos` y atrás: la página vuelve de la caché de ida y vuelta (`pageshow` con `persisted`) con los radios, la línea «PSOE · En juego» y el nombre del fichero de antes, y la imagen descargada después es la buena. Al recargar, Chrome no conserva los radios: vuelven a «Todos» y la línea y el nombre con ellos; la dirección de una casilla tocada, recargada, abre su ficha |
+| El autonómico, en rejilla seguida con nombres completos y un hemiciclo con menos filas | pasa | casillas de 150 px o más: 4 columnas a 768 y 1280, 2 a 390 y 1 a 360 (294 px no dan para dos), con «Almería», «Cádiz»…; el hemiciclo tiene 4 filas (10 en `es`) |
+
+**La ficha al tocar una casilla** (decisión 4 del plan, que pedía medirlo). Con la casilla tocada en el centro de una pantalla de 900 px de alto
+(la página no se desplaza sola):
+
+| Ancho | Casilla | Dónde empieza la ficha | Lo que se ve |
+|---|---|---|---|
+| 1280 | La Coruña (arriba) | 1.157 px | nada cambia a la vista salvo el borde oscuro, que pasa a la casilla |
+| 1280 | Madrid (centro) | 943 px | igual |
+| 1280 | Cádiz (abajo) | 590 px | la cabecera y las primeras filas de la ficha (310 px) |
+| 360 | La Coruña | 1.194 px | nada salvo el borde oscuro |
+| 360 | Madrid | 1.014 px | igual |
+| 360 | Cádiz | 704 px | la cabecera de la ficha (196 px); en un móvil de verdad, más bajo y con la barra de abajo, menos |
+
+En el móvil y en el escritorio, quien toca una provincia del norte o del centro no ve que pase nada más que el
+cambio de borde: la ficha está debajo del mapa, fuera de la pantalla.
+
+**Peso** (HTML de la página con los datos reales, gzip de nivel 6):
+
+| Página | Sin comprimir | gzip | Elementos |
+|---|---|---|---|
+| `/es/circunscripciones` (las 52 fichas) | 290,9 KB | 19,0 KB | 4.026 |
+| `?vista=partidos` | 121,3 KB | 14,1 KB | 1.464 |
+| `?partido=psoe` | 155,8 KB | 16,8 KB | 1.995 |
+| `?vista=renidos` | 27,6 KB | 3,3 KB | 595 |
+| autonómico de prueba (8 fichas) | 54,8 KB | 5,9 KB | 789 |
+| la página del evento `/es`, hoy en demoscopio.es | 1.019,8 KB | 106,7 KB | — |
+
+Muy por debajo del tope de 150 KB: las 52 fichas se repiten mucho y comprimen 15 a 1. Las cifras se midieron de
+nuevo tras la revisión final, con los mismos datos y el mismo método: el título de cada círculo del hemiciclo y de
+las columnas nombra ahora su circunscripción, y eso suma unos 9 KB sin comprimir y unos 2,5 KB en gzip a
+`?vista=partidos` y a `?partido=psoe` (que también lleva los dos gráficos); el elemento de más en la portada y en el
+autonómico es la frase «Toca una provincia…», que ahora va en su propia etiqueta para que no salga en la imagen. Este
+documento hablaba de unos 84 KB para la página del evento; hoy pesa 106,7 KB en gzip de nivel 6.
+
+### Arreglos de la comprobación
+
+- `c11a511`: en el móvil, los títulos largos del mapa y de las columnas pasaban enteros debajo de su barra de acento
+  (la regla de `.card-head h2` del sitio deja partir la línea entre la barra y el texto); en esta página el texto se
+  parte junto a la barra.
+- `0d84443`: los recuentos del centro del hemiciclo medían 12 px a cualquier ancho y dejaban el hueco vacío en el
+  escritorio; ahora crecen con el dibujo como en la maqueta (22 unidades de sus 1.000: de 12 a 20 px). En el móvil
+  siguen en 9,5 px.
+- `6183162`: el círculo seguro es de su color de borde a borde (su relleno pasa bajo el borde), sin el anillo claro
+  que se veía entre los dos en las pantallas densas.
+- `f85a59d`: html2canvas copia en su copia el tamaño calculado de cada SVG de la página, así que la imagen del
+  hemiciclo descargada desde un móvil lo dibujaba a 294 px. El SVG lleva `data-shot-fluid` y `card-image.js`
+  (`freeFluidSvgs`) le quita ese tamaño en la copia, para que tome el ancho de la imagen. El hemiciclo sigue siendo
+  SVG: con este arreglo no hizo falta pasarlo a círculos HTML, como preveía el plan si la imagen fallaba.
+
+### Lo que difiere de este documento
+
+Decisiones del plan, tal como quedaron:
+
+1. La pestaña Partidos tiene la dirección `?vista=partidos`; los botones de partido aterrizan en el selector
+   (`#partidos`).
+2. El hemiciclo es SVG en línea con atributos de presentación, y sus recuentos, HTML encima. La imagen conserva el
+   borde discontinuo; sólo perdía el tamaño desde el móvil, arreglado sin dejar el SVG.
+3. En la imagen del mapa la casilla elegida no lleva el borde oscuro.
+4. Al tocar una casilla la página no se desplaza hasta la ficha. Lo que se ve está arriba: casi nunca la ficha.
+5. Con JavaScript, la casilla cambia la dirección (`replaceState`, sin llenar el historial) y el título; el
+   desplegable también.
+6. Los títulos, las descripciones y la frase de «Los más reñidos» los escribió el constructor (provisionales).
+
+Decididas durante la construcción:
+
+- Los recuentos del centro del hemiciclo van en 9,5 px por debajo de 720 px (el plan decía 11): con 11 se salían
+  del hueco a 360 px. Sus tres muestras son las grises de la leyenda.
+- El borde de los círculos del hemiciclo no mide 1 px, como dice «El signo»: escala con el dibujo, como en la
+  maqueta (1,6 unidades de las 1.000 del dibujo en los probables y 1,9 en los que están en juego). Mide 0,47 y
+  0,56 px en un móvil de 360 px, 1,07 y 1,27 px a 768 y 1,44 y 1,71 px desde 1024. A 360 px los probables se leen
+  como discos más claros con un hilo de borde; el discontinuo se sigue distinguiendo (se ve punteado).
+- Sin `:has()` (navegadores antiguos) se ven todas las fichas de las circunscripciones, por nombre, y los dos
+  dibujos de Partidos sin su conmutador, en vez de ninguna ficha.
+- Si el desplegable elige una circunscripción sin casilla (no debería pasar), envía su formulario como sin
+  JavaScript.
+- Los recuentos del hemiciclo crecen con el dibujo por encima de 720 px (arreglo `0d84443`, como la maqueta).
+
+Cambiados tras la revisión final:
+
+- La frase de una circunscripción cuando un solo partido tiene opciones probables o en juego para los escaños que
+  no son seguros. Decía «El otro sólo está al alcance de PP» (y «Los otros 2 sólo están al alcance de…», «Ninguno de
+  los 4 escaños es seguro: sólo están al alcance de…»); ahora dice «De los 3 escaños, 2 son seguros (PP 1, PSOE 1).
+  Para el otro, quien más opciones tiene es PSOE.», «Para los otros 2, quien más opciones tiene es PP.», «Ninguno de
+  los 4 escaños es seguro: quien más opciones tiene es PP.» y «El escaño no es seguro: quien más opciones tiene es
+  PP.». La frase venía de la primera versión, cuando el suelo era del 1% y el «sólo» era cierto; con el suelo del 25%
+  decía más que el modelo: en el run del 13 de noviembre salía en Lugo, Orense, Cuenca, Soria y Salamanca. En Lugo
+  el BNG consigue su primer escaño en el 19,1% de las simulaciones y el PSOE su segundo en el 13,9%, mientras la
+  ficha enseñaba el 67% del tercero del PP justo debajo de una frase que decía que nadie más podía ganarlo. Por la
+  misma razón, «Los más reñidos» con un solo escaño ya no dice «El único escaño que no es seguro» sino «El escaño más
+  cercano al cara o cruz. La raya marca el 50%.».
+- «Provincia» o «circunscripción». La página dice «provincia» (la pestaña Provincias, «Dónde bailan los escaños,
+  provincia a provincia», «Toca una provincia…» y las entradillas del hemiciclo y de las columnas) sólo cuando todas
+  las circunscripciones de la parte son provincias, es decir, cuando su id es un código INE: el catálogo numera desde
+  100 las que no lo son. Si no, dice «circunscripción» en esos cinco sitios y la pestaña se llama Circunscripciones.
+  Afecta a Asturias (Central, Occidental, Oriental), Baleares (las islas) y Canarias (las islas y la «Lista
+  autonómica»); para `es` y los demás ámbitos nada cambia. Ningún ámbito autonómico publica aún la parte, pero la
+  página sale sola la primera vez que se recalcule uno, sin desplegar la web.
+- Los círculos del hemiciclo y de las columnas nombran su circunscripción en el título: «4.º de PSOE en Alicante: lo
+  consigue en el 51% de las simulaciones», «1.º de PSOE en Cádiz: seguro». En un gráfico de todo el ámbito, «4.º de
+  PSOE: 51%» se leía como el cuarto escaño del partido en total. En las casillas del mapa y en las fichas el título
+  sigue sin la circunscripción, que ya está dicha. Las pilas de círculos de las columnas son decoración para un
+  lector de pantalla (las cifras están en las etiquetas de debajo).
+- El radio de los círculos no seguros del hemiciclo escala con el dibujo, como sus bordes: en `es` (radio 9,7) no
+  cambia nada; en un ámbito pequeño (radio 22) pasa de 21,1 a 20,0 y el borde exterior de un probable o de uno en
+  juego queda donde el de un seguro, en vez de sobresalir.
+- La canónica (y el `og:url`) sigue a la casilla tocada, sin el modo ni el run, como la escribe el servidor para esa
+  dirección: antes, quien compartía la página tras tocar Cádiz desde un navegador que comparte la canónica compartía
+  la circunscripción con la que se había abierto. Se vio en Chrome headless con los datos del run: a 1280 px, al
+  tocar Cádiz y luego Madrid, la canónica pasa a `…/es/circunscripciones/cadiz` y a `…/madrid` con la dirección y
+  el título, sin recargar; a 360 px, con el desplegable, igual con Guadalajara.
+- La frase «Toca una provincia para ver su detalle.» ya no sale en la imagen del mapa (se vio en la imagen descargada
+  a 1280 px: la entradilla acaba en «…si está en juego.»).
+
+Diferencias visibles con la maqueta que este documento no recoge:
+
+- Los selectores del mapa y el conmutador usan el control segmentado del sitio (una banda gris con la opción elegida
+  en negro), no pastillas sueltas con borde. En el móvil los 14 botones de partido ocupan 4 filas (172 px) y los
+  cuatro de estado, 2; en la maqueta son 3 filas más compactas.
+- Los títulos de las tarjetas llevan la barra de acento del sitio.
+- Arriba va la barra del evento del sitio (con su índice y la fecha del run) en lugar del antetítulo de la maqueta, y
+  la entradilla no dice «Actualizado el 13 de noviembre».
+- Las tarjetas llevan su botón de imagen.
+- En el móvil, los recuentos del hemiciclo miden 9,5 px (en la maqueta escalaban con el dibujo y quedaban más pequeños), y
+  bajo cada columna las tres cifras van una debajo de otra.
+
+### Lo que no se pudo comprobar
+
+- El 301 del desplegable sin JavaScript: con ficheros estáticos no hay servidor; lo cubren los tests.
+- Otros navegadores (Safari, Firefox) y móviles de verdad: sólo Chrome headless con emulación. La salida sin
+  `:has()` sólo la cubren los tests.
+- La caché de ida y vuelta de los navegadores de móvil: se vio en Chrome de escritorio.
+- Un ámbito autonómico con su parte publicada: ninguno la tiene aún; se usó la de `es` reducida a Andalucía.
+- El modo Hoy (`nowcast`) en el navegador: el paquete lo llevaba, pero sólo se miró el pronóstico.
+
+### Lo que queda (Luis)
+
+- Decidir si al tocar una casilla la página baja hasta la ficha (o la deja asomar), con los datos de arriba.
+- Decidir si el borde de los círculos del hemiciclo sigue escalando con el dibujo o se fija en 1 px en todas las
+  pantallas.
+- Decidir si los selectores del mapa en el móvil se quedan en el control segmentado de 4 filas o se compactan como
+  en la maqueta.
+- Revisar los textos, todos provisionales. En particular, la frase nueva de un solo partido («Para el otro, quien más
+  opciones tiene es PSOE.», arriba) se escribió en la revisión final sin pasar por Luis: es suya para reescribirla.
+- Cuatro textos que señaló la revisión final y que nadie cambió:
+  - El «Cómo leerlo» de las fichas dice «Cada círculo es un escaño que el partido puede conseguir», y el resto de la
+    página llama a eso «opción de escaño».
+  - El método dice «Como a un escaño en juego suelen optar dos o tres partidos», que es lo que este documento llamó
+    decir demasiado para el pie: en el run del 13 de noviembre hay 187 opciones que no son seguras para 147 escaños
+    que no son seguros.
+  - En la entradilla del hemiciclo, «de ese partido» no tiene a qué referirse («Cada círculo es una opción de escaño
+    de ese partido en alguna provincia»).
+  - En «Los más reñidos», la cabecera «Lo consigue en» seguida de «50%» pide el artículo («en el 50%»).
+- Una ficha puede enseñar más opciones que escaños (Madrid: 24 seguras, 10 probables y 10 en juego para 38 escaños;
+  Ceuta: «1 escaño» y «2 en juego»), y la frase que lo explica («a un mismo escaño pueden optar varios partidos») sólo
+  está al pie del mapa, no en la ficha.
+- Después de desplegar, una comprobación en la web de verdad, que aquí no se pudo hacer porque la comprobación en el
+  navegador fue con ficheros estáticos y no detrás de nginx con su política de seguridad de contenidos: descargar la
+  imagen del hemiciclo desde un móvil, tocar una casilla y mirar la página en el modo «Hoy».
+- Fusionar en `dev`, push e imagen nueva de web, antes del 24-N. No hay que republicar ni rellenar.
+
+### Pendientes menores
+
+Cosas sabidas y dejadas para más adelante; ninguna se ve mal hoy en pantalla.
+
+- El gris de las muestras de la leyenda (y de los recuentos del hemiciclo) está escrito como un color literal en vez
+  de salir de la variable del texto atenuado: hay que tocarlo con el modo oscuro.
+- La regla del plural de las palabras de los estados está escrita en las plantillas además de en Python.
+- Los dos nombres base de las imágenes (el del mapa y el del gráfico) salen en la plantilla quitando texto del nombre
+  del fichero.
+- La función anidada que lee las posiciones del mapa del catálogo no tiene docstring.
+- Ningún test fija la descripción de `?vista=partidos`, ni que un botón de partido conserve un run fijado.
+- El script de la página no tiene un test automático de su comportamiento: sólo el del contrato con el marcado (que
+  cada id y cada grupo de radios que busca existe en alguna de las dos vistas, no en la vista concreta que lo tiene).
+- Si la dirección del sitio estuviera configurada sin `https://`, el cambio de la canónica al tocar una casilla
+  fallaría y la dirección dejaría de seguir a la casilla. Con la configuración de hoy no puede pasar.
+- Al cambiar de casilla cambia una ficha más abajo sin avisar a un lector de pantalla, y el nombre accesible de una
+  casilla («La Coruña, 8 escaños») no contiene su etiqueta visible («C»).
+- Cada una de las 52 direcciones de circunscripción sirve el mismo documento con otra ficha elegida, y un buscador
+  puede leerlas como casi duplicadas (cada una tiene su canónica, su título y su descripción).
+- En el móvil, los selectores del mapa ocupan seis filas (cuatro de partidos y dos de estados).
+- En la barra del evento (de todo el sitio, anterior a esta página), dentro de su franja desplazable quedan enlaces
+  más allá del borde: dos a 360 px (Territorio y Tabla) y uno a 390 px (Tabla).

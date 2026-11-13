@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-13-escanos-que-bailan-mapas-design.md`. Maqueta aprobada: `.superpowers/brainstorm/16860-1794563945/content/mapa-partidos-columnas-bloques.html` del checkout principal (fuera de git; leer su `<style>`, líneas 7-112, y su `<script>`, líneas 130-332, no los blobs base64). El CSS de cada dibujo sale de ahí, con las clases `so-` de este plan.
 
+## Erratas (corregidas al ejecutar)
+
+- Tarea 1: los casos de `token_label` `0.145` y `1450/10000` («15%») no caben con el suelo del 25%; se sustituyeron por `2850/10000` («29%») y `5650/10000` («57%»).
+- Tarea 2: La Coruña tiene 10 opciones en el fixture, no 9 (`('C', 10)`).
+- Tarea 3: el catálogo del bundle de prueba sólo da bloque a PP, así que las pastillas del hemiciclo salen PP, PSOE, VOX, AA, BNG; y la tabla de la canónica lleva rutas, no direcciones completas.
+- Tarea 4: la regla `.shot-image .so-pick` no podía aplicarse nunca (el desplegable está fuera de las tarjetas) y se quitó.
+
 ## Global Constraints
 
 - Estados: seguro si la probabilidad es ≥ 99% (`SAFE_SHARE = 0.99`), probable si ≥ 75% y < 99% (`LIKELY_SHARE = 0.75`), en juego si ≥ 25% y < 75% (`PLAY_SHARE = 0.25`). Por debajo del 25% no se dibuja ni se cuenta, y ningún texto lo dice. La probabilidad es `reach[k-1] / n_sim`, comparada sin redondear. `OPEN_FLOOR` deja de existir.
