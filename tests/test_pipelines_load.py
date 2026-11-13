@@ -3,7 +3,7 @@ import pytest
 
 from mtpy.lib.load import NO_EVENTS
 from mtpy.pipelines.load.Params import Params
-from mtpy.pipelines.load.Polls import Polls
+from mtpy.pipelines.load.Polls import Polls, poll_line
 from tests.test_load_unit import FakeCatalogues, FakeComputer, FakeLoader
 
 EVENTS = {'es': '2026-11-29', 'es-md': '2027-05-23'}
@@ -48,15 +48,44 @@ def params(scope, loader, position=(1, 1), **kwargs):
 def test_polls_loads_a_scope_and_builds_its_line(fresh_app, events, capsys):
     p = polls('es', position=(1, 2))
     assert p.result['status'] == 'loaded' and p.result['action'] == 'polls' and p.result['warnings'] == []
-    assert p.line == 'es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s'
+    assert p.line == ['es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s',
+                      'es: + Casa 1, 2026-11-09 → 2026-11-11',
+                      'es: + Casa 0 / Medio, 2026-11-10 → 2026-11-12']
     assert 'load polls: 2 ámbitos' in capsys.readouterr().out
+
+
+def test_polls_lists_the_new_polls_below_the_line_from_verbose_1(fresh_app, events, capsys):
+    polls('es', verbose=0)
+    assert '+ Casa' not in capsys.readouterr().out
+    polls('es', verbose=1)
+    out = capsys.readouterr().out.splitlines()
+    done = next(i for i, line in enumerate(out) if 'es: polls loaded' in line)
+    assert out[done + 1].endswith('es: + Casa 1, 2026-11-09 → 2026-11-11')
+    assert out[done + 2].endswith('es: + Casa 0 / Medio, 2026-11-10 → 2026-11-12')
+    p = polls('es', loader=FakeLoader(new_polls=0))
+    assert p.line == 'es: polls loaded (5 read, 0 saved, 2026-11-29) in 0 s' and p.result['new'] == []
+
+
+def test_polls_dry_run_and_overwrite_list_only_the_polls_missing_from_the_database(fresh_app, events):
+    p = polls('es', dry_run=True)
+    assert p.line[1:] == ['es: + Casa 1, 2026-11-09 → 2026-11-11', 'es: + Casa 0 / Medio, 2026-11-10 → 2026-11-12']
+    p = polls('es', action='rebulk', loader=FakeLoader(new_polls=1))
+    assert p.line == ['es: polls loaded (5 read, 5 saved, 2026-11-29, overwrite) in 0 s',
+                      'es: + Casa 0 / Medio, 2026-11-10 → 2026-11-12']
+
+
+def test_poll_line_without_sponsor_or_with_one_day_of_fieldwork():
+    assert poll_line('es', {'pollster': 'CIS', 'sponsor': None, 'start_date': '2026-11-03',
+                            'end_date': '2026-11-03'}) == 'es: + CIS, 2026-11-03'
+    assert poll_line('es', {'pollster': '40dB', 'sponsor': 'El País', 'start_date': None,
+                            'end_date': '2026-11-12'}) == 'es: + 40dB / El País, 2026-11-12'
 
 
 def test_polls_rebulk_overwrites_and_flags_the_header(fresh_app, events, capsys):
     p = polls('es', action='rebulk', force=True, dry_run=True)
-    assert p.line == 'es: polls checked (5 read, 5 new, 2026-11-29, overwrite, dry run) in 0 s'
+    assert p.line[0] == 'es: polls checked (5 read, 5 new, 2026-11-29, overwrite, dry run) in 0 s'
     assert 'load polls: 1 ámbito · overwrite · force · dry run' in capsys.readouterr().out
-    assert polls('es', action='rebulk').line == 'es: polls loaded (5 read, 5 saved, 2026-11-29, overwrite) in 0 s'
+    assert polls('es', action='rebulk').line[0] == 'es: polls loaded (5 read, 5 saved, 2026-11-29, overwrite) in 0 s'
 
 
 def test_polls_without_article_fails_or_skips_with_all(fresh_app, events):
@@ -104,15 +133,15 @@ def test_polls_unmapped_names_fail_the_scope_and_force_adds_them(fresh_app, even
     assert 'es: polls failed (unmapped pollsters: Sumar)' in out
     assert "Missing Pollsters: {'Sumar'}" in out
     p = polls('es', loader=FakeLoader(missing={'pollsters': ['Sumar']}), force=True)
-    assert p.line == 'es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s · 1 pollster added · 1 aviso'
+    assert p.line[0] == 'es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s · 1 pollster added · 1 aviso'
     assert p.result['added']['pollsters'] == ['Sumar'] and len(p.result['warnings']) == 1
 
 
 def test_polls_line_counts_added_pollsters_and_sponsors_to_add(fresh_app, events):
     missing = {'pollsters': ['Sumar', 'UJA'], 'sponsors': ['Artículo 14']}
-    assert ' · 2 pollsters added, 1 sponsor added' in polls('es', loader=FakeLoader(missing=missing), force=True).line
+    assert ' · 2 pollsters added, 1 sponsor added' in polls('es', loader=FakeLoader(missing=missing), force=True).line[0]
     p = polls('es', loader=FakeLoader(missing=missing), force=True, dry_run=True)
-    assert 'dry run) in 0 s · 2 pollsters to add, 1 sponsor to add' in p.line
+    assert 'dry run) in 0 s · 2 pollsters to add, 1 sponsor to add' in p.line[0]
 
 
 def test_polls_verbosity_levels(fresh_app, events, capsys):

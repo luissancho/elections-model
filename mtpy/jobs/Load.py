@@ -29,7 +29,9 @@ class Load(SequenceJob):
     The console output has the four levels of ``publish``: 0, the header and the final summary; 1, also
     ``[i/n] scope: empezando``, the names block, the warnings and the result line of each scope; 2, also one line
     per phase with its seconds and the skipped names; 3, also the own output of the loader and the ``Computer``
-    (which receive ``verbose - 2``).
+    (which receive ``verbose - 2``). Below the result line of a scope comes one line per poll that the database did
+    not have (``es: + 40dB / El País, 2026-11-10 → 2026-11-12``: pollster, sponsor and fieldwork), also in the
+    final summary and the alert, and so in ``update``; in a dry run they are the polls that would be saved.
 
     Examples
     --------

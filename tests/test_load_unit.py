@@ -7,7 +7,8 @@ import pytest
 
 from mtpy.lib import load as load_module
 from mtpy.lib.load import (
-    LOAD_STEPS, add_catalogue_entries, has_polls_article, load_polls, unevaluated_quality, unmapped_reason
+    LOAD_STEPS, add_catalogue_entries, has_polls_article, load_polls, new_poll_list, unevaluated_quality,
+    unmapped_reason
 )
 from mtpy.models.elections import Pollsters, Sponsors
 
@@ -57,7 +58,12 @@ class FakeLoader:
 
             def select_series(self, overwrite):
                 factory.calls.append(('select_series', overwrite))
-                self.polls = pd.DataFrame({'x': range(factory.n if overwrite else factory.new_polls)})
+                self.new_polls = pd.DataFrame({
+                    'pollster': ['Casa {}'.format(i) for i in range(factory.new_polls)],
+                    'sponsor': ['Medio' if i % 2 == 0 else None for i in range(factory.new_polls)],
+                    'start_date': pd.to_datetime(['2026-11-{:02d}'.format(10 - i) for i in range(factory.new_polls)]),
+                    'end_date': pd.to_datetime(['2026-11-{:02d}'.format(12 - i) for i in range(factory.new_polls)])})
+                self.polls = pd.DataFrame({'x': range(factory.n)}) if overwrite else self.new_polls
                 return self
 
             def save_polls(self, overwrite):
@@ -125,6 +131,17 @@ def test_load_polls_runs_the_sequence_of_the_notebook_and_reports_each_phase():
     assert ('# Polls: 5', 1) in lines and ('Missing Pollsters: set()', 1) in lines
     assert ('Missing Parties: set()', 1) in lines and ('Missing Sponsors: set()', 1) in lines
     assert (loader.instance.parties_checks.to_string(), 2) in lines
+
+
+def test_new_poll_list_sorts_by_end_date_and_cleans_missing_values():
+    polls = pd.DataFrame({'pollster': ['B', 'A', 'C'], 'sponsor': ['X', None, float('nan')],
+                          'start_date': pd.to_datetime(['2026-11-01', '2026-11-05', None]),
+                          'end_date': pd.to_datetime(['2026-11-03', '2026-11-03', '2026-11-02'])})
+    assert new_poll_list(polls) == [
+        {'pollster': 'C', 'sponsor': None, 'start_date': None, 'end_date': '2026-11-02'},
+        {'pollster': 'A', 'sponsor': None, 'start_date': '2026-11-05', 'end_date': '2026-11-03'},
+        {'pollster': 'B', 'sponsor': 'X', 'start_date': '2026-11-01', 'end_date': '2026-11-03'}]
+    assert new_poll_list(None) == [] and new_poll_list(polls.iloc[:0]) == []
 
 
 def test_load_polls_overwrite_saves_the_whole_cycle():
