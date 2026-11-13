@@ -6,7 +6,7 @@
 // downloads the card (`card-image.js`). Every element it looks for may be missing; a page without the card is left
 // as it is.
 import {wireCardImages} from '../card-image.js';
-import {filterLine, imageFile, outOfView} from '../seat-odds.js';
+import {coveredBand, filterLine, imageFile, outOfView} from '../seat-odds.js';
 import {showError, tryDraw} from './common.js';
 
 /** The radio groups of the card: the view, the party and the state of the map, and the district. */
@@ -14,6 +14,24 @@ const RADIOS = {view: 'sv', party: 'mp', state: 'ms', district: 'd'};
 
 /** Width of the window from which the map and the block of the district sit side by side (`site.css`). */
 const SIDE_BY_SIDE = 1200;
+
+/** The bars that stick to the top of the window (the freeze banner and the header) and to its foot (the tab bar). */
+const TOP_BARS = '#freeze-banner, #site-header';
+const FOOT_BARS = '.tabbar';
+
+/**
+ * The boxes, relative to the window, of the bars of a selector that stick to it: shown and `sticky` or `fixed`. A bar
+ * that is missing, hidden or not stuck takes no room.
+ *
+ * @param {string} selector the bars
+ * @returns {DOMRect[]} their boxes
+ */
+function stuckBoxes(selector) {
+  return [...document.querySelectorAll(selector)].filter((bar) => {
+    const style = window.getComputedStyle(bar);
+    return style.display !== 'none' && (style.position === 'sticky' || style.position === 'fixed');
+  }).map((bar) => bar.getBoundingClientRect()).filter((box) => box.height > 0);
+}
 
 /**
  * The radio checked of a group of the card.
@@ -117,7 +135,9 @@ function wireDropdown(card) {
 
 /**
  * Scroll the block of a district into view when the card is stacked (a window narrower than `SIDE_BY_SIDE`) and none
- * of the block shows (`outOfView`): as little as needed (`nearest`), smoothly unless the reader asks for less motion.
+ * of the block shows (`outOfView`) in the band the bars stuck to the window leave free (`coveredBand`: the header and
+ * the freeze banner above, the tab bar of the phones below): as little as needed (`nearest`), smoothly unless the
+ * reader asks for less motion.
  *
  * @param {HTMLInputElement} radio the radio of the tile, checked
  */
@@ -126,7 +146,12 @@ function revealBlock(radio) {
     return;
   }
   const block = document.getElementById(`ficha-${radio.value}`);
-  if (!block || !outOfView(block.getBoundingClientRect(), window.innerHeight)) {
+  if (!block) {
+    return;
+  }
+  const height = window.innerHeight;
+  const band = coveredBand(stuckBoxes(TOP_BARS), stuckBoxes(FOOT_BARS), height);
+  if (!outOfView(block.getBoundingClientRect(), height, band.top, band.foot)) {
     return;
   }
   const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

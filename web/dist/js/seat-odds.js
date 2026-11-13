@@ -1,6 +1,6 @@
 // Pure helpers of «Escaños que bailan», the card of the event page (`seat-odds-wire.js`): the name of its image and
-// the line that says the filters of the map, after what is on view, and whether a box is out of the window. No
-// imports, so node tests them as they are.
+// the line that says the filters of the map, after what is on view, and whether a box is out of the free band of the
+// window, between the bars stuck to it. No imports, so node tests them as they are.
 
 /**
  * Name of the image of a card: its base and the parts of what is on view that are not empty, joined by `-`.
@@ -26,13 +26,33 @@ export function filterLine(party, state) {
 }
 
 /**
- * Whether a box is out of view: none of it shows in a window of that height (an edge on the border of the window shows
- * nothing either).
+ * Whether a box is out of view: none of it shows in the free band of a window of that height, between what the bars
+ * stuck to its top and to its foot cover (an edge on the border of the band shows nothing either).
  *
  * @param {{top: number, bottom: number}} rect the box, relative to the window (`getBoundingClientRect`)
  * @param {number} height the height of the window (`innerHeight`)
- * @returns {boolean} true when the box is wholly below or wholly above the window
+ * @param {number} [top=0] the pixels the bars stuck to the top of the window cover (`coveredBand`)
+ * @param {number} [foot=0] the pixels the bars stuck to its foot cover
+ * @returns {boolean} true when the box is wholly below or wholly above the free band
  */
-export function outOfView(rect, height) {
-  return rect.top >= height || rect.bottom <= 0;
+export function outOfView(rect, height, top = 0, foot = 0) {
+  return rect.top >= height - foot || rect.bottom <= top;
+}
+
+/**
+ * What the bars stuck to the window cover of it: from its top down to the lowest bottom of the top bars (the freeze
+ * banner and the header), and from its foot up to the highest top of the foot bars (the tab bar of the phones), each
+ * within the window.
+ *
+ * @param {Array<{top: number, bottom: number}>} tops the boxes of the bars stuck to the top, relative to the window
+ * @param {Array<{top: number, bottom: number}>} foots the boxes of the bars stuck to the foot
+ * @param {number} height the height of the window (`innerHeight`)
+ * @returns {{top: number, foot: number}} the pixels covered at the top and at the foot, 0 without bars
+ */
+export function coveredBand(tops, foots, height) {
+  const clamp = (value) => Math.min(Math.max(value, 0), height);
+  return {
+    top: clamp(Math.max(0, ...tops.map((box) => box.bottom))),
+    foot: clamp(Math.max(0, ...foots.map((box) => height - box.top))),
+  };
 }
