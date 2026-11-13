@@ -163,7 +163,9 @@ Rama `escanos-evento`, desde `dev` (`git log --oneline dev..HEAD`):
 - Fuera la página aparte (sus direcciones responden con un 301 a la tarjeta), el hemiciclo de las opciones y la
   ficha de partido: `65f67f7` (sólo cambia de nombre el módulo y sus tests) y `b534d87`.
 - Arreglos de la comprobación en el navegador (abajo): `439e1fa`, `dd35986` y `8d25413`.
-- Este cierre: el commit que lo añade y el que lo pone al día tras la revisión.
+- Cambios de la revisión final de la rama (abajo): `e98f923`, `0e8aa2e`, `89f91db`, `29a679c` y `86e7724`.
+- Este cierre: el commit que lo añade, el que lo pone al día tras la revisión de la comprobación y el que lo pone al
+  día tras la revisión final.
 
 ### Comprobación en el navegador
 
@@ -226,6 +228,37 @@ y unos 4.000 elementos; queda por debajo del tope de 30 KB que fijaba el plan. S
   pestañas, nada cambia: no se mueve con la ficha asomando a 994 de 1.024 y baja con ella a 1.044, como antes del
   arreglo.
 
+### Cambios de la revisión final
+
+- `86e7724`: los enlaces de la tabla de «Resultados por territorio» y su formulario llevaban a `#escanos`, y la sección
+  abre ahora con «Escaños que bailan», que enseña otra circunscripción: quien pedía el detalle de Barcelona sin
+  JavaScript, o abriendo el enlace en otra pestaña, caía en lo alto de la tarjeta nueva y no en la tabla. Ahora llevan
+  a la tarjeta del territorio (`#districts`), sin dejar de pedir la sección (`seccion=escanos`), y con JavaScript la
+  página baja a esa tarjeta cuando pide la sección Escaños con una circunscripción (`region`), que es lo que trae la
+  dirección vieja de escaños (`/es/escanos?region=8` → 301 a `/es?…&region=8&seccion=escanos`). Sin circunscripción,
+  `?seccion=escanos` y `#escanos` siguen cayendo en lo alto de la sección. La tarjeta del territorio tiene el margen de
+  las secciones. Medido con el run real: sin JavaScript, tocando Álava en la tabla, la cabecera de la tarjeta queda a
+  56 px a 1280 (la cabecera del sitio acaba en 57) y a 52 a 390; con el aviso de congelación, a 102 a 1280 (aviso y
+  cabecera acaban en 103). Con JavaScript, esas direcciones y la de destino de la dirección vieja caen igual; sin
+  `region`, la sección cae a 56, 52 y 102 px, como antes.
+- `29a679c`: con el mapa y la ficha lado a lado, en una ventana baja (un portátil de 1280 × 720 o 1366 × 768) quien
+  bajaba hasta las filas del sur del mapa (Andalucía, Canarias, Ceuta y Melilla) y tocaba una casilla tenía la ficha
+  arriba, con el nombre fuera de la pantalla. Desde 1.200 px la columna de la ficha se queda pegada bajo la cabecera
+  (68 px; 114 con el aviso de congelación) mientras el mapa se desplaza, sólo con CSS. Medido: con la última fila del
+  mapa al 60% de la ventana, tocando Cádiz a 1280 × 720 y Las Palmas a 1366 × 768, el nombre de la ficha queda a
+  68 px; con el aviso, Melilla y Cádiz a 114 (aviso y cabecera acaban en 103). A 1440 × 900, con la tarjeta arriba, la
+  ficha está donde estaba, a la altura del mapa. Madrid en una ventana de 1280 × 560 se queda pegada mientras se baja
+  y su última fila se acaba viendo al seguir bajando. Con todas las fichas a la vista (como sin `:has()`) la columna no
+  se mueve, y a 1.199 px nada cambia. Una ficha casi tan alta como el mapa sube con él cuando el mapa se acaba: con la
+  última fila del mapa al 60% de una ventana de 720 px, el nombre de Madrid queda 19 px por encima. La copia de la que
+  sale la imagen no se pega: la primera prueba sacó la ficha bajada en la imagen, y eso se arregló en el mismo commit.
+- `89f91db`: la imagen del mapa conserva el borde oscuro de la casilla elegida, que dice en el mapa de quién es la
+  ficha de al lado. Comparada con la imagen de antes, píxel a píxel, sólo cambia la casilla de Barcelona.
+- `0e8aa2e`: el desplegable de circunscripciones del móvil se nombra con su propio atributo (`aria-label`) y no con
+  una etiqueta oculta, que un lector de pantalla leía suelta («Provincia») donde el desplegable no sale. La imagen ya
+  no necesita esconder esa etiqueta y, mirada, no tiene ningún píxel suelto encima del mapa.
+- `e98f923`: sólo comentarios, un docstring y la limpieza de dos tests.
+
 ### Lo que difiere de este documento
 
 Decisiones del plan, tal como quedaron:
@@ -238,6 +271,14 @@ Decisiones del plan, tal como quedaron:
 
 Decidido durante la construcción: la línea de la imagen con la elección, la estimación y la fecha va una vez, encima
 de las dos vistas, para que la lleve también la imagen de las columnas.
+
+Cambiado tras la revisión final:
+
+- Desde 1.200 px la columna de la ficha se queda a la vista mientras el mapa se desplaza. Este documento decía que en
+  escritorio no hacía falta bajar a la ficha; no baja, pero la ficha acompaña.
+- La imagen del mapa conserva el borde oscuro de la casilla elegida.
+- Los enlaces de «Resultados por territorio» caen en su tarjeta (`#districts`), dentro de la sección Escaños, y no en
+  lo alto de la sección.
 
 Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no recoge:
 
@@ -254,20 +295,31 @@ Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no re
 - Los 301 en el navegador: con ficheros no hay servidor; se vieron con el arnés de los tests.
 - La salida sin `:has()`: sólo la cubren los tests.
 - Un ámbito autonómico con su parte publicada: ninguno la tiene aún; se usó la de `es` reducida a Andalucía.
+- Cuánto tarda la imagen en un móvil de verdad. html2canvas copia el documento entero, que ha pasado de 3.380 a 6.995
+  elementos, y eso también toca a la imagen de «Cambios por encuestadora», en la misma página.
+- La tarjeta con un lector de pantalla: nadie la ha usado con uno.
 
 ### Lo que queda (Luis)
 
 - Los selectores del mapa en el móvil siguen ocupando seis filas (cuatro de partidos y dos de estados), como en la
   página aparte.
+- Los tres cambios de la revisión final son suyos para quedárselos o deshacerlos, y cada uno es pequeño. La columna
+  pegada se deshace quitando las tres reglas de `.so-fichas` del bloque de 1.200 px de `site.css`. El borde de la
+  casilla en la imagen, volviendo a poner las dos reglas `.shot-image .so-tile:has(input:checked)` que se quitaron. Los
+  enlaces del territorio, devolviendo `#escanos` a sus enlaces, a su formulario y a `regionHref` y quitando
+  `sectionLanding` del scroll de la página.
 - La página del evento responde con un error 500 si un bloque de `meta.bmaps.blocks` no tiene fila en el `summary`
   (`promedios.html`, la leyenda de la tabla de bloques). Ya pasa en `dev`: se reprodujo en los dos quitando la fila
   de Derecha. El run real lleva las tres filas (Izquierda, Derecha y Otros) en los dos modos, así que hoy no puede
-  pasar.
+  pasar. Se recomienda arreglarlo en `dev` antes del 29-N con un commit propio y pequeño: `…|selectattr('name',
+  'equalto', block)|first|default(none)` y un test. Esta rama no lo toca.
 - En el móvil, el aviso de congelación se queda pegado arriba y tapa la cabecera (ya pasaba antes de esta rama). Con
   un aviso de una línea (48 px) la ficha queda bajo él; con uno de dos líneas a 360 px (70 px) la ficha empieza 2 px
   por debajo de su borde y su nombre se sigue leyendo, y las secciones a las que lleva el índice quedan con sus 18 px
   de arriba bajo el aviso (medido: caen a 52 px y el aviso acaba en 70).
 - Las dos diferencias con la maqueta, arriba, si hay que cambiarlas.
+- Después de desplegar, medir cuánto tarda la descarga de la imagen en un móvil de verdad y abrir la tarjeta una vez
+  en Safari.
 - Después de desplegar, una comprobación en la web de verdad: abrir `/es#escanos` en un móvil, tocar una provincia y
   descargar la imagen de la tarjeta. Nadie pudo probarlo detrás de nginx, en otros navegadores ni en móviles de
   verdad.
@@ -275,7 +327,6 @@ Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no re
 
 ### Pendientes menores
 
-- Los comentarios de `_seat_odds.html` siguen llamando «card» a la ficha de la circunscripción.
 - `docs/web/contrato.md` conserva, encima de la enmienda que las corrige, las frases viejas sobre `/{scope}/escanos`.
 - El test de la barra del evento de las subpáginas vive en `tests/test_pages_seat_odds.py`.
 - Las redirecciones de las direcciones viejas conservan un `seccion` que traiga la query (`?seccion=tabla` cae en
