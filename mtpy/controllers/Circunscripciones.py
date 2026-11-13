@@ -1,121 +1,86 @@
 """
-Controller of the page «Escaños que bailan» (``/{scope}/circunscripciones[/{district}]``).
+Controller of the addresses of the page «Escaños que bailan» that there was
+(``/{scope}/circunscripciones[/{district}]``, retired on 2026-11-13): they lead to its card on the event page.
 """
-from typing import Optional
-from urllib.parse import quote
-
 from ..lib import pages
 from .Page import Page
 
-# «Los más reñidos», a tab of the first versions of the page (in production on 2026-11-13): its addresses go to the page
-RETIRED_VIEW = 'renidos'
+# the parameters of the page that was, which the event page does not read: the party of its card of a party, its tabs
+# and its dropdown of districts
+RETIRED_PARAMS = ('partido', 'vista', 'circunscripcion')
 
 
 class Circunscripciones(Page):
     """
-    The seats of every district, one by one: which ones each party has safe, which ones are likely and which ones
-    are in play, with the share of the simulations in which it wins them. A subpage of the event: it follows its mode
-    and its pinned run.
+    The addresses of the page «Escaños que bailan», which the card of the same name of the event page replaced: a 301
+    to that card, keeping the mode and the pinned run.
     """
 
     active = None
 
-    def page(self, scope: str, district: Optional[str] = None, party: Optional[str] = None,
-             view: Optional[str] = None) -> str:
+    def card_location(self, scope: str) -> str:
         """
-        Render the page for a scope already resolved.
+        Target of an address of the page that was: the card «Escaños que bailan» of the event page of ``scope``.
+
+        The card opens on its own district (``default_district``): the district of the address is not kept, and neither
+        are the parameters of ``RETIRED_PARAMS``; the rest of the query (``mode``, ``run``) is. The target does not
+        depend on whether the run shown has the card: the event page says what it has.
 
         Parameters
         ----------
         scope : str
-            Scope code.
-        district : str, optional
-            Slug of the district shown; it wins over ``party`` and ``view``.
-        party : str, optional
-            Slug of the party of the view by party (``partido``); it wins over ``view``.
-        view : str, optional
-            ``partidos`` for the chart of the parties without the card of a party (``vista``).
+            Scope of the event page, already resolved.
 
         Returns
         -------
         str
-            The HTML of ``circunscripciones.html``; its canonical drops ``mode`` and ``run`` (``canonical_url``) and
-            the parameters the page ignores: ``circunscripcion`` always, ``partido`` and ``vista`` on the route of a
-            district, ``vista`` when ``partido`` wins (and either when empty).
+            ``'/{scope}{query}#escanos'``.
         """
-        context = pages.seat_odds_context(self.state(scope), district, party, view)
-        ignored = ['circunscripcion']
-
-        if district is not None or party is None:
-            ignored.append('partido')
-
-        if district is not None or party is not None or view is None:
-            ignored.append('vista')
-
-        return self.render('circunscripciones.html', canonical=self.canonical_url(*ignored), **context)
+        return '/{}{}#escanos'.format(scope, self.query_without(*RETIRED_PARAMS))
 
     async def index_action(self, scope: str) -> str:
         """
-        Render the page on the district with most options in play (or on the chart of the parties and the card of the
-        party of ``partido``, or the chart of the parties of ``vista=partidos``), or send the dropdown of districts
-        to the address of the one chosen.
-
-        The dropdown (``#district-pick``) submits ``circunscripcion`` with the slug of a district (the browser lands
-        here with or without JavaScript), and the answer is a 301 to ``/{scope}/circunscripciones/{slug}`` with the
-        rest of the query (``mode``, ``run``) and the fragment of the card (``pages.district_href``). An address of
-        the retired view (``vista=renidos``) gets a 301 to the same address without it.
+        Redirect ``/{scope}/circunscripciones`` to the card of the event page (``card_location``).
 
         Parameters
         ----------
         scope : str
-            Scope of the route (``pages.resolve_event_scope``).
+            Scope of the route.
 
         Returns
         -------
         str
-            The HTML of the page, or the empty body of the redirection.
+            The empty body of the 301.
 
         Raises
         ------
         HttpError
-            404 for an unknown scope or party, or a run without the ``seat-odds`` part (or with a single district);
-            400 for an invalid ``mode``, ``run`` or ``vista``.
+            404 for a scope outside the catalogue or without a published forecast (``pages.resolve_event_scope``);
+            503 without a bundle.
         """
-        code = pages.resolve_event_scope(scope)
-        wanted = self.request.query.get('circunscripcion')
-
-        if wanted:
-            # the address of `district_href`, with the fragment of the card: on a phone the page lands on it
-            rest = self.query_without('circunscripcion')
-
-            return self.redirect(pages.district_href(code, quote(wanted, safe=''), rest))
-
-        if self.request.query.get('vista') == RETIRED_VIEW:
-            return self.redirect('/{}/circunscripciones{}'.format(code, self.query_without('vista')))
-
-        return self.page(code, party=self.request.query.get('partido') or None,
-                         view=self.request.query.get('vista') or None)
+        return self.redirect(self.card_location(pages.resolve_event_scope(scope)))
 
     async def detail_action(self, scope: str, district: str) -> str:
         """
-        Render the page on one district.
+        Redirect ``/{scope}/circunscripciones/{district}`` to the card of the event page (``card_location``), whatever
+        the district.
 
         Parameters
         ----------
         scope : str
-            Scope of the route (``pages.resolve_event_scope``).
+            Scope of the route.
         district : str
-            Slug of the district.
+            Slug of the district of the address; not kept.
 
         Returns
         -------
         str
-            The HTML of the page.
+            The empty body of the 301.
 
         Raises
         ------
         HttpError
-            404 for an unknown scope or district, or a run without the ``seat-odds`` part (or with a single
-            district); 400 for an invalid ``mode`` or ``run``.
+            404 for a scope outside the catalogue or without a published forecast (``pages.resolve_event_scope``);
+            503 without a bundle.
         """
-        return self.page(pages.resolve_event_scope(scope), district)
+        return self.redirect(self.card_location(pages.resolve_event_scope(scope)))

@@ -12,7 +12,7 @@ JS_DIR = pathlib.Path(ROOT, 'web', 'dist', 'js')
 URL_STATE_JS = (JS_DIR / 'url-state.js').as_uri()
 BLOCKS_JS = (JS_DIR / 'blocks.js').as_uri()
 SEATS_JS = (JS_DIR / 'seats.js').as_uri()
-IDS = ['territorio', 'escanos', 'tabla']
+IDS = ['resultados', 'escanos', 'tabla']
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -50,9 +50,25 @@ def test_with_section():
 
 
 def test_section_target():
-    assert run_js('u.sectionTarget("?mode=forecast&seccion=escanos", "#coalition=PP", IDS)') == 'escanos'
-    assert run_js('u.sectionTarget("", "#territorio&ventana=1a", IDS)') == 'territorio'
+    assert run_js('u.sectionTarget("?mode=forecast&seccion=resultados", "#coalition=PP", IDS)') == 'resultados'
+    assert run_js('u.sectionTarget("", "#escanos&ventana=1a", IDS)') == 'escanos'
     assert run_js('u.sectionTarget("?seccion=nope", "#coalition=PP", IDS)') is None
+    assert run_js('u.sectionTarget("", "#territorio&coalition=PP", IDS)') is None  # an anchor of before: none
+
+
+def test_section_landing():
+    # a district asked for in the seats section (the links and the form of the territory table, an old seats address
+    # with a `region`) lands on the territory card, which the section opens with «Escaños que bailan» above
+    assert run_js('u.sectionLanding("escanos", "?mode=forecast&region=8&seccion=escanos", true)') == 'districts'
+    assert run_js('u.sectionLanding("escanos", "?region=8", true)') == 'districts'
+    # without a district, or without the territory card, the top of the section, as before
+    assert run_js('u.sectionLanding("escanos", "?mode=forecast&seccion=escanos", true)') == 'escanos'
+    assert run_js('u.sectionLanding("escanos", "", true)') == 'escanos'
+    assert run_js('u.sectionLanding("escanos", "?region=8&seccion=escanos", false)') == 'escanos'
+    # the other sections never change, with or without a district
+    assert run_js('u.sectionLanding("resultados", "?region=8&seccion=resultados", true)') == 'resultados'
+    assert run_js('u.sectionLanding("tabla", "?region=8", true)') == 'tabla'
+    assert run_js('u.sectionLanding(null, "?region=8", true)') is None
 
 
 def test_drop_param():
@@ -66,13 +82,16 @@ def test_existing_readers_ignore_the_section_token():
     assert run_js('s.parseCoalition("#escanos&coalition=PP,VOX", ["PP", "PSOE", "VOX"])') == ['PP', 'VOX']
 
 
-def test_coalition_location_hash_puts_the_page_on_the_seats_section():
-    """Un enlace compartido de la calculadora abre en «Escaños»: con partidos marcados el fragmento lleva la sección
-    `escanos` (la única suelta, primero) y conserva el resto del estado; sin partidos la sección se queda como está."""
-    assert run_js('s.coalitionLocationHash("", ["PP", "VOX"])') == '#escanos&coalition=PP,VOX'
-    assert run_js('s.coalitionLocationHash("#ventana=1a", ["PP"])') == '#escanos&ventana=1a&coalition=PP'
-    assert run_js('s.coalitionLocationHash("#tabla&ventana=1a", ["PP"])') == '#escanos&ventana=1a&coalition=PP'
-    assert run_js('s.coalitionLocationHash("#escanos&coalition=PP&ventana=1a", ["PP", "VOX"])') == \
-        '#escanos&ventana=1a&coalition=PP,VOX'
+def test_coalition_location_hash_puts_the_page_on_the_results_section():
+    """Un enlace compartido de la calculadora abre en «Resultados» (2026-11-13; antes «Escaños»): con partidos marcados
+    el fragmento lleva la sección `resultados` (la única suelta, primero) y conserva el resto del estado; sin partidos
+    la sección se queda como está."""
+    assert run_js('s.coalitionLocationHash("", ["PP", "VOX"])') == '#resultados&coalition=PP,VOX'
+    assert run_js('s.coalitionLocationHash("#ventana=1a", ["PP"])') == '#resultados&ventana=1a&coalition=PP'
+    assert run_js('s.coalitionLocationHash("#tabla&ventana=1a", ["PP"])') == '#resultados&ventana=1a&coalition=PP'
+    assert run_js('s.coalitionLocationHash("#resultados&coalition=PP&ventana=1a", ["PP", "VOX"])') == \
+        '#resultados&ventana=1a&coalition=PP,VOX'
+    # a link of before keeps its coalition and moves to the results section
+    assert run_js('s.coalitionLocationHash("#escanos&coalition=PP", ["PP", "VOX"])') == '#resultados&coalition=PP,VOX'
     assert run_js('s.coalitionLocationHash("#tabla&coalition=PP&ventana=1a", [])') == '#tabla&ventana=1a'
     assert run_js('s.coalitionLocationHash("#coalition=PP", [])') == ''

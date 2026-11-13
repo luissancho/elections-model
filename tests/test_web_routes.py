@@ -182,18 +182,39 @@ def test_chart_containers_have_aria_labels():
 def test_event_page_js_finds_its_elements_and_shares_the_seats_wiring():
     """Every id the event page looks up by name exists in its templates, and the seats wiring lives in one module,
     imported by the event page, the only page left of the two it once served."""
-    names = ('promedios.html', 'base.html', '_polls_table.html', '_event_bar.html')
+    names = ('promedios.html', 'base.html', '_polls_table.html', '_event_bar.html', '_seat_odds.html')
     text = ''.join(open(os.path.join(TEMPLATES, name), encoding='utf-8').read() for name in names)
-    ids = set(re.findall(r'id="([\w-]+)"', text)) | set(re.findall(r"download_button\('([\w-]+)'", text))
+    # the ids the macros write: the download buttons and the cards (`card_start`, the territory card `districts`)
+    ids = (set(re.findall(r'id="([\w-]+)"', text)) | set(re.findall(r"download_button\('([\w-]+)'", text))
+           | set(re.findall(r"card_start\('([\w-]+)'", text)))
     pages = os.path.join(DIST, 'js', 'pages')
     missing = []
-    for name in ('promedios.js', 'seats-wire.js', 'evolution-wire.js', 'series-wire.js', 'polls-wire.js'):
+    for name in ('promedios.js', 'seats-wire.js', 'evolution-wire.js', 'series-wire.js', 'polls-wire.js',
+                 'seat-odds-wire.js'):
         with open(os.path.join(pages, name), encoding='utf-8') as fh:
             missing += [(name, ref) for ref in re.findall(r"getElementById\('([\w-]+)'\)", fh.read()) if ref not in ids]
     assert missing == []
     with open(os.path.join(pages, 'promedios.js'), encoding='utf-8') as fh:
         text = fh.read()
-    assert "from './seats-wire.js'" in text
+    assert "from './seats-wire.js'" in text and "from './seat-odds-wire.js'" in text
     assert 'function wireCoalition' not in text and 'function wireTerritory' not in text
     assert not os.path.exists(os.path.join(pages, 'escanos.js'))
     assert not os.path.exists(os.path.join(TEMPLATES, 'escanos.html'))
+
+
+OLD_SECTION_ANCHORS = re.compile(r"""#territorio|seccion=territorio|['"]territorio['"]""")
+
+
+def test_no_file_points_at_the_territory_anchor_of_before():
+    """La sección «Territorio» de la página del evento pasó a «Escaños» (`#escanos`) el 2026-11-13, sin apaño para los
+    enlaces viejos: ninguna plantilla, script ni módulo de `mtpy` escribe ya `#territorio`, `seccion=territorio` ni
+    `'territorio'` como identificador de sección (el título «Resultados por territorio» y la palabra suelta, sí)."""
+    found = []
+    for base in (TEMPLATES, os.path.join(DIST, 'js'), os.path.join(ROOT, 'mtpy')):
+        for folder, _, files in os.walk(base):
+            for name in files:
+                if name.endswith(('.py', '.html', '.js')):
+                    path = os.path.join(folder, name)
+                    with open(path, encoding='utf-8') as fh:
+                        found += [(os.path.relpath(path, ROOT), hit) for hit in OLD_SECTION_ANCHORS.findall(fh.read())]
+    assert found == []

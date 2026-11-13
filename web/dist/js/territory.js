@@ -1,6 +1,6 @@
 // Pure logic of "Resultados por territorio" of the event page: rows by province or by community, in seats or in
-// vote, winners, cell tints, sorting and the party rows of one district. The page script only reads the controls,
-// calls these functions and writes the DOM.
+// vote, winners, cell tints, sorting, the party rows of one district and the link of a district. The page script
+// only reads the controls, calls these functions and writes the DOM.
 import {fmtRange} from './format.js';
 
 /** Highest alpha of a cell tint. */
@@ -224,4 +224,18 @@ export function sortTerritory(rows, key, asc) {
 export function regionRows(districts, regionId) {
   const rows = (districts.rows || []).filter((row) => row.region_id === regionId && isNumber(row.pct));
   return rows.sort((a, b) => ((b.seats || 0) - (a.seats || 0)) || ((b.pct || 0) - (a.pct || 0)));
+}
+
+/**
+ * Link of a district of the territory table, as the template writes it: the event page on the seats section
+ * (`escanos`, which holds «Resultados por territorio») with that district (what the form sends without JavaScript;
+ * with it, the click is caught by `wireRegion`). The `#districts` fragment lands a link opened apart (a new window, a
+ * modified click) on the territory card, below «Escaños que bailan».
+ *
+ * @param {object} state the `state` of the initial data (`scope`, `mode`, `run`, `pinned`)
+ * @param {number} id district id
+ * @returns {string} the URL
+ */
+export function regionHref({scope, mode, run, pinned}, id) {
+  return `/${scope}?mode=${mode}${pinned ? `&run=${run}` : ''}&region=${id}&seccion=escanos#districts`;
 }

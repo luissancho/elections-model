@@ -88,27 +88,8 @@ export function fitOverflow(card) {
 }
 
 /**
- * Let the marked SVGs of the copy (`[data-shot-fluid]`: sized by the stylesheet, like the hemicycle of «Escaños que
- * bailan») take the size the copy's layout gives them. html2canvas writes the computed style of every SVG element of
- * the page on its copy, so without this they would keep the size they had on the screen: a hemicycle 294 px wide in
- * an image 1200 px wide when the page is read on a phone.
- *
- * @param {HTMLElement} card the card in the cloned document
- * @returns {number} how many SVGs were freed
- */
-export function freeFluidSvgs(card) {
-  const svgs = [...card.querySelectorAll('[data-shot-fluid]')];
-  for (const svg of svgs) {
-    for (const property of ['width', 'height', 'inline-size', 'block-size']) {
-      svg.style.removeProperty(property);
-    }
-  }
-  return svgs.length;
-}
-
-/**
- * Prepare the copy of the card in the document html2canvas renders: strip the tools (`STRIPPED`), let its marked SVGs
- * take the size of the copy (`freeFluidSvgs`), widen it to show its marked scrollers whole (`fitOverflow`), replace each chart by an image of its option (`imageOptionOf`) at the
+ * Prepare the copy of the card in the document html2canvas renders: strip the tools (`STRIPPED`), widen it to show
+ * its marked scrollers whole (`fitOverflow`), replace each chart by an image of its option (`imageOptionOf`) at the
  * size the copy's layout gives the container, append the signature and wait for the fonts.
  *
  * @param {Document} doc the cloned document
@@ -124,7 +105,6 @@ export async function prepareClone(doc, cardId, charts, sign, scale) {
   }
   card.classList.add('shot-image');
   card.querySelectorAll(STRIPPED).forEach((el) => el.remove());
-  freeFluidSvgs(card);
   fitOverflow(card);
   for (const chart of charts) {
     const {id} = chart;

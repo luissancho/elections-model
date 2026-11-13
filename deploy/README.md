@@ -105,7 +105,8 @@ familias de páginas:
 
 - **De evento** (la próxima elección de un ámbito), bajo el código del ámbito del catálogo: `/{scope}` («Encuestas»,
   controlador `Promedios`, `promedios.html`, con `?region=`), que desde el 2026-11-04 junta Promedios y Escaños en
-  una página por secciones con ancla (`#promedio`, `#escanos`, `#evolucion`, `#territorio`, `#tabla`;
+  una página por secciones con ancla (desde el 2026-11-13: `#promedio`, `#resultados` —el hemiciclo, los resultados
+  y la calculadora—, `#escanos` —«Escaños que bailan» y «Resultados por territorio»—, `#evolucion` y `#tabla`;
   `pages.EVENT_SECTIONS`). Acepta `?mode=` (`nowcast` o `forecast`) y `?run=`, pero desde la fase 7b no pinta un
   selector de modo: sin `?mode=`, `pages.default_mode(horizon)` muestra Elección (`forecast`) cuando el run mostrado
   está a 60 días o menos de su elección (`pages.run_horizon`: `event_date − as_of`; `pages.FORECAST_HORIZON`, desde el
@@ -125,10 +126,13 @@ familias de páginas:
 
 Redirecciones 301 (`Page.redirect`, desde `Redirect.py` y, para `/?scope=`, desde `Index`; `cache-control: no-store`, sin cuerpo, conservando el resto de la query):
 `/?scope=X` → `/X` (`/` sin `scope` es el Inicio); `/promedio` → `/X` (`/es` sin `scope`); `/X/escanos` →
-`/X?…&seccion=escanos`, o `seccion=territorio` si trae `region` (404 si `X` no está publicado; el `Location` nunca
-lleva `#`, así el navegador conserva el fragmento del enlace, como `#coalition=PP,VOX`, y la página hace scroll a la
-sección de `seccion` y lo quita de la URL); `/escanos` va directo a ese mismo destino, sin encadenar dos 301;
-`/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
+`/X?…&seccion=resultados`, o `seccion=escanos` si trae `region`, y entonces la página, con JavaScript, baja a
+«Resultados por territorio» (`#districts`), donde caen también los enlaces y el formulario de su tabla (404 si `X` no está publicado; el
+`Location` nunca lleva `#`, así el navegador conserva el fragmento del enlace, como `#coalition=PP,VOX`, y la página
+hace scroll a la sección de `seccion` y lo quita de la URL); `/escanos` va directo a ese mismo destino, sin encadenar dos 301;
+`/X/circunscripciones` y `/X/circunscripciones/{circunscripción}` (la página aparte de «Escaños que bailan», retirada
+el 2026-11-13; controlador `Circunscripciones`) → `/X?…#escanos`, sin `partido`, `vista` ni `circunscripcion` (404
+si `X` no está publicado); `/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
 (`proxy_cache_valid 200 60s`). La canonical de `/X` no lleva `mode`, `run` ni `seccion`.
 
 Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;

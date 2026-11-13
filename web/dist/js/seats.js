@@ -216,8 +216,9 @@ export function coalitionHash(names) {
 
 /**
  * Fragment of the page after a change of the majority calculator: its own key replaced (`mergeHash`), the rest of
- * the state kept, and, with parties marked, the seats section as the loose token, so that a shared link opens on the
- * calculator (`withSection`). Without parties the section token is left as it is.
+ * the state kept, and, with parties marked, the results section (`resultados`, which holds the calculator) as the
+ * loose token, so that a shared link opens on the calculator (`withSection`). Without parties the section token is
+ * left as it is.
  *
  * @param {string} current the current fragment (`location.hash`)
  * @param {string[]} names the parties marked
@@ -225,7 +226,7 @@ export function coalitionHash(names) {
  */
 export function coalitionLocationHash(current, names) {
   const merged = mergeHash(current, coalitionHash(names), COALITION_KEYS);
-  return names.length ? withSection(merged, 'escanos') : merged;
+  return names.length ? withSection(merged, 'resultados') : merged;
 }
 
 /**

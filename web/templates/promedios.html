@@ -3,6 +3,12 @@
 {% block description %}Encuestas, promedio de sondeos y escaños previstos por partido, bloque y circunscripción, con la probabilidad de mayoría absoluta, de {{ event_bar.title }}.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/promedios.js"></script>
+  {% if seat_odds %}
+  {#- the rules of the run of «Escaños que bailan», without JavaScript: the filter of each party dims the circles of the
+      others; the radio of each district shows its block (those of the views and of the filter of states are fixed, in
+      `site.css`) -#}
+  <style>{% for item in seat_odds.parties %}#seat-odds:has(#mp-{{ item.slug }}:checked) .so-dots i:not(.p-{{ item.slug }}){opacity:.08}{% endfor %}{% for block in seat_odds.cards %}#seat-odds:has(#d-{{ block.slug }}:checked) #ficha-{{ block.slug }}{display:block}{% endfor %}</style>
+  {% endif %}
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
@@ -86,7 +92,7 @@
         {% endcall %}
       {{ m.card_end() }}
       </section>
-      <section class="event-section" id="escanos">
+      <section class="event-section" id="resultados">
       <div class="hemi-grid">
         {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños ' ~ ('si hoy hubiera elecciones' if state.mode == 'nowcast' else 'en la elección') ~ ', dibujado como la cámara.', subtitle, 'hemi-card',
                         tools=m.download_button('hemicycle-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Hemiciclo · ' ~ title_suffix,
@@ -189,11 +195,6 @@
             </div>
           </div>
           {% endif %}
-          {#- the seats one by one, at the foot of the tables as at the foot of the territory card (Luis, 2026-11-12); only
-              when the run shown has the part with two districts or more (`odds`) -#}
-          {% if odds %}
-          {{ m.seat_odds_link(odds.page) }}
-          {% endif %}
           {#- the distributions open on demand (Luis, 2026-10-30): the button only works with JavaScript, which reveals it -#}
           <button type="button" class="more" id="ridge-toggle" aria-expanded="false" aria-controls="ridge-chart" hidden>Ver las distribuciones</button>
           <div class="chart" id="ridge-chart" role="img" aria-label="Distribución de escaños en las simulaciones, una fila por partido o bloque" hidden></div>
@@ -272,6 +273,134 @@
       {% include '_house_changes.html' %}
       {% endif %}
       </section>
+      {% if seat_odds or district_table %}
+      <section class="event-section" id="escanos">
+      {% if seat_odds %}
+      {#- «Escaños que bailan»: only when the run shown has the part with simulations and two districts or more
+          (`seat_odds_card`); the line of its image says which election, which estimate and its day -#}
+      {% import '_seat_odds.html' as s %}
+      {% set stamp %}<p class="so-stamp shot-only">{{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %} · {{ title_suffix }} · Actualizado: {{ event_bar.run_at|date }}</p>{% endset %}
+      {{ s.card(seat_odds, stamp) }}
+      {% endif %}
+      {% if district_table %}
+      {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el reparto central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
+        <div class="series-controls" id="territory-controls" hidden>
+          {% if territory_levels %}
+          <fieldset id="territory-level" class="seg">
+            <legend>Nivel</legend>
+            <label><input type="radio" name="level" value="ccaa" checked> CCAA</label>
+            <label><input type="radio" name="level" value="prov"> Provincia</label>
+          </fieldset>
+          {% endif %}
+          <fieldset id="territory-mode" class="seg">
+            <legend>Mostrar</legend>
+            <label><input type="radio" name="tmode" value="pct"> % Voto</label>
+            <label><input type="radio" name="tmode" value="esc" checked> Escaños</label>
+          </fieldset>
+        </div>
+        <div class="et-wrap">
+          <table id="district-table" class="geo">
+            <caption>Reparto central: D'Hondt en cada circunscripción sobre el voto central; cada fila suma sus escaños. Pasa el ratón para ver el rango del 95%.</caption>
+            <thead>
+              <tr>
+                <th scope="col" data-key="name" aria-sort="ascending">Circunscripción</th>
+                {% for name in district_table.parties %}
+                <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
+                {% endfor %}
+                <th scope="col" data-key="total">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in district_table.rows %}
+              <tr>
+                <td><a href="/{{ state.scope }}{{ query }}&amp;region={{ row.id }}&amp;seccion=escanos#districts">{{ row.name }}</a></td>
+                {% for cell in row.cells %}
+                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
+                {% endfor %}
+                <td>{{ row.seats|int }}</td>
+              </tr>
+              {% endfor %}
+              {% if district_table.total %}
+              <tr class="total">
+                <td>TOTAL</td>
+                {% for cell in district_table.total.cells %}
+                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
+                {% endfor %}
+                <td>{{ district_table.total.seats|int }}</td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
+        {#- without JavaScript the form reloads the page on this card (`seccion`, and the `#districts` of the action,
+            which browsers keep on a GET submit, scrolls there); with it, the detail is drawn in place -#}
+        <form id="district-form" method="get" action="/{{ state.scope }}#districts">
+          <input type="hidden" name="mode" value="{{ state.mode }}">
+          {% if state.pinned %}
+          <input type="hidden" name="run" value="{{ state.run }}">
+          {% endif %}
+          <input type="hidden" name="seccion" value="escanos">
+          <label for="region">Circunscripción</label>
+          <select name="region" id="region">
+            {% for item in regions %}
+            <option value="{{ item.id }}"{% if region and item.id == region.id %} selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="nojs-only">Ver</button>
+        </form>
+        {% if region %}
+        <div class="table-wrap">
+          <table id="region-table">
+            <caption>{{ region.name }} · {{ region.seats }} escaños</caption>
+            <thead>
+              <tr>
+                <th scope="col">Partido</th>
+                <th scope="col">% Voto</th>
+                <th scope="col">Rango 95%</th>
+                <th scope="col">Escaños</th>
+                <th scope="col">Rango 95%</th>
+                <th scope="col">P(escaño)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in region_rows %}
+              <tr>
+                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
+                <td>{{ row.pct|pct }}</td>
+                {% set vote_range = row.pct_lo|range(row.pct_hi, 1) %}
+                <td>{{ vote_range if vote_range == '–' else vote_range ~ '%' }}</td>
+                <td>{{ row.seats|int }}</td>
+                <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                <td>{{ row.p_seats|prob }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% call m.how() %}
+        <p>
+          La tabla reparte los escaños de cada circunscripción con D'Hondt sobre el voto central: la suma de las
+          circunscripciones es el hemiciclo de la página y la de los partidos de cada bloque, la cifra del bloque.
+          Al elegir una circunscripción, el detalle muestra ese reparto con el rango del 95% y la probabilidad de
+          escaño de las simulaciones. Están todos los partidos en liza, con escaños o sin ellos, en el mismo orden
+          en las dos vistas: por escaños y, a igual número, por voto. El guion dice que ahí no sacan ninguno o
+          que no se presentan.
+        </p>
+        <p>
+          Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto.
+        </p>
+        <p>
+          En CCAA los escaños son la suma de sus provincias y el voto, la media ponderada por los votos de la
+          elección anterior.
+        </p>
+        <p>Es un reparto del voto central, no la predicción cerrada de ninguna circunscripción: en las pequeñas, pocos votos cambian un escaño.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {% endif %}
+      </section>
+      {% endif %}
       <section class="event-section" id="evolucion">
       {#- one card for the two metrics: the % Voto / Escaños switch changes the chart and the table of changes
           (`pages/evolution-wire.js`) -#}
@@ -367,134 +496,6 @@
       {{ m.card_end() }}
       {% endif %}
       </section>
-      {% if district_table %}
-      <section class="event-section" id="territorio">
-      {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el reparto central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
-        <div class="series-controls" id="territory-controls" hidden>
-          {% if territory_levels %}
-          <fieldset id="territory-level" class="seg">
-            <legend>Nivel</legend>
-            <label><input type="radio" name="level" value="ccaa" checked> CCAA</label>
-            <label><input type="radio" name="level" value="prov"> Provincia</label>
-          </fieldset>
-          {% endif %}
-          <fieldset id="territory-mode" class="seg">
-            <legend>Mostrar</legend>
-            <label><input type="radio" name="tmode" value="pct"> % Voto</label>
-            <label><input type="radio" name="tmode" value="esc" checked> Escaños</label>
-          </fieldset>
-        </div>
-        <div class="et-wrap">
-          <table id="district-table" class="geo">
-            <caption>Reparto central: D'Hondt en cada circunscripción sobre el voto central; cada fila suma sus escaños. Pasa el ratón para ver el rango del 95%.</caption>
-            <thead>
-              <tr>
-                <th scope="col" data-key="name" aria-sort="ascending">Circunscripción</th>
-                {% for name in district_table.parties %}
-                <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
-                {% endfor %}
-                <th scope="col" data-key="total">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in district_table.rows %}
-              <tr>
-                <td><a href="/{{ state.scope }}{{ query }}&amp;region={{ row.id }}&amp;seccion=territorio#territorio">{{ row.name }}</a></td>
-                {% for cell in row.cells %}
-                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
-                {% endfor %}
-                <td>{{ row.seats|int }}</td>
-              </tr>
-              {% endfor %}
-              {% if district_table.total %}
-              <tr class="total">
-                <td>TOTAL</td>
-                {% for cell in district_table.total.cells %}
-                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
-                {% endfor %}
-                <td>{{ district_table.total.seats|int }}</td>
-              </tr>
-              {% endif %}
-            </tbody>
-          </table>
-        </div>
-        <p class="scroll-hint">Desliza para ver más →</p>
-        {#- without JavaScript the form reloads the page on this section (`seccion`, and the `#territorio` of the action, which
-            browsers keep on a GET submit, scrolls there); with it, the detail is drawn in place -#}
-        <form id="district-form" method="get" action="/{{ state.scope }}#territorio">
-          <input type="hidden" name="mode" value="{{ state.mode }}">
-          {% if state.pinned %}
-          <input type="hidden" name="run" value="{{ state.run }}">
-          {% endif %}
-          <input type="hidden" name="seccion" value="territorio">
-          <label for="region">Circunscripción</label>
-          <select name="region" id="region">
-            {% for item in regions %}
-            <option value="{{ item.id }}"{% if region and item.id == region.id %} selected{% endif %}>{{ item.name }}</option>
-            {% endfor %}
-          </select>
-          <button type="submit" class="nojs-only">Ver</button>
-        </form>
-        {% if region %}
-        <div class="table-wrap">
-          <table id="region-table">
-            <caption>{{ region.name }} · {{ region.seats }} escaños</caption>
-            <thead>
-              <tr>
-                <th scope="col">Partido</th>
-                <th scope="col">% Voto</th>
-                <th scope="col">Rango 95%</th>
-                <th scope="col">Escaños</th>
-                <th scope="col">Rango 95%</th>
-                <th scope="col">P(escaño)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in region_rows %}
-              <tr>
-                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
-                <td>{{ row.pct|pct }}</td>
-                {% set vote_range = row.pct_lo|range(row.pct_hi, 1) %}
-                <td>{{ vote_range if vote_range == '–' else vote_range ~ '%' }}</td>
-                <td>{{ row.seats|int }}</td>
-                <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
-                <td>{{ row.p_seats|prob }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% if odds %}
-        {#- hidden, not absent, when the district shown is not in the part: the script shows it for another one. The keys
-            of `odds.districts` are ints here and strings in the embedded JSON (`odds_hrefs`) -#}
-        {% set odds_href = odds.districts.get(region.id) %}
-        <p class="more"{% if not odds_href %} hidden{% endif %}><a id="region-odds" class="more-link"{% if odds_href %} href="{{ odds_href }}"{% endif %}>Escaño a escaño en {{ region.name }} ›</a></p>
-        {% endif %}
-        {% endif %}
-        {% if odds %}
-        {{ m.seat_odds_link(odds.page) }}
-        {% endif %}
-        {% call m.how() %}
-        <p>
-          La tabla reparte los escaños de cada circunscripción con D'Hondt sobre el voto central: la suma de las
-          circunscripciones es el hemiciclo de la página y la de los partidos de cada bloque, la cifra del bloque.
-          Al elegir una circunscripción, el detalle muestra ese reparto con el rango del 95% y la probabilidad de
-          escaño de las simulaciones. Están todos los partidos en liza, con escaños o sin ellos, en el mismo orden
-          en las dos vistas: por escaños y, a igual número, por voto. El guion dice que ahí no sacan ninguno o
-          que no se presentan.
-        </p>
-        <p>
-          Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto.
-        </p>
-        <p>
-          En CCAA los escaños son la suma de sus provincias y el voto, la media ponderada por los votos de la
-          elección anterior.
-        </p>
-        <p>Es un reparto del voto central, no la predicción cerrada de ninguna circunscripción: en las pequeñas, pocos votos cambian un escaño.</p>
-        {% endcall %}
-      {{ m.card_end() }}
-      </section>
-      {% endif %}
       <section class="event-section" id="tabla">
       {% if table_total %}
       {{ m.card_start('polls', 'Todas las encuestas', ('Lo que publicó cada sondeo del ciclo: la estimación de voto (%) y, en las encuestadoras que los dan, los escaños. Sombreado, el partido que va primero. Pulsa una cabecera para ordenar.' if has_seats else 'Estimación de voto (%) de cada sondeo del ciclo, tal como se publicó. Sombreado, el partido más votado. Pulsa una cabecera para ordenar.')) }}
