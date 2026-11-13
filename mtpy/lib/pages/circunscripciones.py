@@ -28,6 +28,9 @@ CLOSEST_SHOWN = 40
 CARD_ANCHOR = '#ficha'   # the cards of the districts (their wrapper) or the card of a party
 VIEWS_ANCHOR = '#vistas'  # the tabs of the views
 PARTIES_ANCHOR = '#partidos'  # the buttons of the parties, under the chart of the parties
+# the catalogue (`data/es-districts.csv`) keeps the INE code (1 to 52) of a province as the id of its district and
+# numbers every other district from 100 (`tests/test_data_files.py` asserts it)
+FIRST_NON_PROVINCE_ID = 100
 # the strokes of the hemicycle for a circle of radius 9.7 (390 options): those of the mockup, scaled with the radius
 HEMICYCLE_STROKES = {'radius': 9.7, 'likely': 1.6, 'play': 1.9, 'dash': (3.1, 2.5)}
 
@@ -333,6 +336,24 @@ def _join_names(names: list) -> str:
     last = names[-1].lower()
     link = 'e' if last.startswith(('i', 'hi')) else 'y'
     return '{} {} {}'.format(', '.join(names[:-1]), link, names[-1])
+
+
+def districts_are_provinces(regions: list) -> bool:
+    """
+    Whether every district of a part is a province, so that the page can call them «provincias».
+
+    Parameters
+    ----------
+    regions : list
+        ``regions`` of the ``seat-odds`` part (``id``).
+
+    Returns
+    -------
+    bool
+        ``True`` when every id is an INE province code, below ``FIRST_NON_PROVINCE_ID`` (the islands of Canarias and
+        its «Lista autonómica», those of Baleares and the three districts of Asturias are not).
+    """
+    return all(region['id'] < FIRST_NON_PROVINCE_ID for region in regions)
 
 
 def district_sentence(district: dict) -> str:
@@ -1012,7 +1033,9 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         landing on the tabs, the one of the parties on ``?vista=partidos``, and ``on`` of the three views), ``n_sim``,
         ``thresholds`` (``safe``, ``likely`` and ``play``, ``threshold_label`` of ``SAFE_SHARE``, ``LIKELY_SHARE``
         and ``PLAY_SHARE``, for the legend and the «Cómo leerlo»), ``state_words`` (``STATE_WORDS``, for the chips
-        and the filter of states), ``page_title`` (``'Escaños que bailan'`` on the landing) and ``image_sign``.
+        and the filter of states), ``district_word`` (``'provincia'`` when ``districts_are_provinces``,
+        ``'circunscripción'`` otherwise; the label of the first tab follows it), ``page_title`` (``'Escaños que
+        bailan'`` on the landing) and ``image_sign``.
 
     Raises
     ------
@@ -1071,8 +1094,10 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
     base = '/{}/circunscripciones'.format(scope)
     # the tabs land on themselves (`#vistas`) and the party buttons on themselves (`#partidos`, under the chart of the
     # parties): on a phone the card of the view is far below the top of the page
+    provinces = districts_are_provinces(data['regions'])
     tabs = [
-        {'key': 'district', 'label': 'Provincias', 'href': base + query + VIEWS_ANCHOR},
+        {'key': 'district', 'label': 'Provincias' if provinces else 'Circunscripciones',
+         'href': base + query + VIEWS_ANCHOR},
         {'key': 'party', 'label': 'Partidos', 'href': base + _with_param(query, 'vista', 'partidos') + VIEWS_ANCHOR},
         {'key': 'closest', 'label': 'Los más reñidos',
          'href': base + _with_param(query, 'vista', 'renidos') + VIEWS_ANCHOR},
@@ -1094,6 +1119,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         'thresholds': {'safe': threshold_label(SAFE_SHARE), 'likely': threshold_label(LIKELY_SHARE),
                        'play': threshold_label(PLAY_SHARE)},
         'state_words': STATE_WORDS,
+        'district_word': 'provincia' if provinces else 'circunscripción',
         'image_sign': '{} · {}'.format(context['site_host'], context['author_handle']),
     })
     image_slug = card.pop('image_slug', None)

@@ -261,6 +261,38 @@ def test_the_map_without_positions_and_the_foot_without_more_options_than_seats(
     assert 'opciones para' not in page and 'De los 8 escaños, 5 son seguros (PP 2, PSOE 2, VOX 1).' in page
     assert 'se los disputan' not in page
 
+
+def test_only_ine_province_codes_make_the_districts_provinces():
+    # the catalogue keeps the INE code of a province as its id and numbers every other district from 100
+    provinces = [{'id': 11, 'name': 'Cádiz'}, {'id': 52, 'name': 'Melilla'}]
+    assert pages.districts_are_provinces(provinces)
+    assert not pages.districts_are_provinces(provinces + [{'id': 100, 'name': 'Lista autonómica'}])
+    assert not pages.districts_are_provinces([{'id': 101, 'name': 'Central'}, {'id': 102, 'name': 'Occidental'}])
+
+
+def test_a_part_with_a_district_that_is_not_a_province_says_circunscripcion(odds_site, fresh_app):
+    # the islands of Canarias and its «Lista autonómica», the three districts of Asturias: never «provincia»
+    mixed = dict(ODDS, regions=ODDS['regions'] + [{'id': 101, 'name': 'Lista autonómica', 'seats': 2}],
+                 rows=ODDS['rows'] + [odds_row(101, 'PP', 1, 10000, 5000)])
+    write_odds(fresh_app.fs, mixed)
+    page = page_of(odds_site, '/es/circunscripciones')[1]
+    assert re.findall(r'<a href="[^"]*"[^>]*>(Circunscripciones|Partidos|Los más reñidos)</a>', page) == [
+        'Circunscripciones', 'Partidos', 'Los más reñidos']
+    assert '<h2>Dónde bailan los escaños, circunscripción a circunscripción</h2>' in page
+    assert ('con el borde discontinuo si está en juego. Toca una circunscripción para ver su detalle.') in page
+    parties = page_of(odds_site, '/es/circunscripciones', 'vista=partidos')[1]
+    assert 'Cada círculo es una opción de escaño de ese partido en alguna circunscripción. En el núcleo' in parties
+    assert 'Cada círculo es una opción de escaño en alguna circunscripción. Abajo, los seguros' in parties
+    for label, view in (('circunscripciones', page), ('partidos', parties)):
+        text = visible_text(view[view.index('id="content"'):])
+        assert 'provincia' not in text.lower(), label
+    # the scope of the fixture, all provinces, keeps its words
+    write_odds(fresh_app.fs)
+    parties = page_of(odds_site, '/es/circunscripciones', 'vista=partidos')[1]
+    assert '>Provincias</a>' in parties and 'de ese partido en alguna provincia.' in parties
+    assert 'una opción de escaño en alguna provincia.' in parties
+
+
 def test_a_district_card_draws_a_circle_per_option_and_labels_only_those_not_safe(odds_site):
     status, page = page_of(odds_site, '/es/circunscripciones/la-coruna')
     start = page.index('id="ficha-la-coruna"')

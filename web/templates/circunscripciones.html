@@ -34,8 +34,8 @@
         <section class="card shot so-card so-map-card" id="mapa" data-file-base="{{ map_image_file|replace('.png', '') }}">
           {{ m.card_image_button(map_image_file, image_sign) }}
           <header class="card-head">
-            <h2>Dónde bailan los escaños, provincia a provincia</h2>
-            <p class="lead">Cada círculo es una opción de escaño: sólido si es seguro, más claro si es probable y con el borde discontinuo si está en juego. Toca una provincia para ver su detalle.</p>
+            <h2>Dónde bailan los escaños, {{ district_word }} a {{ district_word }}</h2>
+            <p class="lead">Cada círculo es una opción de escaño: sólido si es seguro, más claro si es probable y con el borde discontinuo si está en juego. Toca una {{ district_word }} para ver su detalle.</p>
           </header>
           {#- the two filters dim the circles that do not match (`site.css` and the `<style>` of the head); they
               combine, and their counts are those of the scope whatever the party -#}
@@ -123,9 +123,9 @@
         {{ m.card_image_button(charts.image_file, image_sign) }}
         <header class="card-head">
           <h2 class="so-form-hemi">El hemiciclo que baila</h2>
-          <p class="lead so-form-hemi">Cada círculo es una opción de escaño de ese partido en alguna provincia. En el núcleo de cada partido, los seguros; hacia el borde, los probables y los que están en juego.</p>
+          <p class="lead so-form-hemi">Cada círculo es una opción de escaño de ese partido en alguna {{ district_word }}. En el núcleo de cada partido, los seguros; hacia el borde, los probables y los que están en juego.</p>
           <h2 class="so-form-cols">Las opciones de escaño de cada partido</h2>
-          <p class="lead so-form-cols">Cada círculo es una opción de escaño en alguna provincia. Abajo, los seguros; encima, los probables y los que están en juego.</p>
+          <p class="lead so-form-cols">Cada círculo es una opción de escaño en alguna {{ district_word }}. Abajo, los seguros; encima, los probables y los que están en juego.</p>
         </header>
         <fieldset class="seg so-filter" id="chart-form">
           <legend>Gráfico</legend>

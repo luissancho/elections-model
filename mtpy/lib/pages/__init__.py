@@ -39,7 +39,8 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
                          table_blocks, with_abs, with_model_row, year_range)
 from .circunscripciones import (CLOSEST_SHOWN, LIKELY_SHARE, PLAY_SHARE, SAFE_SHARE, closest_seats,
                                 closest_sentence, default_district, district_href, district_sentence, district_views,
-                                drawn_row, drawn_token, options_sentence, party_sentence, party_view,
+                                districts_are_provinces, drawn_row, drawn_token, options_sentence, party_sentence,
+                                party_view,
                                 published_seat_odds, scope_options, scope_totals, seat_odds_context, seat_odds_links,
                                 seat_state, seat_tokens, state_text, threshold_label, tint, token_alpha, token_label,
                                 tokens_note, tokens_reading)
