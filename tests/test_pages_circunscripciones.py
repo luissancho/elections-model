@@ -675,3 +675,12 @@ def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_he
     assert not [word for word in RETIRED if word in text]
     assert_public_wording(page, 'partidos')
     assert call(odds_site, '/es/circunscripciones', query='vista=otra')[0] == 400
+
+
+def site_css():
+    return open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+
+
+def test_the_long_titles_of_the_cards_wrap_beside_their_accent_bar():
+    # the site's `.card-head h2` wraps its text under the bar when it does not fit a line (phones); not on this page
+    assert re.search(r'\.so-card \.card-head h2\s*\{\s*flex-wrap:\s*nowrap', site_css())
