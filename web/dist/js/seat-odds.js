@@ -1,6 +1,6 @@
-// Pure helpers of the page «Escaños que bailan» (`/{scope}/circunscripciones`): the name of the image of a card, the
-// line that says the filters of the map, after what is on view, and the canonical of the tile checked. No imports, so
-// node tests them as they are.
+// Pure helpers of «Escaños que bailan» (the card of the event page and the page `/{scope}/circunscripciones`): the
+// name of the image of a card, the line that says the filters of the map, after what is on view, whether a box is out
+// of the window, and the canonical of the tile checked. No imports, so node tests them as they are.
 
 /**
  * Name of the image of a card: its base and the parts of what is on view that are not empty, joined by `-`.
@@ -23,6 +23,18 @@ export function imageFile(base, parts) {
  */
 export function filterLine(party, state) {
   return [party, state].filter(Boolean).join(' · ');
+}
+
+/**
+ * Whether a box is out of view: none of it shows in a window of that height (an edge on the border of the window shows
+ * nothing either).
+ *
+ * @param {{top: number, bottom: number}} rect the box, relative to the window (`getBoundingClientRect`)
+ * @param {number} height the height of the window (`innerHeight`)
+ * @returns {boolean} true when the box is wholly below or wholly above the window
+ */
+export function outOfView(rect, height) {
+  return rect.top >= height || rect.bottom <= 0;
 }
 
 /**

@@ -828,19 +828,79 @@ def test_a_safe_circle_has_no_seam_between_its_fill_and_its_border():
     assert re.search(r'\.so-o\.safe \{\s*background-clip:\s*border-box', css)
 
 
-def test_every_element_the_page_script_looks_for_is_in_the_view_that_owns_it(odds_site):
+def seat_odds_card(page):
+    """La tarjeta «Escaños que bailan» de una página del evento ya colapsada: de su `<section>` a su cierre."""
+    start = page.index('<section class="card shot so-card" id="seat-odds"')
+    return page[start:page.index('</section>', start)]
+
+
+def test_the_card_carries_what_its_script_needs_to_name_its_image_and_pick_a_district(odds_site, fresh_app):
+    write_event_districts(fresh_app.fs)
+    card = seat_odds_card(event_page(odds_site)[1])
+    # the image is named after what is on view: the server writes that of the district open and the base
+    assert '<section class="card shot so-card" id="seat-odds" data-file-base="demoscopio-escanos-es">' in card
+    assert re.findall(r'class="card-img-btn" hidden data-file="([^"]+)"', card) == [
+        'demoscopio-escanos-es-la-coruna.png']
+    # the line of the filters, for the image only, is born hidden and empty: the script writes it
+    assert '<p class="so-filter-line shot-only" id="map-filter-line" hidden></p>' in card
+    assert 'id="mp-all" data-slug="" data-label=""' in card
+    assert 'id="mp-psoe" data-slug="psoe" data-label="PSOE"' in card
+    assert 'id="ms-play" data-slug="en-juego" data-label="En juego"' in card
+    assert 'id="sv-map" data-slug=""' in card and 'id="sv-cols" data-slug="columnas"' in card
+    # the dropdown of the phones, hidden until the script reveals it: every district by name, the one open chosen,
+    # with a label in the word of the card
+    select = card[card.index('<select id="district-select" hidden>'):card.index('</select>')]
+    assert re.findall(r'<option value="([a-z-]+)"( selected)?>([^<]+)</option>', select) == [
+        ('cadiz', '', 'Cádiz · 8 escaños'), ('guadalajara', '', 'Guadalajara · 3 escaños'),
+        ('la-coruna', ' selected', 'La Coruña · 8 escaños')]
+    assert '<label for="district-select" class="sr-only">Provincia</label>' in card
+    # the copy the image is drawn from hides the selector of views and both filters (never removes them: the rules of
+    # `:has()` read their radios), and the tile chosen loses its dark border
+    css = site_css()
+    assert all('so-filter' in re.search(r'<fieldset class="([^"]+)" id="{}"'.format(name), card).group(1)
+               for name in ('so-view', 'map-party', 'map-state'))
+    assert re.search(r'\.shot-image \.so-filter\s*\{\s*display:\s*none', css)
+    assert re.search(r'\.shot-image \.so-tile:has\(input:checked\)\s*\{[^}]*'
+                     r'border:\s*1px solid var\(--color-line-strong\)', css)
+    assert re.search(r'\.shot-image \.so-hint\s*\{\s*display:\s*none', css)
+    # the lede of the card is styled in the card only
+    assert re.search(r'(^|\n)#seat-odds \.so-lede\s*\{', css) and not re.search(r'(^|\n)\.so-lede\s*\{', css)
+
+
+def test_a_card_whose_districts_are_not_provinces_names_its_dropdown_after_them(odds_site, fresh_app):
+    # the islands of Canarias and its «Lista autonómica»: never «provincia», as the label of the view
+    islands = [{'id': 101, 'name': 'Lista autonómica', 'seats': 2}]
+    write_odds(fresh_app.fs, dict(ODDS, regions=ODDS['regions'] + islands,
+                                  rows=ODDS['rows'] + [odds_row(101, 'PP', 1, 10000, 5000)]))
+    card = seat_odds_card(event_page(odds_site)[1])
+    assert '<label for="district-select" class="sr-only">Circunscripción</label>' in card
+    assert re.findall(r'id="sv-map"[^>]*>([^<]+)<', card) == ['Circunscripciones']
+
+
+def test_every_element_the_card_script_looks_for_is_in_the_card(odds_site, fresh_app):
     # read from the script itself, so that a renamed id or radio on either side fails here and not on a phone
-    script = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'js', 'pages', 'circunscripciones.js'),
+    script = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'js', 'pages', 'seat-odds-wire.js'),
                   encoding='utf-8').read()
     ids = set(re.findall(r"getElementById\('([\w-]+)'\)", script))
-    names = set(re.findall(r"checkedRadio\('(\w+)'\)", script) + re.findall(r"\.name !== '(\w+)'", script))
-    names |= {name for group in re.findall(r'follow\(\[([^\]]+)\]', script) for name in re.findall(r"'(\w+)'", group)}
-    selectors = re.findall(r"querySelector\('(\w+)\[(\w+)=\"([^\"]+)\"\]'\)", script)
-    assert ids and names and selectors
-    views = [page_of(odds_site, '/es/circunscripciones', query)[1] for query in ('', 'vista=partidos')]
+    prefixes = set(re.findall(r"getElementById\(`([\w-]+)\$\{", script))
+    radios = re.search(r'const RADIOS = \{([^}]+)\}', script).group(1)
+    names = set(re.findall(r":\s*'(\w+)'", radios))
+    selectors = re.findall(r"querySelector\('(\w+)\.([\w-]+)'\)", script)
+    assert ids and prefixes and names == {'sv', 'mp', 'ms', 'd'} and selectors
+    write_event_districts(fresh_app.fs)
+    page = event_page(odds_site)[1]
+    card = seat_odds_card(page)
     for element in ids:
-        assert any('id="{}"'.format(element) in view for view in views), element
+        assert 'id="{}"'.format(element) in card, element
+    for prefix in prefixes:
+        assert 'id="{}'.format(prefix) in card, prefix
     for name in names:
-        assert any('name="{}"'.format(name) in view for view in views), name
-    for tag, attribute, value in selectors:
-        assert all('<{} {}="{}"'.format(tag, attribute, value) in view for view in views), (tag, attribute, value)
+        # each group only in the card; those the image is named after, each radio with its `data-slug` (and the
+        # filters with their `data-label`, the words of the line)
+        assert page.count('name="{}"'.format(name)) == card.count('name="{}"'.format(name)) > 0, name
+    for name in ('sv', 'mp', 'ms'):
+        radios = re.findall(r'<input type="radio" name="{}"[^>]*>'.format(name), card)
+        assert radios and all('data-slug="' in radio for radio in radios), name
+        assert name == 'sv' or all('data-label="' in radio for radio in radios), name
+    for tag, cls in selectors:
+        assert re.search(r'<{} [^>]*class="[^"]*\b{}\b'.format(tag, cls), card), (tag, cls)

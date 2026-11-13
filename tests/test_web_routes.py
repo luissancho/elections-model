@@ -182,18 +182,19 @@ def test_chart_containers_have_aria_labels():
 def test_event_page_js_finds_its_elements_and_shares_the_seats_wiring():
     """Every id the event page looks up by name exists in its templates, and the seats wiring lives in one module,
     imported by the event page, the only page left of the two it once served."""
-    names = ('promedios.html', 'base.html', '_polls_table.html', '_event_bar.html')
+    names = ('promedios.html', 'base.html', '_polls_table.html', '_event_bar.html', '_seat_odds.html')
     text = ''.join(open(os.path.join(TEMPLATES, name), encoding='utf-8').read() for name in names)
     ids = set(re.findall(r'id="([\w-]+)"', text)) | set(re.findall(r"download_button\('([\w-]+)'", text))
     pages = os.path.join(DIST, 'js', 'pages')
     missing = []
-    for name in ('promedios.js', 'seats-wire.js', 'evolution-wire.js', 'series-wire.js', 'polls-wire.js'):
+    for name in ('promedios.js', 'seats-wire.js', 'evolution-wire.js', 'series-wire.js', 'polls-wire.js',
+                 'seat-odds-wire.js'):
         with open(os.path.join(pages, name), encoding='utf-8') as fh:
             missing += [(name, ref) for ref in re.findall(r"getElementById\('([\w-]+)'\)", fh.read()) if ref not in ids]
     assert missing == []
     with open(os.path.join(pages, 'promedios.js'), encoding='utf-8') as fh:
         text = fh.read()
-    assert "from './seats-wire.js'" in text
+    assert "from './seats-wire.js'" in text and "from './seat-odds-wire.js'" in text
     assert 'function wireCoalition' not in text and 'function wireTerritory' not in text
     assert not os.path.exists(os.path.join(pages, 'escanos.js'))
     assert not os.path.exists(os.path.join(TEMPLATES, 'escanos.html'))

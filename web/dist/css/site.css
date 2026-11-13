@@ -1299,11 +1299,17 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas, #mapa, #grafico, #pa
 #seat-odds:has(#ms-likely:checked) .so-dots i:not(.likely) { opacity: .08; }
 #seat-odds:has(#ms-play:checked) .so-dots i:not(.play) { opacity: .08; }
 #seat-odds .so-views { margin-bottom: 12px; }
-.so-lede { margin: 0 0 10px; font-size: 13.5px; color: var(--color-muted); }
+#seat-odds .so-lede { margin: 0 0 10px; font-size: 13.5px; color: var(--color-muted); }
 #seat-odds .so-head { padding-right: 0; }
 #seat-odds .so-head h3 { margin: 0; font: 700 20px/1.2 var(--font-head); }
 #seat-odds .so-fichas { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-line); }
 #seat-odds #district-select { display: none; }
+/* the page script scrolls a block taller than the window to its top: below the sticky header, and the freeze banner */
+#seat-odds .so-ficha { scroll-margin-top: 68px; }
+body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 114px; }
+/* the copy the image is drawn from leaves out the label of the dropdown: html2canvas ignores its clip and would draw
+   its pixel above the map */
+#seat-odds.shot-image .sr-only { display: none; }
 @media (min-width: 1200px) {
   #seat-odds .so-split { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 1fr); gap: 0 28px; align-items: start; }
   #seat-odds .so-split .so-map { margin: 14px 0 8px; }

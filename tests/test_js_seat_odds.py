@@ -30,6 +30,14 @@ def test_the_image_is_named_after_what_is_on_view():
                   "s.filterLine('', '')]") == ['PSOE · En juego', 'PSOE', 'Seguros', '']
 
 
+def test_a_card_is_out_of_view_only_when_none_of_it_shows():
+    assert run_js("[s.outOfView({top: 900, bottom: 1300}, 800), s.outOfView({top: 700, bottom: 1300}, 800), "
+                  "s.outOfView({top: -500, bottom: -10}, 800), s.outOfView({top: -500, bottom: 10}, 800)]") == [
+        True, False, True, False]
+    assert run_js("s.imageFile('demoscopio-escanos-es', ['madrid', 'psoe', 'en-juego'])") == (
+        'demoscopio-escanos-es-madrid-psoe-en-juego.png')
+
+
 def test_the_canonical_of_a_tile_keeps_the_origin_and_drops_the_query():
     # the address of a tile keeps the mode and the run of the page; its canonical, as the server writes it, does not
     assert run_js("s.canonicalFor('https://demoscopio.es/es/circunscripciones', "
