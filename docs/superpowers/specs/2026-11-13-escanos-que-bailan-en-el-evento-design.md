@@ -19,15 +19,21 @@ que lo que se traiga sea sólo lo que informa: el mapa con la ficha de la circun
 4. **Partidos**: sólo las columnas. Sin hemiciclo y sin el listado por partido.
 5. En el índice de la cabecera, la sección de hoy «Escaños» (Hemiciclo, Resultados, Calculadora de mayorías) pasa a
    llamarse **«Resultados»**, y la nueva se llama **«Escaños»** e incluye lo que hoy es «Territorio».
+6. **Los anclajes se renombran** con las secciones, «da igual las consecuencias»: `#resultados` y `#escanos`;
+   `#territorio` deja de existir.
 
 ## Qué cambia en la página del evento
 
 - **Índice**: Promedio · Resultados · Escaños · Evolución · Tabla.
 - **Orden**: la sección «Escaños» va detrás de «Resultados» y antes de «Evolución». Lleva dos tarjetas: «Escaños que
   bailan» y, debajo, «Resultados por territorio», que no cambia salvo que pierde su enlace «Escaño a escaño en…».
-- **Los anclajes no cambian**: «Resultados» sigue siendo `#escanos` y «Escaños» es la sección `#territorio`. Hay
-  enlaces repartidos por la web y compartidos fuera que los usan (la portada, el método, los de la calculadora con
-  `#escanos&coalition=…`, `seccion=territorio`, las redirecciones de las rutas viejas) y así ninguno se rompe.
+- **Anclajes**: «Resultados» es `#resultados` y «Escaños» es `#escanos`. Todo lo de dentro de la web que apuntaba a
+  los de antes se cambia para que siga cayendo en su sitio: la portada y el método (a `#resultados`, donde están el
+  Hemiciclo y la tabla), los enlaces que comparte la calculadora (`#resultados&coalition=…`), la tabla y el formulario
+  del territorio (`seccion=escanos`), las redirecciones de las rutas viejas de escaños y la barra de las subpáginas.
+- **Consecuencias aceptadas** para los enlaces ya compartidos fuera: uno a `#escanos` cae ahora en la sección nueva
+  (el mapa) y no en el Hemiciclo; uno de la calculadora (`#escanos&coalition=PP,VOX`) sigue marcando su coalición pero
+  cae en la sección nueva; uno a `#territorio` abre la página arriba del todo. No se añade ningún apaño para ellos.
 
 ## La tarjeta «Escaños que bailan»
 
@@ -76,13 +82,12 @@ entrada en el índice, como hoy.
 ## Direcciones antiguas
 
 `/{scope}/circunscripciones` y `/{scope}/circunscripciones/{circunscripción}`, con la query que traigan, responden con
-un 301 a la página del evento en la tarjeta (`/{scope}` con su `mode` y su `run`, y el ancla de la tarjeta). No se
+un 301 a la página del evento en la sección «Escaños» (`/{scope}` con su `mode` y su `run`, y `#escanos`). No se
 conserva la circunscripción: la tarjeta se abre en la suya por defecto.
 
 ## Decisiones mías (para que Luis las revise)
 
-1. Los anclajes de las secciones no se renombran (arriba). El coste es que la dirección dice `#territorio` donde el
-   índice dice «Escaños», y `#escanos` donde dice «Resultados».
+1. A dónde apunta ahora cada enlace interno que usaba los anclajes de antes (arriba).
 2. La sección «Escaños» sube: hoy «Territorio» va detrás de «Evolución»; pasa a ir detrás de «Resultados».
 3. El punto de corte del lado a lado, 1.200 px (a 1.024 no cabe).
 4. En el móvil y en tabletas, con JavaScript, al tocar una casilla la página baja hasta la ficha si no está a la
@@ -105,7 +110,7 @@ conserva la circunscripción: la tarjeta se abre en la suya por defecto.
 
 ## Anti-objetivos
 
-- Que algún enlace existente a `#escanos` o `#territorio` deje de caer en su sitio.
+- Que algún enlace de dentro de la web siga apuntando a un anclaje de antes, o caiga en la sección que no es.
 - Que la página del evento deje de leerse o de manejarse sin JavaScript.
 - Que la tarjeta se pinte, o deje un hueco o un enlace en el índice, en un run sin el dato.
 - Que vuelva a aparecer en la tarjeta el reparto central o cualquiera de las palabras retiradas.
@@ -130,7 +135,9 @@ La página del evento pesa hoy unos 107 KB en gzip. Las 52 fichas, el mapa y las
   el dato sin tarjeta, y uno sin territorio sin sección; las palabras retiradas y la redacción pública.
 - Rutas antiguas: 301 con `mode` y `run` desde la portada de la página aparte, desde una circunscripción y con
   `partido`, `vista` o `circunscripcion` en la query.
-- Los anclajes `#escanos` y `#territorio` siguen existiendo y en las secciones que les tocan.
+- Los anclajes: `#resultados` en la sección del Hemiciclo y `#escanos` en la nueva; ningún `#territorio` ni
+  `seccion=territorio` en la página ni en sus scripts; cada enlace interno (portada, método, calculadora, tabla y
+  formulario del territorio, rutas viejas, barra de las subpáginas) apunta al que le toca.
 - Navegador, con el run real, a 360, 390, 768, 1024, 1200, 1280 y 1440 px: lado a lado desde 1.200 y apilado por
   debajo, sin desbordes (Madrid y Barcelona elegidas); el cambio de ficha, de vista y de filtros sin recargar y sin
   JavaScript; la bajada a la ficha en el móvil; las dos imágenes; un ámbito sin posiciones de mapa; el peso.
