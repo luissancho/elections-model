@@ -785,9 +785,10 @@ una subpágina del evento, con su barra, su modo y su run: `/{scope}/circunscrip
 circunscripción con más opciones de escaño en juego) y `/{scope}/circunscripciones/{district}` (la ficha de una;
 `district` es `slugify` de su nombre, `la-coruna`). Las dos aceptan `mode` y `run` como la página del evento; la primera
 acepta además `partido` (`slugify` de las siglas: la vista por partido), `vista` (`partidos`: la pestaña Partidos, con
-el hemiciclo y las columnas por bloque y sin ficha de partido; `renidos`: «Los más reñidos») y `circunscripcion` (lo que
-envía el desplegable: un 301 a `/{scope}/circunscripciones/{slug}` con el resto de la query y el fragmento `#ficha`,
-para que en el móvil cada cambio caiga en la ficha y no arriba de la página). La ruta de la circunscripción gana a
+el hemiciclo y las columnas por partido y sin ficha de partido; `renidos`: «Los más disputados», que conserva su
+dirección) y `circunscripcion` (lo que envía el desplegable: un 301 a `/{scope}/circunscripciones/{slug}` con el resto
+de la query y el fragmento `#ficha`, para que en el móvil cada cambio caiga en la ficha y no arriba de la página). La
+ruta de la circunscripción gana a
 `partido` y `vista`, y `partido` gana a `vista`; la canónica quita `mode` y `run` y lo que la página no usa:
 `circunscripcion` siempre, `partido` y `vista` en la ruta de una circunscripción y `vista` cuando gana `partido`. Leen
 la parte `seat-odds` del modo con `bundle_part` y no tocan la base; la presencia de la parte se recuerda durante el TTL
@@ -802,7 +803,7 @@ ficha elegida); se llama Circunscripciones, y la página dice «circunscripción
 circunscripción de la parte no es una provincia (su id no es un código INE, de 100 en adelante: Asturias, Baleares,
 Canarias); la página lee `data/es-districts.csv` para las posiciones del mapa (sin ellas, las casillas van en una
 rejilla seguida, por nombre); y la canónica conserva `partido` en la vista por partido y `vista` en la pestaña Partidos
-(`vista=partidos`) y en «Los más reñidos» (`vista=renidos`).
+(`vista=partidos`) y en «Los más disputados» (`vista=renidos`).
 
 Las **globales** son `/` (Inicio, `Index`: el índice de eventos), `/elecciones`
 (Histórico Errores, `Elecciones`), `/casas` (Ranking Encuestadoras, `Casas`) y `/metodo` (`Metodo`) con sus

@@ -61,14 +61,17 @@ def test_the_hemicycle_holds_with_three_options_and_with_390():
     assert all(0 <= seat['x'] <= 1000 and 20 <= seat['y'] <= 540 for seat in many['seats'])
 
 
-def test_the_columns_follow_the_blocks_of_the_run_and_fall_back_to_one_per_party():
+def test_the_columns_follow_the_order_given_with_the_rest_last_and_fall_back_to_one_per_party():
     options = pages.scope_options(pages.district_views(ODDS))
     blocks = {'Izquierda': ['PSOE', 'AA', 'FA'], 'Derecha': ['PP', 'VOX'], 'Otros': []}  # BNG is in no block; FA has no option
     columns = pages.party_columns(options, ODDS['parties'], blocks)
+    # the parties of Izquierda and Derecha in the order given (that of the table of results), not block by block
     assert [(c['name'], c['safe'], c['likely'], c['play']) for c in columns] == [
-        ('PSOE', 4, 1, 1), ('AA', 0, 1, 0), ('PP', 6, 1, 1), ('VOX', 2, 1, 1), ('Otros', 2, 0, 1)]
+        ('PP', 6, 1, 1), ('PSOE', 4, 1, 1), ('VOX', 2, 1, 1), ('AA', 0, 1, 0), ('Otros', 2, 0, 1)]
     assert columns[-1]['members'] == ['BNG'] and sum(len(c['options']) for c in columns) == 22
-    assert [o['state'] for o in columns[2]['options']] == ['safe'] * 6 + ['likely', 'play']
+    assert [o['state'] for o in columns[0]['options']] == ['safe'] * 6 + ['likely', 'play']
+    ranked = pages.party_columns(options, ['BNG', 'VOX', 'PSOE', 'PP', 'AA'], blocks)
+    assert [c['name'] for c in ranked] == ['VOX', 'PSOE', 'PP', 'AA', 'Otros']  # «Otros» last wherever its parties rank
     bare = pages.party_columns(options, ODDS['parties'], None)
     assert [c['name'] for c in bare] == ['PP', 'PSOE', 'VOX', 'AA', 'BNG']
     assert pages.party_columns(options, ODDS['parties'], {'Derecha': ['PP']}) == bare  # the blocks of the test bundle

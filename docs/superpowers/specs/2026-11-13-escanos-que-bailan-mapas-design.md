@@ -570,3 +570,19 @@ Cosas sabidas y dejadas para más adelante; ninguna se ve mal hoy en pantalla.
 - En el móvil, los selectores del mapa ocupan seis filas (cuatro de partidos y dos de estados).
 - En la barra del evento (de todo el sitio, anterior a esta página), dentro de su franja desplazable quedan enlaces
   más allá del borde: dos a 360 px (Territorio y Tabla) y uno a 390 px (Tabla).
+
+### Retoques de Luis tras la fusión (2026-11-13)
+
+Cuatro cambios pedidos por Luis al ver la página; donde no coinciden con lo de arriba, mandan éstos.
+
+- **El resumen de cada fila, junto a sus círculos.** En las fichas de circunscripción y de partido, «2 seguros · 1
+  probable» va detrás de los círculos y no en el borde derecho de la tarjeta: la columna de los círculos ocupa lo que
+  pide su fila más larga y no el resto del ancho, y el resumen queda a 42 px del último círculo de esa fila.
+- **Las columnas, en el orden de la tabla «Resultados»** de la página del evento (por escaños y después por voto), con
+  «Otros» al final. Siguen siendo una por partido de los bloques Izquierda y Derecha; lo que cambia es que ya no van
+  bloque a bloque. El 13-11: PP, PSOE, VOX, FA, SALF, UP y Otros.
+- **La ficha del partido, por orden alfabético** de circunscripción (antes, de más a menos dudosa). La línea «Sólo
+  seguros» sigue de más a menos escaños.
+- **«Los más reñidos» pasa a llamarse «Los más disputados»**, y su columna «Lo consigue en», «Probabilidad». La
+  dirección no cambia (`?vista=renidos`). La tabla sigue ordenada como estaba: primero la opción cuya probabilidad
+  está más cerca del 50%, y así las 40 más cercanas entre las que no son seguras.

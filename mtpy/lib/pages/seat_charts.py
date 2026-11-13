@@ -196,7 +196,8 @@ def party_columns(options: list, order: list, blocks: Optional[dict]) -> list:
     options : list
         Seat options with ``party``, ``state`` and ``share`` (``scope_options``).
     order : list
-        Party names in the order of the part; a party with options outside it goes last.
+        Party names in the order of the columns (that of the table of results of the event page); a party with
+        options outside it goes last.
     blocks : dict, optional
         ``bmaps.blocks`` of the run (block name to party names). Valid when it has both ``Izquierda`` and
         ``Derecha``.
@@ -206,20 +207,16 @@ def party_columns(options: list, order: list, blocks: Optional[dict]) -> list:
     list
         One dict per column: ``name``, ``members`` (its parties), its options of each state (``safe``, ``likely``,
         ``play``) and ``options``, by state, by party (in ``order``) and by share descending. With valid ``blocks``,
-        one column per party of Izquierda and then of Derecha with some option, in the order of the block, and a last
+        one column per party of Izquierda or Derecha with some option, in ``order`` (not block by block), and a last
         one, ``REST_COLUMN``, with every other party with options, if any; otherwise one column per party with
         options, in ``order``.
     """
     names = _drawn_names(options, order)
 
     if isinstance(blocks, dict) and 'Izquierda' in blocks and 'Derecha' in blocks:
-        main = []
-
-        for name in (blocks['Izquierda'] or []) + (blocks['Derecha'] or []):
-            if name in names and name not in main:
-                main.append(name)
-
-        rest = [name for name in names if name not in main]
+        own = set(blocks['Izquierda'] or []) | set(blocks['Derecha'] or [])
+        main = [name for name in names if name in own]
+        rest = [name for name in names if name not in own]
         groups = [(name, [name]) for name in main] + ([(REST_COLUMN, rest)] if rest else [])
     else:
         groups = [(name, [name]) for name in names]

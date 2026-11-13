@@ -91,6 +91,13 @@ def test_the_party_view_the_closest_seats_and_the_texts_of_the_states():
     view = pages.party_view(districts, 'PSOE')
     assert (view['safe'], view['likely'], view['play']) == (4, 1, 1) and 'seats' not in view
     assert [row['district']['name'] for row in view['rows']] == ['Cádiz', 'La Coruña']
+    # by name, not by doubt: PP's most doubtful option is the one of La Coruña (30%; in Cádiz, 80%)
+    assert [row['district']['name'] for row in pages.party_view(districts, 'PP')['rows']] == ['Cádiz', 'La Coruña']
+    token = {'k': 1, 'share': 0.5, 'state': 'play', 'label': '50%', 'alpha': 0.16, 'title': ''}
+    folded = [{'id': index, 'name': name, 'slug': name.lower(), 'seats': 3,
+               'rows': [{'name': 'X', 'tokens': [token], 'safe': 0, 'likely': 0, 'play': 1}]}
+              for index, name in enumerate(['Zamora', 'Ávila', 'Álava', 'Soria'])]
+    assert [row['district']['name'] for row in pages.party_view(folded, 'X')['rows']] == ['Álava', 'Ávila', 'Soria', 'Zamora']
     assert view['settled'] == [{'name': 'Guadalajara', 'slug': 'guadalajara', 'safe': 1}]
     closest = pages.closest_seats(districts)
     assert len(closest) == 8 and closest[0] == {'district': 'Cádiz', 'slug': 'cadiz', 'party': 'PSOE', 'k': 3,
@@ -186,8 +193,8 @@ def test_the_three_views_speak_of_three_states_and_never_of_the_central_allocati
     landing = page_of(odds_site, '/es/circunscripciones')[1]
     assert '<h2>La Coruña</h2>' in landing and ('Qué escaños tiene seguros cada partido, cuáles son probables y '
                                                 'cuáles están en juego, según las 10.000 simulaciones del modelo.') in landing
-    assert re.findall(r'<a href="[^"]*"[^>]*>(Provincias|Partidos|Los más reñidos)</a>', landing) == [
-        'Provincias', 'Partidos', 'Los más reñidos']
+    assert re.findall(r'<a href="[^"]*"[^>]*>(Provincias|Partidos|Los más disputados)</a>', landing) == [
+        'Provincias', 'Partidos', 'Los más disputados']
     assert 'id="seat-kpis"' not in landing and 'so-list' not in landing and 'name="orden"' not in landing
     assert '<title>Demoscopio · Escaños que bailan · Elecciones generales 2026</title>' in landing
     cadiz = page_of(odds_site, '/es/circunscripciones/cadiz')[1]
@@ -282,8 +289,8 @@ def test_a_part_with_a_district_that_is_not_a_province_says_circunscripcion(odds
                  rows=ODDS['rows'] + [odds_row(101, 'PP', 1, 10000, 5000)])
     write_odds(fresh_app.fs, mixed)
     page = page_of(odds_site, '/es/circunscripciones')[1]
-    assert re.findall(r'<a href="[^"]*"[^>]*>(Circunscripciones|Partidos|Los más reñidos)</a>', page) == [
-        'Circunscripciones', 'Partidos', 'Los más reñidos']
+    assert re.findall(r'<a href="[^"]*"[^>]*>(Circunscripciones|Partidos|Los más disputados)</a>', page) == [
+        'Circunscripciones', 'Partidos', 'Los más disputados']
     assert '<h2>Dónde bailan los escaños, circunscripción a circunscripción</h2>' in page
     assert ('con el borde discontinuo si está en juego. <span class="so-hint">Toca una circunscripción para ver su '
             'detalle.</span>') in page
@@ -466,7 +473,7 @@ def test_the_closest_view_ranks_the_options_not_safe_by_their_distance_to_a_coin
     table = page[page.index('id="closest"'):]
     # under 720 px each row stacks in two lines (`display: grid`), so the table carries its ARIA roles
     assert table.startswith('id="closest" role="table"') and table.count('scope="col" role="columnheader"') == 3
-    assert re.findall(r'role="columnheader">([^<]+)</th>', table) == ['Circunscripción', 'Escaño', 'Lo consigue en']
+    assert re.findall(r'role="columnheader">([^<]+)</th>', table) == ['Circunscripción', 'Escaño', 'Probabilidad']
     rows = re.findall(r'<tr role="row">(.*?)</tr>', table[table.index('<tbody role="rowgroup">'):])
     assert status == 200 and len(rows) == 8 and all(row.count('role="cell"') == 3 for row in rows)
     assert 'Cádiz' in rows[0] and '3.º de PSOE' in rows[0] and '<b>41%</b>' in rows[0]
@@ -474,9 +481,12 @@ def test_the_closest_view_ranks_the_options_not_safe_by_their_distance_to_a_coin
     assert '1.º de PP' not in table and '<b>98%</b>' in rows[-1]  # never a safe one; the likely ones too
     assert '<link rel="canonical" href="https://demoscopio.es/es/circunscripciones?vista=renidos">' in page
     assert 'Los 8 escaños más cercanos al cara o cruz. La raya marca el 50%.' in page
-    assert '<title>Demoscopio · Los escaños más reñidos · Elecciones generales 2026' in page
+    assert '<title>Demoscopio · Los escaños más disputados · Elecciones generales 2026' in page
+    assert ('<meta name="description" content="Los escaños más disputados de Elecciones generales 2026: los más '
+            'cercanos al cara o cruz, según las simulaciones del modelo.">') in page
+    assert 'reñid' not in visible_text(page[page.index('id="content"'):]) and 'Lo consigue en' not in page
     assert 'class="seg lg so-tabs"' in page and re.findall(r'<a href="[^"]*"( class="on")', page) == [' class="on"']
-    assert_public_wording(page, 'circunscripciones, los más reñidos')
+    assert_public_wording(page, 'circunscripciones, los más disputados')
     assert call(odds_site, '/es/circunscripciones', query='vista=otra')[0] == 400
 
 
@@ -682,11 +692,23 @@ def write_blocks(fs, blocks):
     webapi.site().manifest_cache_clear()
 
 
+def write_summary(fs, rows):
+    """Sobrescribe la parte `summary` del run en los dos modos con estos partidos (siglas, escaños, voto)."""
+    summary = fixture_data('summary')
+    base = summary['parties'][0]
+    summary = summary | {'parties': [base | {'name': name, 'seats': seats, 'pct': pct} for name, seats, pct in rows]}
+    writer = bundle.BundleWriter(fs)
+    for mode in bundle.MODES:
+        writer.write_json(bundle.path_part('es', RUN, 'summary', mode), 'summary', summary, 'es', run_id=RUN, mode=mode)
+    webapi.site().files.clear()
+    webapi.site().manifest_cache_clear()
+
+
 def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_hemicycle(odds_site, fresh_app):
     status, page = page_of(odds_site, '/es/circunscripciones', 'vista=partidos')
     assert status == 200 and '<title>Demoscopio · Escaños que bailan, partido a partido · Elecciones generales 2026</title>' in page
-    assert re.findall(r'<a href="[^"]*"( class="on" aria-current="page")?>(Provincias|Partidos|Los más reñidos)</a>', page) == [
-        ('', 'Provincias'), (' class="on" aria-current="page"', 'Partidos'), ('', 'Los más reñidos')]
+    assert re.findall(r'<a href="[^"]*"( class="on" aria-current="page")?>(Provincias|Partidos|Los más disputados)</a>', page) == [
+        ('', 'Provincias'), (' class="on" aria-current="page"', 'Partidos'), ('', 'Los más disputados')]
     assert 'href="/es/circunscripciones?mode=forecast&amp;vista=partidos#vistas"' in page
     assert re.findall(r'name="pf" value="(hemi|cols)"[^>]*?( checked)?>', page) == [('hemi', ' checked'), ('cols', '')]
     # the switch: the radio of the columns hides the hemicycle, any other state hides the columns
@@ -730,8 +752,13 @@ def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_he
     assert '350' not in visible_text(page[page.index('id="grafico"'):page.index('id="partidos"')])  # never the chamber
     assert 'mayoría' not in page[page.index('id="grafico"'):page.index('id="partidos"')]
     write_blocks(fresh_app.fs, {'Izquierda': ['PSOE', 'AA'], 'Derecha': ['PP', 'VOX'], 'Otros': ['BNG']})
+    # the columns follow the table of results of the event page: by seats and then by vote, «Otros» last
+    write_summary(fresh_app.fs, [('PSOE', 7, 28.0), ('VOX', 7, 30.0), ('PP', 4, 20.0), ('AA', 1, 2.0), ('BNG', 1, 3.0)])
     page = page_of(odds_site, '/es/circunscripciones', 'partido=psoe')[1]
-    assert re.findall(r'class="so-col" data-col="([^"]+)"', page) == ['PSOE', 'AA', 'PP', 'VOX', 'Otros']
+    assert re.findall(r'class="so-col" data-col="([^"]+)"', page) == ['VOX', 'PSOE', 'PP', 'AA', 'Otros']
+    labels = page[page.index('class="so-wlabels"'):]
+    assert re.findall(r'([A-Za-z]+)</b><small>', labels[:labels.index('class="so-legend"')]) == [
+        'VOX', 'PSOE', 'PP', 'AA', 'Otros']
     assert 'Bajo cada partido: seguros · probables · en juego. Otros:' in page
     assert 'id="ficha"' in page and 'Tiene 4 escaños seguros, 1 probable y 1 en juego.' in page
     text = visible_text(page[page.index('id="content"'):])
@@ -742,6 +769,26 @@ def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_he
 
 def site_css():
     return open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+
+
+def test_the_note_of_a_row_sits_beside_its_circles_and_not_at_the_far_edge_of_the_card():
+    # the column of the circles takes what its longest row needs and no more, so the note («2 seguros · 1 probable»)
+    # follows it; with `1fr` it took the rest of a card that now spans the page and pushed the note to the right edge
+    css = site_css()
+    assert re.search(r'\.so-grid \{[^}]*grid-template-columns:\s*max-content minmax\(0, max-content\) max-content;'
+                     r'[^}]*justify-content:\s*start', css)
+    assert re.search(r'\.so-grid\.so-by-party \{\s*grid-template-columns:\s*max-content max-content '
+                     r'minmax\(0, max-content\) max-content', css)
+    # beside, not stuck to them: 42 px from the last circle of the longest row (Luis, 2026-11-13), 38 px of its own
+    # on top of the 4 px between columns
+    assert re.search(r'\.so-note \{\s*padding-left:\s*38px', css)
+    assert re.search(r'\.so-grid \{[^}]*gap:\s*6px 4px', css)
+
+
+def test_the_card_of_a_party_lists_its_districts_by_name(odds_site):
+    page = page_of(odds_site, '/es/circunscripciones', 'partido=pp')[1]
+    card = page[page.index('id="ficha"'):]
+    assert re.findall(r'<div class="so-dname"><a href="[^"]*">([^<]+)</a>', card) == ['Cádiz', 'La Coruña']
 
 
 def test_the_long_titles_of_the_cards_wrap_beside_their_accent_bar():

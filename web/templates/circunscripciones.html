@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% set event_year = ' ' ~ event_bar.year if event_bar.year else '' %}
 {% block title %}{{ page_title }} · {{ event_bar.title }}{{ event_year }}{% endblock %}
-{% block description %}{% if view == 'party' and party %}Los escaños de {{ party.name }}, circunscripción a circunscripción: cuáles tiene seguros, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'party' %}Las opciones de escaño de cada partido en un hemiciclo y en columnas: seguras, probables y en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'closest' %}Los escaños más reñidos de {{ event_bar.title }}{{ event_year }}: los más cercanos al cara o cruz, según las simulaciones del modelo.{% elif landing %}Qué escaños tiene seguros cada partido en cada circunscripción, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% else %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endif %}{% endblock %}
+{% block description %}{% if view == 'party' and party %}Los escaños de {{ party.name }}, circunscripción a circunscripción: cuáles tiene seguros, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'party' %}Las opciones de escaño de cada partido en un hemiciclo y en columnas: seguras, probables y en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% elif view == 'closest' %}Los escaños más disputados de {{ event_bar.title }}{{ event_year }}: los más cercanos al cara o cruz, según las simulaciones del modelo.{% elif landing %}Qué escaños tiene seguros cada partido en cada circunscripción, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% else %}Los escaños de {{ district.name }}, uno a uno: cuáles tiene seguros cada partido, cuáles son probables y cuáles están en juego, según las simulaciones del modelo para {{ event_bar.title }}{{ event_year }}.{% endif %}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/circunscripciones.js"></script>
   {% if view == 'district' %}
@@ -187,7 +187,7 @@
             <tr role="row">
               <th class="l" scope="col" role="columnheader">Circunscripción</th>
               <th class="l" scope="col" role="columnheader">Escaño</th>
-              <th class="l so-meter-col" scope="col" role="columnheader">Lo consigue en</th>
+              <th class="l so-meter-col" scope="col" role="columnheader">Probabilidad</th>
             </tr>
           </thead>
           <tbody role="rowgroup">

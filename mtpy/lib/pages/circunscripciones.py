@@ -16,6 +16,7 @@ from ...core.api import HttpError
 from ..webapi import district_positions, site
 from .common import OTHERS_COLOR, bundle_part, common_context, hemicycle_order, subpage_event_bar
 from .escanos import _sort_name
+from .promedios import result_rows
 from .seat_charts import (REST_COLUMN, STATES, column_ticks, hemicycle_layout, map_tiles, party_columns,
                           state_counts)
 from .slugs import slugify
@@ -409,23 +410,6 @@ def district_sentence(district: dict) -> str:
     return '{} {} se {} disputan {}.'.format(sentence, others, 'lo' if single else 'los', _join_names(rivals))
 
 
-def _coin_toss_gap(tokens: list) -> float:
-    """
-    Distance to 50% of the option not safe nearest to it.
-
-    Parameters
-    ----------
-    tokens : list
-        Options of a party in a district, with at least one not safe.
-
-    Returns
-    -------
-    float
-        The smallest ``abs(share - 0.5)`` among the options that are not safe.
-    """
-    return min(abs(token['share'] - 0.5) for token in tokens if token['state'] != 'safe')
-
-
 def party_view(districts: list, name: str) -> dict:
     """
     View of a party across the districts of a scope.
@@ -441,9 +425,9 @@ def party_view(districts: list, name: str) -> dict:
     -------
     dict
         ``name``, its options of each state (``safe``, ``likely``, ``play``), ``rows`` (districts where it has some
-        option not safe, with ``district``, ``tokens`` and its options of each state, the one whose option not safe
-        is nearest to a coin toss first) and ``settled`` (``name``, ``slug``, ``safe`` of the districts where all its
-        options are safe, most seats first).
+        option not safe, with ``district``, ``tokens`` and its options of each state, by the name of the district
+        with accents folded) and ``settled`` (``name``, ``slug``, ``safe`` of the districts where all its options are
+        safe, most seats first).
     """
     rows, settled = [], []
     totals = dict.fromkeys(STATES, 0)
@@ -461,7 +445,7 @@ def party_view(districts: list, name: str) -> dict:
             })
         elif row['safe']:
             settled.append({'name': district['name'], 'slug': district['slug'], 'safe': row['safe']})
-    rows.sort(key=lambda row: _coin_toss_gap(row['tokens']))
+    rows.sort(key=lambda row: _sort_name(row['district']['name']))
     settled.sort(key=lambda item: -item['safe'])
     return {'name': name, **totals, 'rows': rows, 'settled': settled}
 
@@ -871,7 +855,7 @@ def _party_charts(views: list, names: list, order: list, blocks: Optional[dict],
     names : list
         The parties with some seat option (``_party_names``).
     order : list
-        The parties of the part, for the order of the columns.
+        The parties in the order of the table of results of the event page (``_results_order``), for the columns.
     blocks : dict, optional
         ``bmaps.blocks`` of the run (``party_columns``).
     parties : dict
@@ -910,6 +894,30 @@ def _party_charts(views: list, names: list, order: list, blocks: Optional[dict],
     }
 
 
+def _results_order(scope: str, run: str, mode: str) -> list:
+    """
+    The parties in the order of the table of results of the event page, for the columns of the chart of the parties.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    run : str
+        Run id.
+    mode : str
+        Simulation mode.
+
+    Returns
+    -------
+    list
+        Party names by seats and then by vote, both descending (``result_rows`` of the ``summary`` part of the mode);
+        empty when the run has no such part.
+    """
+    summary = bundle_part(site().run_file, scope, run, 'summary', mode)
+
+    return [row['name'] for row in result_rows(summary or {})]
+
+
 def _closest_card(views: list, parties: dict, scope: str, query: str) -> dict:
     """
     The part of the context specific to the list of the closest seats.
@@ -933,7 +941,7 @@ def _closest_card(views: list, parties: dict, scope: str, query: str) -> dict:
     return {
         'closest': closest,
         'sentence': closest_sentence(len(closest)),
-        'page_title': 'Los escaños más reñidos',
+        'page_title': 'Los escaños más disputados',
     }
 
 
@@ -1072,7 +1080,6 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
 
     names = _party_names(data, views)
     by_slug = {slugify(name): name for name in names}
-    order = data.get('parties') or []
     blocks = ((context['meta'] or {}).get('bmaps') or {}).get('blocks')
 
     if district is not None:
@@ -1087,10 +1094,10 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
             raise HttpError(404, 'party not found')
 
         shown, card = 'party', _party_card(views, by_slug[party], parties, scope, query)
-        card['charts'] = _party_charts(views, names, order, blocks, parties, scope)
+        card['charts'] = _party_charts(views, names, _results_order(scope, run, mode), blocks, parties, scope)
     elif view == 'partidos':
-        shown, card = 'party', {'party': None, 'charts': _party_charts(views, names, order, blocks, parties, scope),
-                                'page_title': 'Escaños que bailan, partido a partido'}
+        charts = _party_charts(views, names, _results_order(scope, run, mode), blocks, parties, scope)
+        shown, card = 'party', {'party': None, 'charts': charts, 'page_title': 'Escaños que bailan, partido a partido'}
     elif view is not None:
         if view != 'renidos':
             raise HttpError(400, 'invalid view')
@@ -1112,7 +1119,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         {'key': 'district', 'label': 'Provincias' if provinces else 'Circunscripciones',
          'href': base + query + VIEWS_ANCHOR},
         {'key': 'party', 'label': 'Partidos', 'href': base + _with_param(query, 'vista', 'partidos') + VIEWS_ANCHOR},
-        {'key': 'closest', 'label': 'Los más reñidos',
+        {'key': 'closest', 'label': 'Los más disputados',
          'href': base + _with_param(query, 'vista', 'renidos') + VIEWS_ANCHOR},
     ]
 

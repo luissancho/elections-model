@@ -1135,7 +1135,7 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-head .chip b { font: 700 14px var(--font-head); }
 .so-says { margin: 0 0 14px; color: var(--color-muted); }
 .so-stamp { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: var(--color-muted); }
-.so-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 6px 4px; }
+.so-grid { display: grid; grid-template-columns: max-content minmax(0, max-content) max-content; justify-content: start; align-items: center; gap: 6px 4px; }
 .so-h { padding: 0 8px 2px 0; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--color-muted); white-space: nowrap; }
 .so-h.so-c { text-align: center; }
 .so-party { display: flex; align-items: center; padding-right: 10px; font-weight: 700; white-space: nowrap; }
@@ -1151,7 +1151,7 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-token .so-o { margin: 0 auto; }
 .so-pct { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .so-token.play .so-pct { font-weight: 500; color: var(--color-muted); }
-.so-note { padding-left: 10px; font-size: 12.5px; color: var(--color-muted); white-space: nowrap; }
+.so-note { padding-left: 38px; font-size: 12.5px; color: var(--color-muted); white-space: nowrap; }
 .so-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-line); font-size: 12px; color: var(--color-muted); }
 .so-legend span { display: inline-flex; align-items: center; gap: 6px; }
 /* the samples of the legend and of the core of the hemicycle: the grey of the muted ink (#5a5f72) at a share inside
@@ -1276,7 +1276,7 @@ body:has(#freeze-banner:not([hidden])) :is(#ficha, #vistas, #mapa, #grafico, #pa
    two lines (the seat and its meter; the district under them) */
 .so-pills .so-party-btn { display: inline-flex; align-items: center; gap: 6px; }
 .so-head h2 .dot { margin-right: 8px; }
-.so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, 1fr) max-content; }
+.so-grid.so-by-party { grid-template-columns: max-content max-content minmax(0, max-content) max-content; }
 .so-dname { padding-right: 10px; font-weight: 600; white-space: nowrap; }
 .so-settled { margin: 14px 0 0; font-size: 13px; color: var(--color-muted); }
 .so-table { width: 100%; border-collapse: collapse; }
