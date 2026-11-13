@@ -1181,12 +1181,11 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 .so-ficha { display: none; }
 /* The copy the image of a card is drawn from (`card-image.js`): the rows of the filters and the switch of the chart
    are hidden, never removed (every rule of `:has()` reads their radios), and a line says the filters on
-   (`#map-filter-line`, written by the page script); the tile chosen loses its dark border, and the dropdown stays out */
+   (`#map-filter-line`, written by the page script); the tile chosen loses its dark border */
 .so-filter-line { margin: 0 0 8px; font: 700 15px var(--font-head); }
 .shot-image .so-filter { display: none; }
 .shot-image .so-tile:has(input:checked) { padding: 4px 4px 6px; border: 1px solid var(--color-line-strong); background: var(--color-bg); }
 .shot-image .so-tile:has(input:checked) .so-ab { color: var(--color-muted); }
-.shot-image .so-pick { display: none; }
 /* The chart of the parties: the radio `pf` shows the hemicycle or the columns, each element keeping its own display
    (`.so-form-hemi`, `.so-form-cols`) */
 #grafico:not(:has(#pf-cols:checked)) .so-form-cols, #grafico:has(#pf-cols:checked) .so-form-hemi { display: none; }

@@ -74,7 +74,8 @@ function follow(names, sync) {
 
 /**
  * The address and the title of the page follow the tile checked (`d`), without reloading nor scrolling: the
- * `data-href` and `data-title` of its radio; the dropdown of the phones shows the same district.
+ * `data-href` and `data-title` of its radio; the dropdown of the phones shows the same district. The title and the
+ * dropdown go first, so they follow even when the browser refuses to replace the address.
  */
 function wireDistricts() {
   document.addEventListener('change', (event) => {
@@ -82,15 +83,19 @@ function wireDistricts() {
     if (radio.name !== 'd' || !radio.checked) {
       return;
     }
-    if (radio.dataset.href) {
-      history.replaceState(null, '', radio.dataset.href);
-    }
     if (radio.dataset.title) {
       document.title = radio.dataset.title;
     }
     const select = document.getElementById('district-select');
     if (select) {
       select.value = radio.value;
+    }
+    if (radio.dataset.href) {
+      try {
+        history.replaceState(null, '', radio.dataset.href);
+      } catch (error) {
+        // Safari refuses history calls past ~100 in 30 s (an arrow key held over the tiles): keep the old address
+      }
     }
   });
 }
