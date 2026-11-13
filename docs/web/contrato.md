@@ -803,7 +803,7 @@ es una provincia (su id no es un código INE, de 100 en adelante: Asturias, Bale
 direcciones de la página aparte que la precedió (enmienda 2026-11-12, controlador `Circunscripciones`),
 `/{scope}/circunscripciones` y `/{scope}/circunscripciones/{district}`, responden con un 301 (`no-store`, sin cuerpo)
 a `/{scope}{query}#seat-odds` (el ancla de la tarjeta, que va debajo de la tabla del territorio; con JavaScript
-la página baja a ella después de dibujar la tabla), donde `query` conserva todo menos `partido`, `vista` y `circunscripcion`: la
+la página baja a ella después de dibujar la tabla, por si el navegador no sostiene el ancla él solo: Chrome sí), donde `query` conserva todo menos `partido`, `vista` y `circunscripcion`: la
 circunscripción no se conserva, la tarjeta abre en la suya, y el 301 no depende de que el run tenga la parte; un
 ámbito desconocido o sin pronóstico da el 404 de la página del evento. Con la página se fueron sus pestañas, su
 canónica, el hemiciclo de las opciones, la ficha de partido (`partido`, `vista`) y sus errores (`seat odds not

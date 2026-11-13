@@ -724,9 +724,9 @@ def test_the_card_is_wired_before_the_page_scrolls_to_its_section():
 
 def test_the_page_lands_on_the_card_when_the_address_asks_for_it():
     # the addresses of the page that was arrive with `#seat-odds`. The card sits below the territory table, which the
-    # page script redraws on load (by community, with its controls): the jump of the browser to the anchor is left
-    # behind, so the script lands on the card itself, as it does with the sections. And with the table on top of the
-    # section, a district asked for in it needs no landing of its own
+    # page script redraws on load (by community, with its controls): Chrome holds the anchor through that by itself
+    # (measured), and for a browser that does not the script lands on the card itself, as it does with the sections.
+    # And with the table on top of the section, a district asked for in it needs no landing of its own
     script = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'js', 'pages', 'promedios.js'),
                   encoding='utf-8').read()
     assert 'const landingIds' in script and 'sectionLanding' not in script

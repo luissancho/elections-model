@@ -333,8 +333,8 @@ const landingIds = () => sectionIds().concat(document.getElementById('seat-odds'
  * Scroll to the section the URL asks for (`seccion` of the query, which the old seats URLs bring, or a loose token
  * of the fragment such as `#resultados&coalition=PP,VOX`, which the browser does not scroll to by itself), or to the
  * card «Escaños que bailan» when the fragment asks for it (`landingIds`: the territory table above it has just been
- * redrawn, so the jump of the browser to the anchor was left behind), and drop `seccion` from the query, keeping the
- * fragment.
+ * redrawn; Chrome holds the anchor through that by itself, and this covers a browser that does not), and drop
+ * `seccion` from the query, keeping the fragment.
  */
 function scrollToSection() {
   const {pathname, search, hash} = window.location;

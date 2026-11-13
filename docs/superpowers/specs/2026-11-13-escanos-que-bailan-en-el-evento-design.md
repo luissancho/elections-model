@@ -310,8 +310,8 @@ Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no re
   `position` y de `top` (la de `sticky`, la del aviso y la de la imagen); la primera regla de `.so-fichas` de ese
   bloque, la del margen y la raya, se queda, que es la que pone la ficha al lado del mapa. El borde de la
   casilla en la imagen, volviendo a poner las dos reglas `.shot-image .so-tile:has(input:checked)` que se quitaron. Los
-  enlaces del territorio, devolviendo `#escanos` a sus enlaces, a su formulario y a `regionHref` y quitando
-  `sectionLanding` del scroll de la página.
+  enlaces del territorio ya no hay que decidirlos: con el retoque del final su tabla abre la sección, `#districts` es
+  lo alto de ella y `sectionLanding` se quitó.
 - La página del evento responde con un error 500 si un bloque de `meta.bmaps.blocks` no tiene fila en el `summary`
   (`promedios.html`, la leyenda de la tabla de bloques). Ya pasa en `dev`: se reprodujo en los dos quitando la fila
   de Derecha. El run real lleva las tres filas (Izquierda, Derecha y Otros) en los dos modos, así que hoy no puede
@@ -336,9 +336,26 @@ Diferencias visibles con la maqueta elegida (a 1280 px) que este documento no re
 - Las redirecciones de las direcciones viejas conservan un `seccion` que traiga la query (`?seccion=tabla` cae en
   `#tabla`).
 - `Circunscripciones.active = None` ya no se usa.
-- Con JavaScript, una dirección con una circunscripción elegida y `#escanos` (se llega a ella eligiendo una provincia
-  en la tabla y pulsando después «Escaños» en el índice) cae, al recargarla o al compartirla, en «Resultados por
-  territorio» y no en lo alto de la sección; sin JavaScript cae en lo alto. Se iguala haciendo que el cambio de
-  destino valga sólo cuando la sección viene en `seccion` (una condición en `sectionLanding`).
-- La tarjeta «Resultados por territorio», cuando se llega a ella por un enlace, queda 1 px bajo la cabecera (lleva
-  el margen de las secciones, 56 px, y la cabecera acaba en 57). No se nota.
+- Las tarjetas «Resultados por territorio» y «Escaños que bailan», cuando se llega a ellas por un enlace, quedan
+  1 px bajo la cabecera (llevan el margen de las secciones, 56 px, y la cabecera acaba en 57). No se nota.
+
+### Retoque de Luis tras la fusión (2026-11-13)
+
+Luis, tras la fusión: «Coloca los escaños que bailan bajo los resultados por territorio». Hecho en `85999d5`:
+
+- En la sección «Escaños» va primero «Resultados por territorio» y debajo «Escaños que bailan». El índice no cambia:
+  «Escaños» lleva a lo alto de la sección, que ahora es la tabla del territorio.
+- Las direcciones de la página aparte (`/{scope}/circunscripciones…`) responden con un 301 al ancla de la tarjeta,
+  `#seat-odds`, y no a `#escanos`, que ya no cae en ella. Sustituye a lo que dice «Direcciones antiguas».
+- La tarjeta lleva el margen de aterrizaje de las secciones, y el script de la página baja a ella cuando la dirección
+  la pide, después de dibujar la tabla de arriba (que con JavaScript pasa de provincias a comunidades y cambia de
+  alto). En Chrome se midió que el navegador sostiene el ancla él solo (misma posición final con y sin esa bajada),
+  así que hoy es una precaución para los navegadores que no lo hagan; en Safari y Firefox no se probó.
+- Sobra el aterrizaje aparte de los enlaces del territorio que añadió la revisión final (`sectionLanding`): su tabla
+  vuelve a abrir la sección. Sus enlaces y su formulario conservan `#districts`.
+
+Comprobado en Chrome con el run real, a 1280 y 390 px, con y sin JavaScript y con el aviso de congelación: el orden;
+la llegada a `#seat-odds` (la tarjeta queda a 56 px con la cabecera en 57; a 102 con el aviso; a 52 en el móvil); las
+direcciones viejas; el índice; los enlaces del territorio y la dirección vieja de escaños con `region`; la ficha
+pegada, la bajada a la ficha en el móvil, el cambio de vista, un filtro y la descarga de la imagen, como antes; las
+demás llegadas (`#resultados&coalition=…`, `seccion=tabla`, «Evolución» desde el índice). Batería completa en verde.
