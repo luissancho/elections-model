@@ -1,6 +1,6 @@
-// Pure helpers of «Escaños que bailan» (the card of the event page and the page `/{scope}/circunscripciones`): the
-// name of the image of a card, the line that says the filters of the map, after what is on view, whether a box is out
-// of the window, and the canonical of the tile checked. No imports, so node tests them as they are.
+// Pure helpers of «Escaños que bailan», the card of the event page (`seat-odds-wire.js`): the name of its image and
+// the line that says the filters of the map, after what is on view, and whether a box is out of the window. No
+// imports, so node tests them as they are.
 
 /**
  * Name of the image of a card: its base and the parts of what is on view that are not empty, joined by `-`.
@@ -35,16 +35,4 @@ export function filterLine(party, state) {
  */
 export function outOfView(rect, height) {
   return rect.top >= height || rect.bottom <= 0;
-}
-
-/**
- * The canonical of the address of a tile: the origin of the canonical of the page and the path of the tile, without
- * its query (the mode and the run, which the canonical never keeps) nor its fragment.
- *
- * @param {string} current the canonical of the page, absolute (`https://demoscopio.es/es/circunscripciones`)
- * @param {string} href the `data-href` of the radio of the tile (`/es/circunscripciones/cadiz?mode=forecast`)
- * @returns {string} the canonical of the tile (`https://demoscopio.es/es/circunscripciones/cadiz`)
- */
-export function canonicalFor(current, href) {
-  return new URL(current).origin + href.split(/[?#]/)[0];
 }

@@ -75,21 +75,10 @@ def test_fit_overflow_widens_the_card_by_what_its_marked_scrollers_hide():
     assert run_js(fit % (card % '[{scrollWidth: 900, clientWidth: 1100}]')) == [0, None]
 
 
-def test_free_fluid_svgs_drops_the_screen_size_html2canvas_writes_on_the_marked_svgs():
-    """html2canvas escribe en la copia el estilo calculado de cada SVG de la página: un SVG que se dimensiona por CSS
-    (`data-shot-fluid`, el hemiciclo de «Escaños que bailan») se quedaría con el tamaño de la pantalla (294 px en un
-    móvil). `freeFluidSvgs` le quita el ancho y el alto escritos y deja el resto de su estilo."""
-    free = ('(() => { const removed = []; const svg = {style: {removeProperty: (p) => removed.push(p)}}; '
-            'const card = {querySelectorAll: (sel) => (sel === "[data-shot-fluid]" ? [svg] : [])}; '
-            'return [c.freeFluidSvgs(card), removed]; })()')
-    assert run_js(free) == [1, ['width', 'height', 'inline-size', 'block-size']]
-    assert run_js('c.freeFluidSvgs({querySelectorAll: () => []})') == 0
-
-
-def test_prepare_clone_frees_the_fluid_svgs_before_it_measures_the_scrollers():
-    """`fitOverflow` mide lo que desborda la copia: el SVG del hemiciclo tiene que haber soltado antes el tamaño de la
-    pantalla que le escribió html2canvas, o la medida sería la del móvil."""
+def test_prepare_clone_frees_no_svg_any_more():
+    """El único SVG que se dimensionaba por CSS, el hemiciclo de la página aparte de «Escaños que bailan», se fue con
+    ella (2026-11-13): la copia ya no suelta el tamaño que html2canvas escribe en ningún SVG."""
     source = pathlib.Path(DIST, 'js', 'card-image.js').read_text(encoding='utf-8')
     body = source[source.index('export async function prepareClone('):]
     body = body[:body.index('\n}\n')]
-    assert -1 < body.index('freeFluidSvgs(card);') < body.index('fitOverflow(card);')
+    assert 'fitOverflow(card);' in body and 'freeFluidSvgs' not in source and 'data-shot-fluid' not in source

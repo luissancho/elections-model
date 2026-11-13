@@ -389,8 +389,10 @@ function paint() {
   tryDraw(() => paintEvolution(initial, catalog), 'the evolution');
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');
   tryDraw(wireSectionIndex, 'the index of the sections');
-  tryDraw(scrollToSection, 'the section of the URL');
+  // the card of the seats that dance before the scroll: under 720 px it reveals its dropdown of districts, which would
+  // push the sections below it down once the page had landed on one of them
   tryDraw(wireSeatOdds, 'the seats that dance');
+  tryDraw(scrollToSection, 'the section of the URL');
 }
 
 wireControls();

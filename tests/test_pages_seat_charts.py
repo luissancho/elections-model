@@ -1,6 +1,4 @@
-"""La colocación de los dibujos de «Escaños que bailan»: casillas del mapa, plazas del hemiciclo y columnas."""
-from collections import Counter
-
+"""La colocación de los dibujos de «Escaños que bailan»: casillas del mapa y columnas."""
 from mtpy.lib import pages
 from tests.test_pages_seat_odds import ODDS
 
@@ -29,36 +27,6 @@ def test_a_scope_without_every_position_draws_its_tiles_in_a_row_by_name():
     empty = dict(ODDS, rows=[row for row in ODDS['rows'] if row['region_id'] != 19])  # a district without options
     tiles = pages.map_tiles(pages.district_views(empty), POSITIONS, ODDS['parties'])['tiles']
     assert [(tile['label'], len(tile['options'])) for tile in tiles] == [('C', 10), ('GU', 0), ('CA', 9)]
-
-
-ORDER = ['PSOE', 'PP', 'VOX', 'AA', 'BNG']  # an order of the hemicycle, from left to right
-
-
-def test_the_hemicycle_seats_every_option_once_party_by_party_and_from_the_inside_out():
-    options = pages.scope_options(pages.district_views(ODDS))
-    layout = pages.hemicycle_layout(options, ORDER)
-    seats = layout['seats']
-    assert len(seats) == 22 == len({(seat['x'], seat['y']) for seat in seats})
-    assert (layout['rows'], layout['radius'], Counter(seat['row'] for seat in seats)) == (2, 22.0, {0: 6, 1: 16})
-    assert [(p['name'], p['safe'], p['likely'], p['play']) for p in layout['parties']] == [
-        ('PSOE', 4, 1, 1), ('PP', 6, 1, 1), ('VOX', 2, 1, 1), ('AA', 0, 1, 0), ('BNG', 2, 0, 1)]
-    wedges = [[seat for seat in seats if seat['party'] == name] for name in ORDER]
-    for left, right in zip(wedges, wedges[1:]):  # each party sits to the left of the next one
-        assert min(seat['angle'] for seat in left) >= max(seat['angle'] for seat in right)
-    for wedge in wedges:  # no option sits in a row further in than a likelier one of its party
-        assert all(a['share'] >= b['share'] for a in wedge for b in wedge if a['row'] < b['row'])
-
-
-def test_the_hemicycle_holds_with_three_options_and_with_390():
-    option = {'k': 1, 'share': 1.0, 'state': 'safe', 'label': None, 'alpha': None, 'title': '', 'district': 'X'}
-    few = pages.hemicycle_layout([dict(option, party='A')] * 2 + [dict(option, party='B')], ['A', 'B'])
-    assert (few['rows'], len(few['seats']), len({(s['x'], s['y']) for s in few['seats']})) == (1, 3, 3)
-    assert pages.hemicycle_layout([], ['A'])['seats'] == []
-    many = pages.hemicycle_layout([dict(option, party='A')] * 200 + [dict(option, party='B')] * 190, ['A', 'B'])
-    assert (many['rows'], many['radius']) == (10, 9.7)
-    assert Counter(seat['row'] for seat in many['seats']) == {0: 23, 1: 26, 2: 30, 3: 34, 4: 37, 5: 41, 6: 44, 7: 48,
-                                                              8: 52, 9: 55}
-    assert all(0 <= seat['x'] <= 1000 and 20 <= seat['y'] <= 540 for seat in many['seats'])
 
 
 def test_the_columns_follow_the_order_given_with_the_rest_last_and_fall_back_to_one_per_party():

@@ -1,13 +1,13 @@
 {% import '_macros.html' as m %}
-{#- The seat options of «Escaños que bailan», their counts and their legend, and the card of the event page (`card`).
-    The macros take what they show as parameters: the legend and the «Cómo leerlo» the `thresholds`
-    (`SAFE_SHARE`, `LIKELY_SHARE` and `PLAY_SHARE`, never literals), the chips the `state_words`. Only `hemicycle`, of
-    the page `/{scope}/circunscripciones`, still reads its context: that page imports this file `with context`. -#}
+{#- «Escaños que bailan», the card of the event page (`card`), and the pieces it is drawn with: the seat options, their
+    counts, their legend and the columns of the parties. The macros take what they show as parameters: the legend and
+    the «Cómo leerlo» the `thresholds` (`SAFE_SHARE`, `LIKELY_SHARE` and `PLAY_SHARE`, never literals), the chips the
+    `state_words`. -#}
 
 {#- One seat option as a circle (`drawn_token`): in the colour of its party (`--c`), solid when safe, with the fill of
     its share (`--f`) when not, its border continuous when likely and dashed when in play (`site.css`). `extra` adds
-    classes (the small sizes of the map and the charts). The state never depends on the colour alone: the border and
-    the title say it. -#}
+    classes (that of its party in the tiles of the map, which its filter reads). The state never depends on the colour
+    alone: the border and the title say it. -#}
 {% macro circle(token, extra='') -%}
 <i class="so-o {{ token.state }}{% if extra %} {{ extra }}{% endif %}" style="--c: {{ token.color }}{% if token.fill %}; --f: {{ token.fill }}{% endif %}" title="{{ token.title }}"></i>
 {%- endmacro %}
@@ -22,8 +22,8 @@
 </span>
 {%- endmacro %}
 
-{#- One chip per state with some option of a district or a party (`safe`, `likely`, `play`): «5 seguros», with the
-    words of each state (`state_words`, `STATE_WORDS`). -#}
+{#- One chip per state with some option of a district (`safe`, `likely`, `play`): «5 seguros», with the words of
+    each state (`state_words`, `STATE_WORDS`). -#}
 {% macro chips(item, state_words) -%}
 {%- for state, words in state_words.items() if item[state] -%}
 <span class="chip so-chip {{ state }}"><b>{{ item[state] }}</b> {{ words[0 if item[state] == 1 else 1] }}</span>
@@ -39,51 +39,16 @@
 </div>
 {%- endmacro %}
 
-{#- The hemicycle of the seat options (`charts.hemicycle`, `_party_charts`): never the seats of the chamber, so no total
-    and no majority. An inline SVG with presentation attributes only, for the image serialises it apart from the
-    stylesheet: safe, filled with the colour of its party; likely, the fill of its share and a continuous border;
-    in play, the same with a dashed one. Sized by the stylesheet (`data-shot-fluid`: the copy of the image lets it take
-    the width of the image, `card-image.js`). Over its hollow, the three counts of the scope (HTML, `.so-hemi-core`); under
-    it, a pill per party with its counts, and the foot. -#}
-{% macro hemicycle(charts, foot) -%}
-{%- set hemi = charts.hemicycle -%}
-<div class="so-hemi">
-  <svg class="so-hemi-svg" viewBox="0 20 1000 520" role="img" aria-label="Hemiciclo con las opciones de escaño de cada partido según su probabilidad" data-shot-fluid>
-    {%- for seat in hemi.seats %}
-    {%- if seat.state == 'safe' %}
-    <circle cx="{{ seat.x }}" cy="{{ seat.y }}" r="{{ hemi.radius }}" fill="{{ seat.color }}"><title>{{ seat.title }}</title></circle>
-    {%- else %}
-    <circle cx="{{ seat.x }}" cy="{{ seat.y }}" r="{{ hemi.open_radius }}" fill="{{ seat.fill }}" stroke="{{ seat.color }}" stroke-width="{{ hemi[seat.state] }}"{% if seat.state == 'play' %} stroke-dasharray="{{ hemi.dash }}"{% endif %}><title>{{ seat.title }}</title></circle>
-    {%- endif %}
-    {%- endfor %}
-  </svg>
-  <div class="so-hemi-core">
-    {%- for state, words in state_words.items() %}
-    <span><i class="so-o {{ state }}" aria-hidden="true"></i><b>{{ totals[state] }}</b> {{ words[0 if totals[state] == 1 else 1] }}</span>
-    {%- endfor %}
-  </div>
-</div>
-<div class="so-plist">
-  {%- for item in hemi.parties %}
-  <span title="{{ item.fullname }}"><span class="dot" style="background-color: {{ item.color }}"></span><b>{{ item.name }}</b><em>{{ item.safe }} · {{ item.likely }} · {{ item.play }}</em></span>
-  {%- endfor %}
-</div>
-<p class="so-foot">Tras cada partido: seguros · probables · en juego.{% if foot %} {{ foot }}{% endif %}</p>
-{%- endmacro %}
-
 {#- The columns of the seat options (`charts.columns`): one per party of the blocks Izquierda and Derecha and the rest,
     «Otros», or one per party when the run has no blocks. Each stacks its circles from the bottom up (`wrap-reverse`):
     the safe ones, then the likely ones and those in play. A mark every 50 options (`charts.ticks`), the last one above
-    the tallest column (`--top`: the chart is as tall as that mark); under each
-    column, its name and its counts (one under the other on phones, `.so-sep`): the stacks are decoration for a screen
-    reader, the labels carry the figures. Wider than the card, it slides sideways (`data-shot-fit`: the image
-    widens). With `district_word` («provincia» or «circunscripción») a sentence above says what a circle is; without
-    it (`none`), the card that holds the chart says it in its head. Under the chart, the legend (`thresholds`) and the
-    foot. -#}
+    the tallest column (`--top`: the chart is as tall as that mark); under each column, its name and its counts (one
+    under the other on phones, `.so-sep`): the stacks are decoration for a screen reader, the labels carry the figures.
+    Wider than the card, it slides sideways (`data-shot-fit`: the image widens). Above the chart, a sentence says what
+    a circle is, in the word of the districts (`district_word`: «provincia» or «circunscripción»); under it, the legend
+    (`thresholds`) and the foot. -#}
 {% macro columns(charts, district_word, thresholds) -%}
-{%- if district_word %}
 <p class="so-lede">Cada círculo es una opción de escaño en alguna {{ district_word }}. Abajo, los seguros; encima, los probables y los que están en juego.</p>
-{% endif -%}
 <div class="so-cols" data-shot-fit>
   <div class="so-waffle"{% if charts.ticks %} style="--top: {{ charts.ticks[-1] }}"{% endif %}>
     {%- for value in charts.ticks %}
@@ -103,8 +68,7 @@
 <p class="so-foot">Bajo cada partido: seguros · probables · en juego.{% if charts.rest %} Otros: {% for item in charts.rest %}<span class="so-rest"><span class="dot" style="background-color: {{ item.color }}"></span>{{ item.name }}</span>{{ ', ' if not loop.last }}{% endfor %}.{% endif %}</p>
 {%- endmacro %}
 
-{#- The «Cómo leerlo» of the cards of a district and of a party, and of the card of the event page, with the bands of
-    the three states (`thresholds`). -#}
+{#- The «Cómo leerlo» of the card, with the bands of the three states (`thresholds`). -#}
 {% macro how(thresholds) -%}
 {% call m.how() %}
 <p>
@@ -162,7 +126,7 @@
     <p class="so-filter-line shot-only" id="map-filter-line" hidden></p>
     <div class="so-split">
       <div class="so-split-map">
-        <div class="so-map{% if not odds.grid.placed %} so-map-loose{% endif %}" role="radiogroup" aria-label="Circunscripciones">
+        <div class="so-map{% if not odds.grid.placed %} so-map-loose{% endif %}" role="radiogroup" aria-label="{{ odds.view_label }}">
           {% for tile in odds.grid.tiles %}
           {% set seats_text = tile.seats ~ ' escaño' ~ ('' if tile.seats == 1 else 's') %}
           <label class="so-tile" title="{{ tile.name }} · {{ seats_text }}"{% if odds.grid.placed %} style="grid-column: {{ tile.col + 1 }} / span {{ tile.w }}; grid-row: {{ tile.row + 1 }} / span {{ tile.h }}"{% endif %}><input type="radio" name="d" value="{{ tile.slug }}" id="d-{{ tile.slug }}" aria-label="{{ tile.name }}, {{ seats_text }}"{% if tile.slug == odds.chosen %} checked{% endif %}><span class="so-ab">{{ tile.label }}</span><span class="so-dots" aria-hidden="true">{% for option in tile.options %}{{ circle(option, 'p-' ~ option.party_slug) }}{% endfor %}</span></label>
