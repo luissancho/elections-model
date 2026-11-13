@@ -234,6 +234,9 @@ def test_the_map_draws_every_district_as_the_label_of_a_radio_and_every_card_is_
     # the rules of the run: one per party for the filter, one per district for its card
     assert '#mapa:has(#mp-psoe:checked) .so-dots i:not(.p-psoe){opacity:.08}' in page
     assert '#provincias:has(#d-cadiz:checked) #ficha-cadiz{display:block}' in page
+    # without `:has()` no card stays hidden: every one shows
+    css = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    assert re.search(r'@supports not selector\(:has\(\*\)\)\s*\{\s*\.so-ficha\s*\{\s*display:\s*block', css)
     assert re.findall(r'class="card shot so-card so-ficha" id="ficha-([a-z-]+)"', page) == ['cadiz', 'guadalajara', 'la-coruna']
     assert 'Hay 22 opciones para 19 escaños: a un mismo escaño pueden optar varios partidos.' in page
     assert '<title>Demoscopio · Escaños que bailan en Cádiz · Elecciones generales 2026</title>' in page

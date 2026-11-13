@@ -1176,6 +1176,10 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 #mapa:has(#ms-likely:checked) .so-dots i:not(.likely) { opacity: .08; }
 #mapa:has(#ms-play:checked) .so-dots i:not(.play) { opacity: .08; }
 .so-ficha { display: none; }
+/* without `:has()` every card shows, by name (the filters and the mark of the tile chosen do nothing there) */
+@supports not selector(:has(*)) {
+  .so-ficha { display: block; }
+}
 /* The links of the page land on the map (`#mapa`), the cards (`#ficha`) or the tabs of the views (`#vistas`) below
    the sticky header (56 px, plus the freeze banner when it shows) with a little air; on phones the cards also leave
    the dropdown of districts above them in sight (header 52 px, dropdown down to 100 px) */
