@@ -38,6 +38,61 @@
 </div>
 {%- endmacro %}
 
+{#- The hemicycle of the seat options (`charts.hemicycle`, `_party_charts`): never the seats of the chamber, so no total
+    and no majority. An inline SVG with presentation attributes only, for the image serialises it apart from the
+    stylesheet: safe, filled with the colour of its party; likely, the fill of its share and a continuous border;
+    in play, the same with a dashed one. Over its hollow, the three counts of the scope (HTML, `.so-hemi-core`); under
+    it, a pill per party with its counts, and the foot. -#}
+{% macro hemicycle(charts, foot) -%}
+{%- set hemi = charts.hemicycle -%}
+<div class="so-hemi">
+  <svg class="so-hemi-svg" viewBox="0 20 1000 520" role="img" aria-label="Hemiciclo con las opciones de escaño de cada partido según su probabilidad">
+    {%- for seat in hemi.seats %}
+    {%- if seat.state == 'safe' %}
+    <circle cx="{{ seat.x }}" cy="{{ seat.y }}" r="{{ hemi.radius }}" fill="{{ seat.color }}"><title>{{ seat.title }}</title></circle>
+    {%- else %}
+    <circle cx="{{ seat.x }}" cy="{{ seat.y }}" r="{{ hemi.open_radius }}" fill="{{ seat.fill }}" stroke="{{ seat.color }}" stroke-width="{{ hemi[seat.state] }}"{% if seat.state == 'play' %} stroke-dasharray="{{ hemi.dash }}"{% endif %}><title>{{ seat.title }}</title></circle>
+    {%- endif %}
+    {%- endfor %}
+  </svg>
+  <div class="so-hemi-core">
+    {%- for state, words in state_words.items() %}
+    <span><i class="so-o {{ state }}" aria-hidden="true"></i><b>{{ totals[state] }}</b> {{ words[0 if totals[state] == 1 else 1] }}</span>
+    {%- endfor %}
+  </div>
+</div>
+<div class="so-plist">
+  {%- for item in hemi.parties %}
+  <span title="{{ item.fullname }}"><span class="dot" style="background-color: {{ item.color }}"></span><b>{{ item.name }}</b><em>{{ item.safe }} · {{ item.likely }} · {{ item.play }}</em></span>
+  {%- endfor %}
+</div>
+<p class="so-foot">Tras cada partido: seguros · probables · en juego.{% if foot %} {{ foot }}{% endif %}</p>
+{%- endmacro %}
+
+{#- The columns of the seat options (`charts.columns`): one per party of the blocks Izquierda and Derecha and the rest,
+    «Otros», or one per party when the run has no blocks. Each stacks its circles from the bottom up (`wrap-reverse`):
+    the safe ones, then the likely ones and those in play. A mark every 50 options (`charts.ticks`); under each
+    column, its name and its counts (one under the other on phones, `.so-sep`). Wider than the card, it slides
+    sideways (`data-shot-fit`: the image widens). -#}
+{% macro columns(charts) -%}
+<div class="so-cols" data-shot-fit>
+  <div class="so-waffle">
+    {%- for value in charts.ticks %}
+    <div class="so-tick" style="bottom: calc({{ value }} / var(--wn) * (var(--wsq) + var(--wgap)))"><span>{{ value }}</span></div>
+    {%- endfor %}
+    {%- for column in charts.columns %}
+    <div class="so-col" data-col="{{ column.name }}">{% for option in column.options %}{{ circle(option) }}{% endfor %}</div>
+    {%- endfor %}
+  </div>
+  <div class="so-wlabels">
+    {%- for column in charts.columns %}
+    <div><b>{% if column.color %}<span class="dot" style="background-color: {{ column.color }}"></span>{% endif %}{{ column.name }}</b><small>{{ column.safe }}<span class="so-sep"> · </span>{{ column.likely }}<span class="so-sep"> · </span>{{ column.play }}</small></div>
+    {%- endfor %}
+  </div>
+</div>
+{{ legend() }}
+<p class="so-foot">Bajo cada partido: seguros · probables · en juego.{% if charts.rest %} Otros: {% for item in charts.rest %}<span class="so-rest"><span class="dot" style="background-color: {{ item.color }}"></span>{{ item.name }}</span>{{ ', ' if not loop.last }}{% endfor %}.{% endif %}</p>
+{%- endmacro %}
 
 {#- The «Cómo leerlo» of the cards of a district and of a party. -#}
 {% macro how() -%}

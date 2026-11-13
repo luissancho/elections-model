@@ -43,7 +43,7 @@ from .circunscripciones import (CLOSEST_SHOWN, LIKELY_SHARE, PLAY_SHARE, SAFE_SH
                                 published_seat_odds, scope_options, scope_totals, seat_odds_context, seat_odds_links,
                                 seat_state, seat_tokens, state_text, threshold_label, tint, token_alpha, token_label,
                                 tokens_note, tokens_reading)
-from .seat_charts import STATES, map_tiles
+from .seat_charts import STATES, column_ticks, hemicycle_layout, map_tiles, party_columns
 from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, has_communities, region_rows, resolve_region,
                       seats_context)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,

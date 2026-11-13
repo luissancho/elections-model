@@ -14,9 +14,9 @@ from urllib.parse import urlencode
 
 from ...core.api import HttpError
 from ..webapi import district_positions, site
-from .common import OTHERS_COLOR, bundle_part, common_context, subpage_event_bar
+from .common import OTHERS_COLOR, bundle_part, common_context, hemicycle_order, subpage_event_bar
 from .escanos import _sort_name
-from .seat_charts import STATES, map_tiles
+from .seat_charts import REST_COLUMN, STATES, column_ticks, hemicycle_layout, map_tiles, party_columns
 from .slugs import slugify
 
 SAFE_SHARE = 0.99
@@ -27,6 +27,9 @@ STATE_WORDS = {'safe': ('seguro', 'seguros'), 'likely': ('probable', 'probables'
 CLOSEST_SHOWN = 40
 CARD_ANCHOR = '#ficha'   # the cards of the districts (their wrapper) or the card of a party
 VIEWS_ANCHOR = '#vistas'  # the tabs of the views
+PARTIES_ANCHOR = '#partidos'  # the buttons of the parties, under the chart of the parties
+# the strokes of the hemicycle for a circle of radius 9.7 (390 options): those of the mockup, scaled with the radius
+HEMICYCLE_STROKES = {'radius': 9.7, 'likely': 1.6, 'play': 1.9, 'dash': (3.1, 2.5)}
 
 
 def seat_state(share: float) -> Optional[str]:
@@ -797,6 +800,79 @@ def _party_card(views: list, name: str, parties: dict, scope: str, query: str) -
     }
 
 
+def _hemicycle_strokes(radius: float) -> dict:
+    """
+    The circles of the hemicycle that are not safe: their radius and their border, in proportion to its radius.
+
+    Parameters
+    ----------
+    radius : float
+        Radius of a circle (``hemicycle_layout``), in the units of the ``viewBox``.
+
+    Returns
+    -------
+    dict
+        ``open_radius`` (0.9 less than ``radius``), ``likely`` and ``play`` (the widths of the continuous and the
+        dashed border) and ``dash`` (the ``stroke-dasharray`` of the dashed one), those of ``HEMICYCLE_STROKES``
+        scaled with ``radius`` and rounded to 1 decimal.
+    """
+    scale = radius / HEMICYCLE_STROKES['radius']
+
+    return {
+        'open_radius': round(radius - 0.9, 1),
+        'likely': round(HEMICYCLE_STROKES['likely'] * scale, 1),
+        'play': round(HEMICYCLE_STROKES['play'] * scale, 1),
+        'dash': ' '.join(str(round(length * scale, 1)) for length in HEMICYCLE_STROKES['dash']),
+    }
+
+
+def _party_charts(views: list, names: list, order: list, blocks: Optional[dict], parties: dict, scope: str) -> dict:
+    """
+    The chart of the parties: every seat option of the scope in a hemicycle and in columns.
+
+    Parameters
+    ----------
+    views : list
+        Views from ``district_views``.
+    names : list
+        The parties with some seat option (``_party_names``).
+    order : list
+        The parties of the part, for the order of the columns.
+    blocks : dict, optional
+        ``bmaps.blocks`` of the run (``party_columns``).
+    parties : dict
+        Catalogue of the scope (name to ``color``, ``fullname`` and ``block``).
+    scope : str
+        Scope code, for the name of its image.
+
+    Returns
+    -------
+    dict
+        ``hemicycle`` (``hemicycle_layout`` in the order of ``hemicycle_order``, its seats drawn with the colour of
+        their party, ``drawn_token``, its parties with ``color`` and ``fullname``, and ``_hemicycle_strokes``),
+        ``columns`` (``party_columns``, each with ``color``, ``None`` for ``REST_COLUMN``, and its options drawn),
+        ``ticks`` (``column_ticks``), ``rest`` (``name`` and ``color`` of the parties of ``REST_COLUMN``, empty
+        without it) and ``image_file``.
+    """
+    options = scope_options(views)
+    layout = hemicycle_layout(options, hemicycle_order(names, parties))
+    seats = [drawn_token(seat, parties[seat['party']]['color']) for seat in layout['seats']]
+    listed = [dict(item, color=parties[item['name']]['color'], fullname=parties[item['name']]['fullname'])
+              for item in layout['parties']]
+    columns = [dict(column, color=None if column['name'] == REST_COLUMN else parties[column['name']]['color'],
+                    options=[drawn_token(option, parties[option['party']]['color']) for option in column['options']])
+               for column in party_columns(options, order, blocks)]
+    rest = next((column['members'] for column in columns if column['name'] == REST_COLUMN), [])
+
+    return {
+        'hemicycle': dict(layout, seats=seats, parties=listed, **_hemicycle_strokes(layout['radius'])),
+        'columns': columns,
+        'ticks': column_ticks(columns),
+        'rest': [{'name': name, 'color': parties[name]['color']} for name in rest],
+        'image_file': _image_file(scope, 'hemiciclo'),
+    }
+
+
 def _closest_card(views: list, parties: dict, scope: str, query: str) -> dict:
     """
     The part of the context specific to the list of the closest seats.
@@ -908,10 +984,12 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
     district : str, optional
         Slug of the district in the URL; it wins over ``party`` and ``view``.
     party : str, optional
-        Slug (``slugify``) of the acronym of a party with some seat option: the view of that party.
+        Slug (``slugify``) of the acronym of a party with some seat option: the view of the parties with the card of
+        that party.
     view : str, optional
-        ``'renidos'``: the list of the closest seats. ``party`` wins over it. Without any of the three, the view of
-        ``default_district``, under the title of the page itself (``landing``).
+        ``'partidos'``: the view of the parties without the card of a party; ``'renidos'``: the list of the closest
+        seats. ``party`` wins over it. Without any of the three, the view of ``default_district``, under the title of
+        the page itself (``landing``).
 
     Returns
     -------
@@ -922,12 +1000,13 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         given), ``totals`` (``scope_totals``), ``foot`` (``options_sentence`` of the totals), ``districts``
         (``district_views`` sorted by name with accents folded, each with ``href``, ``district_href`` keeping the
         query), ``parties`` (the parties with some option, in the order of the part: ``name``, ``slug``,
-        ``fullname``, ``color``, ``href`` keeping the query and landing on the tabs, ``on``; the filter of the map
-        and the buttons of the view of a party) and the data of the view: ``district`` (the chosen one), ``grid``,
-        ``cards`` and ``map_image_file`` (``_provinces_view``), or ``party`` (``party_view`` with ``fullname``,
-        ``color`` and the rows ``drawn_row`` with the ``href`` of their district), ``sentence`` and ``image_file``,
-        or ``closest`` (``closest_seats`` with ``color`` and ``href``) and ``sentence``; ``tabs`` (``key``,
-        ``label``, ``href`` keeping the query and landing on the tabs, and ``on`` of the three views), ``n_sim``,
+        ``fullname``, ``color``, ``href`` keeping the query and landing on the buttons of the parties, ``on``; the
+        filter of the map and those buttons) and the data of the view: ``district`` (the chosen one), ``grid``,
+        ``cards`` and ``map_image_file`` (``_provinces_view``), or ``charts`` (``_party_charts``) and ``party``
+        (``None`` without ``party``; otherwise ``party_view`` with ``fullname``, ``color`` and the rows ``drawn_row``
+        with the ``href`` of their district, ``sentence`` and ``image_file``), or ``closest`` (``closest_seats`` with
+        ``color`` and ``href``) and ``sentence``; ``tabs`` (``key``, ``label``, ``href`` keeping the query and
+        landing on the tabs, the one of the parties on ``?vista=partidos``, and ``on`` of the three views), ``n_sim``,
         ``thresholds`` (``safe``, ``likely`` and ``play``, ``threshold_label`` of ``SAFE_SHARE``, ``LIKELY_SHARE``
         and ``PLAY_SHARE``, for the legend and the «Cómo leerlo»), ``state_words`` (``STATE_WORDS``, for the chips
         and the filter of states), ``page_title`` (``'Escaños que bailan'`` on the landing) and ``image_sign``.
@@ -938,7 +1017,7 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         404 ``seat odds not published`` when the run shown has no ``seat-odds`` part in the mode (or one without
         simulations, or with fewer than two districts: ``published_seat_odds``); 404 ``region not found`` for an
         unknown ``district``; 404 ``party not found`` when ``party`` is not a party of the part with some option; 400
-        ``invalid view`` for a ``view`` other than ``renidos``; those of ``common_context``.
+        ``invalid view`` for a ``view`` other than ``partidos`` and ``renidos``; those of ``common_context``.
     """
     context = common_context(state, None, event=True)
     full, query, parties = context['state'], context['query'], context['catalog']
@@ -954,6 +1033,8 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
 
     names = _party_names(data, views)
     by_slug = {slugify(name): name for name in names}
+    order = data.get('parties') or []
+    blocks = ((context['meta'] or {}).get('bmaps') or {}).get('blocks')
 
     if district is not None:
         chosen = next((item for item in districts if item['slug'] == district), None)
@@ -967,6 +1048,10 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
             raise HttpError(404, 'party not found')
 
         shown, card = 'party', _party_card(views, by_slug[party], parties, scope, query)
+        card['charts'] = _party_charts(views, names, order, blocks, parties, scope)
+    elif view == 'partidos':
+        shown, card = 'party', {'party': None, 'charts': _party_charts(views, names, order, blocks, parties, scope),
+                                'page_title': 'Escaños que bailan, partido a partido'}
     elif view is not None:
         if view != 'renidos':
             raise HttpError(400, 'invalid view')
@@ -981,12 +1066,11 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
     # the index links the sections of the event page, keeping the mode and the pinned run
     context['event_bar'] = subpage_event_bar(context)
     base = '/{}/circunscripciones'.format(scope)
-    # the view of a party opens on the first party of the part with some option; the tabs and the party buttons land
-    # on the tabs (`#vistas`): on a phone the card of the view is far below the top of the page
+    # the tabs land on themselves (`#vistas`) and the party buttons on themselves (`#partidos`, under the chart of the
+    # parties): on a phone the card of the view is far below the top of the page
     tabs = [
         {'key': 'district', 'label': 'Provincias', 'href': base + query + VIEWS_ANCHOR},
-        {'key': 'party', 'label': 'Partidos',
-         'href': base + (_with_param(query, 'partido', slugify(names[0])) if names else query) + VIEWS_ANCHOR},
+        {'key': 'party', 'label': 'Partidos', 'href': base + _with_param(query, 'vista', 'partidos') + VIEWS_ANCHOR},
         {'key': 'closest', 'label': 'Los más reñidos',
          'href': base + _with_param(query, 'vista', 'renidos') + VIEWS_ANCHOR},
     ]
@@ -1000,8 +1084,8 @@ def seat_odds_context(state: dict, district: Optional[str] = None, party: Option
         'districts': districts,
         'parties': [{'name': name, 'slug': slugify(name), 'fullname': parties[name]['fullname'],
                      'color': parties[name]['color'],
-                     'href': base + _with_param(query, 'partido', slugify(name)) + VIEWS_ANCHOR,
-                     'on': shown == 'party' and card['party']['name'] == name} for name in names],
+                     'href': base + _with_param(query, 'partido', slugify(name)) + PARTIES_ANCHOR,
+                     'on': bool(card.get('party')) and card['party']['name'] == name} for name in names],
         'tabs': [dict(tab, on=tab['key'] == shown) for tab in tabs],
         'n_sim': data['n_sim'],
         'thresholds': {'safe': threshold_label(SAFE_SHARE), 'likely': threshold_label(LIKELY_SHARE),

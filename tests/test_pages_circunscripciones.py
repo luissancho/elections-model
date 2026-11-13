@@ -338,7 +338,7 @@ def test_a_pinned_run_stays_in_every_link_of_the_page_and_the_canonical_drops_it
     # the tabs of the views land on themselves (`#vistas`), not at the top of the page
     assert '<nav class="seg lg so-tabs" id="vistas" aria-label="Vistas">' in page
     assert 'href="/es/circunscripciones{}#vistas"'.format(query) in page  # the tab of the view
-    assert 'href="/es/circunscripciones{}&amp;partido=pp#vistas"'.format(query) in page  # the first party with an option
+    assert 'href="/es/circunscripciones{}&amp;vista=partidos#vistas"'.format(query) in page  # the tab of the parties
     assert 'href="/es/circunscripciones{}&amp;vista=renidos#vistas"'.format(query) in page
     assert 'href="/es{}#tabla"'.format(query) in page  # the index of the event bar
     form = page[page.index('id="district-pick"'):page.index('</form>')]
@@ -397,9 +397,9 @@ def test_the_event_bar_of_a_subpage_links_the_event_page_and_drops_the_territory
 def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(odds_site):
     status, page = page_of(odds_site, '/es/circunscripciones', 'partido=psoe')
     assert status == 200 and '<title>Demoscopio · Escaños que bailan: PSOE' in page
-    assert re.findall(r'class="so-party-btn[^"]*" href="[^"]*partido=([a-z]+)#vistas"', page) == [
+    assert re.findall(r'class="so-party-btn[^"]*" href="[^"]*partido=([a-z]+)#partidos"', page) == [
         'pp', 'psoe', 'vox', 'aa', 'bng']
-    card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
+    card = page[page.index('id="ficha"'):page.index('class="so-legend"', page.index('id="ficha"'))]
     assert re.findall(r'href="/es/circunscripciones/([a-z-]+)\?mode=forecast#ficha"', card) == ['cadiz', 'la-coruna']
     assert 'Tiene 4 escaños seguros, 1 probable y 1 en juego.' in card and 'reparto central' not in card
     assert re.findall(r'<span class="chip so-chip ([a-z]+)"><b>(\d+)</b> ([^<]+)</span>', card) == [
@@ -417,7 +417,7 @@ def test_the_party_view_lists_its_doubtful_districts_and_sums_the_settled_ones(o
     assert call(odds_site, '/es/circunscripciones', query='partido=nadie')[0] == 404
     kept = page_of(odds_site, '/es/circunscripciones', 'partido=pp&mode=nowcast')[1]
     assert 'href="/es/circunscripciones/cadiz?mode=nowcast#ficha"' in kept
-    assert 'class="so-party-btn on" href="/es/circunscripciones?mode=nowcast&amp;partido=pp#vistas"' in kept
+    assert 'class="so-party-btn on" href="/es/circunscripciones?mode=nowcast&amp;partido=pp#partidos"' in kept
     # the district of the path wins over the party
     assert '<title>Demoscopio · Escaños que bailan en Cádiz' in page_of(odds_site, '/es/circunscripciones/cadiz', 'partido=pp')[1]
 
@@ -574,6 +574,7 @@ def test_the_image_of_both_cards_says_the_election_the_estimate_and_its_date(odd
     ('/es/circunscripciones', 'partido=pp&vista=renidos', '/es/circunscripciones?partido=pp'),
     # the dropdown never stays (an empty one is ignored by the page)
     ('/es/circunscripciones', 'vista=renidos&circunscripcion=&mode=nowcast', '/es/circunscripciones?vista=renidos'),
+    ('/es/circunscripciones', 'vista=partidos&mode=nowcast', '/es/circunscripciones?vista=partidos'),
 ])
 def test_the_canonical_keeps_only_what_the_page_shows(odds_site, path, query, canonical):
     status, page = page_of(odds_site, path, query)
@@ -599,7 +600,53 @@ def test_a_party_with_only_safe_seats_has_no_grid_and_says_so(odds_site, fresh_a
     settled['rows'][3] = odds_row(11, 'AA', 1, 10000)  # AA's seat in Cádiz, safe: nothing of AA likely nor in play
     write_odds(fresh_app.fs, settled)
     status, page = page_of(odds_site, '/es/circunscripciones', 'partido=aa')
-    card = page[page.index('id="ficha"'):page.index('class="so-legend"')]
+    card = page[page.index('id="ficha"'):page.index('class="so-legend"', page.index('id="ficha"'))]
     assert status == 200 and 'Tiene 1 escaño seguro.' in card
     assert 'so-grid' not in card and '<b>Sólo seguros (1):</b> Cádiz 1.' in card
     assert 'chip so-chip safe' in card and 'chip so-chip likely' not in card and 'chip so-chip play' not in card
+
+
+def write_blocks(fs, blocks):
+    """Sobrescribe la parte `meta` del run del bundle de prueba con estos bloques de la web."""
+    meta = fixture_data('meta')
+    meta = meta | {'bmaps': meta['bmaps'] | {'blocks': blocks}}
+    bundle.BundleWriter(fs).write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
+    webapi.site().files.clear()
+    webapi.site().manifest_cache_clear()
+
+
+def test_the_parties_tab_draws_the_hemicycle_and_the_columns_and_opens_on_the_hemicycle(odds_site, fresh_app):
+    status, page = page_of(odds_site, '/es/circunscripciones', 'vista=partidos')
+    assert status == 200 and '<title>Demoscopio · Escaños que bailan, partido a partido · Elecciones generales 2026</title>' in page
+    assert re.findall(r'<a href="[^"]*"( class="on" aria-current="page")?>(Provincias|Partidos|Los más reñidos)</a>', page) == [
+        ('', 'Provincias'), (' class="on" aria-current="page"', 'Partidos'), ('', 'Los más reñidos')]
+    assert 'href="/es/circunscripciones?mode=forecast&amp;vista=partidos#vistas"' in page
+    assert re.findall(r'name="pf" value="(hemi|cols)"[^>]*?( checked)?>', page) == [('hemi', ' checked'), ('cols', '')]
+    assert '<h2 class="so-form-hemi">El hemiciclo que baila</h2>' in page
+    assert '<h2 class="so-form-cols">Las opciones de escaño de cada partido</h2>' in page
+    start = page.index('<svg class="so-hemi-svg"')
+    svg = page[start:page.index('</svg>', start)]  # the icons of the header and of the image button come first
+    assert 'viewBox="0 20 1000 520" role="img" aria-label="Hemiciclo con las opciones de escaño de cada partido según su probabilidad"' in svg
+    assert svg.count('<circle') == 22 and svg.count('stroke-dasharray') == 4 and svg.count('<title>') == 22
+    for count in ('<b>14</b> seguros', '<b>4</b> probables', '<b>4</b> en juego'):
+        assert count in page[page.index('class="so-hemi-core"'):]
+    # the order of the hemicycle (`hemicycle_order`): the test catalogue only gives a block to PP (Derecha), so the
+    # parties without one go after it, in the order of the catalogue
+    assert re.findall(r'<b>([A-Z]+)</b><em>([^<]+)</em>', page) == [
+        ('PP', '6 · 1 · 1'), ('PSOE', '4 · 1 · 1'), ('VOX', '2 · 1 · 1'), ('AA', '0 · 1 · 0'), ('BNG', '2 · 0 · 1')]
+    assert ('Tras cada partido: seguros · probables · en juego. Hay 22 opciones para 19 escaños: a un mismo escaño '
+            'pueden optar varios partidos.') in page
+    # the blocks of the test bundle are incomplete: one column per party and no «Otros»
+    assert re.findall(r'class="so-col" data-col="([^"]+)"', page) == ['PP', 'PSOE', 'VOX', 'AA', 'BNG']
+    assert 'href="/es/circunscripciones?mode=forecast&amp;partido=psoe#partidos"' in page and 'id="ficha"' not in page
+    assert '350' not in visible_text(page[page.index('id="grafico"'):page.index('id="partidos"')])  # never the chamber
+    assert 'mayoría' not in page[page.index('id="grafico"'):page.index('id="partidos"')]
+    write_blocks(fresh_app.fs, {'Izquierda': ['PSOE', 'AA'], 'Derecha': ['PP', 'VOX'], 'Otros': ['BNG']})
+    page = page_of(odds_site, '/es/circunscripciones', 'partido=psoe')[1]
+    assert re.findall(r'class="so-col" data-col="([^"]+)"', page) == ['PSOE', 'AA', 'PP', 'VOX', 'Otros']
+    assert 'Bajo cada partido: seguros · probables · en juego. Otros:' in page
+    assert 'id="ficha"' in page and 'Tiene 4 escaños seguros, 1 probable y 1 en juego.' in page
+    text = visible_text(page[page.index('id="content"'):])
+    assert not [word for word in RETIRED if word in text]
+    assert_public_wording(page, 'partidos')
+    assert call(odds_site, '/es/circunscripciones', query='vista=otra')[0] == 400
