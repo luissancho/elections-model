@@ -31,6 +31,8 @@ NO_POLLS_ARTICLE = 'no polls article for {}'
 
 NO_EVENTS = 'no elections for {}'
 
+# Most changed and replaced polls that a load without `overwrite` updates on its own: with more, none is touched
+MAX_UPDATES = 10
 # Columns of a poll that come from its row of the article and are compared with the database (`poll_changes`)
 POLL_FIELDS = ('start_date', 'sample_size', 'ctype')
 
@@ -344,7 +346,7 @@ def load_polls(
     event_date : str
         Date of the election (`YYYY-MM-DD`); it must have a polls article in `wp-urls.json`.
     overwrite : bool, default False
-        Replace the polls of the cycle instead of adding only the new ones.
+        Replace the polls of the cycle instead of adding only the new ones and updating those that changed.
     force : bool, default False
         Add the unknown pollsters and sponsors to the catalogues (a missing party always fails).
     years : list of str, optional
@@ -376,6 +378,9 @@ def load_polls(
         ``changed``, ``replaced`` and ``removed`` (the polls of the database that the article gives differently,
         that a new one replaces or that it no longer has, `poll_changes`; the last two always empty with
         ``years``; the three empty if the comparison fails, with a warning),
+        ``updated`` (whether the changed and replaced polls were written: with ``save``, by the ``overwrite`` or,
+        without it, because they were at most `MAX_UPDATES`; the changed ones are then deleted and saved again
+        with the new ones, counted in ``n_saved``, and the replaced ones deleted; the removed ones never are),
         ``overwrite``, ``missing`` and ``skipped`` (names by class), ``added`` (pollsters and sponsors added, or that `force` would add in a dry run),
         ``seconds`` (per phase and ``total``) and, when failed, ``reason``.
 
@@ -393,7 +398,7 @@ def load_polls(
     seconds, start = {}, time.perf_counter()
     result = {
         'status': 'loaded', 'action': 'polls', 'event_date': event_date, 'n_read': 0, 'n_saved': 0, 'new': [],
-        'changed': [], 'replaced': [], 'removed': [],
+        'changed': [], 'replaced': [], 'removed': [], 'updated': False,
         'overwrite': overwrite, 'missing': {cls: [] for cls in NAME_CLASSES},
         'skipped': {cls: [] for cls in NAME_CLASSES}, 'added': {'pollsters': [], 'sponsors': []}, 'seconds': seconds
     }
@@ -465,18 +470,33 @@ def load_polls(
 
     def select_and_save():
         wiki.select_series(overwrite)
-        result['n_saved'] = len(wiki.polls)
         result['new'] = new_poll_list(wiki.new_polls)
         # The comparison only informs: a failure there, or reading the results it needs from the database, must
-        # not fail the load
+        # not fail the load (and then nothing is updated)
+        keys = {'changed': [], 'replaced': []}
         try:
             changes = poll_changes(wiki.read_polls, wiki.read_results, wiki.cur_polls, wiki.fetch_cur_results(),
                                    removed=not years)
-            changes.pop('keys')
+            keys = changes.pop('keys')
             result.update(changes)
         except Exception as e:
             warnings.warn('poll changes failed: {}: {}'.format(type(e).__name__, e))
+
+        # The polls that changed are written again and those replaced are deleted, unless there are too many
+        # (an article or a parser gone wrong, not polls being completed). An overwrite rewrites them all anyway
+        n_updates = len(keys['changed']) + len(keys['replaced'])
+        update = not overwrite and 0 < n_updates <= MAX_UPDATES
+        if not overwrite and n_updates > MAX_UPDATES:
+            warnings.warn('{} changed polls not updated (more than {}): check the article or load with '
+                          'overwrite'.format(n_updates, MAX_UPDATES))
+        if update:
+            wiki.select_changed(keys['changed'])
+        result['n_saved'] = len(wiki.polls)
+        result['updated'] = save and n_updates > 0 and (overwrite or update)
+
         if save:
+            if update:
+                wiki.delete_polls(keys['changed'] + keys['replaced'])
             wiki.save_polls(overwrite)
             wiki.save_results(overwrite)
             # The checks query the database: a failure there must not fail a save already done nor skip the weights

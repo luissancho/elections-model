@@ -69,6 +69,15 @@ class FakeLoader:
                 self.read_polls, self.read_results, self.cur_polls, _ = factory.changes
                 return self
 
+            def select_changed(self, keys):
+                factory.calls.append(('select_changed', list(keys)))
+                self.polls = pd.DataFrame({'x': range(len(self.polls) + len(keys))})
+                return self
+
+            def delete_polls(self, keys):
+                factory.calls.append(('delete_polls', list(keys)))
+                return self
+
             def fetch_cur_results(self):
                 factory.calls.append(('fetch_cur_results',))
                 if factory.results_error is not None:
@@ -594,6 +603,7 @@ def test_load_polls_survives_a_failing_comparison(monkeypatch):
     with pytest.warns(UserWarning, match='poll changes failed: ValueError: x'):
         result, loader = run()[:2]
     assert result['status'] == 'loaded' and result['changed'] == [] and result['removed'] == []
+    assert result['updated'] is False and not {'select_changed', 'delete_polls'} & {call[0] for call in loader.calls}
     assert ('save_polls', False) in loader.calls and ('save_results', False) in loader.calls
 
 
@@ -615,3 +625,65 @@ def test_load_polls_survives_a_failing_read_of_the_current_results():
         result = run(loader)[0]
     assert result['status'] == 'loaded' and result['changed'] == [] and result['removed'] == []
     assert ('save_polls', False) in loader.calls and ('save_results', False) in loader.calls
+
+
+KEY_40DB = ('2026-11-14', 15, 1)
+
+
+def call_names(loader):
+    return [call[0] for call in loader.calls]
+
+
+def test_load_polls_updates_the_changed_polls():
+    result, loader = run(FakeLoader(changes=changed_sample()))[:2]
+    names = call_names(loader)
+    assert ('select_changed', [KEY_40DB]) in loader.calls and ('delete_polls', [KEY_40DB]) in loader.calls
+    assert names.index('select_changed') < names.index('delete_polls') < names.index('save_polls')
+    # Dos nuevos del doble y el cambiado
+    assert result['updated'] is True and result['n_saved'] == 3 and 'keys' not in result
+    assert len(result['changed']) == 1
+
+
+def test_load_polls_without_changes_touches_nothing_else():
+    result, loader = run()[:2]
+    assert result['updated'] is False and result['n_saved'] == 2
+    assert not {'select_changed', 'delete_polls'} & set(call_names(loader))
+
+
+def test_load_polls_deletes_the_poll_a_new_one_replaces():
+    result, loader = run(FakeLoader(changes=sponsor_change()))[:2]
+    assert ('delete_polls', [('2026-11-14', 15, 2)]) in loader.calls and ('select_changed', []) in loader.calls
+    assert result['updated'] is True and result['n_saved'] == 2 and len(result['replaced']) == 1
+
+
+def test_load_polls_dry_run_updates_nothing():
+    result, loader = run(FakeLoader(changes=changed_sample()), save=False)[:2]
+    names = call_names(loader)
+    assert 'delete_polls' not in names and 'save_polls' not in names
+    # Lo que se guardaría: los nuevos y el cambiado
+    assert result['status'] == 'checked' and result['updated'] is False and result['n_saved'] == 3
+
+
+def test_load_polls_overwrite_marks_updated_without_deleting():
+    result, loader = run(FakeLoader(changes=changed_sample()), overwrite=True)[:2]
+    assert not {'select_changed', 'delete_polls'} & set(call_names(loader))
+    assert result['updated'] is True and result['n_saved'] == 5
+    assert run(FakeLoader(changes=changed_sample()), overwrite=True, save=False)[0]['updated'] is False
+    assert run(overwrite=True)[0]['updated'] is False
+
+
+def test_load_polls_brake_leaves_the_changes_unapplied():
+    rows = [(15, 1, '2026-10-{:02d}'.format(day), '2026-10-{:02d}'.format(day), 1000, None) for day in range(1, 12)]
+    res = [(15, 1, '2026-10-{:02d}'.format(day), 'PP', 30.0, None, None) for day in range(1, 12)]
+    cur = poll_frame(rows)
+    cur['sample_size'] = None
+    loader = FakeLoader(changes=(poll_frame(rows), result_frame(res), cur, result_frame(res)))
+    with pytest.warns(UserWarning, match=r'11 changed polls not updated \(more than 10\): check the article or load '
+                                         r'with overwrite'):
+        result = run(loader)[0]
+    assert not {'select_changed', 'delete_polls'} & set(call_names(loader)) and ('save_polls', False) in loader.calls
+    assert result['status'] == 'loaded' and result['updated'] is False
+    assert len(result['changed']) == 11 and result['n_saved'] == 2
+    # Con diez, se aplican
+    ten = FakeLoader(changes=(poll_frame(rows[:10]), result_frame(res[:10]), cur.iloc[:10], result_frame(res[:10])))
+    assert run(ten)[0]['updated'] is True
