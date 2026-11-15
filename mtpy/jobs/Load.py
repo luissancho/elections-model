@@ -11,8 +11,9 @@ class Load(SequenceJob):
 
     The load stops, without saving anything, when a party, pollster or sponsor of the article has no mapping; the
     result line names them. With ``force`` the unmapped pollsters and sponsors are added to the catalogues (with a
-    warning to review their type) and the article is read again; parties are never added. By default only the new
-    polls are saved; with ``overwrite`` the whole cycle is replaced. With ``dry_run`` the article is read and
+    warning to review their type) and the article is read again; parties are never added. By default the new polls
+    are saved and those that changed in the article are written again (see below); with ``overwrite`` the whole
+    cycle is replaced. With ``dry_run`` the article is read and
     checked but nothing is written (the line says what would be added). ``years`` cannot be combined with
     ``overwrite``, which would delete the other years of the cycle. The event is the ``event_date`` given or, by
     default, the next election of each scope. With ``scopes`` ``'all'``, a scope without an upcoming event or whose
@@ -34,14 +35,19 @@ class Load(SequenceJob):
     final summary and the alert, and so in ``update``; in a dry run they are the polls that would be saved.
 
     Every load also compares what the article says with the polls already in the database (`load.poll_changes`:
-    first day of fieldwork, sample, context type and, party by party, share and seats), without changing what is
-    saved, and lists below the new polls: one line per poll that the article gives differently, with each
+    first day of fieldwork, sample, context type and, party by party, share and seats) and lists below the new
+    polls: one line per poll that the article gives differently, with each
     difference (``es: ~ 40dB / Prisa, 2026-11-10 → 2026-11-14: muestra — → 2000; + SALF 1,8; PP escaños — →
     125–136``); a new poll that takes the place of one no longer in the article, because its sponsor or its last
     day changed, says so (``es: + SW Demoscopia / La Séptima, 2026-10-26 → 2026-11-13 (sustituye a 2026-10-26 →
     2026-11-06)``); and one line per poll of the database that the article no longer has (``es: - Hamalgama /
-    OKdiario, 2026-10-20 → 2026-10-22``; not with ``years``, which reads the article in part). With ``overwrite``
-    these are the changes the rewrite has made; without it, the ones still pending in the database. A line
+    OKdiario, 2026-10-20 → 2026-10-22``; not with ``years``, which reads the article in part). A load without
+    ``overwrite`` then updates the database on its own: the polls that changed are deleted and saved again with
+    the new ones, and a poll that a new one replaces is deleted; the result line says ``1 updated`` and
+    ``update`` computes and publishes again. A poll the article no longer has is only reported, never deleted
+    (``overwrite`` does that). With more than 10 changed and replaced polls in one load none is touched: a
+    warning says so and the line says ``changed`` (as in a dry run), since so many changes point to a problem
+    with the article or its reading. With ``overwrite`` the lines are the changes the rewrite has made. A line
     gives at most 6 differences and a scope lists at most 10 changed and 10 removed polls (``… y 3 más``, ``es: ~ …
     y 3 sondeos más``); the result line always has the full counts.
 

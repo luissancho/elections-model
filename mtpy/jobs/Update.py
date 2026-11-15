@@ -6,7 +6,8 @@ from ..lib.publish import resolve_scopes
 
 class Update(SequenceJob):
     """
-    Update the model of the requested scopes in one task: load the new Wikipedia polls, compute the series and publish
+    Update the model of the requested scopes in one task: load the new Wikipedia polls (and those that changed in
+    the article, which the load writes again), compute the series and publish
     the forecast, the analysis, the party catalogue and the live studies (``load``, ``compute`` and ``publish`` chained, in that order,
     each group on every scope before the next one starts).
 
@@ -15,8 +16,8 @@ class Update(SequenceJob):
     leaves the catalogue unpublished), with the same pipelines as the jobs of those names, so every result
     line, status and level of ``verbose`` is the one of the job it comes from. The compute is skipped on the scopes with
     nothing loaded since their last compute, read from the marks ``loaded_at`` and ``computed_at`` of ``events``
-    (``compute.pending_events``): a scope whose load found no new poll ends ``skipped`` in the compute and goes on to
-    the publication. Where it runs, the series goes in the mode the pending work asks for (``mode`` ``auto``, the
+    (``compute.pending_events``): a scope whose load found no new or changed poll ends ``skipped`` in the compute
+    and goes on to the publication. Where it runs, the series goes in the mode the pending work asks for (``mode`` ``auto``, the
     default): ``light`` (weights and herding, what the polls of the current cycle can change: the daily routine) or
     ``full`` (every phase) with ``overwrite`` or when a pending election has an official result (one loaded with
     ``load`` or from the notebook). ``"mode": "full"`` forces the whole series on a day with new polls; with nothing

@@ -13,7 +13,8 @@ class Polls(ScopePipeline):
     """
     Load the Wikipedia polls of the next election of a scope (`load.load_polls`).
 
-    Actions: ``update`` saves only the new polls; ``rebulk`` replaces the whole cycle (overwrite). The chunk is the
+    Actions: ``update`` saves the new polls and writes again those that changed in the article; ``rebulk`` replaces
+    the whole cycle (overwrite). The chunk is the
     scope; every outcome is a result dict (see `load_task`) and a failure never raises.
     """
 
@@ -107,7 +108,8 @@ class Polls(ScopePipeline):
         poll (the polls read that the database did not have: saved or, in a dry run, to save; `replaced_line` for
         one that takes the place of a poll of the database), per poll that the article gives differently
         (`changed_line`) and per poll that it no longer has (`removed_line`). The summary line counts the last two
-        (``· 1 changed, 1 removed``) and only the first `MAX_POLLS` of each have their line, followed by
+        (``· 1 updated, 1 removed``; ``changed`` when the load has not written them: a dry run, or too many
+        changes) and only the first `MAX_POLLS` of each have their line, followed by
         ``es: ~ … y 3 sondeos más``.
         """
         if result['status'] in ('failed', 'skipped'):
@@ -129,7 +131,9 @@ class Polls(ScopePipeline):
         nouns = [counted(n, one, many) + ' ' + verb for n, one, many in
                  ((pollsters, 'pollster', 'pollsters'), (sponsors, 'sponsor', 'sponsors')) if n]
         changed, removed = result.get('changed') or [], result.get('removed') or []
-        nouns += ['{} {}'.format(len(polls), noun) for polls, noun in ((changed, 'changed'), (removed, 'removed'))
+        # `updated` when the load has written the changed polls again, `changed` when they are only reported
+        change_noun = 'updated' if result.get('updated') else 'changed'
+        nouns += ['{} {}'.format(len(polls), noun) for polls, noun in ((changed, change_noun), (removed, 'removed'))
                   if polls]
         if nouns:
             line += ' · ' + ', '.join(nouns)

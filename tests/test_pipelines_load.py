@@ -143,7 +143,7 @@ def changes_loader():
 def test_polls_lists_changes_below_the_line_and_counts_them(fresh_app, events):
     p = polls('es', loader=changes_loader())
     assert p.line == [
-        'es: polls loaded (5 read, 1 saved, 2026-11-29) in 0 s · 1 changed, 1 removed',
+        'es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s · 1 updated, 1 removed',
         'es: + 40dB / Prisa, 2026-11-10 → 2026-11-14 (sustituye a 40dB / El País, 2026-11-10 → 2026-11-14)',
         'es: ~ Sigma Dos / El Mundo, 2026-11-03 → 2026-11-13: muestra — → 5370',
         'es: - Hamalgama / OKdiario, 2026-10-20 → 2026-10-22']
@@ -153,8 +153,15 @@ def test_polls_lists_changes_without_new_polls(fresh_app, events):
     loader = changes_loader()
     loader.new_polls = 0
     p = polls('es', loader=loader)
-    assert p.line[0] == 'es: polls loaded (5 read, 0 saved, 2026-11-29) in 0 s · 1 changed, 1 removed'
+    assert p.line[0] == 'es: polls loaded (5 read, 1 saved, 2026-11-29) in 0 s · 1 updated, 1 removed'
     assert [line.split(' ')[1] for line in p.line[1:]] == ['+', '~', '-']
+
+
+def test_polls_dry_run_says_changed_and_overwrite_says_updated(fresh_app, events):
+    p = polls('es', loader=changes_loader(), dry_run=True)
+    assert p.line[0] == 'es: polls checked (5 read, 2 new, 2026-11-29, dry run) in 0 s · 1 changed, 1 removed'
+    p = polls('es', action='rebulk', loader=changes_loader())
+    assert p.line[0] == 'es: polls loaded (5 read, 5 saved, 2026-11-29, overwrite) in 0 s · 1 updated, 1 removed'
 
 
 def test_polls_line_of_tolerates_a_result_without_change_lists(fresh_app, events):
