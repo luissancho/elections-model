@@ -124,8 +124,10 @@ class Polls(ScopePipeline):
                 ', overwrite' if result['overwrite'] else '', seconds)
             verb = 'added'
         else:
+            # Without overwrite, `n_saved` also counts the changed polls that would be written again
+            n_new = result['n_saved'] if result['overwrite'] else len(result.get('new') or [])
             line = '{}: polls checked ({} read, {} new, {}{}, dry run) in {:.0f} s'.format(
-                chunk, result['n_read'], result['n_saved'], result['event_date'],
+                chunk, result['n_read'], n_new, result['event_date'],
                 ', overwrite' if result['overwrite'] else '', seconds)
             verb = 'to add'
         nouns = [counted(n, one, many) + ' ' + verb for n, one, many in

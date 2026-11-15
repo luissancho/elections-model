@@ -10,6 +10,7 @@ callback; known failures come back as a ``failed`` result, unexpected exceptions
 import json
 import time
 import warnings
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Callable, Optional
 
 import pandas as pd
@@ -33,6 +34,8 @@ NO_EVENTS = 'no elections for {}'
 
 # Most changed and replaced polls that a load without `overwrite` updates on its own: with more, none is touched
 MAX_UPDATES = 10
+# ... and, below that, never more than half of the polls of the cycle, with this floor for a cycle that starts
+MIN_UPDATES = 2
 # Columns of a poll that come from its row of the article and are compared with the database (`poll_changes`)
 POLL_FIELDS = ('start_date', 'sample_size', 'ctype')
 
@@ -144,6 +147,17 @@ def _whole(value) -> Optional[int]:
     return None if _is_null(value) else int(value)
 
 
+def _share(value) -> Optional[float]:
+    """
+    A share rounded to two decimals as the database stores it (half up, on the decimal figure), or ``None`` for a
+    null. The six significant digits it starts from are those of a 32 bit real: 31.125 read is 31.13 stored, and
+    comparing it with the rounding of the binary float (31.12) would give a difference that no update removes.
+    """
+    if _is_null(value):
+        return None
+    return float(Decimal(format(float(value), '.6g')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+
+
 def _poll_label(row: dict) -> dict:
     """The names and fieldwork of a poll row, as `new_poll_list` gives them."""
     return {'pollster': _text(row['pollster']), 'sponsor': _text(row['sponsor']),
@@ -209,7 +223,7 @@ def _poll_table(polls: Optional[pd.DataFrame], results: Optional[pd.DataFrame]) 
         if poll is None:
             continue
         low, high = _whole(row.get('seats_min')), _whole(row.get('seats_max'))
-        pct = None if _is_null(row['pct']) else round(float(row['pct']), 2)
+        pct = _share(row['pct'])
         poll['parties'].setdefault(_text(row['party']), (pct, None if low is None and high is None else [low, high]))
 
     return table
@@ -244,6 +258,25 @@ def _poll_differences(read: dict, cur: dict) -> list[dict]:
             changes.append({'field': 'party', 'party': party, 'old': pct, 'new': None})
 
     return changes
+
+
+def update_limit(n_polls: int) -> int:
+    """
+    Most changed and replaced polls that a load updates on its own in a cycle with ``n_polls`` in the database:
+    `MAX_UPDATES`, and never more than half of the cycle (at least `MIN_UPDATES`), so that an article read wrong
+    cannot rewrite a short cycle whole.
+
+    Parameters
+    ----------
+    n_polls : int
+        Polls of the event in the database.
+
+    Returns
+    -------
+    int
+        The limit; with more changes than it, the load updates none.
+    """
+    return min(MAX_UPDATES, max(MIN_UPDATES, n_polls // 2))
 
 
 def poll_changes(
@@ -379,9 +412,10 @@ def load_polls(
         that a new one replaces or that it no longer has, `poll_changes`; the last two always empty with
         ``years``; the three empty if the comparison fails, with a warning),
         ``updated`` (whether the changed and replaced polls were written: with ``save``, by the ``overwrite`` or,
-        without it, because they were at most `MAX_UPDATES`; the changed ones are then deleted and saved again
+        without it, because they were at most `update_limit`; the changed ones are then deleted and saved again
         with the new ones, counted in ``n_saved``, and the replaced ones deleted; the removed ones never are),
-        ``overwrite``, ``missing`` and ``skipped`` (names by class), ``added`` (pollsters and sponsors added, or that `force` would add in a dry run),
+        ``overwrite``, ``missing`` and ``skipped`` (names by class), ``added`` (pollsters and sponsors added, or
+        that `force` would add in a dry run),
         ``seconds`` (per phase and ``total``) and, when failed, ``reason``.
 
     Raises
@@ -485,10 +519,11 @@ def load_polls(
         # The polls that changed are written again and those replaced are deleted, unless there are too many
         # (an article or a parser gone wrong, not polls being completed). An overwrite rewrites them all anyway
         n_updates = len(keys['changed']) + len(keys['replaced'])
-        update = not overwrite and 0 < n_updates <= MAX_UPDATES
-        if not overwrite and n_updates > MAX_UPDATES:
+        limit = update_limit(0 if wiki.cur_polls is None else len(wiki.cur_polls))
+        update = not overwrite and 0 < n_updates <= limit
+        if not overwrite and n_updates > limit:
             warnings.warn('{} changed polls not updated (more than {}): check the article or load with '
-                          'overwrite'.format(n_updates, MAX_UPDATES))
+                          'overwrite'.format(n_updates, limit))
         if update:
             wiki.select_changed(keys['changed'])
         result['n_saved'] = len(wiki.polls)

@@ -136,7 +136,8 @@ def test_select_series_keeps_the_read_and_current_frames():
 def keyed_polls(rows):
     """Sondeos `(día, pollster_id, sponsor_id)` con las columnas de la clave."""
     return pd.DataFrame([{'event_date': pd.Timestamp('2026-11-29'), 'event_scope': 'es', 'date': pd.Timestamp(day),
-                          'pollster_id': pollster_id, 'sponsor_id': sponsor_id} for day, pollster_id, sponsor_id in rows])
+                          'pollster_id': pollster_id, 'sponsor_id': sponsor_id}
+                         for day, pollster_id, sponsor_id in rows])
 
 
 def test_select_changed_adds_the_read_rows_once():

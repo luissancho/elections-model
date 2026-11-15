@@ -159,7 +159,8 @@ def test_polls_lists_changes_without_new_polls(fresh_app, events):
 
 def test_polls_dry_run_says_changed_and_overwrite_says_updated(fresh_app, events):
     p = polls('es', loader=changes_loader(), dry_run=True)
-    assert p.line[0] == 'es: polls checked (5 read, 2 new, 2026-11-29, dry run) in 0 s · 1 changed, 1 removed'
+    # Uno nuevo y uno cambiado: se guardarían dos, pero nuevo sólo es uno
+    assert p.line[0] == 'es: polls checked (5 read, 1 new, 2026-11-29, dry run) in 0 s · 1 changed, 1 removed'
     p = polls('es', action='rebulk', loader=changes_loader())
     assert p.line[0] == 'es: polls loaded (5 read, 5 saved, 2026-11-29, overwrite) in 0 s · 1 updated, 1 removed'
 

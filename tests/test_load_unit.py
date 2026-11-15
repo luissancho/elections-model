@@ -672,12 +672,18 @@ def test_load_polls_overwrite_marks_updated_without_deleting():
     assert run(overwrite=True)[0]['updated'] is False
 
 
-def test_load_polls_brake_leaves_the_changes_unapplied():
-    rows = [(15, 1, '2026-10-{:02d}'.format(day), '2026-10-{:02d}'.format(day), 1000, None) for day in range(1, 12)]
-    res = [(15, 1, '2026-10-{:02d}'.format(day), 'PP', 30.0, None, None) for day in range(1, 12)]
+def many_polls(n_total, n_changed):
+    """`n_total` sondeos de octubre en los dos lados; a los `n_changed` primeros les falta la muestra en la base."""
+    rows = [(15, 1, '2026-10-{:02d}'.format(day), '2026-10-{:02d}'.format(day), 1000, None)
+            for day in range(1, n_total + 1)]
+    res = [(15, 1, '2026-10-{:02d}'.format(day), 'PP', 30.0, None, None) for day in range(1, n_total + 1)]
     cur = poll_frame(rows)
-    cur['sample_size'] = None
-    loader = FakeLoader(changes=(poll_frame(rows), result_frame(res), cur, result_frame(res)))
+    cur['sample_size'] = [None] * n_changed + [1000] * (n_total - n_changed)
+    return FakeLoader(changes=(poll_frame(rows), result_frame(res), cur, result_frame(res)))
+
+
+def test_load_polls_brake_leaves_the_changes_unapplied():
+    loader = many_polls(30, 11)
     with pytest.warns(UserWarning, match=r'11 changed polls not updated \(more than 10\): check the article or load '
                                          r'with overwrite'):
         result = run(loader)[0]
@@ -685,5 +691,27 @@ def test_load_polls_brake_leaves_the_changes_unapplied():
     assert result['status'] == 'loaded' and result['updated'] is False
     assert len(result['changed']) == 11 and result['n_saved'] == 2
     # Con diez, se aplican
-    ten = FakeLoader(changes=(poll_frame(rows[:10]), result_frame(res[:10]), cur.iloc[:10], result_frame(res[:10])))
-    assert run(ten)[0]['updated'] is True
+    assert run(many_polls(30, 10))[0]['updated'] is True
+
+
+def test_load_polls_brake_is_relative_in_a_short_cycle():
+    # Un ciclo de 8 sondeos en el que cambian todos (una columna corrida en el artículo): más de la mitad
+    loader = many_polls(8, 8)
+    with pytest.warns(UserWarning, match=r'8 changed polls not updated \(more than 4\)'):
+        result = run(loader)[0]
+    assert 'delete_polls' not in call_names(loader) and result['updated'] is False
+    assert run(many_polls(8, 4))[0]['updated'] is True
+    # Con muy pocos sondeos en la base, hasta dos cambios se aplican
+    assert run(many_polls(2, 2))[0]['updated'] is True
+
+
+def test_poll_changes_rounds_shares_as_the_database_does():
+    polls = poll_frame([POLL_40DB])
+    read = result_frame([(15, 1, '2026-11-14', 'PP', 31.125, None, None),
+                         (15, 1, '2026-11-14', 'UP', 2.675, None, None)])
+    cur = result_frame([(15, 1, '2026-11-14', 'PP', 31.13, None, None),
+                        (15, 1, '2026-11-14', 'UP', 2.68, None, None)])
+    assert poll_changes(polls, read, polls.copy(), cur) == NO_CHANGES
+    # También con los reales de 32 bits que devuelve la base y los que deja el formateo de lo leído
+    read['pct'], cur['pct'] = read['pct'].astype('float32'), cur['pct'].astype('float32')
+    assert poll_changes(polls, read, polls.copy(), cur) == NO_CHANGES

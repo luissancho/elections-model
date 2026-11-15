@@ -60,3 +60,20 @@ de todo el ciclo: `load` ya detecta los cambios; ahora los aplica él solo.
 
 - El freno cuenta cambiados y sustituidos juntos, y al saltar no aplica ninguno.
 - Un fallo al borrar o guardar tumba la carga del ámbito, como cualquier fallo de escritura de hoy.
+
+## Tras la revisión final (2026-11-15)
+
+- **Redondeo como la base:** el % se compara redondeado a dos decimales «mitad hacia arriba» sobre la cifra
+  decimal (31,125 es 31,13, como lo guarda la base). Con el redondeo del real binario (31,12) un sondeo así se
+  habría reescrito en cada carga, sin converger nunca.
+- **Freno relativo (decisión mía, por revisar):** además del tope de 10, nunca más de la mitad de los sondeos del
+  ciclo en la base, con un suelo de 2 (`load.update_limit`). Un ciclo autonómico de 8 sondeos con una columna
+  corrida en el artículo daba 8 cambiados, por debajo de 10, y se habría reescrito entero.
+- **Prueba en seco:** la línea dice cuántos son nuevos de verdad (antes contaba también los cambiados).
+- **Prueba en seco de todos los ámbitos:** 8 comprobados (es, es-as, es-ib, es-cb, es-vc, es-ga, es-md, es-pv,
+  es-ri) sin ningún cambiado ni retirado; 5 fallan antes de comparar por nombres sin mapear (es-cn, es-cm, es-ct,
+  es-mc, es-nc) y 4 no tienen artículo.
+- Pendientes menores: una carga con sólo sustituidos no dice `updated` en la línea de resultado; tras saltar el
+  freno, el viejo de un sustituido queda como `-` hasta un `overwrite`; el borrado va antes del guardado (ventana
+  corta en la que el sondeo falta); `notes` o `url` puestos a mano en un sondeo cambiado se pierden al
+  reescribirlo; faltan pruebas de `delete_polls` con claves nulas y de `years` con un cambiado.

@@ -8,8 +8,8 @@ class Update(SequenceJob):
     """
     Update the model of the requested scopes in one task: load the new Wikipedia polls (and those that changed in
     the article, which the load writes again), compute the series and publish
-    the forecast, the analysis, the party catalogue and the live studies (``load``, ``compute`` and ``publish`` chained, in that order,
-    each group on every scope before the next one starts).
+    the forecast, the analysis, the party catalogue and the live studies (``load``, ``compute`` and ``publish``
+    chained, in that order, each group on every scope before the next one starts).
 
     The groups run ``load.polls``, ``compute.compute`` and ``publish.forecast``, ``publish.analysis`` and
     ``publish.parties`` and ``publish.studies`` (once each, after the scopes, the studies last so one that fails never

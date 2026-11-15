@@ -45,7 +45,8 @@ class Load(SequenceJob):
     ``overwrite`` then updates the database on its own: the polls that changed are deleted and saved again with
     the new ones, and a poll that a new one replaces is deleted; the result line says ``1 updated`` and
     ``update`` computes and publishes again. A poll the article no longer has is only reported, never deleted
-    (``overwrite`` does that). With more than 10 changed and replaced polls in one load none is touched: a
+    (``overwrite`` does that). With more than 10 changed and replaced polls in one load, or more than half of the cycle
+    (`load.update_limit`), none is touched: a
     warning says so and the line says ``changed`` (as in a dry run), since so many changes point to a problem
     with the article or its reading. With ``overwrite`` the lines are the changes the rewrite has made. A line
     gives at most 6 differences and a scope lists at most 10 changed and 10 removed polls (``… y 3 más``, ``es: ~ …
