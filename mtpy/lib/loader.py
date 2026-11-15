@@ -520,6 +520,12 @@ class WikipediaLoader(Core):
         self.data = None
         self.polls = None
         self.new_polls = None
+        # Set by `select_series` for `load.poll_changes`: what was read, before the selection, and the cycle
+        # as the database has it
+        self.read_polls = None
+        self.read_results = None
+        self.cur_polls = None
+        self.cur_results = None
         self.results = None
         self.computed = None
 
@@ -1119,9 +1125,14 @@ class WikipediaLoader(Core):
     def select_series(self, overwrite: bool = False) -> Self:
         """
         Keep the polls to save: only those not yet in the database or, with `overwrite`, all of them. Either way
-        `new_polls` holds the polls read that the database does not have yet.
+        `new_polls` holds the polls read that the database does not have yet, `read_polls` and `read_results`
+        everything read (before this selection) and `cur_polls` and `cur_results` the polls and results of the
+        event in the database, the four frames `load.poll_changes` compares.
         """
-        cur_polls = self.m_polls.get_results(query={'filters': self.filters}, formatted=True).set_index(self.m_polls.key)
+        self.read_polls, self.read_results = self.polls, self.results
+        self.cur_polls = self.m_polls.get_results(query={'filters': self.filters}, formatted=True)
+        self.cur_results = self.m_results.get_results(query={'filters': self.filters}, formatted=True)
+        cur_polls = self.cur_polls.set_index(self.m_polls.key)
         self.new_polls = self.polls.set_index(self.m_polls.key).drop(cur_polls.index, errors='ignore').reset_index()
         if not overwrite:
             self.polls = self.new_polls

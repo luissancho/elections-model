@@ -372,6 +372,9 @@ def load_polls(
         ``status`` (`loaded`, `checked` for a dry run or `failed`), ``action`` (`polls`), ``event_date``,
         ``n_read`` (polls in the article), ``n_saved`` (polls selected), ``new`` (the polls read that the
         database did not have, `new_poll_list`: the ones saved, or that would be, with or without ``overwrite``),
+        ``changed``, ``replaced`` and ``removed`` (the polls of the database that the article gives differently,
+        that a new one replaces or that it no longer has, `poll_changes`; the last two always empty with
+        ``years``; the three empty if the comparison fails, with a warning),
         ``overwrite``, ``missing`` and ``skipped`` (names by class), ``added`` (pollsters and sponsors added, or that `force` would add in a dry run),
         ``seconds`` (per phase and ``total``) and, when failed, ``reason``.
 
@@ -389,6 +392,7 @@ def load_polls(
     seconds, start = {}, time.perf_counter()
     result = {
         'status': 'loaded', 'action': 'polls', 'event_date': event_date, 'n_read': 0, 'n_saved': 0, 'new': [],
+        'changed': [], 'replaced': [], 'removed': [],
         'overwrite': overwrite, 'missing': {cls: [] for cls in NAME_CLASSES},
         'skipped': {cls: [] for cls in NAME_CLASSES}, 'added': {'pollsters': [], 'sponsors': []}, 'seconds': seconds
     }
@@ -462,6 +466,12 @@ def load_polls(
         wiki.select_series(overwrite)
         result['n_saved'] = len(wiki.polls)
         result['new'] = new_poll_list(wiki.new_polls)
+        # The comparison only informs: a failure there must not fail the load
+        try:
+            result.update(poll_changes(wiki.read_polls, wiki.read_results, wiki.cur_polls, wiki.cur_results,
+                                       removed=not years))
+        except Exception as e:
+            warnings.warn('poll changes failed: {}: {}'.format(type(e).__name__, e))
         if save:
             wiki.save_polls(overwrite)
             wiki.save_results(overwrite)

@@ -103,3 +103,24 @@ def test_save_event_of_a_new_row_carries_no_marks():
     wp.save_event()
     saved = wp.m_events.upserted[0]
     assert 'loaded_at' not in saved.columns and 'computed_at' not in saved.columns
+
+
+def test_select_series_keeps_the_read_and_current_frames():
+    from mtpy.models.elections import Polls, PollsResults
+
+    def polls(days):
+        return pd.DataFrame({'event_date': pd.Timestamp('2026-11-29'), 'event_scope': 'es',
+                             'date': pd.to_datetime(days), 'pollster_id': 15, 'sponsor_id': 1})
+
+    def results(days):
+        return polls(days).assign(party_id=1, pct=30.0)
+
+    wiki = bare(WikipediaLoader)
+    wiki.m_polls, wiki.m_results = FakeTable(current=polls(['2026-11-07'])), FakeTable(current=results(['2026-11-07']))
+    wiki.m_polls.key, wiki.m_results.key = Polls.key, PollsResults.key
+    wiki.polls, wiki.results = polls(['2026-11-07', '2026-11-14']), results(['2026-11-07', '2026-11-14'])
+    wiki.select_series(overwrite=False)
+    assert list(wiki.polls['date']) == [pd.Timestamp('2026-11-14')] and len(wiki.results) == 1
+    assert len(wiki.read_polls) == 2 and len(wiki.read_results) == 2
+    assert list(wiki.cur_polls['date']) == [pd.Timestamp('2026-11-07')] and 'pollster_id' in wiki.cur_polls.columns
+    assert list(wiki.cur_results['pct']) == [30.0]

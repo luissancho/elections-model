@@ -19,8 +19,9 @@ CLASSES = ('parties', 'pollsters', 'sponsors')
 class FakeLoader:
     """Fábrica con la firma de `WikipediaLoader`: anota las construcciones (`inits`) y las llamadas (`calls`)."""
 
-    def __init__(self, data=5, missing=None, skipped=None, fixes_missing=None, new_polls=2):
+    def __init__(self, data=5, missing=None, skipped=None, fixes_missing=None, new_polls=2, changes=None):
         self.inits, self.calls, self.instance = [], [], None
+        self.changes = changes or (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
         self.n, self.new_polls = data, new_polls
         self.missing, self.skipped, self.fixes = missing or {}, skipped or {}, fixes_missing or []
 
@@ -64,6 +65,7 @@ class FakeLoader:
                     'start_date': pd.to_datetime(['2026-11-{:02d}'.format(10 - i) for i in range(factory.new_polls)]),
                     'end_date': pd.to_datetime(['2026-11-{:02d}'.format(12 - i) for i in range(factory.new_polls)])})
                 self.polls = pd.DataFrame({'x': range(factory.n)}) if overwrite else self.new_polls
+                self.read_polls, self.read_results, self.cur_polls, self.cur_results = factory.changes
                 return self
 
             def save_polls(self, overwrite):
@@ -543,3 +545,45 @@ def test_poll_changes_with_duplicate_keys():
     read = poll_frame([POLL_40DB, (15, 1, '2026-11-10', '2026-11-14', 2500, None)])
     out = poll_changes(read, result_frame(RES_40DB + RES_40DB), poll_frame([POLL_40DB]), result_frame(RES_40DB))
     assert out == NO_CHANGES
+
+
+def changed_sample():
+    """Los cuatro frames de un 40dB que en la base no tiene muestra y en el artículo sí."""
+    return (poll_frame([POLL_40DB]), result_frame(RES_40DB),
+            poll_frame([(15, 1, '2026-11-10', '2026-11-14', None, None)]), result_frame(RES_40DB))
+
+
+def test_load_polls_returns_the_changes():
+    result = run(FakeLoader(changes=changed_sample()))[0]
+    assert result['changed'] == [LABEL_40DB | {'changes': [
+        {'field': 'sample_size', 'party': None, 'old': None, 'new': 2000}]}]
+    assert result['replaced'] == [] and result['removed'] == []
+
+
+def test_load_polls_with_years_skips_removed():
+    frames = (poll_frame([POLL_40DB]).iloc[:0], result_frame(RES_40DB).iloc[:0], poll_frame([POLL_40DB]),
+              result_frame(RES_40DB))
+    assert run(FakeLoader(changes=frames))[0]['removed'] == [LABEL_40DB]
+    assert run(FakeLoader(changes=frames), years=['2026'])[0]['removed'] == []
+
+
+def test_load_polls_survives_a_failing_comparison(monkeypatch):
+    def boom(*args, **kwargs):
+        raise ValueError('x')
+
+    monkeypatch.setattr(load_module, 'poll_changes', boom)
+    with pytest.warns(UserWarning, match='poll changes failed: ValueError: x'):
+        result, loader = run()[:2]
+    assert result['status'] == 'loaded' and result['changed'] == [] and result['removed'] == []
+    assert ('save_polls', False) in loader.calls and ('save_results', False) in loader.calls
+
+
+def test_load_polls_failed_results_carry_empty_change_lists():
+    result = run(FakeLoader(missing={'parties': ['X']}))[0]
+    assert result['status'] == 'failed'
+    assert result['changed'] == [] and result['replaced'] == [] and result['removed'] == []
+
+
+def test_load_polls_dry_run_compares_too():
+    result = run(FakeLoader(changes=changed_sample()), save=False)[0]
+    assert result['status'] == 'checked' and len(result['changed']) == 1
