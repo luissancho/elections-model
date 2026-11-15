@@ -107,7 +107,8 @@ class Polls(ScopePipeline):
         poll (the polls read that the database did not have: saved or, in a dry run, to save; `replaced_line` for
         one that takes the place of a poll of the database), per poll that the article gives differently
         (`changed_line`) and per poll that it no longer has (`removed_line`). The summary line counts the last two
-        (``· 1 changed, 1 removed``).
+        (``· 1 changed, 1 removed``) and only the first `MAX_POLLS` of each have their line, followed by
+        ``es: ~ … y 3 sondeos más``.
         """
         if result['status'] in ('failed', 'skipped'):
             return '{}: polls {} ({})'.format(chunk, result['status'], result['reason']) + notes_suffix(result)
@@ -141,8 +142,11 @@ class Polls(ScopePipeline):
             substitute = replaced.pop(poll_label(poll), None)
             lines.append(poll_line(chunk, poll) if substitute is None else replaced_line(chunk, substitute))
         lines += [replaced_line(chunk, poll) for poll in replaced.values()]
-        lines += [changed_line(chunk, poll) for poll in changed]
-        lines += [removed_line(chunk, poll) for poll in removed]
+        # The alert is short: beyond `MAX_POLLS` of each kind only the count is given
+        for polls, mark, liner in ((changed, '~', changed_line), (removed, '-', removed_line)):
+            lines += [liner(chunk, poll) for poll in polls[:MAX_POLLS]]
+            if len(polls) > MAX_POLLS:
+                lines.append('{}: {} … y {} sondeos más'.format(chunk, mark, len(polls) - MAX_POLLS))
         if not lines:
             return line
         return [line] + lines
@@ -152,6 +156,10 @@ class Polls(ScopePipeline):
 FIELD_NAMES = {'start_date': 'inicio', 'sample_size': 'muestra', 'ctype': 'tipo'}
 # How a missing value is written in the detail of a changed poll
 NULL = '—'
+# Most differences written in the line of a changed poll and most changed (or removed) polls listed for a scope:
+# the rest are only counted, so the lines of the load do not fill the alert
+MAX_CHANGES = 6
+MAX_POLLS = 10
 
 
 def poll_dates(poll):
@@ -269,9 +277,13 @@ def changed_line(scope, poll):
     Returns
     -------
     str
-        The scope, ``~``, the label of the poll and its differences (`change_text`) separated by ``; ``.
+        The scope, ``~``, the label of the poll and its differences (`change_text`) separated by ``; ``: the
+        first `MAX_CHANGES` and, if there are more, ``… y 3 más``.
     """
-    return '{}: ~ {}: {}'.format(scope, poll_label(poll), '; '.join(change_text(change) for change in poll['changes']))
+    details = [change_text(change) for change in poll['changes'][:MAX_CHANGES]]
+    if len(poll['changes']) > MAX_CHANGES:
+        details.append('… y {} más'.format(len(poll['changes']) - MAX_CHANGES))
+    return '{}: ~ {}: {}'.format(scope, poll_label(poll), '; '.join(details))
 
 
 def share_text(value):
@@ -312,4 +324,5 @@ def change_text(change):
         return '{} {} → {}'.format(party, share_text(old), share_text(new))
     if field == 'seats':
         return '{} escaños {} → {}'.format(party, seats_text(old), seats_text(new))
-    return '{} {} → {}'.format(FIELD_NAMES.get(field, field), NULL if old is None else old, NULL if new is None else new)
+    old, new = (NULL if value is None else value for value in (old, new))
+    return '{} {} → {}'.format(FIELD_NAMES.get(field, field), old, new)

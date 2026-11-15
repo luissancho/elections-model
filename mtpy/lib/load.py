@@ -466,10 +466,11 @@ def load_polls(
         wiki.select_series(overwrite)
         result['n_saved'] = len(wiki.polls)
         result['new'] = new_poll_list(wiki.new_polls)
-        # The comparison only informs: a failure there must not fail the load
+        # The comparison only informs: a failure there, or reading the results it needs from the database, must
+        # not fail the load
         try:
-            result.update(poll_changes(wiki.read_polls, wiki.read_results, wiki.cur_polls, wiki.cur_results,
-                                       removed=not years))
+            result.update(poll_changes(wiki.read_polls, wiki.read_results, wiki.cur_polls,
+                                       wiki.fetch_cur_results(), removed=not years))
         except Exception as e:
             warnings.warn('poll changes failed: {}: {}'.format(type(e).__name__, e))
         if save:

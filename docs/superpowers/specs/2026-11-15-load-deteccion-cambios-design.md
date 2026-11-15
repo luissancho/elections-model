@@ -114,3 +114,16 @@ Con la lista `changed` en la mano, actualizar es reescribir sólo esos sondeos: 
 `polls_results` por clave, volver a insertarlas, marcar el evento como cargado y dejar que el compute recalcule los
 pesos. Los `replaced` añadirían el borrado del sondeo viejo. Queda por decidir si es automático o tras una opción
 (`refresh`), y qué hacer con los retirados sin pareja.
+
+## Tras la revisión final (2026-11-15)
+
+- La lectura de los resultados de la base, que sólo sirve a la comparación, va aparte de `select_series`
+  (`WikipediaLoader.fetch_cur_results`) y dentro de la misma protección: si falla, se avisa y la carga sigue.
+- Para que las líneas no llenen la alerta (1.024 caracteres en el aviso al móvil): una línea `~` da como mucho 6
+  diferencias (`… y 3 más`) y un ámbito lista como mucho 10 cambiados y 10 retirados (`es: ~ … y 3 sondeos más`);
+  la línea de resultado lleva siempre los recuentos completos. Los topes son míos, por revisar.
+- Sin `overwrite` un sondeo cambiado sigue saliendo en cada carga hasta que se actualice: es lo que resuelve el
+  paso siguiente.
+- Pendientes menores: un % con tres decimales en el artículo daría un cambio permanente por redondeo; los partidos
+  se cruzan por nombre y no por `party_id` (un cambio de siglas en el catálogo sale como `+ NUEVO; - VIEJO` hasta
+  un `overwrite`); un partido o una casa que pasan a excluidos salen como quitados o retirados.

@@ -22,6 +22,7 @@ class FakeLoader:
     def __init__(self, data=5, missing=None, skipped=None, fixes_missing=None, new_polls=2, changes=None):
         self.inits, self.calls, self.instance = [], [], None
         self.changes = changes or (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
+        self.results_error = None
         self.n, self.new_polls = data, new_polls
         self.missing, self.skipped, self.fixes = missing or {}, skipped or {}, fixes_missing or []
 
@@ -65,8 +66,15 @@ class FakeLoader:
                     'start_date': pd.to_datetime(['2026-11-{:02d}'.format(10 - i) for i in range(factory.new_polls)]),
                     'end_date': pd.to_datetime(['2026-11-{:02d}'.format(12 - i) for i in range(factory.new_polls)])})
                 self.polls = pd.DataFrame({'x': range(factory.n)}) if overwrite else self.new_polls
-                self.read_polls, self.read_results, self.cur_polls, self.cur_results = factory.changes
+                self.read_polls, self.read_results, self.cur_polls, _ = factory.changes
                 return self
+
+            def fetch_cur_results(self):
+                factory.calls.append(('fetch_cur_results',))
+                if factory.results_error is not None:
+                    raise factory.results_error
+                self.cur_results = factory.changes[3]
+                return self.cur_results
 
             def save_polls(self, overwrite):
                 factory.calls.append(('save_polls', overwrite))
@@ -123,8 +131,8 @@ def run(loader=None, **kwargs):
 def test_load_polls_runs_the_sequence_of_the_notebook_and_reports_each_phase():
     result, loader, computer, _, steps, lines = run()
     assert steps == list(LOAD_STEPS)
-    assert loader.calls == [('read_data', None), ('build_series',), ('select_series', False), ('save_polls', False),
-                            ('save_results', False)]
+    assert loader.calls == [('read_data', None), ('build_series',), ('select_series', False), ('fetch_cur_results',),
+                            ('save_polls', False), ('save_results', False)]
     assert computer.calls == [(True, True)] and computer.inits == [('es', ['2026-11-29'], 0, '.')]
     assert (result['status'], result['action'], result['n_read'], result['n_saved'], result['overwrite']) == \
         ('loaded', 'polls', 5, 2, False)
@@ -396,7 +404,6 @@ def test_load_params_fails_without_elections():
         load_params('es-xx', deriver=lambda scope, overrides: {}, reader=lambda: {}, writer=lambda data: None)
 
 
-
 # Comparación de lo leído con la base (`poll_changes`)
 
 NO_CHANGES = {'changed': [], 'replaced': [], 'removed': []}
@@ -587,3 +594,12 @@ def test_load_polls_failed_results_carry_empty_change_lists():
 def test_load_polls_dry_run_compares_too():
     result = run(FakeLoader(changes=changed_sample()), save=False)[0]
     assert result['status'] == 'checked' and len(result['changed']) == 1
+
+
+def test_load_polls_survives_a_failing_read_of_the_current_results():
+    loader = FakeLoader(changes=changed_sample())
+    loader.results_error = TimeoutError('rds')
+    with pytest.warns(UserWarning, match='poll changes failed: TimeoutError: rds'):
+        result = run(loader)[0]
+    assert result['status'] == 'loaded' and result['changed'] == [] and result['removed'] == []
+    assert ('save_polls', False) in loader.calls and ('save_results', False) in loader.calls

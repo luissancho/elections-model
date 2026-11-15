@@ -119,8 +119,15 @@ def test_select_series_keeps_the_read_and_current_frames():
     wiki.m_polls, wiki.m_results = FakeTable(current=polls(['2026-11-07'])), FakeTable(current=results(['2026-11-07']))
     wiki.m_polls.key, wiki.m_results.key = Polls.key, PollsResults.key
     wiki.polls, wiki.results = polls(['2026-11-07', '2026-11-14']), results(['2026-11-07', '2026-11-14'])
+    asked = []
+    current = wiki.m_results.get_results
+    wiki.m_results.get_results = lambda **kwargs: asked.append(kwargs) or current(**kwargs)
+    wiki.cur_results = None
     wiki.select_series(overwrite=False)
     assert list(wiki.polls['date']) == [pd.Timestamp('2026-11-14')] and len(wiki.results) == 1
     assert len(wiki.read_polls) == 2 and len(wiki.read_results) == 2
     assert list(wiki.cur_polls['date']) == [pd.Timestamp('2026-11-07')] and 'pollster_id' in wiki.cur_polls.columns
+    # Los resultados de la base sólo sirven a la comparación: la selección no los pide
+    assert asked == [] and wiki.cur_results is None
+    assert list(wiki.fetch_cur_results()['pct']) == [30.0] and len(asked) == 1
     assert list(wiki.cur_results['pct']) == [30.0]

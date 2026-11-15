@@ -1126,12 +1126,11 @@ class WikipediaLoader(Core):
         """
         Keep the polls to save: only those not yet in the database or, with `overwrite`, all of them. Either way
         `new_polls` holds the polls read that the database does not have yet, `read_polls` and `read_results`
-        everything read (before this selection) and `cur_polls` and `cur_results` the polls and results of the
-        event in the database, the four frames `load.poll_changes` compares.
+        everything read (before this selection) and `cur_polls` the polls of the event in the database: with
+        `fetch_cur_results`, the four frames `load.poll_changes` compares.
         """
         self.read_polls, self.read_results = self.polls, self.results
         self.cur_polls = self.m_polls.get_results(query={'filters': self.filters}, formatted=True)
-        self.cur_results = self.m_results.get_results(query={'filters': self.filters}, formatted=True)
         cur_polls = self.cur_polls.set_index(self.m_polls.key)
         self.new_polls = self.polls.set_index(self.m_polls.key).drop(cur_polls.index, errors='ignore').reset_index()
         if not overwrite:
@@ -1140,6 +1139,20 @@ class WikipediaLoader(Core):
         self.results = self.results.set_index(self.m_results.key[:-1]).loc[self.polls.set_index(self.m_polls.key).index].reset_index()
 
         return self
+
+    def fetch_cur_results(self) -> pd.DataFrame:
+        """
+        Read the results of the polls of the event in the database into `cur_results`. Only the comparison of
+        `load.poll_changes` needs them, so the query is apart from `select_series`: if it fails, the load can go on.
+
+        Returns
+        -------
+        DataFrame
+            The rows of `polls_results` of the event, also kept in `cur_results`.
+        """
+        self.cur_results = self.m_results.get_results(query={'filters': self.filters}, formatted=True)
+
+        return self.cur_results
 
     def save_polls(self, overwrite: bool = False) -> Self:
         """

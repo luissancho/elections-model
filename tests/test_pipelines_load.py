@@ -3,7 +3,7 @@ import pytest
 
 from mtpy.lib.load import NO_EVENTS
 from mtpy.pipelines.load.Params import Params
-from mtpy.pipelines.load.Polls import Polls, change_text, changed_line, poll_line, removed_line, replaced_line
+from mtpy.pipelines.load.Polls import MAX_CHANGES, MAX_POLLS, Polls, change_text, changed_line, poll_line, removed_line, replaced_line
 from tests.test_load_unit import (
     POLL_40DB, POLL_SIGMA, RES_40DB, RES_SIGMA, FakeCatalogues, FakeComputer, FakeLoader, poll_frame, result_frame
 )
@@ -108,6 +108,26 @@ def test_changed_replaced_and_removed_lines():
         == 'es: + 40dB / Prisa, 2026-11-10 → 2026-11-14 (sustituye a 2026-11-10 → 2026-11-12)'
     assert replaced_line('es', poll | {'old': poll | {'sponsor': 'El País'}}) \
         == 'es: + 40dB / Prisa, 2026-11-10 → 2026-11-14 (sustituye a 40dB / El País, 2026-11-10 → 2026-11-14)'
+
+
+def test_changed_line_caps_the_differences_of_a_poll():
+    poll = {'pollster': '40dB', 'sponsor': 'Prisa', 'start_date': '2026-11-10', 'end_date': '2026-11-14'}
+    changes = [{'field': 'party', 'party': 'P{}'.format(i), 'old': 1.0, 'new': None} for i in range(MAX_CHANGES + 3)]
+    line = changed_line('es', poll | {'changes': changes})
+    assert line.endswith('- P{}; … y 3 más'.format(MAX_CHANGES - 1)) and line.count(';') == MAX_CHANGES
+    assert '…' not in changed_line('es', poll | {'changes': changes[:MAX_CHANGES]})
+
+
+def test_polls_line_of_caps_the_changed_and_removed_polls(fresh_app, events):
+    p = polls('es', loader=FakeLoader(new_polls=0))
+    many = [{'pollster': 'Casa {:02d}'.format(i), 'sponsor': None, 'start_date': None, 'end_date': '2026-11-01',
+             'changes': [{'field': 'sample_size', 'party': None, 'old': None, 'new': 1000}]}
+            for i in range(MAX_POLLS + 2)]
+    lines = p.line_of('es', p.result | {'changed': many, 'removed': many[:MAX_POLLS]})
+    assert lines[0].endswith(' · {} changed, {} removed'.format(MAX_POLLS + 2, MAX_POLLS))
+    changed = [line for line in lines if line.startswith('es: ~ ')]
+    assert len(changed) == MAX_POLLS + 1 and changed[-1] == 'es: ~ … y 2 sondeos más'
+    assert len([line for line in lines if line.startswith('es: - ')]) == MAX_POLLS and '… y' not in lines[-1]
 
 
 def changes_loader():

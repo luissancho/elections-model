@@ -41,7 +41,9 @@ class Load(SequenceJob):
     day changed, says so (``es: + SW Demoscopia / La Séptima, 2026-10-26 → 2026-11-13 (sustituye a 2026-10-26 →
     2026-11-06)``); and one line per poll of the database that the article no longer has (``es: - Hamalgama /
     OKdiario, 2026-10-20 → 2026-10-22``; not with ``years``, which reads the article in part). With ``overwrite``
-    these are the changes the rewrite has made; without it, the ones still pending in the database.
+    these are the changes the rewrite has made; without it, the ones still pending in the database. A line
+    gives at most 6 differences and a scope lists at most 10 changed and 10 removed polls (``… y 3 más``, ``es: ~ …
+    y 3 sondeos más``); the result line always has the full counts.
 
     Examples
     --------
