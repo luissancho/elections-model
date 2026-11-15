@@ -33,6 +33,16 @@ class Load(SequenceJob):
     not have (``es: + 40dB / El País, 2026-11-10 → 2026-11-12``: pollster, sponsor and fieldwork), also in the
     final summary and the alert, and so in ``update``; in a dry run they are the polls that would be saved.
 
+    Every load also compares what the article says with the polls already in the database (`load.poll_changes`:
+    first day of fieldwork, sample, context type and, party by party, share and seats), without changing what is
+    saved, and lists below the new polls: one line per poll that the article gives differently, with each
+    difference (``es: ~ 40dB / Prisa, 2026-11-10 → 2026-11-14: muestra — → 2000; + SALF 1,8; PP escaños — →
+    125–136``); a new poll that takes the place of one no longer in the article, because its sponsor or its last
+    day changed, says so (``es: + SW Demoscopia / La Séptima, 2026-10-26 → 2026-11-13 (sustituye a 2026-10-26 →
+    2026-11-06)``); and one line per poll of the database that the article no longer has (``es: - Hamalgama /
+    OKdiario, 2026-10-20 → 2026-10-22``; not with ``years``, which reads the article in part). With ``overwrite``
+    these are the changes the rewrite has made; without it, the ones still pending in the database.
+
     Examples
     --------
     From the command line::

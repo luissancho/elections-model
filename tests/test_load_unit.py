@@ -59,7 +59,7 @@ class FakeLoader:
 
             def select_series(self, overwrite):
                 factory.calls.append(('select_series', overwrite))
-                self.new_polls = pd.DataFrame({
+                self.new_polls = factory.new_polls if isinstance(factory.new_polls, pd.DataFrame) else pd.DataFrame({
                     'pollster': ['Casa {}'.format(i) for i in range(factory.new_polls)],
                     'sponsor': ['Medio' if i % 2 == 0 else None for i in range(factory.new_polls)],
                     'start_date': pd.to_datetime(['2026-11-{:02d}'.format(10 - i) for i in range(factory.new_polls)]),
