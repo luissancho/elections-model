@@ -7,8 +7,8 @@ import pytest
 
 from mtpy.lib import load as load_module
 from mtpy.lib.load import (
-    LOAD_STEPS, add_catalogue_entries, has_polls_article, load_polls, new_poll_list, unevaluated_quality,
-    unmapped_reason
+    LOAD_STEPS, add_catalogue_entries, has_polls_article, load_polls, new_poll_list, poll_changes,
+    unevaluated_quality, unmapped_reason
 )
 from mtpy.models.elections import Pollsters, Sponsors
 
@@ -393,3 +393,153 @@ def test_load_params_fails_without_elections():
     with pytest.raises(ValueError, match=NO_EVENTS.format('es-xx')):
         load_params('es-xx', deriver=lambda scope, overrides: {}, reader=lambda: {}, writer=lambda data: None)
 
+
+
+# Comparación de lo leído con la base (`poll_changes`)
+
+NO_CHANGES = {'changed': [], 'replaced': [], 'removed': []}
+CASAS = {15: '40dB', 3: 'Sigma Dos', 40: 'Hamalgama', 50: 'SW Demoscopia'}
+MEDIOS = {1: 'Prisa', 2: 'El País', 3: 'El Mundo', 4: 'OKdiario', 5: 'La Séptima', None: None}
+
+
+def poll_frame(rows):
+    """Sondeos de `es` para el 29-N: cada fila es `(pollster_id, sponsor_id, start, end, sample_size, ctype)`."""
+    frame = pd.DataFrame([{
+        'event_date': pd.Timestamp('2026-11-29'), 'event_scope': 'es', 'date': pd.Timestamp(end),
+        'pollster_id': pollster_id, 'sponsor_id': sponsor_id, 'pollster': CASAS[pollster_id],
+        'sponsor': MEDIOS[sponsor_id], 'start_date': pd.Timestamp(start), 'end_date': pd.Timestamp(end),
+        'sample_size': sample_size, 'ctype': ctype
+    } for pollster_id, sponsor_id, start, end, sample_size, ctype in rows])
+    return frame
+
+
+def result_frame(rows):
+    """Resultados: cada fila es `(pollster_id, sponsor_id, end, party, pct, seats_min, seats_max)`."""
+    return pd.DataFrame([{
+        'event_date': pd.Timestamp('2026-11-29'), 'event_scope': 'es', 'date': pd.Timestamp(end),
+        'pollster_id': pollster_id, 'sponsor_id': sponsor_id, 'party_id': index, 'party': party, 'pct': pct,
+        'seats_min': seats_min, 'seats_max': seats_max
+    } for index, (pollster_id, sponsor_id, end, party, pct, seats_min, seats_max) in enumerate(rows)])
+
+
+POLL_40DB = (15, 1, '2026-11-10', '2026-11-14', 2000, None)
+POLL_SIGMA = (3, 3, '2026-11-03', '2026-11-13', 5370, None)
+RES_40DB = [(15, 1, '2026-11-14', 'PP', 31.4, 125, 136), (15, 1, '2026-11-14', 'PSOE', 29.9, 117, 123)]
+RES_SIGMA = [(3, 3, '2026-11-13', 'PP', 31.0, 126, 132), (3, 3, '2026-11-13', 'PSOE', 25.6, 105, 111)]
+LABEL_40DB = {'pollster': '40dB', 'sponsor': 'Prisa', 'start_date': '2026-11-10', 'end_date': '2026-11-14'}
+
+
+def test_poll_changes_without_differences_is_empty():
+    polls, results = poll_frame([POLL_40DB, POLL_SIGMA]), result_frame(RES_40DB + RES_SIGMA)
+    assert poll_changes(polls, results, polls.copy(), results.copy()) == NO_CHANGES
+
+
+def test_poll_changes_reports_poll_fields():
+    read = poll_frame([(15, 1, '2026-11-09', '2026-11-14', 2000, 'exit')])
+    cur = poll_frame([(15, 1, '2026-11-10', '2026-11-14', None, None)])
+    out = poll_changes(read, result_frame(RES_40DB), cur, result_frame(RES_40DB))
+    assert out['replaced'] == [] and out['removed'] == [] and len(out['changed']) == 1
+    assert {k: v for k, v in out['changed'][0].items() if k != 'changes'} == LABEL_40DB | {'start_date': '2026-11-09'}
+    assert out['changed'][0]['changes'] == [
+        {'field': 'start_date', 'party': None, 'old': '2026-11-10', 'new': '2026-11-09'},
+        {'field': 'sample_size', 'party': None, 'old': None, 'new': 2000},
+        {'field': 'ctype', 'party': None, 'old': None, 'new': 'exit'}]
+
+
+def test_poll_changes_reports_parties_shares_and_seats():
+    polls = poll_frame([POLL_40DB])
+    read = result_frame([(15, 1, '2026-11-14', 'PP', 31.4, 125, 136), (15, 1, '2026-11-14', 'PSOE', 29.9, 117, 123),
+                         (15, 1, '2026-11-14', 'SALF', 1.8, None, None)])
+    cur = result_frame([(15, 1, '2026-11-14', 'PP', 31.0, None, None), (15, 1, '2026-11-14', 'PSOE', 29.9, 117, 123),
+                        (15, 1, '2026-11-14', 'UP', 1.3, None, None)])
+    out = poll_changes(polls, read, polls.copy(), cur)
+    assert out['changed'] == [LABEL_40DB | {'changes': [
+        {'field': 'pct', 'party': 'PP', 'old': 31.0, 'new': 31.4},
+        {'field': 'seats', 'party': 'PP', 'old': None, 'new': [125, 136]},
+        {'field': 'party', 'party': 'SALF', 'old': None, 'new': 1.8},
+        {'field': 'party', 'party': 'UP', 'old': 1.3, 'new': None}]}]
+
+
+def test_poll_changes_ignores_dtype_differences():
+    read = poll_frame([POLL_40DB])
+    read['sample_size'] = read['sample_size'].astype(float)
+    read[['date', 'start_date', 'end_date']] = read[['date', 'start_date', 'end_date']].apply(lambda col: col.dt.date)
+    read_results = result_frame([(15, 1, '2026-11-14', 'PP', 31.400000001, float('nan'), float('nan')),
+                                 (15, 1, '2026-11-14', 'PSOE', 29.9, 117.0, 123.0)])
+    cur = poll_frame([POLL_40DB])
+    cur['sample_size'] = cur['sample_size'].astype('Int64')
+    cur['pollster'], cur['sponsor'] = cur['pollster'].astype('category'), cur['sponsor'].astype('category')
+    cur[['pollster_id', 'sponsor_id']] = cur[['pollster_id', 'sponsor_id']].astype('Int64')
+    cur_results = result_frame([(15, 1, '2026-11-14', 'PP', 31.4, None, None),
+                                (15, 1, '2026-11-14', 'PSOE', 29.9, 117, 123)])
+    cur_results[['seats_min', 'seats_max']] = cur_results[['seats_min', 'seats_max']].astype('Int64')
+    cur_results['party'] = cur_results['party'].astype('category')
+    assert poll_changes(read, read_results, cur, cur_results) == NO_CHANGES
+
+
+def test_poll_changes_matches_polls_without_sponsor():
+    row, res = (15, None, '2026-11-10', '2026-11-14', 2000, None), [(15, None, '2026-11-14', 'PP', 31.4, 125, 136)]
+    cur, cur_results = poll_frame([row]), result_frame(res)
+    cur['sponsor_id'] = pd.array([pd.NA], dtype='Int64')
+    cur_results['sponsor_id'] = pd.array([pd.NA], dtype='Int64')
+    assert poll_changes(poll_frame([row]), result_frame(res), cur, cur_results) == NO_CHANGES
+
+
+def test_poll_changes_new_and_removed_polls():
+    gone = (40, 4, '2026-10-20', '2026-10-22', 1000, None)
+    read, read_results = poll_frame([POLL_40DB, POLL_SIGMA]), result_frame(RES_40DB + RES_SIGMA)
+    cur = poll_frame([POLL_40DB, gone])
+    cur_results = result_frame(RES_40DB + [(40, 4, '2026-10-22', 'PP', 33.0, None, None)])
+    out = poll_changes(read, read_results, cur, cur_results)
+    assert out['changed'] == [] and out['replaced'] == []
+    assert out['removed'] == [{'pollster': 'Hamalgama', 'sponsor': 'OKdiario', 'start_date': '2026-10-20',
+                               'end_date': '2026-10-22'}]
+
+
+def sponsor_change():
+    """El 40dB de la base lo patrocina El País y el leído, Prisa: mismo sondeo con otro medio."""
+    old = [(15, 2, '2026-11-14', party, pct, low, high) for _, _, _, party, pct, low, high in RES_40DB]
+    return (poll_frame([POLL_40DB]), result_frame(RES_40DB),
+            poll_frame([(15, 2, '2026-11-10', '2026-11-14', 2000, None)]), result_frame(old))
+
+
+def test_poll_changes_pairs_a_sponsor_change():
+    out = poll_changes(*sponsor_change())
+    assert out['changed'] == [] and out['removed'] == []
+    assert out['replaced'] == [LABEL_40DB | {'old': LABEL_40DB | {'sponsor': 'El País'}}]
+
+
+def test_poll_changes_pairs_a_longer_fieldwork():
+    read = poll_frame([(50, 5, '2026-10-26', '2026-11-13', 1500, None)])
+    cur = poll_frame([(50, 5, '2026-10-26', '2026-11-06', 1200, None)])
+    out = poll_changes(read, result_frame([(50, 5, '2026-11-13', 'PP', 30.0, None, None)]),
+                       cur, result_frame([(50, 5, '2026-11-06', 'PP', 30.5, None, None)]))
+    assert out['removed'] == [] and len(out['replaced']) == 1
+    assert out['replaced'][0]['end_date'] == '2026-11-13' and out['replaced'][0]['old']['end_date'] == '2026-11-06'
+
+
+def test_poll_changes_leaves_ambiguous_pairs_apart():
+    read = poll_frame([POLL_40DB, (15, 3, '2026-11-10', '2026-11-14', 2000, None)])
+    read_results = result_frame(RES_40DB + [(15, 3, '2026-11-14', 'PP', 31.4, 125, 136)])
+    cur = poll_frame([(15, 2, '2026-11-10', '2026-11-14', 2000, None)])
+    out = poll_changes(read, read_results, cur, result_frame([(15, 2, '2026-11-14', 'PP', 31.4, 125, 136)]))
+    assert out['replaced'] == [] and out['removed'] == [LABEL_40DB | {'sponsor': 'El País'}]
+
+
+def test_poll_changes_without_removed():
+    out = poll_changes(*sponsor_change(), removed=False)
+    assert out == NO_CHANGES
+
+
+def test_poll_changes_with_empty_database():
+    read, read_results = poll_frame([POLL_40DB]), result_frame(RES_40DB)
+    for cur, cur_results in ((None, None), (read.iloc[:0], read_results.iloc[:0])):
+        assert poll_changes(read, read_results, cur, cur_results) == NO_CHANGES
+    assert poll_changes(None, None, None, None) == NO_CHANGES
+    assert poll_changes(read.iloc[:0], read_results.iloc[:0], read, read_results)['removed'] == [LABEL_40DB]
+
+
+def test_poll_changes_with_duplicate_keys():
+    read = poll_frame([POLL_40DB, (15, 1, '2026-11-10', '2026-11-14', 2500, None)])
+    out = poll_changes(read, result_frame(RES_40DB + RES_40DB), poll_frame([POLL_40DB]), result_frame(RES_40DB))
+    assert out == NO_CHANGES

@@ -31,6 +31,9 @@ NO_POLLS_ARTICLE = 'no polls article for {}'
 
 NO_EVENTS = 'no elections for {}'
 
+# Columns of a poll that come from its row of the article and are compared with the database (`poll_changes`)
+POLL_FIELDS = ('start_date', 'sample_size', 'ctype')
+
 # Phases of `load_params`
 PARAMS_STEPS = ('read', 'derive', 'save')
 
@@ -119,6 +122,37 @@ def unmapped_reason(missing: dict[str, list[str]]) -> str:
     )
 
 
+def _is_null(value) -> bool:
+    """Whether a scalar is any of the nulls of Python, numpy or pandas."""
+    return value is None or bool(pd.isnull(value))
+
+
+def _day(value) -> Optional[str]:
+    """A date as ``YYYY-MM-DD``, or ``None`` for a null."""
+    return None if _is_null(value) else pd.Timestamp(value).strftime('%Y-%m-%d')
+
+
+def _text(value) -> Optional[str]:
+    """A name as a string, or ``None`` for a null or an empty one."""
+    return None if _is_null(value) or value == '' else str(value)
+
+
+def _whole(value) -> Optional[int]:
+    """A number as an integer, or ``None`` for a null."""
+    return None if _is_null(value) else int(value)
+
+
+def _poll_label(row: dict) -> dict:
+    """The names and fieldwork of a poll row, as `new_poll_list` gives them."""
+    return {'pollster': _text(row['pollster']), 'sponsor': _text(row['sponsor']),
+            'start_date': _day(row['start_date']), 'end_date': _day(row['end_date'])}
+
+
+def _label_order(label: dict) -> tuple:
+    """Sort key of a poll label: last day of fieldwork, pollster and sponsor."""
+    return (label['end_date'] or '', label['pollster'] or '', label['sponsor'] or '')
+
+
 def new_poll_list(polls: Optional[pd.DataFrame]) -> list[dict]:
     """
     The polls of a frame as plain dicts, sorted by the last day of fieldwork and pollster.
@@ -137,15 +171,146 @@ def new_poll_list(polls: Optional[pd.DataFrame]) -> list[dict]:
     if polls is None or len(polls) == 0:
         return []
 
-    def day(value):
-        return None if pd.isnull(value) else pd.Timestamp(value).strftime('%Y-%m-%d')
+    return sorted((_poll_label(row) for row in polls.to_dict('records')), key=_label_order)
 
-    def name(value):
-        return None if pd.isnull(value) or value == '' else str(value)
 
-    rows = [{'pollster': name(row['pollster']), 'sponsor': name(row['sponsor']), 'start_date': day(row['start_date']),
-             'end_date': day(row['end_date'])} for row in polls.to_dict('records')]
-    return sorted(rows, key=lambda row: (row['end_date'] or '', row['pollster'] or '', row['sponsor'] or ''))
+def _poll_key(row: dict) -> tuple:
+    """Identity of a poll or result row within its event: last day of fieldwork, pollster and sponsor."""
+    return (_day(row['date']), _whole(row['pollster_id']), _whole(row['sponsor_id']))
+
+
+def _poll_table(polls: Optional[pd.DataFrame], results: Optional[pd.DataFrame]) -> dict:
+    """
+    The polls of a frame by key, as plain values that compare the same whatever the dtypes of the frame.
+
+    Parameters
+    ----------
+    polls : DataFrame or None
+        Polls with the key, the names and the columns of `POLL_FIELDS`.
+    results : DataFrame or None
+        Their results with the key, ``party``, ``pct``, ``seats_min`` and ``seats_max``.
+
+    Returns
+    -------
+    dict
+        ``{key: {'label', 'fields', 'parties'}}`` in the order of the frame: the label of `new_poll_list`, the
+        `POLL_FIELDS` and ``{party: (pct, seats)}`` with ``pct`` rounded to two decimals and ``seats`` as
+        ``[min, max]`` or ``None``. Of a repeated key (or party of a poll) the first row is kept; a result
+        without a poll is ignored.
+    """
+    table = {}
+    if polls is None or len(polls) == 0:
+        return table
+
+    for row in polls.to_dict('records'):
+        fields = {'start_date': _day(row['start_date']), 'sample_size': _whole(row.get('sample_size')),
+                  'ctype': _text(row.get('ctype'))}
+        table.setdefault(_poll_key(row), {'label': _poll_label(row), 'fields': fields, 'parties': {}})
+
+    for row in ([] if results is None else results.to_dict('records')):
+        poll = table.get(_poll_key(row))
+        if poll is None:
+            continue
+        low, high = _whole(row.get('seats_min')), _whole(row.get('seats_max'))
+        pct = None if _is_null(row['pct']) else round(float(row['pct']), 2)
+        poll['parties'].setdefault(_text(row['party']), (pct, None if low is None and high is None else [low, high]))
+
+    return table
+
+
+def _poll_differences(read: dict, cur: dict) -> list[dict]:
+    """
+    The differences between a poll as read and as stored (two entries of `_poll_table`).
+
+    Returns
+    -------
+    list of dict
+        ``{'field', 'party', 'old', 'new'}``: first the `POLL_FIELDS` that differ, then party by party (those
+        read, then those only stored) ``party`` for one added or dropped (its share on the side that has it),
+        ``pct`` and ``seats``.
+    """
+    changes = [{'field': field, 'party': None, 'old': cur['fields'][field], 'new': read['fields'][field]}
+               for field in POLL_FIELDS if cur['fields'][field] != read['fields'][field]]
+
+    for party, (pct, seats) in read['parties'].items():
+        if party not in cur['parties']:
+            changes.append({'field': 'party', 'party': party, 'old': None, 'new': pct})
+            continue
+        old_pct, old_seats = cur['parties'][party]
+        if old_pct != pct:
+            changes.append({'field': 'pct', 'party': party, 'old': old_pct, 'new': pct})
+        if old_seats != seats:
+            changes.append({'field': 'seats', 'party': party, 'old': old_seats, 'new': seats})
+
+    for party, (pct, _) in cur['parties'].items():
+        if party not in read['parties']:
+            changes.append({'field': 'party', 'party': party, 'old': pct, 'new': None})
+
+    return changes
+
+
+def poll_changes(
+    read_polls: Optional[pd.DataFrame],
+    read_results: Optional[pd.DataFrame],
+    cur_polls: Optional[pd.DataFrame],
+    cur_results: Optional[pd.DataFrame],
+    removed: bool = True
+) -> dict:
+    """
+    Compare the polls read from the article with those of the database.
+
+    A poll is the same on both sides when it shares the key (last day of fieldwork, pollster and sponsor). Only
+    what comes from the article is compared: `POLL_FIELDS` of the poll and, party by party, the share (rounded
+    to two decimals) and the seats range; two nulls are equal and the dtypes of the frames do not matter.
+
+    Parameters
+    ----------
+    read_polls, read_results : DataFrame or None
+        Polls and results read (after the curated fixes), with the columns of `Polls` and `PollsResults`.
+    cur_polls, cur_results : DataFrame or None
+        Polls and results of the same event in the database.
+    removed : bool, default True
+        Report also the polls of the database that the article no longer has; ``False`` when the article was
+        read only in part (``years``).
+
+    Returns
+    -------
+    dict
+        ``changed``: the polls on both sides with some difference, each the dict of `new_poll_list` plus
+        ``changes`` (`_poll_differences`). ``replaced``: the new polls that take the place of one no longer in
+        the article, each with ``old`` (the label of that one): same pollster and either the same last day
+        (the sponsor changed) or the same sponsor and first day (the fieldwork got longer), only when the pair
+        is one to one. ``removed``: the other polls of the database missing from the article. The three lists
+        are sorted as `new_poll_list`; the last two are empty without ``removed``.
+    """
+    read, cur = _poll_table(read_polls, read_results), _poll_table(cur_polls, cur_results)
+
+    changed = []
+    for key, poll in read.items():
+        changes = _poll_differences(poll, cur[key]) if key in cur else []
+        if changes:
+            changed.append(poll['label'] | {'changes': changes})
+
+    replaced, gone = [], []
+    if removed:
+        new_keys = [key for key in read if key not in cur]
+        gone_keys = [key for key in cur if key not in read]
+
+        def same_poll(new_key, gone_key):
+            start = read[new_key]['fields']['start_date']
+            return new_key[1] == gone_key[1] and (new_key[0] == gone_key[0] or (
+                new_key[2] == gone_key[2] and start is not None and start == cur[gone_key]['fields']['start_date']))
+
+        candidates = {gone_key: [key for key in new_keys if same_poll(key, gone_key)] for gone_key in gone_keys}
+        for gone_key in gone_keys:
+            found = candidates[gone_key]
+            if len(found) == 1 and sum(found[0] in others for others in candidates.values()) == 1:
+                replaced.append(read[found[0]]['label'] | {'old': cur[gone_key]['label']})
+            else:
+                gone.append(cur[gone_key]['label'])
+
+    return {'changed': sorted(changed, key=_label_order), 'replaced': sorted(replaced, key=_label_order),
+            'removed': sorted(gone, key=_label_order)}
 
 
 def _names(loader, kind: str) -> dict[str, list[str]]:
