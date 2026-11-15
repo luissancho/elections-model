@@ -19,7 +19,7 @@ from ..models.elections import Pollsters, Sponsors
 from .compute import _phase
 from .computer import Computer
 from .data import derive_scope_params, read_params, write_params
-from .loader import WikipediaLoader
+from .loader import WikipediaLoader, poll_row_key
 from .quality import load_criteria, quality_from_points
 
 # Phases of `load_polls`, in order
@@ -174,11 +174,6 @@ def new_poll_list(polls: Optional[pd.DataFrame]) -> list[dict]:
     return sorted((_poll_label(row) for row in polls.to_dict('records')), key=_label_order)
 
 
-def _poll_key(row: dict) -> tuple:
-    """Identity of a poll or result row within its event: last day of fieldwork, pollster and sponsor."""
-    return (_day(row['date']), _whole(row['pollster_id']), _whole(row['sponsor_id']))
-
-
 def _poll_table(polls: Optional[pd.DataFrame], results: Optional[pd.DataFrame]) -> dict:
     """
     The polls of a frame by key, as plain values that compare the same whatever the dtypes of the frame.
@@ -205,10 +200,10 @@ def _poll_table(polls: Optional[pd.DataFrame], results: Optional[pd.DataFrame]) 
     for row in polls.to_dict('records'):
         fields = {'start_date': _day(row['start_date']), 'sample_size': _whole(row.get('sample_size')),
                   'ctype': _text(row.get('ctype'))}
-        table.setdefault(_poll_key(row), {'label': _poll_label(row), 'fields': fields, 'parties': {}})
+        table.setdefault(poll_row_key(row), {'label': _poll_label(row), 'fields': fields, 'parties': {}})
 
     for row in ([] if results is None else results.to_dict('records')):
-        poll = table.get(_poll_key(row))
+        poll = table.get(poll_row_key(row))
         if poll is None:
             continue
         low, high = _whole(row.get('seats_min')), _whole(row.get('seats_max'))
@@ -282,14 +277,17 @@ def poll_changes(
         (the sponsor changed) or the same sponsor and first day (the fieldwork got longer), only when the pair
         is one to one. ``removed``: the other polls of the database missing from the article. The three lists
         are sorted as `new_poll_list`; the last two are empty without ``removed``.
+        ``keys``: what an update has to touch, as keys of `loader.poll_row_key` in the order of their lists:
+        ``changed``, the polls to write again, and ``replaced``, the old polls to delete.
     """
     read, cur = _poll_table(read_polls, read_results), _poll_table(cur_polls, cur_results)
 
-    changed = []
+    changed, keys = [], {}
     for key, poll in read.items():
         changes = _poll_differences(poll, cur[key]) if key in cur else []
         if changes:
             changed.append(poll['label'] | {'changes': changes})
+            keys[id(changed[-1])] = key
 
     replaced, gone = [], []
     if removed:
@@ -306,11 +304,14 @@ def poll_changes(
             found = candidates[gone_key]
             if len(found) == 1 and sum(found[0] in others for others in candidates.values()) == 1:
                 replaced.append(read[found[0]]['label'] | {'old': cur[gone_key]['label']})
+                keys[id(replaced[-1])] = gone_key
             else:
                 gone.append(cur[gone_key]['label'])
 
-    return {'changed': sorted(changed, key=_label_order), 'replaced': sorted(replaced, key=_label_order),
-            'removed': sorted(gone, key=_label_order)}
+    changed, replaced = sorted(changed, key=_label_order), sorted(replaced, key=_label_order)
+    return {'changed': changed, 'replaced': replaced, 'removed': sorted(gone, key=_label_order),
+            'keys': {'changed': [keys[id(poll)] for poll in changed],
+                     'replaced': [keys[id(poll)] for poll in replaced]}}
 
 
 def _names(loader, kind: str) -> dict[str, list[str]]:
@@ -469,8 +470,10 @@ def load_polls(
         # The comparison only informs: a failure there, or reading the results it needs from the database, must
         # not fail the load
         try:
-            result.update(poll_changes(wiki.read_polls, wiki.read_results, wiki.cur_polls,
-                                       wiki.fetch_cur_results(), removed=not years))
+            changes = poll_changes(wiki.read_polls, wiki.read_results, wiki.cur_polls, wiki.fetch_cur_results(),
+                                   removed=not years)
+            changes.pop('keys')
+            result.update(changes)
         except Exception as e:
             warnings.warn('poll changes failed: {}: {}'.format(type(e).__name__, e))
         if save:

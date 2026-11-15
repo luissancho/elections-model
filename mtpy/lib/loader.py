@@ -102,6 +102,30 @@ def scope_colmap(maps: dict, scope: str, key: str) -> dict[str, str]:
     return colmap
 
 
+def poll_row_key(row: dict) -> tuple:
+    """
+    Identity of a poll (or of one of its results) within its event, as plain values that compare the same
+    whatever the dtypes of the frame the row comes from.
+
+    Parameters
+    ----------
+    row : dict
+        A row with ``date`` (last day of fieldwork), ``pollster_id`` and ``sponsor_id``.
+
+    Returns
+    -------
+    tuple
+        ``(date, pollster_id, sponsor_id)``: the date as ``YYYY-MM-DD`` and the ids as integers, ``None`` for a
+        null.
+    """
+    def whole(value):
+        return None if value is None or bool(pd.isnull(value)) else int(value)
+
+    date = row['date']
+    day = None if date is None or bool(pd.isnull(date)) else pd.Timestamp(date).strftime('%Y-%m-%d')
+    return (day, whole(row['pollster_id']), whole(row['sponsor_id']))
+
+
 def apply_poll_fixes(
     polls: pd.DataFrame,
     results: pd.DataFrame,
@@ -1137,6 +1161,52 @@ class WikipediaLoader(Core):
             self.polls = self.new_polls
 
         self.results = self.results.set_index(self.m_results.key[:-1]).loc[self.polls.set_index(self.m_polls.key).index].reset_index()
+
+        return self
+
+    def select_changed(self, keys: list[tuple]) -> Self:
+        """
+        Add to the polls to save (after `select_series`) those read that the database has differently, so that
+        `save_polls` and `save_results` write them again; a poll already selected is not added twice.
+
+        Parameters
+        ----------
+        keys : list of tuple
+            Keys of the polls to add (`poll_row_key`), from `load.poll_changes`.
+        """
+        chosen = set(keys) - {poll_row_key(row) for row in self.polls.to_dict('records')}
+        if not chosen:
+            return self
+
+        polls = self.read_polls[[poll_row_key(row) in chosen for row in self.read_polls.to_dict('records')]]
+        results = self.read_results[[poll_row_key(row) in chosen for row in self.read_results.to_dict('records')]]
+        # An empty frame is replaced, not concatenated (pandas warns about concatenating empty frames)
+        self.polls = polls if len(self.polls) == 0 else pd.concat([self.polls, polls], ignore_index=True)
+        self.results = results if len(self.results) == 0 else pd.concat([self.results, results], ignore_index=True)
+
+        return self
+
+    def delete_polls(self, keys: list[tuple]) -> Self:
+        """
+        Delete from the database the polls of the event with these keys, and their results: those about to be
+        written again and those a new poll replaces. Every statement carries the filters of the event.
+
+        Parameters
+        ----------
+        keys : list of tuple
+            Keys of the polls to delete (`poll_row_key`); with none, nothing is run.
+        """
+        if not keys:
+            return self
+
+        where = ' OR '.join(
+            "(date = '{}' AND pollster_id = {} AND sponsor_id {})".format(
+                pd.Timestamp(day).strftime('%Y-%m-%d'), int(pollster_id),
+                'IS NULL' if sponsor_id is None else '= {}'.format(int(sponsor_id))
+            ) for day, pollster_id, sponsor_id in keys
+        )
+        for model in (self.m_results, self.m_polls):
+            model.execute('DELETE FROM {} WHERE {} AND ({})'.format(model.table, ' AND '.join(self.filters), where))
 
         return self
 

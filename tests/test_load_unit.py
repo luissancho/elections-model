@@ -406,7 +406,7 @@ def test_load_params_fails_without_elections():
 
 # Comparación de lo leído con la base (`poll_changes`)
 
-NO_CHANGES = {'changed': [], 'replaced': [], 'removed': []}
+NO_CHANGES = {'changed': [], 'replaced': [], 'removed': [], 'keys': {'changed': [], 'replaced': []}}
 CASAS = {15: '40dB', 3: 'Sigma Dos', 40: 'Hamalgama', 50: 'SW Demoscopia'}
 MEDIOS = {1: 'Prisa', 2: 'El País', 3: 'El Mundo', 4: 'OKdiario', 5: 'La Séptima', None: None}
 
@@ -494,6 +494,17 @@ def test_poll_changes_matches_polls_without_sponsor():
     assert poll_changes(poll_frame([row]), result_frame(res), cur, cur_results) == NO_CHANGES
 
 
+def test_poll_changes_returns_the_keys_to_update():
+    read = poll_frame([POLL_40DB, POLL_SIGMA])
+    cur = poll_frame([(15, 1, '2026-11-10', '2026-11-14', None, None), (3, 3, '2026-11-03', '2026-11-13', None, None),
+                      (40, 4, '2026-10-20', '2026-10-22', 1000, None)])
+    out = poll_changes(read, result_frame(RES_40DB + RES_SIGMA), cur,
+                       result_frame(RES_40DB + RES_SIGMA + [(40, 4, '2026-10-22', 'PP', 33.0, None, None)]))
+    # En el orden de `changed` (fin de campo): los retirados sin pareja no dan clave
+    assert [poll['pollster'] for poll in out['changed']] == ['Sigma Dos', '40dB'] and len(out['removed']) == 1
+    assert out['keys'] == {'changed': [('2026-11-13', 3, 3), ('2026-11-14', 15, 1)], 'replaced': []}
+
+
 def test_poll_changes_new_and_removed_polls():
     gone = (40, 4, '2026-10-20', '2026-10-22', 1000, None)
     read, read_results = poll_frame([POLL_40DB, POLL_SIGMA]), result_frame(RES_40DB + RES_SIGMA)
@@ -516,6 +527,7 @@ def test_poll_changes_pairs_a_sponsor_change():
     out = poll_changes(*sponsor_change())
     assert out['changed'] == [] and out['removed'] == []
     assert out['replaced'] == [LABEL_40DB | {'old': LABEL_40DB | {'sponsor': 'El País'}}]
+    assert out['keys'] == {'changed': [], 'replaced': [('2026-11-14', 15, 2)]}
 
 
 def test_poll_changes_pairs_a_longer_fieldwork():

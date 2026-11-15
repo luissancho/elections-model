@@ -131,3 +131,54 @@ def test_select_series_keeps_the_read_and_current_frames():
     assert asked == [] and wiki.cur_results is None
     assert list(wiki.fetch_cur_results()['pct']) == [30.0] and len(asked) == 1
     assert list(wiki.cur_results['pct']) == [30.0]
+
+
+def keyed_polls(rows):
+    """Sondeos `(día, pollster_id, sponsor_id)` con las columnas de la clave."""
+    return pd.DataFrame([{'event_date': pd.Timestamp('2026-11-29'), 'event_scope': 'es', 'date': pd.Timestamp(day),
+                          'pollster_id': pollster_id, 'sponsor_id': sponsor_id} for day, pollster_id, sponsor_id in rows])
+
+
+def test_select_changed_adds_the_read_rows_once():
+    from mtpy.models.elections import Polls, PollsResults
+    wiki = bare(WikipediaLoader)
+    wiki.m_polls, wiki.m_results = FakeTable(), FakeTable()
+    wiki.m_polls.key, wiki.m_results.key = Polls.key, PollsResults.key
+    rows = [('2026-11-07', 15, 1), ('2026-11-13', 3, 0), ('2026-11-14', 15, 1)]
+    wiki.read_polls = keyed_polls(rows)
+    wiki.read_results = pd.concat([keyed_polls(rows).assign(party_id=1, pct=30.0),
+                                   keyed_polls(rows).assign(party_id=2, pct=20.0)], ignore_index=True)
+    # El del 14 es nuevo y ya está en lo que se guarda; el del 13 (sin medio, id 0) ha cambiado
+    wiki.polls = wiki.read_polls.iloc[[2]]
+    wiki.results = wiki.read_results[wiki.read_results.date == pd.Timestamp('2026-11-14')]
+    assert wiki.select_changed([('2026-11-13', 3, 0), ('2026-11-14', 15, 1)]) is wiki
+    assert sorted(wiki.polls['date'].dt.strftime('%Y-%m-%d')) == ['2026-11-13', '2026-11-14']
+    assert len(wiki.results) == 4 and sorted(wiki.results['date'].dt.day.unique()) == [13, 14]
+    wiki.select_changed([])
+    assert len(wiki.polls) == 2 and len(wiki.results) == 4
+
+
+def test_select_changed_into_an_empty_selection():
+    from mtpy.models.elections import Polls, PollsResults
+    wiki = bare(WikipediaLoader)
+    wiki.m_polls, wiki.m_results = FakeTable(), FakeTable()
+    wiki.m_polls.key, wiki.m_results.key = Polls.key, PollsResults.key
+    wiki.read_polls = keyed_polls([('2026-11-07', 15, 1), ('2026-11-13', 3, 0)])
+    wiki.read_results = wiki.read_polls.assign(party_id=1, pct=30.0)
+    wiki.polls, wiki.results = wiki.read_polls.iloc[:0], wiki.read_results.iloc[:0]
+    wiki.select_changed([('2026-11-07', 15, 1)])
+    assert list(wiki.polls['pollster_id']) == [15] and list(wiki.results['pct']) == [30.0]
+
+
+def test_delete_polls_builds_one_filtered_delete_per_table():
+    wiki = bare(WikipediaLoader)
+    wiki.filters = ["event_scope = 'es'", "event_date = '2026-11-29'"]
+    wiki.m_polls, wiki.m_results = FakeTable(), FakeTable()
+    wiki.m_polls.table, wiki.m_results.table = 'elections.polls', 'elections.polls_results'
+    assert wiki.delete_polls([]) is wiki and wiki.m_polls.executed == [] and wiki.m_results.executed == []
+    wiki.delete_polls([('2026-11-14', 15, 1), ('2026-11-13', 3, None)])
+    where = ("event_scope = 'es' AND event_date = '2026-11-29' AND ("
+             "(date = '2026-11-14' AND pollster_id = 15 AND sponsor_id = 1) OR "
+             "(date = '2026-11-13' AND pollster_id = 3 AND sponsor_id IS NULL))")
+    assert wiki.m_results.executed == ['DELETE FROM elections.polls_results WHERE ' + where]
+    assert wiki.m_polls.executed == ['DELETE FROM elections.polls WHERE ' + where]
