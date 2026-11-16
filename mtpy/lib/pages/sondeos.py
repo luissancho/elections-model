@@ -3,8 +3,6 @@ The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the loo
 of the previous delivery of its house and sponsor, the rows and figures of its cards, the template context and what
 the image of its link previews says (``preview_of``, as plain data: ``pages.images`` draws it).
 """
-import hashlib
-import json
 from datetime import timedelta
 from typing import Optional
 
@@ -14,6 +12,7 @@ from .casas import mtype_label
 from .common import block_color, bundle_part, common_context, ink_color, parse_state, part, subpage_event_bar
 from .elecciones import chart_parties
 from .filters import DASH, MONTHS, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num, fmt_pct, gradient
+from .previews import PREVIEW_ROWS, preview_change, preview_version, with_figures
 from .promedios import RATING_COLORS, chart_polls, fieldwork_label, poll_href, round_series
 from .slugs import poll_detail_href, pollster_href, slugify
 
@@ -596,43 +595,12 @@ def fieldwork_compact(poll: dict) -> Optional[str]:
     return f'{first.day}{DASH}{fmt_date(last)}'
 
 
-# The image of the link previews of a poll (``pages.images.poll_png``): the parties it shows and the version of its
-# drawing. The version goes into the fingerprint of the address of the image: bump it when the drawing changes, so
-# the networks that keep an image by its address ask for the new one
-PREVIEW_ROWS = 6
-PREVIEW_DESIGN = 1
-
-
-def _preview_change(change: Optional[float]) -> Optional[dict]:
-    """
-    Change of a party against the previous delivery, as the image of a poll shows it.
-
-    Parameters
-    ----------
-    change : float or None
-        ``change`` of a row of ``vote_rows``, in points with one decimal.
-
-    Returns
-    -------
-    dict or None
-        ``direction`` (``'up'``, ``'down'`` or ``'same'``) and ``text`` (the points without sign, ``'0,4'``, or
-        ``'='`` when nothing changes); ``None`` when the previous delivery lacks the party or there is none.
-    """
-    if change is None:
-        return None
-
-    if change == 0:
-        return {'direction': 'same', 'text': '='}
-
-    return {'direction': 'up' if change > 0 else 'down', 'text': fmt_num(abs(change), 1)}
-
-
 def preview_of(poll: dict, previous: Optional[dict], parties: list, colors: dict, election: str, host: str) -> dict:
     """
-    What the image of the link previews of a poll says, as plain data.
+    What the link previews of a poll say, as plain data: its image and its description.
 
     The figures, the names, the order and the change are those of the page of the poll (``vote_rows``,
-    ``poll_title``, ``sample_text``).
+    ``poll_title``, ``sample_text``); the rules shared with the other previews are those of ``previews``.
 
     Parameters
     ----------
@@ -655,15 +623,16 @@ def preview_of(poll: dict, previous: Optional[dict], parties: list, colors: dict
         ``title`` (``poll_title``); ``subtitle`` (the election, ``'Campo: '`` and ``fieldwork_compact`` — or the day
         of the poll without fieldwork dates — and ``sample_text``, joined with ``' · '``, without what is missing);
         ``rows`` (the ``PREVIEW_ROWS`` parties with most vote, by vote: ``name``, ``color``, ``value``, ``share``
-        (``fmt_pct``), ``change`` (``_preview_change``) and ``seats`` (the text of ``vote_rows``, or ``None``));
+        (``fmt_pct``), ``change`` (``preview_change``) and ``seats`` (the text of ``vote_rows``, or ``None``));
         ``has_seats`` (whether a shown party has seats); ``more`` (``'y 7 partidos más en demoscopio.es'``, ``None``
         when every party is shown); ``alt`` (the text alternative of the image: the title, the fieldwork and the
-        shares shown) and ``version`` (8 hex digits of the MD5 of ``PREVIEW_DESIGN`` and of what is drawn: the
-        title, the subtitle, the rows and the footnote).
+        shares shown); ``description`` (the description of the page: the election, the title and the day of the
+        poll, and the shares shown that fit whole, ``with_figures``) and ``version`` (``preview_version`` of what
+        is drawn: the title, the subtitle, the rows and the footnote).
     """
     rows = vote_rows(poll, parties, colors, previous)
     shown = [{'name': row['name'], 'color': row['color'], 'value': row['value'], 'share': fmt_pct(row['value']),
-              'change': _preview_change(row['change']), 'seats': row['seats']} for row in rows[:PREVIEW_ROWS]]
+              'change': preview_change(row['change']), 'seats': row['seats']} for row in rows[:PREVIEW_ROWS]]
     title = poll_title(poll)
     fieldwork = fieldwork_compact(poll)
     day = fmt_date(poll.get('date'))
@@ -674,15 +643,16 @@ def preview_of(poll: dict, previous: Optional[dict], parties: list, colors: dict
     if left > 0:
         more = 'y {} más'.format('1 partido' if left == 1 else f'{left} partidos') + (f' en {host}' if host else '')
 
-    figures = ', '.join('{} {}'.format(row['name'], row['share']) for row in shown)
+    shares = ['{} {}'.format(row['name'], row['share']) for row in shown]
+    figures = ', '.join(shares)
     drawn = {'title': title, 'rows': shown, 'more': more,
              'subtitle': ' · '.join(text for text in (election, when, sample_text(poll)) if text and text != DASH)}
-    fingerprint = json.dumps([PREVIEW_DESIGN, drawn], sort_keys=True, ensure_ascii=False).encode('utf-8')
 
     return dict(drawn, has_seats=any(row['seats'] is not None for row in shown),
                 alt='Sondeo de {} ({}){}.'.format(title, 'campo ' + fieldwork if fieldwork else day,
                                                   ': ' + figures if figures else ''),
-                version=hashlib.md5(fingerprint).hexdigest()[:8])
+                description=with_figures('{}: sondeo de {} ({}). '.format(election, title, day), shares),
+                version=preview_version(drawn))
 
 
 def _published_poll(context: dict, date: str, pollster: str, sponsor: Optional[str] = None) -> dict:

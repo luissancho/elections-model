@@ -181,7 +181,7 @@ def test_preview_version_follows_what_is_drawn(monkeypatch):
     monkeypatch.setitem(COLORS, 'PP', '#000000')
     assert preview()['version'] != version
     monkeypatch.undo()
-    monkeypatch.setattr(sondeos, 'PREVIEW_DESIGN', sondeos.PREVIEW_DESIGN + 1)
+    monkeypatch.setattr(pages.previews, 'PREVIEW_DESIGN', pages.previews.PREVIEW_DESIGN + 1)
     assert preview()['version'] != version
     # what the image says is composed as data: the module does not draw
     assert 'PIL' not in inspect.getsource(sondeos)
