@@ -49,7 +49,8 @@ class Sondeos(Page):
             ``run``. Its ``og:image`` is the image of the poll (``image_action``): the canonical ending in ``.png``,
             with the fingerprint of what it draws in ``?v=`` (the networks keep an image by its address) and a text
             alternative with its figures. The image always draws the latest run, so a page with a pinned run
-            declares the fingerprint of the latest one, and the brand image when the poll is not in it.
+            declares the fingerprint of the latest one, and the brand image when the poll is not in it. The
+            brand image stays too when this process cannot draw (``pages.images.available``).
 
         Raises
         ------
@@ -70,7 +71,7 @@ class Sondeos(Page):
 
         image = {}
 
-        if preview is not None:
+        if preview is not None and pages.images.available():
             image = {'og_image': '{}{}.png?v={}'.format(origin, context['detail_href'], preview['version']),
                      'og_image_alt': preview['alt']}
 

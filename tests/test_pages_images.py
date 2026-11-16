@@ -42,7 +42,8 @@ DOWN = (220, 38, 38)  # --color-bad
 SITE = 'https://demoscopio.es'
 IMAGE_PATH = POLL_PATH + '.png'  # the image of the only poll of the fixture bundle
 BRAND_ALT = 'Demoscopio: promedio de encuestas, previsión de escaños y ranking de encuestadoras'
-HALO = 4  # shrinking the drawing leaves a faint halo of 3 px around any ink: an empty area is checked from further
+# Shrinking the drawing leaves a faint halo of 3 px around any ink: an empty area is checked from further
+HALO = 4
 
 
 def near(pixel, colour, tolerance=2):
@@ -160,6 +161,23 @@ def test_preview_version_follows_what_is_drawn(monkeypatch):
     assert preview(previous=poll_of(date='2026-10-20', PP=31.5))['version'] != version
     assert preview(poll_of(seats={'PP': [125, 136]}))['version'] != version
     assert preview(poll_of(rating=10.0, weight=0.5, url='https://example.org/'))['version'] == version
+    # each text of the picture moves it on its own: the title, the grey line, the footnote and the name of a row
+    monkeypatch.setitem(COLORS, 'PPX', COLORS['PP'])
+    renamed = poll_of('PP', PPX=GAD3['PP'], seats=GAD3['seats'] | {'PPX': GAD3['seats']['PP']})
+    texts = ('title', 'subtitle', 'more', 'rows')
+    others = [('title', preview(poll_of(sponsor='Colpisa'))),
+              ('subtitle', preview(poll_of(sample_size=1200.0))),
+              ('subtitle', sondeos.preview_of(GAD3, None, PARTIES, COLORS, 'Elecciones generales 2027', HOST)),
+              ('more', preview(poll_of('CC'))),
+              ('more', sondeos.preview_of(GAD3, None, PARTIES, COLORS, ELECTION, 'example.org')),
+              ('rows', preview(renamed, parties=['PPX'] + PARTIES[1:]))]
+
+    for text, other in others:
+        assert [key for key in texts if other[key] != preview()[key]] == [text]
+        assert other['version'] != version, text
+
+    assert [row['name'] for row in others[-1][1]['rows']][:2] == ['PPX', 'PSOE']
+    assert [dict(row, name='PP') for row in others[-1][1]['rows']][0] == preview()['rows'][0]  # only the name
     monkeypatch.setitem(COLORS, 'PP', '#000000')
     assert preview()['version'] != version
     monkeypatch.undo()
@@ -416,6 +434,10 @@ def test_poll_png_has_the_header_of_the_sketch():
     image = drawn(card([row_of('PP', 31.9)]))
     mark = (images.RIGHT - images.WORDMARK_WIDTH, 60, images.RIGHT + 1, 120)
     assert count_near(image, mark, ACCENT, 12) > 100 and count_near(image, mark, INK, 12) > 500  # lens and letters
+    # pasted with its transparency: around the letters, inside its own rectangle, the background of the card
+    own = (mark[0], images.WORDMARK_TOP, images.RIGHT, images.WORDMARK_TOP + images.wordmark().height // images.SCALE)
+    paper = ImageColor.getrgb(images.BACKGROUND)
+    assert count_near(image, own, paper, 0) > (own[2] - own[0]) * (own[3] - own[1]) // 4
     assert blank(image, (images.RIGHT + HALO, 0, 1200, 675)) and blank(image, (0, 0, images.MARGIN - HALO, 675))
     assert count_near(image, (images.MARGIN, 60, 600, 115), INK, 12) > 2000  # the title
     assert not blank(image, (images.MARGIN, 128, 900, 160))  # the grey line
@@ -593,6 +615,50 @@ def test_pinned_run_page_declares_the_latest_image_or_the_brand_one(houses, fres
     monkeypatch.setattr(pages, 'latest_poll_preview', lambda *args: None)
     gone = page_of(houses, POLL_PATH, query='run=' + RUN)
     assert meta_of(gone, 'og:image') == pages.og_image_url() and meta_of(gone, 'og:image:alt') == BRAND_ALT
+
+
+@pytest.fixture
+def drawing_caches():
+    """Olvida, antes y después de la prueba, lo que el dibujo guarda por proceso (fuentes, marca y si puede
+    dibujar)."""
+    images = pages.images
+
+    def forget():
+        for cached in (images.font, images.wordmark, images.available):
+            cached.cache_clear()
+
+    forget()
+    yield
+    forget()
+
+
+@pytest.mark.parametrize('missing', ['FONTS_DIR', 'WORDMARK_PATH'])
+def test_poll_page_keeps_the_brand_image_when_nothing_can_be_drawn(houses, fresh_app, monkeypatch, tmp_path,
+                                                                   drawing_caches, missing):
+    """Si este proceso no puede dibujar (faltan las fuentes o la marca, o este Pillow no lee las fuentes), la página
+    de un sondeo sigue con la imagen de marca en vez de declarar una imagen que respondería un error; se comprueba
+    una vez por proceso y se avisa."""
+    images = pages.images
+    assert images.available() is True and images.available.cache_info().currsize == 1
+    own = meta_of(page_of(houses, POLL_PATH), 'og:image')
+    assert own.startswith(SITE + IMAGE_PATH + '?v=')
+    images.available.cache_clear()
+    images.font.cache_clear()
+    images.wordmark.cache_clear()
+    monkeypatch.setattr(images, missing, str(tmp_path / 'nothing-here'))
+
+    with pytest.warns(UserWarning, match='cannot be drawn'):
+        assert images.available() is False
+
+    assert images.available() is False  # asked once: no second warning, no second try
+    page = page_of(houses, POLL_PATH)
+    assert meta_of(page, 'og:image') == pages.og_image_url() and meta_of(page, 'og:image:alt') == BRAND_ALT
+    assert IMAGE_PATH not in page
+    pinned = page_of(houses, POLL_PATH, query='run=' + RUN)
+    assert meta_of(pinned, 'og:image') == pages.og_image_url()
+    # the address itself answers an error, not a broken picture
+    status, headers, _ = call(houses, IMAGE_PATH)
+    assert status == 500 and headers['cache-control'] == 'no-store'
 
 
 def test_other_pages_keep_the_brand_image(houses, fresh_app):

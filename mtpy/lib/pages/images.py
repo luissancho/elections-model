@@ -15,6 +15,7 @@ polls: another card (a past election) can be built with them.
 import io
 import math
 import os
+import warnings
 from functools import lru_cache
 from typing import Optional
 
@@ -296,6 +297,35 @@ def wordmark() -> Image.Image:
     width = WORDMARK_WIDTH * SCALE
 
     return mark.resize((width, round(width * mark.height / mark.width)), Image.LANCZOS)
+
+
+@lru_cache(maxsize=1)
+def available() -> bool:
+    """
+    Whether this process can draw: every font opens at its weight and sets a text, and the wordmark loads.
+
+    Checked once per process, as the version of the brand image is read (``common.og_image_version``): an
+    incomplete deploy must not leave the links of the polls without image.
+
+    Returns
+    -------
+    bool
+        ``False``, with a warning, when a font or the wordmark is missing or when this Pillow cannot read the fonts
+        (a FreeType built without brotli does not open a woff2, one without variation support does not pin a
+        weight). A page then keeps the brand image instead of declaring an image that would answer an error.
+    """
+    try:
+        for name in FACES:
+            text_width(name, ELLIPSIS, LABEL_SIZE)
+
+        wordmark()
+    except Exception as error:  # whatever the cause, nothing can be drawn with this installation
+        warnings.warn('the images of the links cannot be drawn, the pages keep the brand image ({}: {})'.format(
+            type(error).__name__, error))
+
+        return False
+
+    return True
 
 
 def header(image: Image.Image, title: str, subtitle: str) -> None:

@@ -134,6 +134,19 @@ check /promedio 301 none
 check /es-zz 404 html
 check "/es/sondeos/abc/nadie" 400 html
 check "/es/sondeos/2020-01-01/nadie" 404 html
+check "/es/sondeos/abc/nadie.png" 400 html
+check "/es/sondeos/2020-01-01/nadie.png" 404 html
+# La imagen del enlace de un sondeo (la direccion de su pagina acabada en .png) la dibuja el servidor al pedirla,
+# con las fuentes woff2 del sitio: aqui se ve si el Pillow de esta instalacion las lee. Se pide la del primer
+# sondeo que enlaza /es.
+poll="$(curl -s --max-time 20 "$base/es" | "$PY" -c "import re, sys
+found = re.search(r'href=\"(/es/sondeos/[0-9-]+/[^\"?#]+)', sys.stdin.read())
+print(found.group(1) if found else '')" 2>/dev/null || true)"
+if [ -n "$poll" ]; then
+    check "$poll.png" 200 none image/png
+else
+    echo "n/a  imagen de un sondeo: /es no enlaza ninguno"
+fi
 check_db_only "/casas?scope=es" 200 html
 check "/casas?id=abc" 400 html
 check "/elecciones?scope=es" 200 html

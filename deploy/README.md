@@ -267,8 +267,12 @@ imagen es siempre la de lo último publicado (no lee `mode`, `run` ni ningún ot
 en `og:image` con `?v=` y una huella de lo que pinta: si el sondeo se corrige, la dirección cambia y las redes
 piden la nueva. Si cambia el dibujo, sube `PREVIEW_DESIGN` (`pages/sondeos.py`) para que cambien todas las
 huellas. El dibujo necesita que Pillow lea las fuentes woff2, y los paquetes de Pillow de PyPI lo hacen (su
-FreeType trae brotli); `tests/test_pages_images.py` falla donde no sea así. El resto de páginas sigue con la imagen
-de marca.
+FreeType trae brotli); `tests/test_pages_images.py` falla donde no sea así. Un proceso que no puede dibujar (le
+faltan las fuentes o `wordmark.png`, o su Pillow no lee las fuentes) lo comprueba una vez
+(`pages.images.available`), avisa y deja sus páginas de sondeo con la imagen de marca; la dirección de la imagen
+responde entonces 500. `deploy/check-api.sh` pide la imagen del primer sondeo que enlaza `/es` y falla si no llega
+un PNG: así se ve en la imagen de Docker (`smoke.sh` lo ejecuta) y tras desplegar. El resto de páginas sigue con
+la imagen de marca.
 
 El título de cada página lo compone `base.html`: el bloque `title` de la plantilla (qué es la página, con las
 palabras con que se busca) y detrás la marca, « · Demoscopio» (bloque `title_brand`); la portada es la excepción,
