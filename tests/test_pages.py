@@ -384,8 +384,8 @@ def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
     status, headers, body = call(api, '/es', query='mode=forecast')
     page = html(body)
     assert status == 200
-    assert ('<p class="wordmark"><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="574" height="100"></a></p>'
-            in page)
+    assert ('<p class="wordmark"><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="574" '
+            'height="100"></a></p>') in page
     assert 'brand-tagline' not in page  # the tagline only lives in the description since phase 8
     assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
     assert '<link rel="icon" href="/dist/img/favicon.ico" sizes="16x16 32x32 48x48">' in page

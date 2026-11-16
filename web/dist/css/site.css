@@ -112,8 +112,9 @@ main {
 }
 
 #site-header .brand { display: flex; flex-direction: column; justify-content: center; }
-/* The wordmark is a link home, not a heading: the <h1> of each page is its own title */
-#site-header .wordmark { margin: 0; font-size: 1.5rem; line-height: 1; }
+/* The wordmark is a link home, not a heading: the <h1> of each page is its own title. It keeps the type of the
+   headings for the alt text of a logo that fails to load */
+#site-header .wordmark { margin: 0; font-family: var(--font-head); font-size: 1.5rem; font-weight: 700; line-height: 1; }
 #site-header .wordmark a { display: inline-flex; align-items: center; min-height: 40px; color: var(--color-text); text-decoration: none; }
 /* The wordmark (logo.svg, 563 x 102 intrinsic) at 24 px tall */
 #site-header .wordmark img { display: block; height: 24px; width: auto; }

@@ -57,7 +57,7 @@ Para el orden del título, uno solo razonable: la página primero y la marca al 
 | `/es-md` | Encuestas, promedios y escaños · Elecciones autonómicas · Madrid 2027 | Encuestas elecciones autonómicas Madrid 2027: promedio y escaños |
 | un sondeo | Sigma Dos para El Mundo · 5 oct 2026 · Elecciones generales 2026 | Encuesta Sigma Dos para El Mundo · 5 oct 2026 · Elecciones generales 2026 |
 | `/elecciones` | Histórico Errores | Errores de las encuestas en las elecciones pasadas |
-| una elección pasada | Generales 2023 | Generales 2023: resultado y errores de las encuestas |
+| una elección pasada | Elecciones Generales Julio 2023 | Elecciones Generales Julio 2023: resultado y errores de las encuestas |
 | `/casas` | Ranking Encuestadoras | Ranking de encuestadoras: cuáles aciertan más |
 | una encuestadora | GAD3 | GAD3: rating e historial de la encuestadora |
 | una casa sin rating | Agregador | Agregador: historial de la encuestadora |
@@ -65,7 +65,9 @@ Para el orden del título, uno solo razonable: la página primero y la marca al 
 | `/analisis` | Análisis | Análisis electorales con datos oficiales |
 
 Sin cambios: las cuatro subpáginas del método, los estudios y `/privacidad`. Sin año conocido, el evento va sin él
-(«Encuestas elecciones generales: promedio y escaños»). El menú conserva sus etiquetas.
+(«Encuestas elecciones generales: promedio y escaños»). El menú conserva sus etiquetas. El nombre de una elección
+pasada es el de la base de datos («Elecciones Generales Julio 2023», «Elecciones Madrid Mayo 2023»: lleva el mes,
+así que las dos generales de 2019 no comparten título); el paquete de las pruebas la llama «Generales 2023».
 
 ### `<h1>`
 
@@ -99,10 +101,17 @@ Nada de lo que se ve cambia: se comprueba con capturas de antes y después.
 - La página de error: título y `<h1>`.
 - `event_phrase` para el ámbito nacional, uno autonómico y uno fuera del catálogo.
 
+## Corregido tras la revisión
+
+- El texto alternativo del logotipo, que sólo se ve si la imagen no carga, perdía la tipografía de los títulos al
+  dejar de ser un `<h1>`: `.wordmark` la conserva. Con eso las capturas de antes y después son idénticas también
+  sin el logotipo.
+
 ## Fuera de este paso
 
 - Las descripciones: tres del método pasan de 300 caracteres (Google enseña unos 160), dos empiezan por la
-  etiqueta del menú («Histórico Errores: …») y la de `/es` dice «de Elecciones generales».
+  etiqueta del menú («Histórico Errores: …»), la de `/es` dice «de Elecciones generales» y la del perfil de una
+  casa sin rating promete «su rating».
 - Un título visible en las páginas que no lo tienen (enfoque 3).
 - Datos estructurados, `twitter:site`, las canónicas con `?scope=`: siguen en la ronda.
 

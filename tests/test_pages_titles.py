@@ -139,7 +139,7 @@ def test_hidden_heading_carries_the_title_before_the_event_bar(houses):
 
 
 def test_pages_with_a_visible_heading_do_not_get_the_hidden_one(houses, fresh_app):
-    """La portada, el índice de análisis, los estudios y las páginas del método con titular ya enseñan su `<h1>`."""
+    """La portada, el índice de análisis, los estudios y las páginas del método con titular ya tienen su `<h1>`."""
     write_study(fresh_app.fs)
     study = '<h1 class="study-title">El voto CERA en España y el efecto de la «Ley de Nietos»</h1>'
     visible = {'/': '<h1 class="hero-t">', '/analisis': '<h1>Análisis</h1>', '/analisis/voto-cera': study,
@@ -188,8 +188,12 @@ def test_error_page_has_its_status_as_heading(api):
 
 
 def test_header_css_styles_the_wordmark_not_a_heading():
-    """El CSS de la cabecera cuelga del logotipo (`.wordmark`), no de un `<h1>` que ya no existe."""
+    """El CSS de la cabecera cuelga del logotipo (`.wordmark`), no de un `<h1>` que ya no existe, y le deja la
+    tipografía de los títulos."""
     with open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8') as f:
         css = f.read()
 
     assert '#site-header h1' not in css and css.count('#site-header .wordmark') == 4
+    # the alt text of a logo that fails to load keeps the type it had as a heading
+    rule = re.search(r'#site-header \.wordmark \{([^}]*)\}', css).group(1)
+    assert 'font-family: var(--font-head);' in rule and 'font-weight: 700;' in rule
