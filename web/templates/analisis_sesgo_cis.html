@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{{ study_meta.get('title') or 'El sesgo del CIS de Tezanos' }}{% endblock %}
+{% block heading %}{% endblock %}
 {% block description %}{{ study_meta.get('subtitle') or 'El último sondeo del CIS antes de cada elección, frente a las urnas, con y sin Tezanos.' }}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/analisis-sesgo-cis.js"></script>

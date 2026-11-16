@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{{ study_meta.get('title') or 'El mercado de la fruta en Andorra' }}{% endblock %}
+{% block heading %}{% endblock %}
 {% block description %}{{ study_meta.get('subtitle') or 'Los sondeos que se publican fuera de España durante la veda, frente al resultado.' }}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/analisis-andorra.js"></script>

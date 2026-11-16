@@ -1,14 +1,18 @@
 """Tests de los títulos de las páginas (`<title>`, `og:title`) y de su `<h1>`."""
+import os
 import re
 
 from mtpy.lib import pages
 from tests.test_api_asgi import call
 from tests.test_pages import api, houses, houses_without_analysis, html, site_api  # noqa: F401
-from tests.test_pages_crawlers import POLL_PATH, SITE, sitemap
+from tests.test_pages_crawlers import POLL_PATH, SITE, sitemap, write_polls
 from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, use_database, write_study  # noqa: F401
 
 BRAND = ' · Demoscopio'
 HOME_TITLE = 'Demoscopio · Promedio de encuestas electorales en España'
+# the wordmark of the header: a link home, not a heading
+WORDMARK = ('<p class="wordmark"><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="574" '
+            'height="100"></a></p>')
 # the full `<title>` of one page of each kind of the fixture site
 TITLES = {
     '/': HOME_TITLE,
@@ -106,3 +110,86 @@ def test_error_page_title_ends_with_the_brand(api):
     """La página de error también dice primero qué es."""
     status, _, body = call(api, '/nope')
     assert status == 404 and title_of(html(body)) == 'Error 404' + BRAND
+
+
+def headings_of(page):
+    """Los `<h1>` de una página, con sus etiquetas."""
+    return re.findall(r'<h1[\s>].*?</h1>', page, re.S)
+
+
+def test_every_page_has_a_single_h1_that_is_not_the_wordmark(houses, fresh_app):
+    """Cada página tiene un solo `<h1>`, el suyo: el logotipo de la cabecera es un enlace a la portada."""
+    write_study(fresh_app.fs)
+
+    for path in site_paths(houses):
+        page = html(call(houses, path)[2])
+        assert len(headings_of(page)) == 1 and page.count('<h1') == 1, path
+        assert WORDMARK in page and 'logo.svg' not in headings_of(page)[0], path
+
+
+def test_hidden_heading_carries_the_title_before_the_event_bar(houses):
+    """Una página sin titular visible lleva su título en un `<h1>` que sólo leen los lectores de pantalla y los
+    buscadores, tras la cabecera: quien salta a él y sigue leyendo pasa por la barra del evento y por el contenido."""
+    page = html(call(houses, '/es')[2])
+    assert re.search(r'</header>\s*<h1 class="sr-only">Encuestas elecciones generales 2026: promedio y escaños</h1>'
+                     r'\s*<div id="event-bar"', page)
+    page = html(call(houses, '/casas')[2])
+    assert re.search(r'</header>\s*<h1 class="sr-only">Ranking de encuestadoras: cuáles aciertan más</h1>'
+                     r'\s*<main id="main">', page)
+
+
+def test_pages_with_a_visible_heading_do_not_get_the_hidden_one(houses, fresh_app):
+    """La portada, el índice de análisis, los estudios y las páginas del método con titular ya enseñan su `<h1>`."""
+    write_study(fresh_app.fs)
+    study = '<h1 class="study-title">El voto CERA en España y el efecto de la «Ley de Nietos»</h1>'
+    visible = {'/': '<h1 class="hero-t">', '/analisis': '<h1>Análisis</h1>', '/analisis/voto-cera': study,
+               '/metodo/promedio': '<h1 class="headline">¿Cómo promediamos las encuestas?</h1>'}
+
+    for path, heading in visible.items():
+        page = html(call(houses, path)[2])
+        assert heading in page and '<h1 class="sr-only">' not in page, path
+
+
+def test_templates_empty_the_hidden_heading_exactly_when_they_show_one():
+    """Una plantilla que extiende `base.html` vacía el bloque `heading` si y sólo si pinta su propio `<h1>`: ni dos
+    `<h1>` ni ninguno. Los parciales no llevan `<h1>`."""
+    pages_seen = 0
+
+    for name in sorted(os.listdir(pages.TEMPLATES_DIR)):
+        with open(os.path.join(pages.TEMPLATES_DIR, name), encoding='utf-8') as f:
+            text = re.sub(r'\{#.*?#\}', '', f.read(), flags=re.S)  # the comments may name the tag
+
+        if "{% extends 'base.html' %}" not in text:
+            assert ('<h1' in text) == (name in ('base.html', 'error.html')), name
+            continue
+
+        pages_seen += 1
+        shows_heading = '<h1' in text or "tag='h1'" in text
+        assert ('{% block heading %}{% endblock %}' in text) == shows_heading, name
+
+    assert pages_seen >= 17
+
+
+def test_reserved_characters_are_escaped_once_in_title_og_and_heading(houses, fresh_app):
+    """Un nombre con un carácter reservado de HTML llega escapado una sola vez al título, a `og:title` y al `<h1>`."""
+    write_polls(fresh_app.fs, [{'pollster': 'Sondeos & Datos'}])
+    status, _, body = call(houses, '/es/sondeos/2026-10-05/sondeos-datos')
+    page = html(body)
+    text = 'Encuesta Sondeos &amp; Datos · 5 oct 2026 · Elecciones generales 2026'
+    assert status == 200 and title_of(page) == text + BRAND and og_title_of(page) == text
+    assert headings_of(page) == ['<h1 class="sr-only">' + text + '</h1>']
+
+
+def test_error_page_has_its_status_as_heading(api):
+    """La página de error no hereda de `base.html`: lleva su propio `<h1>` oculto y el logotipo sin título."""
+    status, _, body = call(api, '/nope')
+    page = html(body)
+    assert status == 404 and headings_of(page) == ['<h1 class="sr-only">Error 404</h1>'] and WORDMARK in page
+
+
+def test_header_css_styles_the_wordmark_not_a_heading():
+    """El CSS de la cabecera cuelga del logotipo (`.wordmark`), no de un `<h1>` que ya no existe."""
+    with open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8') as f:
+        css = f.read()
+
+    assert '#site-header h1' not in css and css.count('#site-header .wordmark') == 4

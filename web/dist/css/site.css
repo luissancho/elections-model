@@ -112,10 +112,11 @@ main {
 }
 
 #site-header .brand { display: flex; flex-direction: column; justify-content: center; }
-#site-header h1 { margin: 0; font-size: 1.5rem; line-height: 1; }
-#site-header h1 a { display: inline-flex; align-items: center; min-height: 40px; color: var(--color-text); text-decoration: none; }
+/* The wordmark is a link home, not a heading: the <h1> of each page is its own title */
+#site-header .wordmark { margin: 0; font-size: 1.5rem; line-height: 1; }
+#site-header .wordmark a { display: inline-flex; align-items: center; min-height: 40px; color: var(--color-text); text-decoration: none; }
 /* The wordmark (logo.svg, 563 x 102 intrinsic) at 24 px tall */
-#site-header h1 img { display: block; height: 24px; width: auto; }
+#site-header .wordmark img { display: block; height: 24px; width: auto; }
 #site-header nav, .hdr nav { display: flex; gap: var(--space-1); }
 
 #site-header nav a, .hdr nav a {
@@ -1347,7 +1348,7 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   dt + dd { margin-bottom: var(--space-2); }
 
   #site-header, .hdr { min-height: 52px; }
-  #site-header h1 img { height: 22px; }
+  #site-header .wordmark img { height: 22px; }
   #site-header nav, .hdr nav { display: none; }
   body:has(#freeze-banner:not([hidden])) #site-header, body:has(#freeze-banner:not([hidden])) .hdr { top: 0; }
 

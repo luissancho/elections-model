@@ -250,6 +250,15 @@ también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`:
 del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
 controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
 
+El título de cada página lo compone `base.html`: el bloque `title` de la plantilla (qué es la página, con las
+palabras con que se busca) y detrás la marca, « · Demoscopio» (bloque `title_brand`); la portada es la excepción,
+con la marca delante. `og:title` es el bloque `title` a secas: la vista previa de un enlace ya enseña el dominio.
+Cada página tiene un solo `<h1>`: el logotipo de la cabecera es un enlace (`.wordmark`), no un título, y
+`base.html` pone tras la cabecera un `<h1 class="sr-only">` con el título de la página, que sólo leen los lectores
+de pantalla y los buscadores (bloque `heading`). Una plantilla nueva sólo tiene que rellenar `title`; si pinta su
+propio `<h1>` visible, vacía `heading` (`{% block heading %}{% endblock %}`), y una prueba lo exige en los dos
+sentidos. La página de error, que no hereda de `base.html`, lleva los suyos.
+
 Para los rastreadores (`mtpy/lib/pages/crawlers.py`, controlador `Crawlers`): `/robots.txt` deja todo abierto menos
 `/api/` (los mismos datos de las páginas en JSON y CSV) y da la URL del sitemap; `/sitemap.xml` lista las URL
 canónicas de lo publicado, calculadas en cada petición con los enlaces de las propias páginas: la portada y cada
