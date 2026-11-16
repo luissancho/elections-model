@@ -270,6 +270,8 @@ def test_fit_text_shrinks_then_cuts():
     size, text = fit('bold', 'PODEMOS-IU-AV', 34, 22, column)
     assert size == 22 and text.endswith('…') and width('bold', text, size) <= column
     assert fit('title', 'Demoscopio', 50, 34, 1) == (34, '…')  # no room for a letter
+    # a cut that falls after a space drops the space
+    assert fit('title', 'Sigma Dos para El Mundo', 34, 34, width('title', 'Sigma …', 34)) == (34, 'Sigma…')
     assert fit('title', '', 50, 34, 100) == (50, '')
 
 
@@ -287,6 +289,11 @@ def test_name_column_grows_before_the_names_shrink():
     assert left == images.BAR_LEFT_MAX and 22 <= size < 34
     assert left - images.MARGIN - width('bold', 'W' * 9, size) >= 12
     assert images.name_column(['W' * 30]) == (22, images.BAR_LEFT_MAX)
+    # a name too long even then is cut before the bars
+    image = drawn(card([row_of('W' * 30, 40), row_of('PP', 30)]))
+    top, bottom = row_band(0)
+    assert blank(image, (images.BAR_LEFT_MAX - 10, top, images.BAR_LEFT_MAX - HALO, bottom))
+    assert not blank(image, (images.MARGIN, top, images.BAR_LEFT_MAX - 40, bottom))
 
 
 def test_poll_png_is_a_1200x675_png_and_repeats():
@@ -339,6 +346,8 @@ def test_poll_png_without_seats_leaves_the_column_empty():
     assert not blank(image, (images.RIGHT - 190, images.ROW_TOP - 30, images.RIGHT + 1, images.ROW_TOP - 4))  # header
     cells = [(images.RIGHT - 190, row_band(index)[0], images.RIGHT + 1, row_band(index)[1]) for index in range(3)]
     assert not blank(image, cells[0]) and blank(image, cells[1]) and not blank(image, cells[2])
+    # the column is one decision for the whole card (``has_seats``), not one per row
+    assert blank(drawn(dict(card(seats), has_seats=False)), column)
 
 
 def test_poll_png_marks_the_change_after_the_figure():
