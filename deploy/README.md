@@ -239,9 +239,12 @@ Marca: el sitio se llama Demoscopio (`pages.SITE_TITLE`; `SITE_TAGLINE` es la l�
 por defecto de las páginas). La cabecera (`_brand.html`) muestra el logotipo `web/dist/img/logo.svg`: "Demoscopi" en
 Source Serif 4 Semibold convertida a trazos, con la última "o" como lente (anillo y punto en el azul de acento), que es
 también el favicon (`favicon.svg`, `favicon.ico` en 16/32/48 y `apple-touch-icon.png`, enlazados desde `_icons.html`).
-Los cuatro ficheros los genera `python web/brand/build.py` desde la fuente (necesita `fonttools[woff]` y Pillow, que
-no son dependencias de la web): para cambiar el nombre, los colores o la lente, edita las constantes del script y
-vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
+Del mismo script sale `og-image.png`, la imagen de 1200×675 de los enlaces compartidos: el logotipo, el lema, el
+dominio y la lente ampliada sobre una nube de sondeos y su promedio, sin cifras para que no caduque en la caché de
+las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en las franjas de arriba y de abajo que
+X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
+`fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
+edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
 más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página.
 
 Datos y errores: `/elecciones` y `/metodo/backtest` leen solo el paquete (sin base): sin elecciones o sin backtest
