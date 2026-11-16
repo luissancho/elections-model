@@ -14,6 +14,8 @@ Outputs, in ``web/dist/img/``:
 - ``favicon.ico``: the lens in 16, 32 and 48 px, for the rest (and for ``/favicon.ico``).
 - ``apple-touch-icon.png``: the lens on the page background, 180 px, for the iOS home screen.
 - ``og-image.png``: the image of the shared links, 1200x675 (``base.html`` declares it as ``og:image``).
+- ``wordmark.png``: the wordmark on a transparent background, for the images the server draws
+  (``mtpy.lib.pages.images``), which cannot read the SVG.
 
 Run from the repository root::
 
@@ -69,6 +71,9 @@ OG_DOMAIN = 'demoscopio.es'
 OG_DOMAIN_AT = (88, 590, 24)  # x, baseline and size: Outfit, wght 700
 OG_LENS = (958, 338, 218, 46)  # centre, outer radius and width of the ring
 OG_DOTS = (150, 7, 0.22)  # polls of the cloud, seed and opacity
+# The wordmark as an image: file and width in pixels (four times what the image of a poll shows it at)
+WORDMARK_PNG = ('wordmark.png', 800)
+WORDMARK_SUPERSAMPLE = 4
 
 
 def number(value: float) -> str:
@@ -417,6 +422,84 @@ def draw_text(draw: ImageDraw.ImageDraw, font: TTFont, text: str, x: float, base
         draw.text((x + offset * unit, baseline), char, font=raster, fill=fill, anchor='ls')
 
 
+def draw_wordmark(letters: ImageDraw.ImageDraw, lens: ImageDraw.ImageDraw, font: TTFont, layout: dict, unit: float,
+                  origin: float, baseline: float, ink, accent) -> None:
+    """
+    Draw the wordmark: its letters, glyph by glyph where ``logo.svg`` has them, and the lens in the place of the
+    last "o".
+
+    Parameters
+    ----------
+    letters : PIL.ImageDraw.ImageDraw
+        Where the letters go.
+    lens : PIL.ImageDraw.ImageDraw
+        Where the lens goes (the same canvas, or another when each colour is drawn on its own).
+    font : TTFont
+        The wordmark font (``load_font``).
+    layout : dict
+        ``wordmark_layout(font)``.
+    unit : float
+        Pixels per font unit.
+    origin : float
+        Pixel of ``x = 0`` of the layout.
+    baseline : float
+        Pixel of the baseline (``y = 0`` of the layout).
+    ink : str or int
+        Colour of the letters.
+    accent : str or int
+        Colour of the lens.
+    """
+    raster = raster_font(font, font['head'].unitsPerEm * unit)
+
+    for char, x in layout['glyphs']:
+        letters.text((origin + x * unit, baseline), char, font=raster, fill=ink, anchor='ls')
+
+    mark = layout['lens']
+    cx, cy = origin + mark['cx'] * unit, baseline + mark['cy'] * unit
+    outer = (mark['radius'] + mark['stroke'] / 2) * unit
+    lens.ellipse([cx - outer, cy - outer, cx + outer, cy + outer], outline=accent, width=round(mark['stroke'] * unit))
+    dot = mark['dot'] * unit
+    lens.ellipse([cx - dot, cy - dot, cx + dot, cy + dot], fill=accent)
+
+
+def wordmark_png(width: int) -> Image.Image:
+    """
+    The wordmark rasterised on a transparent background, with the geometry of ``logo.svg``.
+
+    The letters and the lens are drawn as two masks, ``WORDMARK_SUPERSAMPLE`` times larger and shrunk with
+    Lanczos, and each gets its flat colour: the edges fade in opacity only, so the image leaves no dark fringe on
+    any background.
+
+    Parameters
+    ----------
+    width : int
+        Width of the image, in pixels: the box of the viewBox of ``logo.svg`` (the ink plus ``PAD``).
+
+    Returns
+    -------
+    PIL.Image.Image
+        RGBA image, ``width`` wide and as tall as the ratio of the box says.
+    """
+    font = load_font()
+    layout = wordmark_layout(font)
+    left, top, box_width, box_height = layout['box']
+    scale = WORDMARK_SUPERSAMPLE
+    unit = width * scale / box_width
+    size = (width * scale, round(box_height * unit))
+    letters, lens = Image.new('L', size, 0), Image.new('L', size, 0)
+    draw_wordmark(ImageDraw.Draw(letters), ImageDraw.Draw(lens), font, layout, unit, -left * unit, -top * unit,
+                  255, 255)
+    size = (width, round(width * box_height / box_width))
+    image = Image.new('RGBA', size, (0, 0, 0, 0))
+
+    for mask, colour in ((letters, INK), (lens, ACCENT)):
+        layer = Image.new('RGBA', size, ImageColor.getrgb(colour) + (0,))
+        layer.putalpha(mask.resize(size, Image.LANCZOS))
+        image = Image.alpha_composite(image, layer)
+
+    return image
+
+
 def polls_cloud() -> tuple:
     """
     The cloud of polls and their average under the big lens of the share image, in pixels of the image.
@@ -509,15 +592,7 @@ def og_image() -> Image.Image:
     mark_left, mark_top, mark_width = OG_WORDMARK
     unit = mark_width * scale / box_width  # pixels of the canvas per font unit
     origin, baseline = mark_left * scale - box_left * unit, mark_top * scale - box_top * unit
-    raster = raster_font(font, font['head'].unitsPerEm * unit)
-    for char, x in layout['glyphs']:
-        draw.text((origin + x * unit, baseline), char, font=raster, fill=INK, anchor='ls')
-    lens = layout['lens']
-    cx, cy = origin + lens['cx'] * unit, baseline + lens['cy'] * unit
-    outer = (lens['radius'] + lens['stroke'] / 2) * unit
-    draw.ellipse([cx - outer, cy - outer, cx + outer, cy + outer], outline=ACCENT, width=round(lens['stroke'] * unit))
-    dot = lens['dot'] * unit
-    draw.ellipse([cx - dot, cy - dot, cx + dot, cy + dot], fill=ACCENT)
+    draw_wordmark(draw, draw, font, layout, unit, origin, baseline, INK, ACCENT)
 
     x, baselines, size = OG_TAGLINE_AT
     body = instance(BODY_FONT, wght=500, opsz=size)
@@ -532,7 +607,7 @@ def og_image() -> Image.Image:
 
 
 def build() -> None:
-    """Write the five assets to ``OUT``."""
+    """Write the six assets to ``OUT``."""
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, 'logo.svg'), 'w', encoding='utf-8') as file:
         file.write(wordmark())
@@ -543,6 +618,7 @@ def build() -> None:
                    append_images=[icons[32], icons[16]])
     lens_png(180, background=BACKGROUND, scale=0.72).save(os.path.join(OUT, 'apple-touch-icon.png'), optimize=True)
     og_image().save(os.path.join(OUT, OG_FILE), optimize=True)
+    wordmark_png(WORDMARK_PNG[1]).save(os.path.join(OUT, WORDMARK_PNG[0]), optimize=True)
 
 
 if __name__ == '__main__':
