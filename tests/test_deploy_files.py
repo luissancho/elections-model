@@ -175,3 +175,22 @@ def test_wordmark_is_set_in_outfit_and_the_old_fonts_are_gone():
     logo = read('web/dist/img/logo.svg')
     assert logo.count('<path d=') == 9  # D e m o s c o p i: nueve glifos, la lente aparte
     assert read('web/dist/img/favicon.svg').startswith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">')
+
+
+def test_og_image_is_the_16_9_brand_image():
+    """La imagen de los enlaces compartidos existe, es un PNG de 1200×675 ligero, deja sólo fondo en las franjas que
+    recortan X y Facebook, lleva el logotipo y la lente donde dice la spec y repite el lema del sitio."""
+    path = ROOT / 'web' / 'dist' / 'img' / 'og-image.png'
+    assert path.stat().st_size < 300_000
+    background, ink, accent = (244, 245, 248), (26, 28, 34), (29, 79, 134)
+    with Image.open(path) as png:
+        assert (png.format, png.mode, png.size) == ('PNG', 'RGB', (1200, 675))
+        for band in ((0, 0, 1200, 24), (0, 651, 1200, 675)):
+            assert png.crop(band).getcolors() == [(1200 * 24, background)]
+        assert png.getpixel((96, 267)) == ink  # the stem of the "D" of the wordmark
+        assert png.getpixel((763, 338)) == accent  # the ring of the lens, at its left
+        assert png.getpixel((1190, 338)) == background  # nothing bleeds off the right edge
+    source = read('web/brand/build.py')
+    lines = re.search(r"OG_TAGLINE = \('([^']+)', '([^']+)'\)", source).groups()
+    assert "SITE_TAGLINE = '{}'".format(' '.join(lines)) in read('mtpy/lib/pages/common.py')
+    assert "OG_DOMAIN = 'demoscopio.es'" in source and "'og-image.png'" in source

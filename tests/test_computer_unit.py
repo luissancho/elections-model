@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.stats import norm
+import warnings
 
 from mtpy.lib.computer import Computer, DriftEstimator
 
@@ -1407,3 +1408,31 @@ def test_reweight_recomputes_sample_and_overlap_weights():
     assert w.loc[polls.pollster_id == 1, 'weight_over'].tolist() == [0.5, 0.5]  # dos en 4 días: 1/2 cada uno
     w2 = Computer.reweight(polls, wspan=1, ol_max=5000)
     assert w2.loc[polls.pollster_id == 1, 'weight_over'].tolist() == [1.0, 1.0]
+
+
+def test_reweight_accepts_categorical_pollsters():
+    """La serie real llega con `pollster` y `mtype` categóricas (`get_poll_series`): agrupar por ellas no debe
+    depender del valor por defecto de `observed` (aviso de pandas en cada carga y cada compute) y una casa del
+    catálogo sin sondeos no cambia nada."""
+    polls = _polls_frame()
+    expected = Computer.reweight(polls, wspan=4, ol_max=5000, ol_dev=3)
+    polls['pollster'] = pd.Categorical(polls['pollster'], categories=['A', 'B', 'C'])
+    polls['mtype'] = pd.Categorical(polls['mtype'], categories=['cati', 'online'])
+    pd.testing.assert_frame_equal(Computer.reweight(polls, wspan=4, ol_max=5000, ol_dev=3), expected)
+
+
+# --- 2026-11-14: los sondeos de una elección sin resultado no tienen error que promediar ---
+
+def test_weighted_mean_of_nothing_is_null_without_warnings():
+    """Los sondeos del ciclo en curso llegan a `compute_errors` sin ningún error medido: su media es nula, sin el
+    0/0 del tamaño efectivo de `Stat` («invalid value encountered in scalar divide» en cada compute)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        assert np.isnan(Computer.weighted_mean(pd.Series([], dtype=float), pd.Series([], dtype=float)))
+        assert np.isnan(Computer.weighted_mean(pd.Series([np.nan, np.nan]), pd.Series([.7, .3])))
+
+
+def test_weighted_mean_weighs_the_values_it_has():
+    """Con datos, la media ponderada de siempre: los valores nulos no cuentan y su peso tampoco."""
+    assert Computer.weighted_mean(pd.Series([1., 3.]), pd.Series([3., 1.])) == pytest.approx(1.5)
+    assert Computer.weighted_mean(pd.Series([2., np.nan]), pd.Series([.7, .3])) == pytest.approx(2.)

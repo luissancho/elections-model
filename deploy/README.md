@@ -239,10 +239,28 @@ Marca: el sitio se llama Demoscopio (`pages.SITE_TITLE`; `SITE_TAGLINE` es la l�
 por defecto de las páginas). La cabecera (`_brand.html`) muestra el logotipo `web/dist/img/logo.svg`: "Demoscopi" en
 Source Serif 4 Semibold convertida a trazos, con la última "o" como lente (anillo y punto en el azul de acento), que es
 también el favicon (`favicon.svg`, `favicon.ico` en 16/32/48 y `apple-touch-icon.png`, enlazados desde `_icons.html`).
-Los cuatro ficheros los genera `python web/brand/build.py` desde la fuente (necesita `fonttools[woff]` y Pillow, que
-no son dependencias de la web): para cambiar el nombre, los colores o la lente, edita las constantes del script y
-vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
-más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página.
+Del mismo script sale `og-image.png`, la imagen de 1200×675 de los enlaces compartidos: el logotipo, el lema, el
+dominio y la lente ampliada sobre una nube de sondeos y su promedio, sin cifras para que no caduque en la caché de
+las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en las franjas de arriba y de abajo que
+X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
+`fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
+edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
+más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página. Cada página declara
+también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`: la imagen de marca con `?v=` y el hash
+del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
+controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
+
+Para los rastreadores (`mtpy/lib/pages/crawlers.py`, controlador `Crawlers`): `/robots.txt` deja todo abierto menos
+`/api/` (los mismos datos de las páginas en JSON y CSV) y da la URL del sitemap; `/sitemap.xml` lista las URL
+canónicas de lo publicado, calculadas en cada petición con los enlaces de las propias páginas: la portada y cada
+ámbito (con `<lastmod>`, la hora de su última actualización), las elecciones pasadas, los perfiles de las
+encuestadoras, el método, los análisis y la página de cada sondeo de la última actualización de cada ámbito (sólo
+los que su página encuentra: dos registros con el mismo día, casa y patrocinador no tienen página). Sin variantes
+con parámetros, sin las rutas que redirigen y sin `/privacidad`. Las dos respuestas llevan `cache-control: public,
+max-age=3600`; la caché de nginx las guarda como mucho una hora y suelta antes lo que nadie pide en 10 minutos
+(`inactive=10m`), así que la visita de un rastreador casi siempre las recalcula. El sitemap necesita la base de
+datos (los perfiles salen de ella): sin base o sin paquete responde 503, nunca una lista a medias. Tras el primer
+despliegue, darlo de alta en Google Search Console y en Bing Webmaster Tools.
 
 Datos y errores: `/elecciones` y `/metodo/backtest` leen solo el paquete (sin base): sin elecciones o sin backtest
 publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400 ("Fecha no válida.") y una
@@ -297,9 +315,24 @@ la web, también sus jobs quedan limitados a 10 s. Mientras `deploy/docker/cront
 conflicto; si un día el contenedor ejecuta publicaciones o cargas, ejecútalas en otro contenedor con la
 variable vacía (un `RUN_JOB` es siempre un `docker run` aparte: `-e DB_STATEMENT_TIMEOUT=` lo anula, porque
 `-e` gana a `--env-file`). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
-paquete, por defecto `site/v1`), `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60) y
+paquete, por defecto `site/v1`), `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60),
 `WEB_SITE_URL` (origen público del sitio para las `canonical`, por defecto `https://demoscopio.es`; en el
-`.env` local va el host de desarrollo, `https://demoscopio.dev`).
+`.env` local va el host de desarrollo, `https://demoscopio.dev`) y `WEB_GTM_ID` (el contenedor de Google Tag
+Manager que mide las visitas, `GTM-…`; vacío, que es lo normal en local y en los tests, la web no mide ni lleva
+aviso de cookies).
+
+Medición de visitas (2026-11-16): con `WEB_GTM_ID` cada página lleva el aviso de cookies (`_consent.html`, oculto
+en el HTML) y su módulo (`web/dist/js/consent.js`), que es quien carga el contenedor, y sólo cuando el lector
+acepta: antes no se pide nada a Google ni se guarda ninguna cookie. La elección se guarda 12 meses en el
+almacenamiento local del navegador (`pages.CONSENT_MONTHS`) y se cambia en `/privacidad`; rechazar después de
+aceptar borra las cookies `_ga…` y recarga la página. Las señales de Consent Mode v2 van con la publicidad siempre
+denegada. Google Analytics (el ID `G-…`) se configura dentro del contenedor, no aquí. El fragmento de Google no
+va en línea porque la política de seguridad de nginx (`Content-Security-Policy`, repetida en los tres sitios de
+`nginx.conf` que añaden cabeceras) no admite scripts en línea ni `eval`: sólo abre a Google los scripts de Tag
+Manager y de su vista previa, las imágenes y conexiones de Analytics sin funciones publicitarias y los estilos y
+fuentes de la vista previa. Por eso en el contenedor no funcionan las etiquetas «HTML personalizado» ni las
+variables de «JavaScript personalizado»; una etiqueta que llame a otro dominio (publicidad, otro proveedor)
+necesita abrirle la política antes. La página de error no mide.
 Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
 en HTML.
 

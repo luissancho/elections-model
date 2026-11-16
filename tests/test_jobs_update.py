@@ -180,6 +180,14 @@ def test_update_rejects_an_unknown_mode_before_loading(fresh_app, tmp_path, scop
     assert loader.calls == []
 
 
+def test_update_lists_the_changed_polls_in_the_alert(fresh_app, tmp_path, scopes, events, patched, alerts):
+    from tests.test_pipelines_load import changes_loader
+    run(tmp_path, loader=changes_loader(), scopes=['es'])
+    body = alerts[0].splitlines()
+    assert 'es: ~ Sigma Dos / El Mundo, 2026-11-03 → 2026-11-13: muestra — → 5370' in body
+    assert 'es: - Hamalgama / OKdiario, 2026-10-20 → 2026-10-22' in body
+
+
 def test_update_lists_the_new_polls_in_the_alert(fresh_app, tmp_path, scopes, events, patched, alerts):
     run(tmp_path, scopes=['es'])
     body = alerts[0].splitlines()

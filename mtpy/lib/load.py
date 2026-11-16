@@ -10,6 +10,7 @@ callback; known failures come back as a ``failed`` result, unexpected exceptions
 import json
 import time
 import warnings
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Callable, Optional
 
 import pandas as pd
@@ -19,7 +20,7 @@ from ..models.elections import Pollsters, Sponsors
 from .compute import _phase
 from .computer import Computer
 from .data import derive_scope_params, read_params, write_params
-from .loader import WikipediaLoader
+from .loader import WikipediaLoader, poll_row_key
 from .quality import load_criteria, quality_from_points
 
 # Phases of `load_polls`, in order
@@ -30,6 +31,13 @@ NAME_CLASSES = ('parties', 'pollsters', 'sponsors')
 NO_POLLS_ARTICLE = 'no polls article for {}'
 
 NO_EVENTS = 'no elections for {}'
+
+# Most changed and replaced polls that a load without `overwrite` updates on its own: with more, none is touched
+MAX_UPDATES = 10
+# ... and, below that, never more than half of the polls of the cycle, with this floor for a cycle that starts
+MIN_UPDATES = 2
+# Columns of a poll that come from its row of the article and are compared with the database (`poll_changes`)
+POLL_FIELDS = ('start_date', 'sample_size', 'ctype')
 
 # Phases of `load_params`
 PARAMS_STEPS = ('read', 'derive', 'save')
@@ -119,6 +127,48 @@ def unmapped_reason(missing: dict[str, list[str]]) -> str:
     )
 
 
+def _is_null(value) -> bool:
+    """Whether a scalar is any of the nulls of Python, numpy or pandas."""
+    return value is None or bool(pd.isnull(value))
+
+
+def _day(value) -> Optional[str]:
+    """A date as ``YYYY-MM-DD``, or ``None`` for a null."""
+    return None if _is_null(value) else pd.Timestamp(value).strftime('%Y-%m-%d')
+
+
+def _text(value) -> Optional[str]:
+    """A name as a string, or ``None`` for a null or an empty one."""
+    return None if _is_null(value) or value == '' else str(value)
+
+
+def _whole(value) -> Optional[int]:
+    """A number as an integer, or ``None`` for a null."""
+    return None if _is_null(value) else int(value)
+
+
+def _share(value) -> Optional[float]:
+    """
+    A share rounded to two decimals as the database stores it (half up, on the decimal figure), or ``None`` for a
+    null. The six significant digits it starts from are those of a 32 bit real: 31.125 read is 31.13 stored, and
+    comparing it with the rounding of the binary float (31.12) would give a difference that no update removes.
+    """
+    if _is_null(value):
+        return None
+    return float(Decimal(format(float(value), '.6g')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+
+
+def _poll_label(row: dict) -> dict:
+    """The names and fieldwork of a poll row, as `new_poll_list` gives them."""
+    return {'pollster': _text(row['pollster']), 'sponsor': _text(row['sponsor']),
+            'start_date': _day(row['start_date']), 'end_date': _day(row['end_date'])}
+
+
+def _label_order(label: dict) -> tuple:
+    """Sort key of a poll label: last day of fieldwork, pollster and sponsor."""
+    return (label['end_date'] or '', label['pollster'] or '', label['sponsor'] or '')
+
+
 def new_poll_list(polls: Optional[pd.DataFrame]) -> list[dict]:
     """
     The polls of a frame as plain dicts, sorted by the last day of fieldwork and pollster.
@@ -137,15 +187,166 @@ def new_poll_list(polls: Optional[pd.DataFrame]) -> list[dict]:
     if polls is None or len(polls) == 0:
         return []
 
-    def day(value):
-        return None if pd.isnull(value) else pd.Timestamp(value).strftime('%Y-%m-%d')
+    return sorted((_poll_label(row) for row in polls.to_dict('records')), key=_label_order)
 
-    def name(value):
-        return None if pd.isnull(value) or value == '' else str(value)
 
-    rows = [{'pollster': name(row['pollster']), 'sponsor': name(row['sponsor']), 'start_date': day(row['start_date']),
-             'end_date': day(row['end_date'])} for row in polls.to_dict('records')]
-    return sorted(rows, key=lambda row: (row['end_date'] or '', row['pollster'] or '', row['sponsor'] or ''))
+def _poll_table(polls: Optional[pd.DataFrame], results: Optional[pd.DataFrame]) -> dict:
+    """
+    The polls of a frame by key, as plain values that compare the same whatever the dtypes of the frame.
+
+    Parameters
+    ----------
+    polls : DataFrame or None
+        Polls with the key, the names and the columns of `POLL_FIELDS`.
+    results : DataFrame or None
+        Their results with the key, ``party``, ``pct``, ``seats_min`` and ``seats_max``.
+
+    Returns
+    -------
+    dict
+        ``{key: {'label', 'fields', 'parties'}}`` in the order of the frame: the label of `new_poll_list`, the
+        `POLL_FIELDS` and ``{party: (pct, seats)}`` with ``pct`` rounded to two decimals and ``seats`` as
+        ``[min, max]`` or ``None``. Of a repeated key (or party of a poll) the first row is kept; a result
+        without a poll is ignored.
+    """
+    table = {}
+    if polls is None or len(polls) == 0:
+        return table
+
+    for row in polls.to_dict('records'):
+        fields = {'start_date': _day(row['start_date']), 'sample_size': _whole(row.get('sample_size')),
+                  'ctype': _text(row.get('ctype'))}
+        table.setdefault(poll_row_key(row), {'label': _poll_label(row), 'fields': fields, 'parties': {}})
+
+    for row in ([] if results is None else results.to_dict('records')):
+        poll = table.get(poll_row_key(row))
+        if poll is None:
+            continue
+        low, high = _whole(row.get('seats_min')), _whole(row.get('seats_max'))
+        pct = _share(row['pct'])
+        poll['parties'].setdefault(_text(row['party']), (pct, None if low is None and high is None else [low, high]))
+
+    return table
+
+
+def _poll_differences(read: dict, cur: dict) -> list[dict]:
+    """
+    The differences between a poll as read and as stored (two entries of `_poll_table`).
+
+    Returns
+    -------
+    list of dict
+        ``{'field', 'party', 'old', 'new'}``: first the `POLL_FIELDS` that differ, then party by party (those
+        read, then those only stored) ``party`` for one added or dropped (its share on the side that has it),
+        ``pct`` and ``seats``.
+    """
+    changes = [{'field': field, 'party': None, 'old': cur['fields'][field], 'new': read['fields'][field]}
+               for field in POLL_FIELDS if cur['fields'][field] != read['fields'][field]]
+
+    for party, (pct, seats) in read['parties'].items():
+        if party not in cur['parties']:
+            changes.append({'field': 'party', 'party': party, 'old': None, 'new': pct})
+            continue
+        old_pct, old_seats = cur['parties'][party]
+        if old_pct != pct:
+            changes.append({'field': 'pct', 'party': party, 'old': old_pct, 'new': pct})
+        if old_seats != seats:
+            changes.append({'field': 'seats', 'party': party, 'old': old_seats, 'new': seats})
+
+    for party, (pct, _) in cur['parties'].items():
+        if party not in read['parties']:
+            changes.append({'field': 'party', 'party': party, 'old': pct, 'new': None})
+
+    return changes
+
+
+def update_limit(n_polls: int) -> int:
+    """
+    Most changed and replaced polls that a load updates on its own in a cycle with ``n_polls`` in the database:
+    `MAX_UPDATES`, and never more than half of the cycle (at least `MIN_UPDATES`), so that an article read wrong
+    cannot rewrite a short cycle whole.
+
+    Parameters
+    ----------
+    n_polls : int
+        Polls of the event in the database.
+
+    Returns
+    -------
+    int
+        The limit; with more changes than it, the load updates none.
+    """
+    return min(MAX_UPDATES, max(MIN_UPDATES, n_polls // 2))
+
+
+def poll_changes(
+    read_polls: Optional[pd.DataFrame],
+    read_results: Optional[pd.DataFrame],
+    cur_polls: Optional[pd.DataFrame],
+    cur_results: Optional[pd.DataFrame],
+    removed: bool = True
+) -> dict:
+    """
+    Compare the polls read from the article with those of the database.
+
+    A poll is the same on both sides when it shares the key (last day of fieldwork, pollster and sponsor). Only
+    what comes from the article is compared: `POLL_FIELDS` of the poll and, party by party, the share (rounded
+    to two decimals) and the seats range; two nulls are equal and the dtypes of the frames do not matter.
+
+    Parameters
+    ----------
+    read_polls, read_results : DataFrame or None
+        Polls and results read (after the curated fixes), with the columns of `Polls` and `PollsResults`.
+    cur_polls, cur_results : DataFrame or None
+        Polls and results of the same event in the database.
+    removed : bool, default True
+        Report also the polls of the database that the article no longer has; ``False`` when the article was
+        read only in part (``years``).
+
+    Returns
+    -------
+    dict
+        ``changed``: the polls on both sides with some difference, each the dict of `new_poll_list` plus
+        ``changes`` (`_poll_differences`). ``replaced``: the new polls that take the place of one no longer in
+        the article, each with ``old`` (the label of that one): same pollster and either the same last day
+        (the sponsor changed) or the same sponsor and first day (the fieldwork got longer), only when the pair
+        is one to one. ``removed``: the other polls of the database missing from the article. The three lists
+        are sorted as `new_poll_list`; the last two are empty without ``removed``.
+        ``keys``: what an update has to touch, as keys of `loader.poll_row_key` in the order of their lists:
+        ``changed``, the polls to write again, and ``replaced``, the old polls to delete.
+    """
+    read, cur = _poll_table(read_polls, read_results), _poll_table(cur_polls, cur_results)
+
+    changed, keys = [], {}
+    for key, poll in read.items():
+        changes = _poll_differences(poll, cur[key]) if key in cur else []
+        if changes:
+            changed.append(poll['label'] | {'changes': changes})
+            keys[id(changed[-1])] = key
+
+    replaced, gone = [], []
+    if removed:
+        new_keys = [key for key in read if key not in cur]
+        gone_keys = [key for key in cur if key not in read]
+
+        def same_poll(new_key, gone_key):
+            start = read[new_key]['fields']['start_date']
+            return new_key[1] == gone_key[1] and (new_key[0] == gone_key[0] or (
+                new_key[2] == gone_key[2] and start is not None and start == cur[gone_key]['fields']['start_date']))
+
+        candidates = {gone_key: [key for key in new_keys if same_poll(key, gone_key)] for gone_key in gone_keys}
+        for gone_key in gone_keys:
+            found = candidates[gone_key]
+            if len(found) == 1 and sum(found[0] in others for others in candidates.values()) == 1:
+                replaced.append(read[found[0]]['label'] | {'old': cur[gone_key]['label']})
+                keys[id(replaced[-1])] = gone_key
+            else:
+                gone.append(cur[gone_key]['label'])
+
+    changed, replaced = sorted(changed, key=_label_order), sorted(replaced, key=_label_order)
+    return {'changed': changed, 'replaced': replaced, 'removed': sorted(gone, key=_label_order),
+            'keys': {'changed': [keys[id(poll)] for poll in changed],
+                     'replaced': [keys[id(poll)] for poll in replaced]}}
 
 
 def _names(loader, kind: str) -> dict[str, list[str]]:
@@ -178,7 +379,7 @@ def load_polls(
     event_date : str
         Date of the election (`YYYY-MM-DD`); it must have a polls article in `wp-urls.json`.
     overwrite : bool, default False
-        Replace the polls of the cycle instead of adding only the new ones.
+        Replace the polls of the cycle instead of adding only the new ones and updating those that changed.
     force : bool, default False
         Add the unknown pollsters and sponsors to the catalogues (a missing party always fails).
     years : list of str, optional
@@ -207,7 +408,14 @@ def load_polls(
         ``status`` (`loaded`, `checked` for a dry run or `failed`), ``action`` (`polls`), ``event_date``,
         ``n_read`` (polls in the article), ``n_saved`` (polls selected), ``new`` (the polls read that the
         database did not have, `new_poll_list`: the ones saved, or that would be, with or without ``overwrite``),
-        ``overwrite``, ``missing`` and ``skipped`` (names by class), ``added`` (pollsters and sponsors added, or that `force` would add in a dry run),
+        ``changed``, ``replaced`` and ``removed`` (the polls of the database that the article gives differently,
+        that a new one replaces or that it no longer has, `poll_changes`; the last two always empty with
+        ``years``; the three empty if the comparison fails, with a warning),
+        ``updated`` (whether the changed and replaced polls were written: with ``save``, by the ``overwrite`` or,
+        without it, because they were at most `update_limit`; the changed ones are then deleted and saved again
+        with the new ones, counted in ``n_saved``, and the replaced ones deleted; the removed ones never are),
+        ``overwrite``, ``missing`` and ``skipped`` (names by class), ``added`` (pollsters and sponsors added, or
+        that `force` would add in a dry run),
         ``seconds`` (per phase and ``total``) and, when failed, ``reason``.
 
     Raises
@@ -224,6 +432,7 @@ def load_polls(
     seconds, start = {}, time.perf_counter()
     result = {
         'status': 'loaded', 'action': 'polls', 'event_date': event_date, 'n_read': 0, 'n_saved': 0, 'new': [],
+        'changed': [], 'replaced': [], 'removed': [], 'updated': False,
         'overwrite': overwrite, 'missing': {cls: [] for cls in NAME_CLASSES},
         'skipped': {cls: [] for cls in NAME_CLASSES}, 'added': {'pollsters': [], 'sponsors': []}, 'seconds': seconds
     }
@@ -295,9 +504,34 @@ def load_polls(
 
     def select_and_save():
         wiki.select_series(overwrite)
-        result['n_saved'] = len(wiki.polls)
         result['new'] = new_poll_list(wiki.new_polls)
+        # The comparison only informs: a failure there, or reading the results it needs from the database, must
+        # not fail the load (and then nothing is updated)
+        keys = {'changed': [], 'replaced': []}
+        try:
+            changes = poll_changes(wiki.read_polls, wiki.read_results, wiki.cur_polls, wiki.fetch_cur_results(),
+                                   removed=not years)
+            keys = changes.pop('keys')
+            result.update(changes)
+        except Exception as e:
+            warnings.warn('poll changes failed: {}: {}'.format(type(e).__name__, e))
+
+        # The polls that changed are written again and those replaced are deleted, unless there are too many
+        # (an article or a parser gone wrong, not polls being completed). An overwrite rewrites them all anyway
+        n_updates = len(keys['changed']) + len(keys['replaced'])
+        limit = update_limit(0 if wiki.cur_polls is None else len(wiki.cur_polls))
+        update = not overwrite and 0 < n_updates <= limit
+        if not overwrite and n_updates > limit:
+            warnings.warn('{} changed polls not updated (more than {}): check the article or load with '
+                          'overwrite'.format(n_updates, limit))
+        if update:
+            wiki.select_changed(keys['changed'])
+        result['n_saved'] = len(wiki.polls)
+        result['updated'] = save and n_updates > 0 and (overwrite or update)
+
         if save:
+            if update:
+                wiki.delete_polls(keys['changed'] + keys['replaced'])
             wiki.save_polls(overwrite)
             wiki.save_results(overwrite)
             # The checks query the database: a failure there must not fail a save already done nor skip the weights

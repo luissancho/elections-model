@@ -3,8 +3,10 @@ import pytest
 
 from mtpy.lib.load import NO_EVENTS
 from mtpy.pipelines.load.Params import Params
-from mtpy.pipelines.load.Polls import Polls, poll_line
-from tests.test_load_unit import FakeCatalogues, FakeComputer, FakeLoader
+from mtpy.pipelines.load.Polls import MAX_CHANGES, MAX_POLLS, Polls, change_text, changed_line, poll_line, removed_line, replaced_line
+from tests.test_load_unit import (
+    POLL_40DB, POLL_SIGMA, RES_40DB, RES_SIGMA, FakeCatalogues, FakeComputer, FakeLoader, poll_frame, result_frame
+)
 
 EVENTS = {'es': '2026-11-29', 'es-md': '2027-05-23'}
 
@@ -79,6 +81,94 @@ def test_poll_line_without_sponsor_or_with_one_day_of_fieldwork():
                             'end_date': '2026-11-03'}) == 'es: + CIS, 2026-11-03'
     assert poll_line('es', {'pollster': '40dB', 'sponsor': 'El País', 'start_date': None,
                             'end_date': '2026-11-12'}) == 'es: + 40dB / El País, 2026-11-12'
+
+
+def test_change_text_formats():
+    assert change_text({'field': 'sample_size', 'party': None, 'old': None, 'new': 2000}) == 'muestra — → 2000'
+    assert change_text({'field': 'start_date', 'party': None, 'old': '2026-11-10', 'new': '2026-11-09'}) \
+        == 'inicio 2026-11-10 → 2026-11-09'
+    assert change_text({'field': 'ctype', 'party': None, 'old': None, 'new': 'exit'}) == 'tipo — → exit'
+    assert change_text({'field': 'party', 'party': 'SALF', 'old': None, 'new': 1.8}) == '+ SALF 1,8'
+    assert change_text({'field': 'party', 'party': 'UP', 'old': 1.3, 'new': None}) == '- UP'
+    assert change_text({'field': 'pct', 'party': 'PP', 'old': 31.0, 'new': 31.4}) == 'PP 31 → 31,4'
+    assert change_text({'field': 'pct', 'party': 'AA', 'old': 1.85, 'new': None}) == 'AA 1,85 → —'
+    assert change_text({'field': 'seats', 'party': 'PP', 'old': None, 'new': [125, 136]}) == 'PP escaños — → 125–136'
+    assert change_text({'field': 'seats', 'party': 'CC', 'old': [1, 1], 'new': [0, 1]}) == 'CC escaños 1 → 0–1'
+    assert change_text({'field': 'seats', 'party': 'CC', 'old': [None, 2], 'new': [1, None]}) == 'CC escaños —–2 → 1–—'
+
+
+def test_changed_replaced_and_removed_lines():
+    poll = {'pollster': '40dB', 'sponsor': 'Prisa', 'start_date': '2026-11-10', 'end_date': '2026-11-14'}
+    assert changed_line('es', poll | {'changes': [
+        {'field': 'sample_size', 'party': None, 'old': None, 'new': 2000},
+        {'field': 'party', 'party': 'SALF', 'old': None, 'new': 1.8}]}) \
+        == 'es: ~ 40dB / Prisa, 2026-11-10 → 2026-11-14: muestra — → 2000; + SALF 1,8'
+    assert removed_line('es', poll) == 'es: - 40dB / Prisa, 2026-11-10 → 2026-11-14'
+    assert replaced_line('es', poll | {'old': poll | {'end_date': '2026-11-12'}}) \
+        == 'es: + 40dB / Prisa, 2026-11-10 → 2026-11-14 (sustituye a 2026-11-10 → 2026-11-12)'
+    assert replaced_line('es', poll | {'old': poll | {'sponsor': 'El País'}}) \
+        == 'es: + 40dB / Prisa, 2026-11-10 → 2026-11-14 (sustituye a 40dB / El País, 2026-11-10 → 2026-11-14)'
+
+
+def test_changed_line_caps_the_differences_of_a_poll():
+    poll = {'pollster': '40dB', 'sponsor': 'Prisa', 'start_date': '2026-11-10', 'end_date': '2026-11-14'}
+    changes = [{'field': 'party', 'party': 'P{}'.format(i), 'old': 1.0, 'new': None} for i in range(MAX_CHANGES + 3)]
+    line = changed_line('es', poll | {'changes': changes})
+    assert line.endswith('- P{}; … y 3 más'.format(MAX_CHANGES - 1)) and line.count(';') == MAX_CHANGES
+    assert '…' not in changed_line('es', poll | {'changes': changes[:MAX_CHANGES]})
+
+
+def test_polls_line_of_caps_the_changed_and_removed_polls(fresh_app, events):
+    p = polls('es', loader=FakeLoader(new_polls=0))
+    many = [{'pollster': 'Casa {:02d}'.format(i), 'sponsor': None, 'start_date': None, 'end_date': '2026-11-01',
+             'changes': [{'field': 'sample_size', 'party': None, 'old': None, 'new': 1000}]}
+            for i in range(MAX_POLLS + 2)]
+    lines = p.line_of('es', p.result | {'changed': many, 'removed': many[:MAX_POLLS]})
+    assert lines[0].endswith(' · {} changed, {} removed'.format(MAX_POLLS + 2, MAX_POLLS))
+    changed = [line for line in lines if line.startswith('es: ~ ')]
+    assert len(changed) == MAX_POLLS + 1 and changed[-1] == 'es: ~ … y 2 sondeos más'
+    assert len([line for line in lines if line.startswith('es: - ')]) == MAX_POLLS and '… y' not in lines[-1]
+
+
+def changes_loader():
+    """Un 40dB que cambia de medio (nuevo y sustituto), un Sigma Dos sin muestra en la base y un Hamalgama retirado."""
+    old_40db = [(15, 2, '2026-11-14', party, pct, low, high) for _, _, _, party, pct, low, high in RES_40DB]
+    read, read_results = poll_frame([POLL_40DB, POLL_SIGMA]), result_frame(RES_40DB + RES_SIGMA)
+    cur = poll_frame([(15, 2, '2026-11-10', '2026-11-14', 2000, None), (3, 3, '2026-11-03', '2026-11-13', None, None),
+                      (40, 4, '2026-10-20', '2026-10-22', 1000, None)])
+    cur_results = result_frame(old_40db + RES_SIGMA + [(40, 4, '2026-10-22', 'PP', 33.0, None, None)])
+    return FakeLoader(new_polls=poll_frame([POLL_40DB]), changes=(read, read_results, cur, cur_results))
+
+
+def test_polls_lists_changes_below_the_line_and_counts_them(fresh_app, events):
+    p = polls('es', loader=changes_loader())
+    assert p.line == [
+        'es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s · 1 updated, 1 removed',
+        'es: + 40dB / Prisa, 2026-11-10 → 2026-11-14 (sustituye a 40dB / El País, 2026-11-10 → 2026-11-14)',
+        'es: ~ Sigma Dos / El Mundo, 2026-11-03 → 2026-11-13: muestra — → 5370',
+        'es: - Hamalgama / OKdiario, 2026-10-20 → 2026-10-22']
+
+
+def test_polls_lists_changes_without_new_polls(fresh_app, events):
+    loader = changes_loader()
+    loader.new_polls = 0
+    p = polls('es', loader=loader)
+    assert p.line[0] == 'es: polls loaded (5 read, 1 saved, 2026-11-29) in 0 s · 1 updated, 1 removed'
+    assert [line.split(' ')[1] for line in p.line[1:]] == ['+', '~', '-']
+
+
+def test_polls_dry_run_says_changed_and_overwrite_says_updated(fresh_app, events):
+    p = polls('es', loader=changes_loader(), dry_run=True)
+    # Uno nuevo y uno cambiado: se guardarían dos, pero nuevo sólo es uno
+    assert p.line[0] == 'es: polls checked (5 read, 1 new, 2026-11-29, dry run) in 0 s · 1 changed, 1 removed'
+    p = polls('es', action='rebulk', loader=changes_loader())
+    assert p.line[0] == 'es: polls loaded (5 read, 5 saved, 2026-11-29, overwrite) in 0 s · 1 updated, 1 removed'
+
+
+def test_polls_line_of_tolerates_a_result_without_change_lists(fresh_app, events):
+    p = polls('es')
+    result = {key: value for key, value in p.result.items() if key not in ('changed', 'replaced', 'removed')}
+    assert p.line_of('es', result) == p.line
 
 
 def test_polls_rebulk_overwrites_and_flags_the_header(fresh_app, events, capsys):

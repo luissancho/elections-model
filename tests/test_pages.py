@@ -1,6 +1,7 @@
 """Tests de las páginas servidas por los controladores (`Page`, `Index`, `Promedios`, `Redirect`, `Casas`...) con el
 arnés ASGI."""
 import copy
+import hashlib
 import json
 import os
 import re
@@ -420,6 +421,41 @@ def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fre
     status, headers, body = call(api, '/es')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.dev/es">' in html(body)
     assert '<meta property="og:url" content="https://demoscopio.dev/es">' in html(body)
+
+
+def test_pages_carry_the_share_image_and_the_large_card(api, fresh_app):
+    """Toda página declara la imagen de marca de los enlaces compartidos (`og:image` absoluta según `web.site_url`,
+    con la versión del fichero, su tamaño y su texto alternativo) y la tarjeta grande de X; la de error, no."""
+    status, headers, body = call(api, '/es')
+    page = html(body)
+    image = re.search(r'<meta property="og:image" content="([^"]+)">', page).group(1)
+    with open(os.path.join(ROOT, 'web', 'dist', 'img', 'og-image.png'), 'rb') as file:
+        version = hashlib.md5(file.read()).hexdigest()[:8]
+    assert status == 200 and image == 'https://demoscopio.es/dist/img/og-image.png?v=' + version
+    assert '<meta property="og:image:type" content="image/png">' in page
+    assert '<meta property="og:image:width" content="1200">' in page
+    assert '<meta property="og:image:height" content="675">' in page
+    assert ('<meta property="og:image:alt" content="Demoscopio: promedio de encuestas, previsión de escaños y ranking '
+            'de encuestadoras">') in page
+    assert '<meta name="twitter:card" content="summary_large_image">' in page and 'content="summary"' not in page
+    for path, query in (('/', ''), ('/metodo', 'scope=es')):
+        assert '<meta property="og:image" content="{}">'.format(image) in html(call(api, path, query=query)[2])
+    assert 'og:image' not in html(call(api, '/nope')[2])
+    from mtpy.core.app import Config
+    fresh_app.set('config', Config({'web': {'site_url': 'https://demoscopio.dev/'}}))
+    assert ('<meta property="og:image" content="https://demoscopio.dev/dist/img/og-image.png?v={}">'.format(version)
+            in html(call(api, '/es')[2]))
+
+
+def test_share_image_url_without_the_file_has_no_version(api, monkeypatch, tmp_path):
+    """Sin el fichero de la imagen (un despliegue incompleto) las páginas no fallan: la URL sale sin versión."""
+    monkeypatch.setattr(pages.common, 'OG_IMAGE_PATH', str(tmp_path / 'missing.png'))
+    pages.og_image_version.cache_clear()
+    try:
+        assert pages.og_image_url() == 'https://demoscopio.es/dist/img/og-image.png'
+        assert call(api, '/es')[0] == 200
+    finally:
+        pages.og_image_version.cache_clear()
 
 
 def test_error_page_carries_the_brand_and_the_default_description(api):
@@ -2039,8 +2075,10 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters',
-                     'herd', 'inicio', 'lean', 'metodo', 'promedios', 'seat_charts', 'seat_odds', 'shy', 'slugs', 'sondeos']
+    assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common',
+                     'crawlers', 'elecciones', 'escanos', 'filters',
+                     'herd', 'inicio', 'lean', 'metodo', 'privacidad', 'promedios', 'seat_charts', 'seat_odds', 'shy', 'slugs',
+                     'sondeos']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'

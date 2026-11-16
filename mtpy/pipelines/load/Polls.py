@@ -13,7 +13,8 @@ class Polls(ScopePipeline):
     """
     Load the Wikipedia polls of the next election of a scope (`load.load_polls`).
 
-    Actions: ``update`` saves only the new polls; ``rebulk`` replaces the whole cycle (overwrite). The chunk is the
+    Actions: ``update`` saves the new polls and writes again those that changed in the article; ``rebulk`` replaces
+    the whole cycle (overwrite). The chunk is the
     scope; every outcome is a result dict (see `load_task`) and a failure never raises.
     """
 
@@ -104,7 +105,12 @@ class Polls(ScopePipeline):
     def line_of(self, chunk, result, **kwargs):
         """
         Format the summary line of one scope result, with the count of its warnings, followed by one line per new
-        poll (the polls read that the database did not have: saved or, in a dry run, to save).
+        poll (the polls read that the database did not have: saved or, in a dry run, to save; `replaced_line` for
+        one that takes the place of a poll of the database), per poll that the article gives differently
+        (`changed_line`) and per poll that it no longer has (`removed_line`). The summary line counts the last two
+        (``· 1 updated, 1 removed``; ``changed`` when the load has not written them: a dry run, or too many
+        changes) and only the first `MAX_POLLS` of each have their line, followed by
+        ``es: ~ … y 3 sondeos más``.
         """
         if result['status'] in ('failed', 'skipped'):
             return '{}: polls {} ({})'.format(chunk, result['status'], result['reason']) + notes_suffix(result)
@@ -118,19 +124,87 @@ class Polls(ScopePipeline):
                 ', overwrite' if result['overwrite'] else '', seconds)
             verb = 'added'
         else:
+            # Without overwrite, `n_saved` also counts the changed polls that would be written again
+            n_new = result['n_saved'] if result['overwrite'] else len(result.get('new') or [])
             line = '{}: polls checked ({} read, {} new, {}{}, dry run) in {:.0f} s'.format(
-                chunk, result['n_read'], result['n_saved'], result['event_date'],
+                chunk, result['n_read'], n_new, result['event_date'],
                 ', overwrite' if result['overwrite'] else '', seconds)
             verb = 'to add'
         nouns = [counted(n, one, many) + ' ' + verb for n, one, many in
                  ((pollsters, 'pollster', 'pollsters'), (sponsors, 'sponsor', 'sponsors')) if n]
+        changed, removed = result.get('changed') or [], result.get('removed') or []
+        # `updated` when the load has written the changed polls again, `changed` when they are only reported
+        change_noun = 'updated' if result.get('updated') else 'changed'
+        nouns += ['{} {}'.format(len(polls), noun) for polls, noun in ((changed, change_noun), (removed, 'removed'))
+                  if polls]
         if nouns:
             line += ' · ' + ', '.join(nouns)
         line += notes_suffix(result)
-        polls = result.get('new') or []
-        if not polls:
+
+        # A new poll that replaces one of the database is listed once, with the poll it replaces
+        replaced = {poll_label(poll): poll for poll in result.get('replaced') or []}
+        lines = []
+        for poll in result.get('new') or []:
+            substitute = replaced.pop(poll_label(poll), None)
+            lines.append(poll_line(chunk, poll) if substitute is None else replaced_line(chunk, substitute))
+        lines += [replaced_line(chunk, poll) for poll in replaced.values()]
+        # The alert is short: beyond `MAX_POLLS` of each kind only the count is given
+        for polls, mark, liner in ((changed, '~', changed_line), (removed, '-', removed_line)):
+            lines += [liner(chunk, poll) for poll in polls[:MAX_POLLS]]
+            if len(polls) > MAX_POLLS:
+                lines.append('{}: {} … y {} sondeos más'.format(chunk, mark, len(polls) - MAX_POLLS))
+        if not lines:
             return line
-        return [line] + [poll_line(chunk, poll) for poll in polls]
+        return [line] + lines
+
+
+# Names of the poll fields in the detail of a changed poll (`change_text`)
+FIELD_NAMES = {'start_date': 'inicio', 'sample_size': 'muestra', 'ctype': 'tipo'}
+# How a missing value is written in the detail of a changed poll
+NULL = '—'
+# Most differences written in the line of a changed poll and most changed (or removed) polls listed for a scope:
+# the rest are only counted, so the lines of the load do not fill the alert
+MAX_CHANGES = 6
+MAX_POLLS = 10
+
+
+def poll_dates(poll):
+    """
+    Fieldwork of a poll: ``'2026-11-10 → 2026-11-12'``, or one date when both are the same day or the start is
+    unknown.
+
+    Parameters
+    ----------
+    poll : dict
+        With ``start_date`` and ``end_date`` (``YYYY-MM-DD`` or ``None``).
+
+    Returns
+    -------
+    str
+        The dates.
+    """
+    start, end = poll['start_date'], poll['end_date']
+    return end if not start or start == end else '{} → {}'.format(start, end or '?')
+
+
+def poll_label(poll):
+    """
+    Name of a poll in the lines of the load: ``'40dB / El País, 2026-11-10 → 2026-11-12'``.
+
+    Parameters
+    ----------
+    poll : dict
+        ``pollster``, ``sponsor`` (``None`` without one), ``start_date`` and ``end_date`` (`load.new_poll_list`).
+
+    Returns
+    -------
+    str
+        The pollster, the sponsor after ``/`` when there is one and the fieldwork dates (`poll_dates`).
+    """
+    name = poll['pollster'] or '?'
+    if poll['sponsor']:
+        name += ' / ' + poll['sponsor']
+    return '{}, {}'.format(name, poll_dates(poll))
 
 
 def poll_line(scope, poll):
@@ -147,12 +221,114 @@ def poll_line(scope, poll):
     Returns
     -------
     str
-        The pollster, the sponsor after ``/`` when there is one and the fieldwork dates (one when they are the
-        same day or the start is unknown).
+        The scope, ``+`` and the label of the poll (`poll_label`).
     """
-    name = poll['pollster'] or '?'
-    if poll['sponsor']:
-        name += ' / ' + poll['sponsor']
-    start, end = poll['start_date'], poll['end_date']
-    dates = end if not start or start == end else '{} → {}'.format(start, end or '?')
-    return '{}: + {}, {}'.format(scope, name, dates)
+    return '{}: + {}'.format(scope, poll_label(poll))
+
+
+def replaced_line(scope, poll):
+    """
+    Line of a new poll that takes the place of one of the database:
+    ``'es: + 40dB / Prisa, 2026-11-10 → 2026-11-14 (sustituye a 2026-11-10 → 2026-11-12)'``.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the poll.
+    poll : dict
+        A poll of `load.poll_changes` ``replaced``: the new poll with ``old``, the one it replaces.
+
+    Returns
+    -------
+    str
+        The line of the new poll and, in brackets, the fieldwork of the old one, or its whole label when the
+        pollster or the sponsor are not the same.
+    """
+    old = poll['old']
+    same_names = (old['pollster'], old['sponsor']) == (poll['pollster'], poll['sponsor'])
+    return '{} (sustituye a {})'.format(poll_line(scope, poll), poll_dates(old) if same_names else poll_label(old))
+
+
+def removed_line(scope, poll):
+    """
+    Line of a poll of the database that the article no longer has: ``'es: - 40dB / Prisa, 2026-11-10 → 2026-11-14'``.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the poll.
+    poll : dict
+        A poll of `load.poll_changes` ``removed``.
+
+    Returns
+    -------
+    str
+        The scope, ``-`` and the label of the poll.
+    """
+    return '{}: - {}'.format(scope, poll_label(poll))
+
+
+def changed_line(scope, poll):
+    """
+    Line of a poll that the article gives differently from the database:
+    ``'es: ~ 40dB / Prisa, 2026-11-10 → 2026-11-14: muestra — → 2000; + SALF 1,8'``.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the poll.
+    poll : dict
+        A poll of `load.poll_changes` ``changed``, with its ``changes``.
+
+    Returns
+    -------
+    str
+        The scope, ``~``, the label of the poll and its differences (`change_text`) separated by ``; ``: the
+        first `MAX_CHANGES` and, if there are more, ``… y 3 más``.
+    """
+    details = [change_text(change) for change in poll['changes'][:MAX_CHANGES]]
+    if len(poll['changes']) > MAX_CHANGES:
+        details.append('… y {} más'.format(len(poll['changes']) - MAX_CHANGES))
+    return '{}: ~ {}: {}'.format(scope, poll_label(poll), '; '.join(details))
+
+
+def share_text(value):
+    """A share with a decimal comma and no trailing zeros (``31``, ``31,4``, ``1,85``), or `NULL`."""
+    if value is None:
+        return NULL
+    return '{:.2f}'.format(value).rstrip('0').rstrip('.').replace('.', ',')
+
+
+def seats_text(seats):
+    """A seats range ``[min, max]`` as ``125–136``, one number when both are the same, or `NULL`."""
+    if seats is None:
+        return NULL
+    low, high = (NULL if value is None else str(value) for value in seats)
+    return low if low == high else '{}–{}'.format(low, high)
+
+
+def change_text(change):
+    """
+    One difference of a changed poll, as it is written in its line.
+
+    Parameters
+    ----------
+    change : dict
+        ``field``, ``party``, ``old`` and ``new`` (`load.poll_changes`).
+
+    Returns
+    -------
+    str
+        ``muestra a → b``, ``inicio a → b`` or ``tipo a → b`` for a field of the poll; ``+ PARTY 1,8`` for a party
+        added and ``- PARTY`` for one dropped; ``PARTY 31 → 31,4`` for a share and ``PARTY escaños a → b`` for the
+        seats. A missing value is `NULL`.
+    """
+    field, party, old, new = change['field'], change['party'], change['old'], change['new']
+    if field == 'party':
+        return '- {}'.format(party) if new is None else '+ {} {}'.format(party, share_text(new))
+    if field == 'pct':
+        return '{} {} → {}'.format(party, share_text(old), share_text(new))
+    if field == 'seats':
+        return '{} escaños {} → {}'.format(party, seats_text(old), seats_text(new))
+    old, new = (NULL if value is None else value for value in (old, new))
+    return '{} {} → {}'.format(FIELD_NAMES.get(field, field), old, new)

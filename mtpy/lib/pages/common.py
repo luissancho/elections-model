@@ -1,9 +1,11 @@
 """
 Common parts of the web pages: routes, messages, the Jinja2 environment and the shared context.
 """
+import hashlib
 import os
 import re
 from datetime import date, datetime
+from functools import lru_cache
 from typing import Optional
 from urllib.parse import urlencode, urlsplit
 
@@ -22,6 +24,10 @@ TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
 SITE_TITLE = 'Demoscopio'
 # Under the wordmark in the header, and the default description of the pages
 SITE_TAGLINE = 'Promedio de encuestas, previsión de escaños y ranking de encuestadoras'
+# The image of the link previews (``og:image``), one for the whole site: built by ``web/brand/build.py`` and
+# served by nginx under ``/dist/img``
+OG_IMAGE = 'og-image.png'
+OG_IMAGE_PATH = os.path.join(REPO_ROOT, 'web', 'dist', 'img', OG_IMAGE)
 # The author, linked from the footer next to the model attribution
 AUTHOR_HANDLE = '@luis_sancho'
 AUTHOR_URL = 'https://x.com/luis_sancho'
@@ -79,6 +85,10 @@ ROUTES = [
     ('/analisis', 'analisis', 'index', ['GET']),
     # the default alias (``[0-9a-z_\-]+``): ``:str`` is only ``[a-z]+`` and the slugs have hyphens (``voto-cera``)
     ('/analisis/{study}', 'analisis', 'study', ['GET']),
+    # the files for the crawlers; the dot is escaped because the patterns are regular expressions
+    (r'/robots\.txt', 'crawlers', 'robots', ['GET']),
+    (r'/sitemap\.xml', 'crawlers', 'sitemap', ['GET']),
+    ('/privacidad', 'privacidad', 'index', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
     # the old seats page of a scope (before 2026-11-04): a 301 to its section of the event page
     ('/{scope}/escanos', 'redirect', 'seats', ['GET']),
@@ -153,6 +163,39 @@ def ink_color(color: Optional[str]) -> str:
     luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
 
     return DARK_INK if luminance > 0.5 else LIGHT_INK
+
+
+@lru_cache(maxsize=1)
+def og_image_version() -> str:
+    """
+    Version of the image of the link previews, read once per process.
+
+    Returns
+    -------
+    str
+        The first 8 hex digits of the MD5 of ``OG_IMAGE_PATH``, or ``''`` when the file is missing (an incomplete
+        deploy must not break the pages).
+    """
+    try:
+        with open(OG_IMAGE_PATH, 'rb') as file:
+            return hashlib.md5(file.read()).hexdigest()[:8]
+    except OSError:
+        return ''
+
+
+def og_image_url() -> str:
+    """
+    Absolute URL of the image of the link previews, for ``og:image``.
+
+    Returns
+    -------
+    str
+        ``'<site_url>/dist/img/og-image.png?v=<version>'``: the version (``og_image_version``) changes with the
+        file, so the networks that keep the image by its URL ask for the new one. Without the file, no ``?v=``.
+    """
+    version = og_image_version()
+
+    return '{}/dist/img/{}{}'.format(settings()['site_url'], OG_IMAGE, '?v=' + version if version else '')
 
 
 def environment() -> Environment:

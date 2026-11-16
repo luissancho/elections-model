@@ -3,5 +3,5 @@
   {% for key in ['polls', 'results', 'model'] if manifest.attribution.get(key) %}
   <p>{{ manifest.attribution[key] }}{% if key == 'model' %} (<a href="{{ author_url }}" rel="me">{{ author_handle }}</a>){% endif %}</p>
   {% endfor %}
-  <p><a href="/metodo">Método</a> · <a href="/api/v1/manifest">Manifiesto de datos</a></p>
+  <p><a href="/metodo">Método</a> · <a href="/api/v1/manifest">Manifiesto de datos</a> · <a href="/privacidad">Privacidad y cookies</a></p>
 </footer>

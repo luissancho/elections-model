@@ -750,6 +750,36 @@ ol.notes > li:target { color: var(--color-text); }
 #site-footer a { font-weight: 600; text-decoration: none; }
 #site-footer a:hover { text-decoration: underline; }
 
+/* Cookie notice (`_consent.html`): a card fixed to the bottom of the window, over everything, until the reader
+   chooses; its two buttons weigh the same. On phones it sits above the tab bar. The privacy page reuses the
+   row of buttons. */
+.consent {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  left: var(--space-4);
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-4) 20px;
+  background: var(--color-card);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-up);
+  font-size: 13.5px;
+}
+.consent[hidden] { display: none; }
+.consent p { flex: 1 1 320px; margin: 0; }
+.consent-actions { display: flex; gap: var(--space-2); }
+.consent-actions button { min-width: 104px; min-height: 40px; justify-content: center; }
+/* While the notice is up the footer leaves room for it, so that it never hides the last lines of the page */
+body:has(.consent:not([hidden])) #site-footer { padding-bottom: 130px; }
+
 /* Promedios, "Todas las encuestas": control bar, dropdowns of chips, the table `.et` and its pages */
 .ctrl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); font-size: 13px; }
 .ctrl-bar[hidden] { display: none; }
@@ -1408,6 +1438,10 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   .bar-end { margin-left: 0; width: 100%; }
   .filters-bar label { width: 100%; }
   #site-footer { padding-bottom: 24px; }
+  .consent { bottom: calc(68px + env(safe-area-inset-bottom)); }
+  body:has(.consent:not([hidden])) #site-footer { padding-bottom: 200px; }
+  .consent-actions { width: 100%; }
+  .consent-actions button { flex: 1; min-height: var(--tap); }
 }
 
 /* No motion for those who ask: nothing animates on entry; ECharts reads the same query (charts/base.js) */

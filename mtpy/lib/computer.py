@@ -1226,10 +1226,11 @@ class Computer(Core):
         # We need to fix the sample size of the polls that didn't report it
         df['sample_size'] = df['sample_size'].where(df['sample_size'] > 0, np.nan)
         # First, we compute the median sample size of the polls published by the same pollster for the same event
-        msizes_loc = df.groupby(['event_date', 'pollster'])['sample_size'].median().dropna()
+        # (`pollster` is a category in the real series: only the pollsters with polls are grouped, `observed`)
+        msizes_loc = df.groupby(['event_date', 'pollster'], observed=True)['sample_size'].median().dropna()
         # If there are no polls published by the same pollster for the same event, we compute the median sample size
         # of the polls published by the same pollster for any event
-        msizes_tot = df.groupby('pollster')['sample_size'].median().dropna()
+        msizes_tot = df.groupby('pollster', observed=True)['sample_size'].median().dropna()
         # Finally, if there are no polls published by the same pollster, we compute the median sample size of all polls
         msizes_all = df.loc[~df['mtype'].isin(drop_mtypes)]['sample_size'].median()
 
@@ -1278,6 +1279,33 @@ class Computer(Core):
         df['weight_over'] = df[keys].merge(weight_over, on=keys, how='left')['weight_over'].to_numpy()
 
         return df[['proc_sample', 'weight_sample', 'weight_over']]
+
+    @staticmethod
+    def weighted_mean(values: pd.Series, weights: pd.Series) -> float:
+        """
+        Weighted mean of the values that are not null, or null when there is none.
+
+        A poll of an election without official result has no error to average: asking `Stat` for the mean of
+        nothing divides 0 by 0 in its effective sample size and warns on every compute.
+
+        Parameters
+        ----------
+        values : pd.Series
+            Values to average; the null ones do not count.
+        weights : pd.Series
+            Weight of each value, with the index of `values`.
+
+        Returns
+        -------
+        float
+            The weighted mean, or `np.nan` when every value is null.
+        """
+        values = values.dropna()
+
+        if values.empty:
+            return np.nan
+
+        return Stat(values, weights=weights.loc[values.index]).mean()
 
     def compute_errors(
         self,
@@ -1368,19 +1396,16 @@ class Computer(Core):
         if self.verbose > 0:
             print('Build aggregated biases...')
 
-        error_avg = errors_pct_main.apply(lambda x: Stat(
-            x['error'].dropna().abs(),
-            weights=x['event'].loc[x['error'].dropna().index]
-        ).mean(), axis=1).rename('error_avg')
+        error_avg = errors_pct_main.apply(
+            lambda x: self.weighted_mean(x['error'].abs(), x['event']), axis=1
+        ).rename('error_avg')
         error_blocks = errors_gap_vs['error', 'gap'].rename('error_blocks')
-        bias_avg = errors_lor_main.apply(lambda x: Stat(
-            x['error'].dropna().abs(),
-            weights=x['event'].loc[x['error'].dropna().index]
-        ).mean(), axis=1).rename('bias_avg')
-        bias_blocks = errors_lor_vs.apply(lambda x: Stat(
-            x['error'].dropna().abs(),
-            weights=x['event'].loc[x['error'].dropna().index]
-        ).mean(), axis=1).rename('bias_blocks')
+        bias_avg = errors_lor_main.apply(
+            lambda x: self.weighted_mean(x['error'].abs(), x['event']), axis=1
+        ).rename('bias_avg')
+        bias_blocks = errors_lor_vs.apply(
+            lambda x: self.weighted_mean(x['error'].abs(), x['event']), axis=1
+        ).rename('bias_blocks')
 
         # Bias in the split of each `vs` block between its parties (log-odds, see `within_block_bias`), so
         # that a poll that gets the blocks right but swaps votes between allies is told apart
@@ -1396,7 +1421,7 @@ class Computer(Core):
             print('Set computed biases...')
 
         bias_weights = pd.Series(self.error_weights).add_prefix('bias_')
-        dp['bias'] = dp[bias_weights.index].apply(lambda x: Stat(x, weights=bias_weights).mean(), axis=1)
+        dp['bias'] = dp[bias_weights.index].apply(lambda x: self.weighted_mean(x, bias_weights), axis=1)
 
         if self.verbose > 0:
             print('Process data...')

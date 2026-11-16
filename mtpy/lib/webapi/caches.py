@@ -1,4 +1,5 @@
 """Small in-process caches of the web API (TTL and LRU) and the ``web`` settings that size them."""
+import re
 import time
 import warnings
 from collections import OrderedDict
@@ -12,6 +13,8 @@ DEFAULT_TTL = 60
 # Public origin of the site (``WEB_SITE_URL``: demoscopio.es in production, the local host in development),
 # for the canonical links of the pages
 DEFAULT_SITE_URL = 'https://demoscopio.es'
+# Id of a Google Tag Manager container (``WEB_GTM_ID``): the only thing that may reach the notice of the pages
+GTM_ID_RE = re.compile(r'GTM-[A-Z0-9]+')
 LRU_SIZE = 200
 
 
@@ -22,16 +25,19 @@ def settings() -> dict:
     Returns
     -------
     dict
-        ``{'prefix': str, 'cache_ttl': float, 'site_url': str}``. Missing or empty values fall back
+        ``{'prefix': str, 'cache_ttl': float, 'site_url': str, 'gtm_id': str}``. Missing or empty values fall back
         to ``bundle.PREFIX``, ``DEFAULT_TTL`` and ``DEFAULT_SITE_URL``; a ``cache_ttl`` that is not a
         number also falls back, with a warning. ``site_url`` (the public origin of the site, for
-        the canonical links) loses its trailing slash.
+        the canonical links) loses its trailing slash. ``gtm_id`` is the Google Tag Manager container that
+        measures the visits (``GTM-…``, without the spaces around it): empty when missing, which turns the
+        measurement off, and also, with a warning, when it is not a container id.
     """
     config = getattr(App.get_(), 'config', None)
     web = getattr(config, 'web', None) if config is not None else None
     prefix = getattr(web, 'prefix', None)
     ttl = getattr(web, 'cache_ttl', None)
     site_url = getattr(web, 'site_url', None)
+    gtm_id = str(getattr(web, 'gtm_id', None) or '').strip()
 
     try:
         cache_ttl = float(ttl) if ttl not in (None, '') else float(DEFAULT_TTL)
@@ -39,10 +45,15 @@ def settings() -> dict:
         warnings.warn('invalid web.cache_ttl {!r}; using {}'.format(ttl, DEFAULT_TTL))
         cache_ttl = float(DEFAULT_TTL)
 
+    if gtm_id and not GTM_ID_RE.fullmatch(gtm_id):
+        warnings.warn('invalid web.gtm_id {!r}; the measurement stays off'.format(gtm_id))
+        gtm_id = ''
+
     return {
         'prefix': str(prefix) if prefix not in (None, '') else bundle.PREFIX,
         'cache_ttl': cache_ttl,
         'site_url': str(site_url).rstrip('/') if site_url not in (None, '') else DEFAULT_SITE_URL,
+        'gtm_id': gtm_id,
     }
 
 
