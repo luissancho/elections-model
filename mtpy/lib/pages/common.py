@@ -17,7 +17,7 @@ from .. import bundle
 from ..webapi import check_mode, check_run, check_scope, scope_codes, settings, site
 from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, gradient,
                       fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around,
-                      shade_scale)
+                      shade_scale, snippet)
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
@@ -206,8 +206,10 @@ def environment() -> Environment:
     filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime``, ``ink``, ``rng``
     (``ink_color``), ``bar`` (``bar_width``), ``sides`` (``bar_sides``) and ``shade`` (``shade``: the bars and
     shades of the cells of the ranking), ``shade_scale`` (``shade_scale``: the green of the sensitivity grids of the
-    studies), ``slug`` (``slugs.slugify``: a name as a piece of a file name) and the globals ``method_href`` (``metodo.method_href``: link to a
-    subpage of the method, or to the method itself while the subpage has no text) and ``pollster_href``
+    studies), ``snippet`` (``filters.snippet``: a description cut to what a search result shows),
+    ``slug`` (``slugs.slugify``: a name as a piece of a file name) and the globals ``method_href``
+    (``metodo.method_href``: link to a subpage of the method, or to the method itself while the subpage has no
+    text) and ``pollster_href``
     (``slugs.pollster_href``: link to the profile of a pollster). Without a booted App the
     environment is built but not cached.
 
@@ -247,6 +249,7 @@ def environment() -> Environment:
             'date_short': fmt_date_short,
             'delta': delta_text,
             'badge': delta_badge,
+            'snippet': snippet,
         })
         # imported here: ``metodo`` and ``slugs`` import this module
         from .metodo import method_href
@@ -703,9 +706,11 @@ def event_info(scope: str, meta: dict, state: dict, today: Optional[date] = None
     Returns
     -------
     dict
-        ``title`` (``event_title``), ``phrase`` (``event_phrase``, for the ``<title>`` of the pages of the
-        event), ``date`` (``event_date``), ``year`` (its first four characters, ``None``
-        without a date; for the ``<title>`` of the event page), ``days_left``, ``days_text``
+        ``title`` (``event_title``), ``phrase`` (``event_phrase``, for the ``<title>`` of the event page),
+        ``election`` (the phrase with a capital and the year when it is known, ``'Elecciones generales
+        2026'``: how the titles and the descriptions of the pages of the event name it), ``date``
+        (``event_date``), ``year`` (its first four characters, ``None`` without a date), ``days_left``,
+        ``days_text``
         (``days_text``), ``chamber`` (``chamber_text``), ``run_at`` and ``n_polls`` (of the run), ``href``
         (``'/{scope}'``) and ``sections``: ``{'id', 'label', 'href'}`` per entry of ``EVENT_SECTIONS``, ``href``
         being the anchor ``'#' + id`` on the same page (the event page drops the ones it does not render).
@@ -715,12 +720,15 @@ def event_info(scope: str, meta: dict, state: dict, today: Optional[date] = None
 
     event_date = meta.get('event_date')
     days = days_left(event_date, today)
+    phrase = event_phrase(scope, scopes)
+    year = event_date[:4] if days is not None else None
 
     return {
         'title': event_title(scope, scopes),
-        'phrase': event_phrase(scope, scopes),
+        'phrase': phrase,
+        'election': phrase[:1].upper() + phrase[1:] + (' ' + year if year else ''),
         'date': event_date,
-        'year': event_date[:4] if days is not None else None,
+        'year': year,
         'days_left': days,
         'days_text': days_text(days),
         'chamber': chamber_text(scope, meta),

@@ -259,6 +259,13 @@ de pantalla y los buscadores (bloque `heading`). Una plantilla nueva sólo tiene
 propio `<h1>` visible, vacía `heading` (`{% block heading %}{% endblock %}`), y una prueba lo exige en los dos
 sentidos. La página de error, que no hereda de `base.html`, lleva los suyos.
 
+La descripción (`<meta name="description">` y `og:description`, el mismo texto) es el bloque `description` de la
+plantilla: una o dos frases que digan qué hay en la página, escritas para caber en 160 caracteres, que es lo que
+enseña un resultado de búsqueda. `base.html` le pasa el filtro `snippet` (`pages/filters.py`), que deja igual lo
+que cabe y corta lo que no: en el final de una frase si las primeras suman al menos 80 caracteres, y si no en una
+palabra entera seguida de «…». Así el subtítulo de un estudio o un sondeo con un nombre largo acaban limpios; un
+texto fijo no debería necesitar el corte, y las pruebas comprueban que los de hoy caben enteros.
+
 Para los rastreadores (`mtpy/lib/pages/crawlers.py`, controlador `Crawlers`): `/robots.txt` deja todo abierto menos
 `/api/` (los mismos datos de las páginas en JSON y CSV) y da la URL del sitemap; `/sitemap.xml` lista las URL
 canónicas de lo publicado, calculadas en cada petición con los enlaces de las propias páginas: la portada y cada

@@ -51,13 +51,13 @@ Filtro de las plantillas, aplicado en `base.html` a la descripción de todas las
 | Página | Hoy | Nueva |
 |---|---|---|
 | `/es` | Encuestas, promedio de sondeos y escaños previstos por partido, bloque y circunscripción, con la probabilidad de mayoría absoluta, de Elecciones generales. | Elecciones generales 2026: promedio de las encuestas, escaños previstos por partido y circunscripción y probabilidad de mayoría absoluta. |
-| un sondeo | Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio. | Elecciones generales 2026: sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026. Voto y escaños por partido, cambio frente al anterior, rating y peso en el promedio. |
+| un sondeo | Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio. | Elecciones generales 2026: sondeo de Sigma Dos realizado hasta el 5 oct 2026. Voto y escaños por partido, cambio frente al anterior y peso en el promedio. |
 | `/elecciones` | Histórico Errores: cuánto se equivocaron las encuestas frente al resultado en cada elección pasada. | Cuánto se equivocaron las encuestas frente al resultado oficial en cada elección general y autonómica: su error medio y hacia qué bloque fallaron. |
 | una elección pasada | Resultado de la elección del 23 jul 2023 y cuánto se equivocaron frente a él los sondeos, cada encuestadora y el modelo. | Elecciones Generales Julio 2023: el resultado oficial y cuánto se equivocaron frente a él los sondeos, cada encuestadora y el modelo. |
 | `/casas` | Ranking Encuestadoras: qué encuestadoras aciertan más, cuánto se separa cada una del promedio y cuáles se ciñen al resto. | Qué encuestadoras aciertan más: el ranking por rating, cuánto se separa cada una del promedio de todas (su efecto de casa) y cuáles se ciñen al resto. |
 | una encuestadora | Perfil de la encuestadora GAD3: su rating, sus errores en cada elección y su rebaño. | Perfil de la encuestadora GAD3: su rating, lo que se sabe de cómo trabaja, sus errores en cada elección y sus efectos de casa. |
 | una casa sin rating | (la misma) | Perfil de Agregador: de qué tipo es, lo que se sabe de cómo trabaja y sus errores en cada elección. Sus sondeos no entran en el promedio y no tiene rating. |
-| `/metodo` | El método del modelo: sus dos partes, el promedio de encuestas y la simulación de escaños, cómo se califica a las encuestadoras, cuánto acierta y dónde están sus límites. | Cómo funciona el modelo: el promedio de encuestas, la simulación de escaños, el rating de las encuestadoras, cuánto acierta y dónde están sus límites. |
+| `/metodo` | El método del modelo: sus dos partes, el promedio de encuestas y la simulación de escaños, cómo se califica a las encuestadoras, cuánto acierta y dónde están sus límites. | El método del modelo: el promedio de encuestas, la simulación de escaños, el rating de las encuestadoras, cuánto acierta y dónde están sus límites. |
 | `/metodo/promedio` | (303 caracteres) | Cómo calculamos el promedio de encuestas: qué sondeos entran, cuánto pesa cada uno, cómo ajustamos las diferencias entre encuestadoras y cómo lo comprobamos. |
 | `/metodo/escanos` | (380 caracteres) | Cómo pasamos del promedio de encuestas a los escaños: el sorteo del voto, el reparto por circunscripciones con la regla D'Hondt y qué significa cada cifra. |
 | `/metodo/rating` | (413 caracteres) | Cómo calculamos el rating de cada encuestadora: qué error medimos, con qué sondeos lo comparamos, su calidad previa y cuánto pesa en el promedio. |
@@ -65,8 +65,10 @@ Filtro de las plantillas, aplicado en `base.html` a la descripción de todas las
 Detalles:
 
 - El evento y el sondeo nombran la elección como el título («Elecciones autonómicas Madrid 2027: …»), sin el punto
-  medio de la barra del evento. El sondeo sigue diciendo «con trabajo de campo hasta el»: su fecha nunca es la de
-  publicación.
+  medio de la barra del evento. El sondeo dice «realizado hasta el»: su fecha es el último día del trabajo de
+  campo, nunca la de publicación. Con «con trabajo de campo hasta el» y «rating», el sondeo más corriente (con
+  escaños y entrega anterior) pasaba de 160 y perdía su segunda frase; con un medio de nombre largo se queda en la
+  primera, que dice de quién es y de cuándo.
 - La elección pasada lleva su nombre (sin nombre, «Elección del 23 jul 2023») y sólo dice «y el modelo» si la
   página tiene la tarjeta «Lo que dijo el modelo».
 - Los estudios conservan su subtítulo publicado; el corte lo deja en su primera oración o en unas 25 palabras.

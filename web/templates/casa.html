@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {#- a house without rating (aggregator, online panel) is not promised one in the title -#}
 {% block title %}{{ profile.pollster.name }}: {% if quality.informative %}historial{% else %}rating e historial{% endif %} de la encuestadora{% endblock %}
-{% block description %}Perfil de la encuestadora {{ profile.pollster.name }}: su rating, sus errores en cada elección y su rebaño.{% endblock %}
+{% block description %}{% if quality.informative %}Perfil de {{ profile.pollster.name }}: de qué tipo es, lo que se sabe de cómo trabaja y sus errores en cada elección. Sus sondeos no entran en el promedio y no tiene rating.{% else %}Perfil de la encuestadora {{ profile.pollster.name }}: su rating, lo que se sabe de cómo trabaja, sus errores en cada elección y sus efectos de casa.{% endif %}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/casas.js"></script>
 {% endblock %}

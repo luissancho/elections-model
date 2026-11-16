@@ -10,12 +10,19 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from markupsafe import Markup
+
 MONTHS = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic')
 DASH = '–'
 _DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
 # The green of ``--color-ok`` and its lightest and strongest opacities in ``shade_scale``
 SCALE_COLOR = '#16a34a'
 SCALE_ALPHA = (0.08, 0.55)
+# Characters of a description that a search result shows on a desktop screen (a phone shows about 120)
+SNIPPET_LENGTH = 160
+# The end of a sentence: its mark, with or without a closing quote, before the capital, digit or opening mark of the
+# next one (so «S.L. para» or a quote in the middle of a sentence do not end it)
+_SENTENCE_END_RE = re.compile(r'(?:(?<=[.?!])|(?<=[.?!]»))\s+(?=[A-ZÁÉÍÓÚÜÑ0-9¿¡«])')
 
 
 def _is_missing(x) -> bool:
@@ -590,3 +597,57 @@ def rng_cell(lo, hi, median, total, majority=None) -> Optional[dict]:
         'mark': place(median),
         'line': None if _is_missing(majority) else place(majority),
     }
+
+
+def snippet(text, limit: int = SNIPPET_LENGTH) -> str:
+    """
+    A text cut to what fits under a link in a search result or in a link preview.
+
+    Parameters
+    ----------
+    text : str or markupsafe.Markup
+        The text. Markup that is already escaped (the block of a template) is unescaped first, so that the cut
+        counts characters and never splits an entity.
+    limit : int, optional
+        Characters the result has at most.
+
+    Returns
+    -------
+    str
+        Plain text with its white space collapsed. The whole text when it fits; otherwise its leading sentences
+        that fit, when they add up to half the limit or more; otherwise its words up to the limit, without the
+        trailing words of three letters or fewer, followed by ``'…'``.
+    """
+    if isinstance(text, Markup):
+        text = text.unescape()
+
+    text = ' '.join(str(text).split())
+
+    if len(text) <= limit:
+        return text
+
+    kept = ''
+
+    for sentence in _SENTENCE_END_RE.split(text):
+        longer = f'{kept} {sentence}'.strip()
+
+        if len(longer) > limit:
+            break
+
+        kept = longer
+
+    if len(kept) >= limit // 2:
+        return kept
+
+    # room for the ellipsis; a head that stops inside a word goes back to the end of the previous one
+    head = text[:limit - 1]
+
+    if text[limit - 1] != ' ' and ' ' in head:
+        head = head.rsplit(' ', 1)[0]
+
+    words = head.split(' ')
+
+    while len(words) > 1 and len(words[-1].strip(',;:.')) <= 3:
+        words.pop()
+
+    return ' '.join(words).rstrip(' ,;:.') + '…'

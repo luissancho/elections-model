@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Encuestas {{ event_bar.phrase }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}: promedio y escaños{% endblock %}
-{% block description %}Encuestas, promedio de sondeos y escaños previstos por partido, bloque y circunscripción, con la probabilidad de mayoría absoluta, de {{ event_bar.title }}.{% endblock %}
+{% block description %}{{ event_bar.election }}: promedio de las encuestas, escaños previstos por partido y circunscripción y probabilidad de mayoría absoluta.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/promedios.js"></script>
   {% if seat_odds %}

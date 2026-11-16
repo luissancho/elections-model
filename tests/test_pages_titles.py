@@ -101,8 +101,8 @@ def test_event_title_without_a_year_does_not_print_none():
     for name, expected in (('promedios.html', 'Encuestas elecciones generales: promedio y escaños'),
                            ('sondeo.html', 'Encuesta GAD3 · 5 oct 2026 · Elecciones generales')):
         template = pages.environment().get_template(name)
-        context = template.new_context({'event_bar': {'phrase': 'elecciones generales', 'year': None},
-                                        'poll_title': 'GAD3', 'poll_date': '5 oct 2026'})
+        event_bar = {'phrase': 'elecciones generales', 'year': None, 'election': 'Elecciones generales'}
+        context = template.new_context({'event_bar': event_bar, 'poll_title': 'GAD3', 'poll_date': '5 oct 2026'})
         assert ''.join(template.blocks['title'](context)) == expected
 
 
