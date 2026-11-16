@@ -450,7 +450,8 @@ def poll_card(preview: dict) -> Image.Image:
     Parameters
     ----------
     preview : dict
-        What the card says (``sondeos.preview_of``): ``title``, ``subtitle``, ``rows``, ``has_seats`` and ``more``.
+        What the card says (``sondeos.preview_of``, or ``elecciones.result_preview`` for a past election):
+        ``title``, ``subtitle``, ``rows``, ``has_seats`` and ``more``.
 
     Returns
     -------
@@ -509,5 +510,24 @@ def poll_png(preview: dict) -> bytes:
     -------
     bytes
         A PNG of ``SIZE`` (``poll_card``, ``encode``).
+    """
+    return encode(poll_card(preview))
+
+
+def result_png(preview: dict) -> bytes:
+    """
+    The image of the link previews of a past election.
+
+    Parameters
+    ----------
+    preview : dict
+        What the image says (``elecciones.result_preview``), in the shape of the preview of a poll: its official
+        result where a poll has its estimate, its change against the previous election where a poll has the change
+        against the previous delivery.
+
+    Returns
+    -------
+    bytes
+        A PNG of ``SIZE``: the card of a poll (``poll_card``, ``encode``) over those data.
     """
     return encode(poll_card(preview))

@@ -36,7 +36,8 @@ from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OG_I
                      subpage_event_bar, tabbar, title_of)
 from . import images, previews, structured
 from .crawlers import CRAWLERS_TTL, robots_txt, sitemap_entries, sitemap_xml
-from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
+from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, REST_PARTY, RESULTS_SHOWN, SUMMARY_KEYS,
+                         bias_colors, event_preview, latest_event_preview, previous_result, result_preview,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
                          history_scopes,
                          eleccion_context, elecciones_context, error_rows, event_part, final_stretch_rows, fixed_rows,
