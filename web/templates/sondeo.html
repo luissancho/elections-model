@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Encuesta {{ poll_title }} · {{ poll_date }} · {{ event_bar.election }}{% endblock %}
-{% block description %}{{ event_bar.election }}: sondeo de {{ poll_title }} ({{ poll_date }}). Voto{% if has_seats %} y escaños{% endif %}{% if previous %}, cambio frente al anterior{% else %} por partido{% endif %} y peso en el promedio.{% endblock %}
+{% block description %}{{ preview.description }}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/sondeo.js"></script>
 {% endblock %}

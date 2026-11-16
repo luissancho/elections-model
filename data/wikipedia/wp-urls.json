@@ -2,7 +2,10 @@
     "es": {
         "2026-11-29": {
             "results": "https://en.wikipedia.org/wiki/2026_Spanish_general_election",
-            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2026_Spanish_general_election",
+            "polls": [
+                "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2026_Spanish_general_election",
+                "https://en.wikipedia.org/wiki/Nationwide_opinion_polling_for_the_2026_Spanish_general_election_(2023%E2%80%932024)"
+            ],
             "years": ["2023", "2024", "2025", "2026"]
         },
         "2023-07-23": {

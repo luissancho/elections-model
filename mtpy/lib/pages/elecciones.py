@@ -9,8 +9,9 @@ from .. import bundle
 from ..bundle import POLL_ERRORS_WINDOW
 from ..webapi import check_date, event_params, site
 from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color,
-                     bundle_part, common_context, ink_color)
-from .filters import _madrid_tz, fmt_date, fmt_num
+                     bundle_part, common_context, ink_color, parse_state)
+from .filters import _is_missing, _madrid_tz, fmt_date, fmt_num, fmt_pct
+from .previews import PREVIEW_ROWS, preview_change, preview_version, with_figures
 from .promedios import (BLOCK_ORDER, _leaders, chart_polls, fitted_blocks, poll_months, polls_table,
                         pollster_options, round_series)
 from .slugs import event_href
@@ -39,6 +40,8 @@ RESULTS_SHOWN = 15
 LAST_KEYS = ('pollster', 'pollster_id', 'days', 'sample_size', 'error_avg', 'error_blocks', 'error_blocks_abs')
 # The name of the model in the table of the last polls, where it is scored like a pollster
 MODEL_ROW = 'Modelo (promedio)'
+# The row of a result that is not a party: the rest of the candidacies (``Simulator.OTHERS``)
+REST_PARTY = '-'
 
 
 def event_part(scope: str, date: str, name: str) -> Optional[dict]:
@@ -1053,6 +1056,225 @@ def fixed_rows(last: Optional[dict], results_rows: list, parties: list, colors: 
     ]
 
 
+def previous_result(scope: str, date: str) -> Optional[dict]:
+    """
+    Official vote in the published election of a scope right before another one.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    date : str
+        Date of an election of the scope, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    dict or None
+        ``date`` (of the election before) and ``pct`` (``{party: share}`` of its ``results`` part, as published);
+        ``None`` when no election of the scope is published before ``date``.
+    """
+    before = [day for day in site().events(scope) if day < date]
+
+    if not before:
+        return None
+
+    results = event_part(scope, max(before), 'results') or {}
+
+    return {'date': max(before), 'pct': {row['party']: row.get('pct') for row in results.get('rows') or []}}
+
+
+def result_title(meta: dict, date: str) -> str:
+    """
+    Name of a past election in its link previews.
+
+    Parameters
+    ----------
+    meta : dict
+        Data of its ``meta`` part.
+    date : str
+        Its date, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    str
+        Its ``name``, or ``'Elección del 23 jul 2023'`` without one.
+    """
+    return meta.get('name') or 'Elección del ' + fmt_date(date)
+
+
+def result_preview(title: str, date: str, rows: list, previous: Optional[dict], host: str) -> dict:
+    """
+    What the link previews of a past election say, as plain data: its image and its description.
+
+    It has the shape of the preview of a poll (``sondeos.preview_of``), so the same card draws both
+    (``images.poll_card``): the official result where the poll has its estimate, the change against the previous
+    election where the poll has the change against the previous delivery of its house.
+
+    Parameters
+    ----------
+    title : str
+        Name of the election (``result_title``).
+    date : str
+        Its date, ``YYYY-MM-DD``.
+    rows : list of dict
+        Its result as published, a row per candidacy (``party``, ``pct``, ``seats``, ``color``).
+    previous : dict or None
+        ``previous_result`` of the election; ``None`` for the first one of its scope.
+    host : str
+        Host of the site (``'demoscopio.es'``), for the footnote.
+
+    Returns
+    -------
+    dict
+        ``title``; ``subtitle`` (``'Resultado oficial del 23 jul 2023'``, followed by ``' · Cambio frente a la
+        elección anterior (10 nov 2019)'`` when a shown party has a change); ``rows`` (the ``PREVIEW_ROWS`` parties
+        with most vote, by vote, without ``REST_PARTY`` nor the rows without a share: ``name``, ``color``, ``value``,
+        ``share`` (``fmt_pct``), ``change`` (``preview_change`` of the share minus the one of the same party in the
+        previous election, in points with one decimal; ``None`` for a party that is not in it) and ``seats`` (the
+        seats won as a text, or ``None``)); ``has_seats`` (whether a shown party has seats published); ``more``
+        (``'y 5 partidos más con escaño en demoscopio.es'``: the parties with a seat that are not shown, ``None``
+        without any); ``alt`` (the text alternative of the image: the title, the date and the shares shown);
+        ``description`` (the description of the page: the title and the shares shown that fit whole, each with its
+        seats, the word only on the first one, ``with_figures``; ``None`` without rows) and ``version``
+        (``preview_version`` of what is drawn: the title, the subtitle, the rows and the footnote).
+    """
+    parties = sorted((row for row in rows if row.get('party') != REST_PARTY and not _is_missing(row.get('pct'))),
+                     key=lambda row: -row['pct'])
+    before = (previous or {}).get('pct') or {}
+    shown, figures, worded = [], [], False
+
+    for row in parties[:PREVIEW_ROWS]:
+        earlier = before.get(row['party'])
+        change = None if _is_missing(earlier) else preview_change(round(row['pct'] - earlier, 1))
+        seats = None if _is_missing(row.get('seats')) else str(int(row['seats']))
+        shown.append({'name': row['party'], 'color': row.get('color'), 'value': row['pct'],
+                      'share': fmt_pct(row['pct']), 'change': change, 'seats': seats})
+        figure = '{} {}'.format(row['party'], shown[-1]['share'])
+
+        if seats is not None:
+            # the word once: the figures that follow are read like the first one
+            figure += ' ({})'.format(seats if worded else seats + (' escaño' if seats == '1' else ' escaños'))
+            worded = True
+
+        figures.append(figure)
+
+    names = {row['name'] for row in shown}
+    left = sum(1 for row in parties
+               if row['party'] not in names and not _is_missing(row.get('seats')) and row['seats'] > 0)
+    more = None
+
+    if left:
+        more = 'y {} con escaño'.format('1 partido más' if left == 1 else f'{left} partidos más') \
+            + (f' en {host}' if host else '')
+
+    day = fmt_date(date)
+    subtitle = 'Resultado oficial del {}'.format(day)
+
+    if any(row['change'] for row in shown):
+        subtitle += ' · Cambio frente a la elección anterior ({})'.format(fmt_date(previous['date']))
+
+    shares = ', '.join('{} {}'.format(row['name'], row['share']) for row in shown)
+    drawn = {'title': title, 'subtitle': subtitle, 'rows': shown, 'more': more}
+
+    return dict(drawn, has_seats=any(row['seats'] is not None for row in shown),
+                alt='{}, resultado oficial del {}{}.'.format(title, day, ': ' + shares if shares else ''),
+                description=with_figures(title + ': ', figures) if figures else None,
+                version=preview_version(drawn))
+
+
+def event_common(state: dict, active: Optional[str]) -> dict:
+    """
+    Common context of the detail of a past election.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+    active : str or None
+        ``href`` of the page in the navigation.
+
+    Returns
+    -------
+    dict
+        ``common_context`` of the scope; of the national scope, with its latest run, for a scope without a
+        published forecast (just voted, or with too few polls), which still has the detail of its elections.
+    """
+    has_run = state['scope'] in site().manifest_data()['scopes']
+
+    return common_context(state if has_run else dict(state, scope=NATIONAL_SCOPE, run=None), active)
+
+
+def event_preview(state: dict, date: str) -> dict:
+    """
+    What the link previews of a published past election say.
+
+    It reads the catalogue of the run, the ``meta`` and the ``results`` parts of the election and the result of the
+    election before, nothing else of what its page needs.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``), the scope taken from the route.
+    date : str
+        Raw date of the election, validated by ``resolve_event``.
+
+    Returns
+    -------
+    dict
+        See ``result_preview``; the same data as ``eleccion_context(...)['preview']`` for the same state.
+
+    Raises
+    ------
+    HttpError
+        400 for an invalid date; 404 ``event not published``; those of ``common_context``.
+    """
+    scope = state['scope']
+    date = resolve_event(scope, date)
+    meta = event_part(scope, date, 'meta')
+
+    if meta is None:
+        raise HttpError(404, 'event not published')
+
+    context = event_common(state, None)
+    catalog = context['catalog']
+    results = event_part(scope, date, 'results') or {}
+    rows = [{'party': row['party'], 'pct': row.get('pct'), 'seats': row.get('seats'),
+             'color': catalog[row['party']]['color']} for row in results.get('rows') or []]
+
+    return result_preview(result_title(meta, date), date, rows, previous_result(scope, date), context['site_host'])
+
+
+def latest_event_preview(scope: str, date: str) -> Optional[dict]:
+    """
+    What the image of a past election says with the latest published run of its scope, which is what its address
+    draws whatever run a page pins.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code (already resolved).
+    date : str
+        Date of the election.
+
+    Returns
+    -------
+    dict or None
+        See ``result_preview``; ``None`` when the election is not published (its image answers 404).
+
+    Raises
+    ------
+    HttpError
+        Any error of ``event_preview`` other than a 404.
+    """
+    try:
+        return event_preview(parse_state({}, scope), date)
+    except HttpError as error:
+        if error.status == 404:
+            return None
+
+        raise
+
+
 def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dict:
     """
     Template context of the detail of a past election.
@@ -1110,7 +1332,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         the error histogram), ``catalog`` (``parties`` of the table, of the results and of the series,
         ``chart_parties``, plus ``bmaps`` (``main`` of the meta and the ``blocks`` of the curve), for the
         browser's catalogue), with the series, ``series`` (rounded to two decimals, ``round_series``) and, with
-        the cycle, ``polls`` (``chart_polls``)).
+        the cycle, ``polls`` (``chart_polls``)), and ``preview`` (``result_preview``: what the link previews of the
+        page say, its image and its description).
 
     Raises
     ------
@@ -1123,7 +1346,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     """
     scope = state['scope']
     has_run = scope in site().manifest_data()['scopes']
-    context = common_context(state if has_run else dict(state, scope=NATIONAL_SCOPE, run=None), active)
+    context = event_common(state, active)
     full = context['state']
     date = resolve_event(scope, date)
     meta = event_part(scope, date, 'meta')
@@ -1219,6 +1442,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['months'] = poll_months(cycle_polls)
     context['pollsters'] = pollster_options(cycle_polls)
     context['csv_href'] = api_url(scope, 'cycle', fmt='csv', kind='event', date=date)
+    context['preview'] = result_preview(result_title(meta, date), date, results_rows, previous_result(scope, date),
+                                        context['site_host'])
     context['initial'] = {
         'state': full,
         'meta': meta,

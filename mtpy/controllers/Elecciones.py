@@ -1,6 +1,7 @@
 """
-Controller of the past elections page (``/elecciones``) and of the detail of one
-(``/elecciones/{country}/{scope}/{month}``).
+Controller of the past elections page (``/elecciones``), of the detail of one
+(``/elecciones/{country}/{scope}/{month}``) and of the image of its link previews (the same address ending in
+``.png``).
 """
 from ..lib import pages, webapi
 from .Page import Page
@@ -9,7 +10,8 @@ from .Page import Page
 class Elecciones(Page):
     """
     Past elections page: the error history of the published elections; ``/elecciones/es/generales/2023-07``, one
-    election.
+    election, and ``/elecciones/es/generales/2023-07.png`` the image a network shows when that page is shared
+    (``image_action``), which the page declares as its ``og:image``.
     """
 
     active = '/elecciones'
@@ -53,13 +55,54 @@ class Elecciones(Page):
         str
             The HTML of ``eleccion.html``, with its breadcrumbs (the election by its name or, without one, by its
             date, like its title); its canonical is the month URL (``pages.event_href``), whatever the segment and
-            the query.
+            the query. Its ``og:image`` is the image of the election (``image_action``, ``preview_image``): the
+            canonical ending in ``.png``, with the fingerprint of what it draws and a text alternative with its
+            figures. The image always draws with the latest run, so a page with a pinned run declares the
+            fingerprint of the latest one.
         """
         code, date = pages.resolve_event_path(country, scope, date)
         context = pages.eleccion_context(self.state(code), date, active=self.active)
-
-        canonical = webapi.settings()['site_url'] + pages.event_href(code, date)
+        href = pages.event_href(code, date)
         event = context['event']
         trail = self.section_trail(self.active, event.get('name') or pages.fmt_date(event['event_date']))
+        preview = context['preview']
 
-        return self.render('eleccion.html', canonical=canonical, structured=[trail], **context)
+        if context['state']['pinned']:
+            preview = pages.latest_event_preview(code, date)
+
+        return self.render('eleccion.html', canonical=webapi.settings()['site_url'] + href, structured=[trail],
+                           **self.preview_image(href, preview), **context)
+
+    async def image_action(self, country: str, scope: str, date: str) -> bytes:
+        """
+        Draw the image of the link previews of a past election.
+
+        It is always drawn with the latest published run (the colours of the parties): the query (``mode``,
+        ``run``, anything else) does not change the drawing. The ``v`` of the address the page declares only
+        decides how long a cache may keep the answer (``png``).
+
+        Parameters
+        ----------
+        country : str
+            Country segment of the route (``es``).
+        scope : str
+            Scope segment (``generales``, ``madrid``).
+        date : str
+            Month (``2023-07``) or date of the election (``pages.resolve_event_path``).
+
+        Returns
+        -------
+        bytes
+            The PNG (``pages.images.result_png`` of ``pages.event_preview``), answered as a cacheable image
+            (``png``: a day under the fingerprint of what it draws, the time of the pages under any other address).
+
+        Raises
+        ------
+        HttpError
+            404 for an unknown scope or election and 400 for an invalid date, as the page; nothing is drawn then.
+        """
+        code, date = pages.resolve_event_path(country, scope, date)
+
+        preview = pages.event_preview(pages.parse_state({}, code), date)
+
+        return self.png(pages.images.result_png(preview), preview['version'])

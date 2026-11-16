@@ -99,17 +99,18 @@ check_db_only() {
     fi
 }
 
-# check_published RUTA TIPO: lo publicado con `publish event`/`backtest` puede faltar en el paquete. Un 404
-# cuyo cuerpo dice "not published" (JSON de la API) o "no publicada"/"no publicado" (pagina HTML) es
-# "n/a sin publicar"; cualquier otra respuesta se comprueba como check RUTA 200 TIPO. El patron tambien
-# casa con el JSON `scope not published`: es inofensivo.
+# check_published RUTA TIPO [PREFIJO_CONTENT_TYPE] [STATUS]: lo publicado con `publish event`/`backtest` puede faltar
+# en el paquete. Un 404 cuyo cuerpo dice "not published" (JSON de la API), "no publicada"/"no publicado" (pagina
+# HTML) o "no tiene actualizaciones" (la pagina de un ambito sin ninguna eleccion publicada) es "n/a sin publicar";
+# cualquier otra respuesta se comprueba como check RUTA STATUS TIPO [PREFIJO_CONTENT_TYPE], con STATUS 200 si no se
+# da. El patron tambien casa con el JSON `scope not published`: es inofensivo.
 check_published() {
     local path="$1" kind="$2" code
     code="$(curl -s --max-time 20 -o "$body" -w '%{http_code}' "$base$path" || true)"
-    if [ "$code" = 404 ] && grep -qE 'not published|no publicad[ao]' "$body"; then
+    if [ "$code" = 404 ] && grep -qE 'not published|no publicad[ao]|no tiene actualizaciones' "$body"; then
         echo "n/a  $path sin publicar"
     else
-        check "$path" 200 "$kind"
+        check "$path" "${4:-200}" "$kind" "${3:-}"
     fi
 }
 
@@ -134,11 +135,30 @@ check /promedio 301 none
 check /es-zz 404 html
 check "/es/sondeos/abc/nadie" 400 html
 check "/es/sondeos/2020-01-01/nadie" 404 html
+check "/es/sondeos/abc/nadie.png" 400 html
+check "/es/sondeos/2020-01-01/nadie.png" 404 html
+# La imagen del enlace de un sondeo (la direccion de su pagina acabada en .png) la dibuja el servidor al pedirla,
+# con las fuentes woff2 del sitio: aqui se ve si el Pillow de esta instalacion las lee. Se pide la del primer
+# sondeo que enlaza /es.
+poll="$(curl -s --max-time 20 "$base/es" | "$PY" -c "import re, sys
+found = re.search(r'href=\"(/es/sondeos/[0-9-]+/[^\"?#]+)', sys.stdin.read())
+print(found.group(1) if found else '')" 2>/dev/null || true)"
+if [ -n "$poll" ]; then
+    check "$poll.png" 200 none image/png
+else
+    echo "n/a  imagen de un sondeo: /es no enlaza ninguno"
+fi
 check_db_only "/casas?scope=es" 200 html
 check "/casas?id=abc" 400 html
 check "/elecciones?scope=es" 200 html
 check "/elecciones?date=abc" 400 html
-check_published "/elecciones?scope=es&date=2023-07-23" html
+# El detalle de una eleccion vive en su direccion limpia; la antigua, con ?date=, redirige a ella (301).
+check_published "/elecciones/es/generales/2023-07" html
+# El 400 de una fecha no valida solo se alcanza si el ambito tiene elecciones publicadas: sin ellas es un 404.
+check_published "/elecciones/es/generales/abc.png" html "" 400
+# La imagen del enlace de una eleccion pasada (la direccion de su pagina acabada en .png), que el servidor dibuja
+# como la de un sondeo.
+check_published "/elecciones/es/generales/2023-07.png" none image/png
 check "/metodo/backtest?scope=es" 200 html
 check /metodo 200 html
 check /metodo/promedio 200 html

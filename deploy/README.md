@@ -242,7 +242,8 @@ también el favicon (`favicon.svg`, `favicon.ico` en 16/32/48 y `apple-touch-ico
 Del mismo script sale `og-image.png`, la imagen de 1200×675 de los enlaces compartidos: el logotipo, el lema, el
 dominio y la lente ampliada sobre una nube de sondeos y su promedio, sin cifras para que no caduque en la caché de
 las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en las franjas de arriba y de abajo que
-X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
+X y Facebook recortan. Y `wordmark.png`, el logotipo sobre fondo transparente, para las imágenes que dibuja el
+servidor (abajo), que no puede leer el SVG. Los seis ficheros los genera `python web/brand/build.py` desde la fuente (necesita
 `fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
 edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
 más la ruta, sin consulta: ningún parámetro da a una página una dirección propia. `mode`, `run`, `region` y
@@ -252,7 +253,52 @@ más la ruta, sin consulta: ningún parámetro da a una página una dirección p
 autor (`AUTHOR_HANDLE`, en `pages/common.py`). Cada página declara
 también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`: la imagen de marca con `?v=` y el hash
 del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
-controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
+controlador puede pasar otra imagen a `render` con `og_image=`, y su texto con `og_image_alt=`. La página de error
+no lleva etiquetas `og:`.
+
+La página de un sondeo tiene imagen propia, con sus cifras: su misma dirección acabada en `.png`
+(`/es/sondeos/2026-11-05/gad3/vocento.png`, acción `image` del controlador `Sondeos`). El servidor la dibuja con
+Pillow cuando se la piden y no la guarda en ningún sitio: la respuesta lleva un día de caché (`Page.IMAGE_TTL`)
+y nginx la conserva mientras se siga pidiendo. El día sólo vale para la dirección que la página declara, la que
+lleva en `?v=` la huella de lo que se dibuja; con otra `v` o sin ella, la misma imagen sale con el minuto de las
+páginas (`cache_ttl`). Así un dibujo viejo no se queda un día en nginx bajo una dirección que nombra otro: justo
+tras publicar, un worker puede seguir hasta un minuto con el run anterior, y lo que responda entonces bajo la
+dirección nueva dura otro minuto en nginx. La ventana es de dos minutos (dos veces `cache_ttl`), no de un día. Lo
+que una red ya se haya llevado en esos dos minutos no se arregla desde aquí: conviene esperar tres minutos tras
+publicar antes de compartir un enlace. Un enlace antiguo conserva su `v` después de una corrección: nginx puede
+seguir sirviendo la copia que tenía de antes mientras se siga pidiendo (hasta un día) y, después, la imagen
+corregida con un minuto de caché.
+Lo que dice (la casa y el medio, la elección, el campo y la muestra,
+los seis partidos con más voto con su cambio frente a la entrega anterior, los escaños de la casa y el pie con los
+partidos que no caben) lo compone `pages.preview_of` con las funciones de la página del sondeo, y lo dibuja
+`pages.images.poll_png` (1200×675, con las fuentes de `web/dist/vendor/fonts` tal como están y `wordmark.png`). La
+imagen es siempre la de lo último publicado (`mode`, `run` o cualquier otro parámetro no cambian el dibujo; la `v`
+sólo decide el tiempo de caché), y la página la declara
+en `og:image` con `?v=` y una huella de lo que pinta: si el sondeo se corrige, la dirección cambia y las redes
+piden la nueva. Si cambia el dibujo, sube `PREVIEW_DESIGN` (`pages/previews.py`) para que cambien todas las
+huellas. El dibujo necesita que Pillow lea las fuentes woff2, y los paquetes de Pillow de PyPI lo hacen (su
+FreeType trae brotli); `tests/test_pages_images.py` falla donde no sea así. Un proceso que no puede dibujar (le
+faltan las fuentes o `wordmark.png`, o su Pillow no lee las fuentes) lo comprueba una vez
+(`pages.images.available`), avisa y deja sus páginas de sondeo con la imagen de marca; la dirección de la imagen
+responde entonces 500. `deploy/check-api.sh` pide la imagen del primer sondeo que enlaza `/es` y falla si no llega
+un PNG: así se ve en la imagen de Docker (`smoke.sh` lo ejecuta) y tras desplegar.
+
+El detalle de una elección pasada tiene la suya, con la misma tarjeta y las mismas reglas, también la de la caché
+(`/elecciones/es/generales/2023-07.png`, acción `image` del controlador `Elecciones`; responde igual con la fecha
+completa): los seis partidos con más voto con su resultado oficial, sus escaños y, en el triángulo, su cambio frente
+a la elección anterior publicada del mismo ámbito. Los partidos se casan por sus siglas, así que uno que no se
+presentó con ellas la vez anterior va sin triángulo, y la primera elección publicada de un ámbito, sin ninguno; la
+fila «-» (el resto de candidaturas) no cuenta, y el pie dice cuántos partidos con escaño no caben. Lo compone
+`pages.result_preview` y lo dibuja `pages.images.result_png`, que es la tarjeta del sondeo con esos datos;
+`deploy/check-api.sh` pide la de las generales de 2023. El resto de páginas sigue con la imagen de marca.
+
+Esas dos páginas, que no cambian, dicen también sus cifras en la descripción (`<meta name="description">` y
+`og:description`): las de su imagen, por orden de voto, tantas como quepan enteras en 160 caracteres
+(`pages.previews.with_figures`), detrás de la elección, la casa y el día en un sondeo («Elecciones generales 2026:
+sondeo de GAD3 para Vocento (5 nov 2026). PP 31,9%, PSOE 25,9%…») y del nombre de la elección en una elección
+pasada, con los escaños («…: PP 33,1% (137 escaños), PSOE 31,7% (121)…»). Una elección sin resultado publicado
+se describe con lo que la página tiene. Las reglas comunes a las dos vistas previas viven en
+`pages/previews.py`.
 
 El título de cada página lo compone `base.html`: el bloque `title` de la plantilla (qué es la página, con las
 palabras con que se busca) y detrás la marca, « · Demoscopio» (bloque `title_brand`); la portada es la excepción,
@@ -383,8 +429,12 @@ nginx; sin nginx lo marca `n/a`) y si hay base a partir de `/api/v1/parties` (un
 por ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `/` (200 HTML),
 `/es?mode=nowcast` (200 HTML), `/es?region=abc` (400 HTML), `/es/escanos?mode=forecast`, `/promedio` y
 `/modelo` (301), `/es-zz` (404 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
-`/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML), `/elecciones?scope=es&date=2023-07-23` (200 HTML
-si la elección está publicada), `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y
+`/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML),
+`/elecciones/es/generales/2023-07` (200 HTML si la elección está publicada; desde el 2026-11-16: antes pedía la
+dirección antigua con `?date=`, que redirige con un 301 desde que las elecciones tienen dirección limpia, y la
+daba por fallo), su imagen `/elecciones/es/generales/2023-07.png` (`image/png`) y
+`/elecciones/es/generales/abc.png` (400 HTML: una fecha no válida no se dibuja; como las dos anteriores, sólo si
+`es` tiene elecciones publicadas), `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y
 `/metodo/rating` (200 HTML), `/metodo/nope` y `/nope` (404 HTML), con nginx también
 `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`), `/dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2`
 (`font/woff2`) y `/dist/css/site.css` (`text/css`), y 21 rutas de la API (código, tipo y JSON válido): las 10 del
@@ -393,8 +443,11 @@ paquete, `/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/
 `/api/v1/analysis/es/nope` (404), `/api/v1/events/es/2023-07-23/pollsters` y `/api/v1/backtest/es/by-horizon` (200
 JSON si están publicados), `/api/v1/events/es/2023-13-01/meta` (400) y `/api/v1/backtest/es/nope` (404); sale con
 error si alguna falla. Lo que escriben `publish event` y `publish backtest` puede faltar en el paquete (en local,
-casi siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API) o "no
-publicada"/"no publicado" (páginas), y comprueba como `check RUTA 200` cualquier otra respuesta.
+casi siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API), "no
+publicada"/"no publicado" (páginas) o "no tiene actualizaciones" (la página de un ámbito sin ninguna elección
+publicada, que es lo que responde cualquier dirección de `/elecciones/es/generales/…` en un paquete sin
+elecciones), y comprueba como `check RUTA 200` cualquier otra respuesta (o con el código que se le dé como cuarto
+argumento: el 400 de la fecha no válida).
 
 ### Tipografías y marca
 

@@ -17,9 +17,15 @@ class Page(Controller):
     ----------
     active : str or None
         ``href`` of the page in the navigation; subclasses set it (``None`` for the event pages).
+    IMAGE_TTL : int
+        Seconds a cache may keep the image of the link previews of a page (``png``) under the address the page
+        declares: the pages that have one do not change, and when what they draw is corrected the page declares
+        another address (the ``?v=`` of its ``og:image``). Under any other address the image is kept for the time
+        of the pages.
     """
 
     active = '/'
+    IMAGE_TTL = 86400
 
     def state(self, scope: Optional[str] = None) -> dict:
         """
@@ -132,9 +138,10 @@ class Page(Controller):
             Template name in ``web/templates``.
         **context
             Template variables; ``canonical`` (``canonical_url``), ``og_image`` (``pages.og_image_url``, the
-            brand image of the link previews), ``analytics`` (``pages.analytics_config``, the settings of
-            the cookie notice, ``None`` when the visits are not measured) and ``structured`` (the schema.org
-            blocks of the page, ``pages.structured``; none by default) are added when missing.
+            brand image of the link previews), ``og_image_alt`` (``None``: the text alternative of the brand
+            image; a page with an image of its own passes both), ``analytics`` (``pages.analytics_config``, the
+            settings of the cookie notice, ``None`` when the visits are not measured) and ``structured`` (the
+            schema.org blocks of the page, ``pages.structured``; none by default) are added when missing.
 
         Returns
         -------
@@ -143,6 +150,7 @@ class Page(Controller):
         """
         context.setdefault('canonical', self.canonical_url())
         context.setdefault('og_image', pages.og_image_url())
+        context.setdefault('og_image_alt', None)
         context.setdefault('analytics', pages.analytics_config())
         context.setdefault('structured', [])
         html = pages.environment().get_template(template).render(**context)
@@ -152,6 +160,62 @@ class Page(Controller):
         self.response.set_cache(int(webapi.settings()['cache_ttl']))
 
         return html
+
+    def preview_image(self, href: str, preview: Optional[dict]) -> dict:
+        """
+        The image of its own a page declares for its link previews.
+
+        Parameters
+        ----------
+        href : str
+            Canonical path of the page (``'/es/sondeos/2026-11-05/gad3'``); its image is that address ending in
+            ``.png``.
+        preview : dict or None
+            What the image says (``pages.preview_of``, ``pages.result_preview``), with its ``version`` and its
+            ``alt``; ``None`` when there is nothing to draw.
+
+        Returns
+        -------
+        dict
+            The ``og_image`` (absolute, with the fingerprint of what it draws in ``?v=``: the networks keep an
+            image by its address) and ``og_image_alt`` of ``render``. Empty without a preview or when this process
+            cannot draw (``pages.images.available``): the page keeps the brand image.
+        """
+        if preview is None or not pages.images.available():
+            return {}
+
+        return {'og_image': '{}{}.png?v={}'.format(webapi.settings()['site_url'], href, preview['version']),
+                'og_image_alt': preview['alt']}
+
+    def png(self, image: bytes, version: str) -> bytes:
+        """
+        Answer an image the server draws for the link previews of a page.
+
+        Sets ``image/png``, an ETag (MD5 of the bytes) and how long a cache may keep it: ``IMAGE_TTL`` only when
+        the ``v`` of the request is the fingerprint of what was drawn, which is the address the page declares.
+        Any other address (another ``v``, an empty one or none) does not name this drawing: for a minute after a
+        publication a worker may still draw the previous run under the new address, and an old link keeps its old
+        ``v`` after a correction. Those get the time of the pages (``cache_ttl``), so a drawing never outlives a
+        page in a cache under an address that names another one.
+
+        Parameters
+        ----------
+        image : bytes
+            The PNG (``pages.images``).
+        version : str
+            Fingerprint of what the image draws (the ``version`` of its preview).
+
+        Returns
+        -------
+        bytes
+            The same bytes.
+        """
+        named = self.request.query.get('v') == version
+        self.response.set_content_type('image/png', charset=None)
+        self.response.set_etag(hashlib.md5(image).hexdigest())
+        self.response.set_cache(self.IMAGE_TTL if named else int(webapi.settings()['cache_ttl']))
+
+        return image
 
     def error_page(self, status: int, message: str) -> str:
         """

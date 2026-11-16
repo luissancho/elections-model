@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}{{ event.name or event.event_date|date }}: resultado y errores de las encuestas{% endblock %}
-{% block description %}{{ event.name or 'Elección del ' ~ event.event_date|date }}: el resultado oficial y cuánto se equivocaron frente a él los sondeos{% if horizon_tables %}, cada encuestadora y el modelo{% else %} y cada encuestadora{% endif %}.{% endblock %}
+{# With a published result, its figures (`preview.description`); without one, what the page holds #}
+{% block description %}{% if preview.description %}{{ preview.description }}{% else %}{{ event.name or 'Elección del ' ~ event.event_date|date }}: el resultado oficial y cuánto se equivocaron frente a él los sondeos{% if horizon_tables %}, cada encuestadora y el modelo{% else %} y cada encuestadora{% endif %}.{% endif %}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/elecciones.js"></script>
 {% endblock %}

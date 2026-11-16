@@ -1,6 +1,7 @@
 """
 The page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``): the lookup of the poll named by the URL and
-of the previous delivery of its house and sponsor, the rows and figures of its cards and the template context.
+of the previous delivery of its house and sponsor, the rows and figures of its cards, the template context and what
+the image of its link previews says (``preview_of``, as plain data: ``pages.images`` draws it).
 """
 from datetime import timedelta
 from typing import Optional
@@ -8,9 +9,10 @@ from typing import Optional
 from ...core.api import HttpError
 from ..webapi import site
 from .casas import mtype_label
-from .common import block_color, bundle_part, common_context, ink_color, part, subpage_event_bar
+from .common import block_color, bundle_part, common_context, ink_color, parse_state, part, subpage_event_bar
 from .elecciones import chart_parties
-from .filters import DASH, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num, gradient
+from .filters import DASH, MONTHS, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num, fmt_pct, gradient
+from .previews import PREVIEW_ROWS, preview_change, preview_version, with_figures
 from .promedios import RATING_COLORS, chart_polls, fieldwork_label, poll_href, round_series
 from .slugs import poll_detail_href, pollster_href, slugify
 
@@ -559,6 +561,228 @@ def fieldwork_text(poll: dict) -> Optional[str]:
     return f'{days[0]} {DASH} {days[1]}' if len(days) == 2 else (days[0] if days else None)
 
 
+def fieldwork_compact(poll: dict) -> Optional[str]:
+    """
+    Fieldwork dates of a poll with the year, without repeating what its two days share.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``start_date``, ``end_date``).
+
+    Returns
+    -------
+    str or None
+        ``'3–5 nov 2026'`` within a month, ``'29 oct–2 nov 2026'`` across months, ``'28 dic 2025–2 ene 2026'``
+        across years, a single date when both coincide or only one is known, ``None`` without any valid date.
+    """
+    days = [day for day in (_parse_datetime(poll.get(key)) for key in ('start_date', 'end_date')) if day is not None]
+
+    if not days:
+        return None
+
+    first, last = days[0], days[-1]
+
+    if first.date() == last.date():
+        return fmt_date(last)
+
+    if first.year != last.year:
+        return f'{fmt_date(first)}{DASH}{fmt_date(last)}'
+
+    if first.month != last.month:
+        return f'{first.day} {MONTHS[first.month - 1]}{DASH}{fmt_date(last)}'
+
+    return f'{first.day}{DASH}{fmt_date(last)}'
+
+
+def preview_of(poll: dict, previous: Optional[dict], parties: list, colors: dict, election: str, host: str) -> dict:
+    """
+    What the link previews of a poll say, as plain data: its image and its description.
+
+    The figures, the names, the order and the change are those of the page of the poll (``vote_rows``,
+    ``poll_title``, ``sample_text``); the rules shared with the other previews are those of ``previews``.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record.
+    previous : dict or None
+        Previous delivery of the same house and sponsor (``previous_poll``).
+    parties : list
+        Parties of the scope, in their order (``vote_rows``).
+    colors : dict
+        ``{party: colour}``.
+    election : str
+        The election the poll belongs to (``event_bar['election']``, ``'Elecciones generales 2026'``).
+    host : str
+        Host of the site (``'demoscopio.es'``), for the footnote.
+
+    Returns
+    -------
+    dict
+        ``title`` (``poll_title``); ``subtitle`` (the election, ``'Campo: '`` and ``fieldwork_compact`` — or the day
+        of the poll without fieldwork dates — and ``sample_text``, joined with ``' · '``, without what is missing);
+        ``rows`` (the ``PREVIEW_ROWS`` parties with most vote, by vote: ``name``, ``color``, ``value``, ``share``
+        (``fmt_pct``), ``change`` (``preview_change``) and ``seats`` (the text of ``vote_rows``, or ``None``));
+        ``has_seats`` (whether a shown party has seats); ``more`` (``'y 7 partidos más en demoscopio.es'``, ``None``
+        when every party is shown); ``alt`` (the text alternative of the image: the title, the fieldwork and the
+        shares shown); ``description`` (the description of the page: the election, the title and the day of the
+        poll, and the shares shown that fit whole, ``with_figures``) and ``version`` (``preview_version`` of what
+        is drawn: the title, the subtitle, the rows and the footnote).
+    """
+    rows = vote_rows(poll, parties, colors, previous)
+    shown = [{'name': row['name'], 'color': row['color'], 'value': row['value'], 'share': fmt_pct(row['value']),
+              'change': preview_change(row['change']), 'seats': row['seats']} for row in rows[:PREVIEW_ROWS]]
+    title = poll_title(poll)
+    fieldwork = fieldwork_compact(poll)
+    day = fmt_date(poll.get('date'))
+    when = 'Campo: ' + fieldwork if fieldwork else day
+    left = len(rows) - len(shown)
+    more = None
+
+    if left > 0:
+        more = 'y {} más'.format('1 partido' if left == 1 else f'{left} partidos') + (f' en {host}' if host else '')
+
+    shares = ['{} {}'.format(row['name'], row['share']) for row in shown]
+    figures = ', '.join(shares)
+    drawn = {'title': title, 'rows': shown, 'more': more,
+             'subtitle': ' · '.join(text for text in (election, when, sample_text(poll)) if text and text != DASH)}
+
+    return dict(drawn, has_seats=any(row['seats'] is not None for row in shown),
+                alt='Sondeo de {} ({}){}.'.format(title, 'campo ' + fieldwork if fieldwork else day,
+                                                  ': ' + figures if figures else ''),
+                description=with_figures('{}: sondeo de {} ({}). '.format(election, title, day), shares),
+                version=preview_version(drawn))
+
+
+def _published_poll(context: dict, date: str, pollster: str, sponsor: Optional[str] = None) -> dict:
+    """
+    The poll that a URL names in the run of a page, with what its cards and its image read of the ``polls`` part.
+
+    Parameters
+    ----------
+    context : dict
+        ``common_context`` of an event page (``state``, ``catalog``).
+    date : str
+        Day of the poll in the URL (already checked).
+    pollster : str
+        House segment of the URL (``find_poll``).
+    sponsor : str, optional
+        Sponsor segment of the URL.
+
+    Returns
+    -------
+    dict
+        ``polls`` (the data of the part), ``poll`` (``find_poll``), ``parties`` (the parties of the part, in their
+        order), ``colors`` (``{party: colour}`` from the catalogue) and ``previous`` (``previous_poll``).
+
+    Raises
+    ------
+    HttpError
+        404 ``poll not found`` without a ``polls`` part or without the poll.
+    """
+    state = context['state']
+    polls = bundle_part(site().run_file, state['scope'], state['run'], 'polls')
+
+    if polls is None:
+        raise HttpError(404, 'poll not found')
+
+    records = polls.get('polls') or []
+    poll = find_poll(records, date, pollster, sponsor)
+    names = list(polls.get('parties') or [])
+
+    return {'polls': polls, 'poll': poll, 'parties': names,
+            'colors': {name: context['catalog'][name]['color'] for name in names},
+            'previous': previous_poll(records, poll)}
+
+
+def _context_preview(context: dict, found: dict) -> dict:
+    """
+    ``preview_of`` a published poll, with the election and the host of its page.
+
+    Parameters
+    ----------
+    context : dict
+        ``common_context`` of an event page (``event_bar``, ``site_host``).
+    found : dict
+        ``_published_poll`` of the same context.
+
+    Returns
+    -------
+    dict
+        See ``preview_of``.
+    """
+    return preview_of(found['poll'], found['previous'], found['parties'], found['colors'],
+                      context['event_bar']['election'], context['site_host'])
+
+
+def poll_preview(state: dict, date: str, pollster: str, sponsor: Optional[str] = None) -> dict:
+    """
+    What the image of the link previews of a published poll says.
+
+    It reads the metadata of the run and its ``polls`` part, nothing else of what the page of the poll needs.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``), the scope taken from the route.
+    date : str
+        Day of the poll in the URL (already checked).
+    pollster : str
+        House segment of the URL (``find_poll``).
+    sponsor : str, optional
+        Sponsor segment of the URL.
+
+    Returns
+    -------
+    dict
+        See ``preview_of``; the same data as ``sondeo_context(...)['preview']`` for the same state.
+
+    Raises
+    ------
+    HttpError
+        404 ``poll not found`` without a ``polls`` part or without the poll; those of ``common_context``.
+    """
+    context = common_context(state, None, event=True)
+
+    return _context_preview(context, _published_poll(context, date, pollster, sponsor))
+
+
+def latest_poll_preview(scope: str, date: str, pollster: str, sponsor: Optional[str] = None) -> Optional[dict]:
+    """
+    What the image of a poll says in the latest published run of its scope, which is what its address draws
+    whatever run a page pins.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the route (already resolved).
+    date : str
+        Day of the poll in the URL (already checked).
+    pollster : str
+        House segment of the URL (``find_poll``).
+    sponsor : str, optional
+        Sponsor segment of the URL.
+
+    Returns
+    -------
+    dict or None
+        See ``preview_of``; ``None`` when the latest run does not have the poll (its image answers 404).
+
+    Raises
+    ------
+    HttpError
+        Any error of ``poll_preview`` other than a 404.
+    """
+    try:
+        return poll_preview(parse_state({}, scope), date, pollster, sponsor)
+    except HttpError as error:
+        if error.status == 404:
+            return None
+
+        raise
+
+
 def sheet_rows(poll: dict, house_href: str, event_label: str) -> list:
     """
     Rows of the data sheet of a poll.
@@ -623,7 +847,8 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``, ``sponsor``, ``pollster`` and the
         percentages), ``previous`` (``values``, the shares, and ``seats``, the ranges, of the previous delivery, or
         ``None``), ``seats`` (``None`` without them), ``n_seats`` and ``majority``. The card of the poll draws the poll
-        and its change against the previous delivery, never the average (Luis, 2026-11-09).
+        and its change against the previous delivery, never the average (Luis, 2026-11-09). And ``preview``
+        (``preview_of``): what the image of its link previews says, in the run of the page.
 
     Raises
     ------
@@ -633,16 +858,10 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     context = common_context(state, None, event=True)
     full, meta, parties, query = context['state'], context['meta'], context['catalog'], context['query']
     scope, mode, run = full['scope'], full['mode'], full['run']
-    polls = bundle_part(site().run_file, scope, run, 'polls')
-
-    if polls is None:
-        raise HttpError(404, 'poll not found')
-
-    poll = find_poll(polls.get('polls') or [], date, pollster, sponsor)
-    poll_parties = list(polls.get('parties') or [])
+    found = _published_poll(context, date, pollster, sponsor)
+    polls, poll, poll_parties, colors, prev = (found[key] for key in ('polls', 'poll', 'parties', 'colors', 'previous'))
     series = part(scope, run, 'series')
     weights = bundle_part(site().run_file, scope, run, 'weights')
-    colors = {name: parties[name]['color'] for name in poll_parties}
     bmaps = meta.get('bmaps') or {}
     blocks = bmaps.get('blocks')
     blocks = list(blocks) if isinstance(blocks, dict) else []
@@ -660,7 +879,6 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
     house_polls = dict(polls, polls=[other for other in polls.get('polls') or [] if other.get(key) == poll.get(key)])
     run_parties = [entry['name'] for entry in meta.get('parties') or []]
     seats = poll.get('seats') or None
-    prev = previous_poll(polls.get('polls') or [], poll)
     previous = None if prev is None else {'date': fmt_date(prev['date']), 'title': poll_title(prev),
                                           'href': poll_detail_href(scope, prev) + query,
                                           'fieldwork': fieldwork_text(prev), 'overlap': fieldwork_overlaps(prev, poll)}
@@ -688,6 +906,7 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'image_sign': '{} · {}'.format(context['site_host'], context['author_handle']),
         'chart_file': 'demoscopio-encuestadora-{}-{}-{}.png'.format(scope, house_slug, date),
         'blocks': blocks,
+        'preview': _context_preview(context, found),
     })
     context['initial'] = {
         'state': full,

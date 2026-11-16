@@ -7,11 +7,14 @@ from html import unescape
 from markupsafe import Markup
 
 from mtpy.lib import pages
+from mtpy.lib.pages import sondeos
 from mtpy.lib.pages.filters import SNIPPET_LENGTH, snippet
 from tests.test_api_asgi import call
 from tests.test_pages import (api, houses, houses_without_analysis, html, publish_study, site_api,  # noqa: F401
                               write_event)
 from tests.test_pages_crawlers import POLL_PATH, write_polls
+from tests.test_pages_event_images import write_results
+from tests.test_pages_images import COLORS, GAD3, PARTIES
 from tests.test_pages_titles import site_paths
 from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, use_database, write_study  # noqa: F401
 
@@ -19,11 +22,11 @@ from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, use_d
 DESCRIPTIONS = {
     '/es': ('Elecciones generales 2026: promedio de las encuestas, escaños previstos por partido y circunscripción y '
             'probabilidad de mayoría absoluta.'),
-    POLL_PATH: 'Elecciones generales 2026: sondeo de Sigma Dos (5 oct 2026). Voto por partido y peso en el promedio.',
+    POLL_PATH: 'Elecciones generales 2026: sondeo de Sigma Dos (5 oct 2026). PP 33,1%.',
     '/elecciones': ('Cuánto se equivocaron las encuestas frente al resultado oficial en cada elección general y '
                     'autonómica: su error medio y hacia qué bloque fallaron.'),
-    '/elecciones/es/generales/2023-07': ('Generales 2023: el resultado oficial y cuánto se equivocaron frente a él '
-                                         'los sondeos, cada encuestadora y el modelo.'),
+    '/elecciones/es/generales/2023-07': ('Generales 2023: PP 33,1% (160 escaños), PSOE 31,4% (150), VOX 12,3% (40), '
+                                         'Cs 0,1% (0).'),
     '/casas': ('Qué encuestadoras aciertan más: el ranking por rating, cuánto se separa cada una del promedio de '
                'todas (su efecto de casa) y cuáles se ciñen al resto.'),
     '/casas/gad3': ('Perfil de la encuestadora GAD3: su rating, lo que se sabe de cómo trabaja, sus errores en cada '
@@ -142,8 +145,7 @@ def test_description_that_fits_is_escaped_once(houses, fresh_app):
     write_polls(fresh_app.fs, [{'pollster': 'Sondeos & Datos'}])
     status, _, body = call(houses, '/es/sondeos/2026-10-05/sondeos-datos')
     page = html(body)
-    text = ('Elecciones generales 2026: sondeo de Sondeos &amp; Datos (5 oct 2026). Voto por partido y peso en el '
-            'promedio.')
+    text = 'Elecciones generales 2026: sondeo de Sondeos &amp; Datos (5 oct 2026). PP 33,1%.'
     assert status == 200 and '<meta name="description" content="%s">' % text in page
     assert '<meta property="og:description" content="%s">' % text in page
 
@@ -182,72 +184,72 @@ def test_no_description_repeats_or_leads_with_a_menu_label(houses, fresh_app):
         assert not any(description.startswith(entry['label'] + ':') for entry in pages.PAGES), path
 
 
-def test_election_description_only_names_the_model_when_the_page_has_it(houses, fresh_app):
-    """Una elección sin la tarjeta «Lo que dijo el modelo» no dice «y el modelo» en su descripción."""
+def test_election_without_results_keeps_its_sentence(houses, fresh_app):
+    """Una elección sin resultado publicado no tiene cifras que decir: se describe con lo que la página tiene, y
+    sólo nombra el modelo si lleva la tarjeta «Lo que dijo el modelo»."""
     write_event(fresh_app.fs, date='2019-11-10', model=False, featured=False)
+    write_results(fresh_app.fs, '2019-11-10', [])
+    write_results(fresh_app.fs, '2023-07-23', [])
     status, _, body = call(houses, '/elecciones/es/generales/2019-11')
     page = html(body)
     assert status == 200 and 'Lo que dijo el modelo' not in page
-    description = description_of(page)
-    assert description.endswith(': el resultado oficial y cuánto se equivocaron frente a él los sondeos y cada '
-                                'encuestadora.')
+    assert description_of(page) == ('Generales 2023: el resultado oficial y cuánto se equivocaron frente a él los '
+                                    'sondeos y cada encuestadora.')
     page = html(call(houses, '/elecciones/es/generales/2023-07')[2])
     assert 'Lo que dijo el modelo' in page
-    assert description_of(page) == DESCRIPTIONS['/elecciones/es/generales/2023-07']
+    assert description_of(page) == ('Generales 2023: el resultado oficial y cuánto se equivocaron frente a él los '
+                                    'sondeos, cada encuestadora y el modelo.')
 
 
 def test_election_without_a_name_is_described_by_its_date():
-    """Sin nombre, la elección se describe por su fecha (bloque de la plantilla)."""
+    """Sin nombre y sin resultado publicado, la elección se describe por su fecha (bloque de la plantilla)."""
     template = pages.environment().get_template('eleccion.html')
-    context = template.new_context({'event': {'name': None, 'event_date': '2023-07-23'}, 'horizon_tables': []})
+    context = template.new_context({'event': {'name': None, 'event_date': '2023-07-23'}, 'horizon_tables': [],
+                                    'preview': {'description': None}})
     assert unescape(''.join(template.blocks['description'](context))) == (
         'Elección del 23 jul 2023: el resultado oficial y cuánto se equivocaron frente a él los sondeos y cada '
         'encuestadora.')
 
 
-def poll_description(**context):
-    """El bloque `description` de la página de un sondeo con ese contexto, sin escapar y sin cortar."""
-    template = pages.environment().get_template('sondeo.html')
-    return unescape(''.join(template.blocks['description'](template.new_context(context))))
+def poll_description(election='Elecciones generales 2026', **change):
+    """La descripción de un sondeo (el de GAD3, con trece partidos) con esos campos cambiados."""
+    return sondeos.preview_of(GAD3 | change, None, PARTIES, COLORS, election, 'demoscopio.es')['description']
 
 
-def test_poll_description_says_what_the_page_holds_and_fits():
-    """La descripción de un sondeo dice de quién es y de cuándo, y lo que la página tiene: escaños sólo si los
-    publicó y el cambio sólo si hay una entrega anterior. El de las generales con el nombre más largo cabe entero."""
-    event_bar = {'election': 'Elecciones generales 2026'}
-    lead = 'Elecciones generales 2026: sondeo de Sigma Dos para El Mundo (5 oct 2026). '
-    texts = {
-        (True, True): lead + 'Voto y escaños, cambio frente al anterior y peso en el promedio.',
-        (False, True): lead + 'Voto, cambio frente al anterior y peso en el promedio.',
-        (True, False): lead + 'Voto y escaños por partido y peso en el promedio.',
-        (False, False): lead + 'Voto por partido y peso en el promedio.',
-    }
-    for (has_seats, has_previous), text in texts.items():
-        assert poll_description(event_bar=event_bar, poll_title='Sigma Dos para El Mundo', poll_date='5 oct 2026',
-                                has_seats=has_seats, previous={'title': 'x'} if has_previous else None) == text
-        assert snippet(text) == text
-    # the longest house and outlet of the general election (32 characters) with the longest date: still whole
-    longest = poll_description(event_bar=event_bar, poll_title='Ateneo del Dato para elDiario.es',
-                               poll_date='28 sept 2026', has_seats=True, previous={'title': 'x'})
-    assert snippet(longest) == longest and longest.endswith('y peso en el promedio.')
-    # so does the usual poll of a regional election
-    regional = poll_description(event_bar={'election': 'Elecciones autonómicas Madrid 2027'}, has_seats=True,
-                                poll_title='Sigma Dos para El Mundo', poll_date='28 sept 2026', previous={'title': 'x'})
-    assert snippet(regional) == regional
+def test_poll_description_says_its_figures_and_fits():
+    """La descripción de un sondeo dice de quién es y de cuándo, y después sus cifras: las de su imagen, por orden
+    de voto, tantas como quepan enteras. Nunca corta una cifra ni pasa del tope."""
+    text = poll_description()
+    assert text == ('Elecciones generales 2026: sondeo de GAD3 para Vocento (5 nov 2026). PP 31,9%, PSOE 25,9%, '
+                    'VOX 18,6%, FA 7,5%, ERC 2,7%, AA 1,6%.')
+    assert len(text) <= SNIPPET_LENGTH and snippet(text) == text
+    # the longest house and outlet of the general election (32 characters): the six figures still fit
+    longest = poll_description(pollster='Ateneo del Dato', sponsor='elDiario.es', date='2026-09-28')
+    assert longest.startswith('Elecciones generales 2026: sondeo de Ateneo del Dato para elDiario.es (28 sept 2026). ')
+    assert longest.endswith(', AA 1,6%.') and snippet(longest) == longest
+    # a long election and a long house: fewer figures, the last one whole
+    regional = poll_description('Elecciones autonómicas Comunidad Valenciana 2027', pollster='Lápiz Estratégico',
+                                sponsor='Prensa Ibérica', date='2025-09-26')
+    assert regional == ('Elecciones autonómicas Comunidad Valenciana 2027: sondeo de Lápiz Estratégico para Prensa '
+                        'Ibérica (26 sept 2025). PP 31,9%, PSOE 25,9%, VOX 18,6%, FA 7,5%.')
+    assert len(regional) <= SNIPPET_LENGTH < len(regional) + len(', ERC 2,7%') and snippet(regional) == regional
+    # a poll without any figure: the sentence that says whose it is
+    empty = poll_description(**{name: None for name in PARTIES})
+    assert empty == 'Elecciones generales 2026: sondeo de GAD3 para Vocento (5 nov 2026).'
 
 
 def test_long_poll_description_ends_at_its_first_sentence(houses, fresh_app):
-    """Un sondeo con una encuestadora y un medio de nombre muy largo no cabe: la descripción se queda en su primera
-    frase, la que dice de quién es y de cuándo, igual en `og:description`."""
+    """Con una encuestadora y un medio de nombre muy largo no cabe ninguna cifra: la descripción se queda en su
+    primera frase, la que dice de quién es y de cuándo, igual en `og:description`."""
     change = {'pollster': 'Instituto de Estudios Demoscópicos y de Opinión',
-              'sponsor': 'El Periódico de la Mañana y Radio Norte'}
+              'sponsor': 'El Periódico de la Mañana y la Radio Nacional del Norte'}
     write_polls(fresh_app.fs, [change])
     path = pages.poll_detail_href('es', fixture_data('polls')['polls'][0] | change)
     status, _, body = call(houses, path)
     page = html(body)
     assert status == 200 and description_of(page) == og_description_of(page) == (
         'Elecciones generales 2026: sondeo de Instituto de Estudios Demoscópicos y de Opinión para El Periódico de '
-        'la Mañana y Radio Norte (5 oct 2026).')
+        'la Mañana y la Radio Nacional del Norte (5 oct 2026).')
 
 
 def test_event_description_fits_for_the_longest_scope_name():
