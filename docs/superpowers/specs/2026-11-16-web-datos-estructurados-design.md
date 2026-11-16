@@ -109,3 +109,9 @@ primer nivel y no son artículos.
 - **El logotipo de la organización es la lente** (el icono cuadrado), no la marca con el nombre.
 - **Qué páginas llevan qué** (la tabla), y que las migas usen las etiquetas del menú.
 - **Los estudios sin `datePublished`.**
+- **La fecha del estudio del voto CERA**: lleva como `dateModified` la de su última publicación (la del
+  manifiesto), como los otros cuatro, aunque su página no enseña ninguna «Actualizado el». La alternativa es
+  declarar la fecha sólo en los estudios que la enseñan.
+- **Los bloques van en línea** en la página (`<script type="application/ld+json">`): son datos que el navegador no
+  ejecuta, y la política de seguridad de nginx, que no admite scripts en línea, no les aplica; la prueba que
+  vigila esa regla los admite desde este paso.
