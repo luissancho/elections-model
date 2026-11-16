@@ -85,6 +85,9 @@ ROUTES = [
     ('/analisis', 'analisis', 'index', ['GET']),
     # the default alias (``[0-9a-z_\-]+``): ``:str`` is only ``[a-z]+`` and the slugs have hyphens (``voto-cera``)
     ('/analisis/{study}', 'analisis', 'study', ['GET']),
+    # the files for the crawlers; the dot is escaped because the patterns are regular expressions
+    (r'/robots\.txt', 'crawlers', 'robots', ['GET']),
+    (r'/sitemap\.xml', 'crawlers', 'sitemap', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
     # the old seats page of a scope (before 2026-11-04): a 301 to its section of the event page
     ('/{scope}/escanos', 'redirect', 'seats', ['GET']),

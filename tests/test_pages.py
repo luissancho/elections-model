@@ -2075,7 +2075,8 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters',
+    assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common',
+                     'crawlers', 'elecciones', 'escanos', 'filters',
                      'herd', 'inicio', 'lean', 'metodo', 'promedios', 'seat_charts', 'seat_odds', 'shy', 'slugs', 'sondeos']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
