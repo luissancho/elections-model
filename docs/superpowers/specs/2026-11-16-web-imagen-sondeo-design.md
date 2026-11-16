@@ -21,8 +21,10 @@ quiso «al menos para el Promedio». Un sondeo publicado no cambia, salvo correc
   crece con los partidos. Las redes no ejecutan JavaScript al leer un enlace.
 - El servidor tiene Pillow 10.3 (`requirements.txt`, la misma imagen de Docker para la web y los jobs). La imagen
   de marca se dibujó con Pillow en `web/brand/build.py`, que no es código de la web.
-- Las fuentes del sitio sólo existen como woff2 variables (`web/dist/vendor/fonts/`), que Pillow no lee sin
-  `brotli`, que no es dependencia de la web. Son SIL OFL.
+- Las fuentes del sitio sólo existen como woff2 variables (`web/dist/vendor/fonts/`). Son SIL OFL, con los
+  nombres «Outfit» y «DM Sans» reservados. **Corregido al construir (2026-11-16):** Pillow sí las lee tal como
+  están; el FreeType de sus paquetes para macOS y para Linux (x86_64 y aarch64) trae `brotli`, y admite fijar
+  el peso de una fuente variable.
 - Las rutas son expresiones regulares y los segmentos de un sondeo (`[0-9a-z_\-]+`) no admiten puntos.
 - Un controlador puede devolver `bytes`.
 - nginx guarda en caché las respuestas 200 de la aplicación (60 s por defecto; respeta el `Cache-Control` de la
@@ -120,8 +122,11 @@ voto, que era mi recomendación.
 - Lo que la imagen pinta se compone primero como datos (título, subtítulo, filas con siglas, voto, color, cambio y
   escaños, pie) en una función sin Pillow; el dibujo sólo recibe eso. La página usa los mismos datos para la
   huella y el texto alternativo.
-- Las fuentes del dibujo se versionan como TrueType junto al código (generadas una vez desde las woff2 del sitio
-  con las herramientas de `web/brand`, que ya piden `fonttools` y `brotli`); en ejecución sólo hace falta Pillow.
+- El dibujo usa las mismas fuentes que sirve el sitio (las woff2 variables, con el peso fijado al abrirlas); en
+  ejecución sólo hace falta Pillow. La marca se versiona como PNG (`web/dist/img/wordmark.png`), generado una
+  vez con las herramientas de `web/brand`. **Cambiado al construir:** el diseño aprobado decía versionar copias
+  TrueType de las fuentes, por el error de arriba; no hacen falta, y así no hay copias derivadas que mantener
+  ni que renombrar por la licencia.
 - Las piezas de dibujo se escriben pensando en una segunda tarjeta (la de una elección pasada), sin construirla.
 
 ### Pruebas
@@ -173,5 +178,4 @@ Mías, por revisar:
 - Cómo se espacian las letras (con el motor de Pillow que haya o colocando cada letra): la imagen tiene que salir
   bien con y sin `raqm`, y las anchuras se miden con el mismo motor con que se dibuja.
 - Si el dibujo se hace al doble de tamaño y se reduce, o directamente.
-- Qué fuentes TrueType se versionan (una variable por familia o una por peso) y dónde.
 - Cómo se calcula la huella de `?v=`.
