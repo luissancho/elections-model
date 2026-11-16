@@ -422,9 +422,10 @@ por ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprue
 `/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML),
 `/elecciones/es/generales/2023-07` (200 HTML si la elección está publicada; desde el 2026-11-16: antes pedía la
 dirección antigua con `?date=`, que redirige con un 301 desde que las elecciones tienen dirección limpia, y la
-daba por fallo) y su imagen `/elecciones/es/generales/2023-07.png` (`image/png`), `/metodo/backtest?scope=es`,
-`/metodo`, `/metodo/promedio`, `/metodo/escanos` y `/metodo/rating` (200 HTML), `/metodo/nope` y `/nope` (404
-HTML), con nginx también
+daba por fallo), su imagen `/elecciones/es/generales/2023-07.png` (`image/png`) y
+`/elecciones/es/generales/abc.png` (400 HTML: una fecha no válida no se dibuja; como las dos anteriores, sólo si
+`es` tiene elecciones publicadas), `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y
+`/metodo/rating` (200 HTML), `/metodo/nope` y `/nope` (404 HTML), con nginx también
 `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`), `/dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2`
 (`font/woff2`) y `/dist/css/site.css` (`text/css`), y 21 rutas de la API (código, tipo y JSON válido): las 10 del
 paquete, `/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23`,
@@ -432,8 +433,11 @@ paquete, `/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/
 `/api/v1/analysis/es/nope` (404), `/api/v1/events/es/2023-07-23/pollsters` y `/api/v1/backtest/es/by-horizon` (200
 JSON si están publicados), `/api/v1/events/es/2023-13-01/meta` (400) y `/api/v1/backtest/es/nope` (404); sale con
 error si alguna falla. Lo que escriben `publish event` y `publish backtest` puede faltar en el paquete (en local,
-casi siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API) o "no
-publicada"/"no publicado" (páginas), y comprueba como `check RUTA 200` cualquier otra respuesta.
+casi siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API), "no
+publicada"/"no publicado" (páginas) o "no tiene actualizaciones" (la página de un ámbito sin ninguna elección
+publicada, que es lo que responde cualquier dirección de `/elecciones/es/generales/…` en un paquete sin
+elecciones), y comprueba como `check RUTA 200` cualquier otra respuesta (o con el código que se le dé como cuarto
+argumento: el 400 de la fecha no válida).
 
 ### Tipografías y marca
 

@@ -3,7 +3,10 @@ elección anterior), su dibujo (el de la tarjeta de un sondeo) y su dirección."
 import copy
 import hashlib
 import io
+import os
 import re
+import shlex
+import subprocess
 
 import pytest
 from PIL import Image
@@ -43,6 +46,7 @@ BEFORE = {'date': '2019-11-10',
 LEGEND = 'Resultado oficial del 23 jul 2023 · Cambio frente a la elección anterior (10 nov 2019)'
 EVENT_PATH = '/elecciones/es/generales/2023-07'  # the only election of the fixture bundle
 EVENT_IMAGE = EVENT_PATH + '.png'
+CHECK_API = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'deploy', 'check-api.sh')
 
 
 def preview(rows=None, previous=BEFORE, title=TITLE, date=DATE, host=HOST):
@@ -386,3 +390,56 @@ def test_event_image_of_a_scope_without_forecast(houses, fresh_app):
     assert meta_of(page, 'og:image') == SITE + path + '.png?v=' + data['version']
     status, headers, body = call(houses, path + '.png')
     assert status == 200 and headers['content-type'] == 'image/png' and body == pages.images.result_png(data)
+
+
+def check_api_lines():
+    """Las líneas de `deploy/check-api.sh` que piden una dirección de las elecciones, troceadas en sus argumentos,
+    y el patrón con el que su `check_published` da un 404 por «sin publicar»."""
+    with open(CHECK_API, encoding='utf-8') as file:
+        script = file.read()
+
+    pattern = re.search(r"""grep -qE '([^']+)' "\$body"; then\n +echo "n/a  \$path sin publicar\"""", script)
+    lines = [shlex.split(line) for line in script.splitlines() if re.match(r'check(_published)? "?/elecciones', line)]
+
+    return lines, pattern.group(1)
+
+
+def check_api_verdicts(site, tmp_path):
+    """Lo que `deploy/check-api.sh` diría de cada una de sus líneas de las elecciones contra `site`: `OK`, `n/a`
+    (un 404 que su patrón da por «sin publicar», pasado por el `grep` de verdad) o `FAIL` con el código."""
+    lines, pattern = check_api_lines()
+    verdicts = {}
+
+    for words in lines:
+        address, _, query = words[1].partition('?')
+        status, _, body = call(site, address, query=query)
+        want = words[2]
+
+        if words[0] == 'check_published':
+            want = (words[4:5] or ['200'])[0]
+            page = tmp_path / 'body'
+            page.write_bytes(body)
+
+            if status == 404 and subprocess.run(['grep', '-qE', pattern, str(page)]).returncode == 0:
+                verdicts[words[1]] = 'n/a'
+                continue
+
+        verdicts[words[1]] = 'OK' if str(status) == want else 'FAIL {}'.format(status)
+
+    return verdicts
+
+
+def test_check_api_does_not_fail_on_a_package_without_published_elections(api, tmp_path):
+    """En un paquete sin elecciones publicadas (el local casi siempre), `deploy/check-api.sh` da por «sin publicar»
+    la página de una elección, su imagen y el 400 de una fecha no válida, que sólo se alcanza con elecciones."""
+    assert check_api_verdicts(api, tmp_path) == {
+        '/elecciones?scope=es': 'OK', '/elecciones?date=abc': 'OK', EVENT_PATH: 'n/a',
+        '/elecciones/es/generales/abc.png': 'n/a', EVENT_IMAGE: 'n/a'}
+
+
+def test_check_api_checks_a_published_election_and_its_image(houses, tmp_path):
+    """Con la elección publicada, `deploy/check-api.sh` comprueba su página, su imagen y el 400 de una fecha no
+    válida."""
+    assert check_api_verdicts(houses, tmp_path) == {
+        '/elecciones?scope=es': 'OK', '/elecciones?date=abc': 'OK', EVENT_PATH: 'OK',
+        '/elecciones/es/generales/abc.png': 'OK', EVENT_IMAGE: 'OK'}
