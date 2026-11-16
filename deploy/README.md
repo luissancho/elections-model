@@ -250,6 +250,16 @@ también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`:
 del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
 controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
 
+Para los rastreadores (`mtpy/lib/pages/crawlers.py`, controlador `Crawlers`): `/robots.txt` deja todo abierto menos
+`/api/` (los mismos datos de las páginas en JSON y CSV) y da la URL del sitemap; `/sitemap.xml` lista las URL
+canónicas de lo publicado, calculadas en cada petición con los enlaces de las propias páginas: la portada y cada
+ámbito (con `<lastmod>`, la hora de su última actualización), las elecciones pasadas, los perfiles de las
+encuestadoras, el método, los análisis y la página de cada sondeo de la última actualización de cada ámbito. Sin
+variantes con parámetros, sin las rutas que redirigen y sin `/privacidad`. Las dos respuestas se guardan una hora
+(`cache-control: public, max-age=3600`, que la caché de nginx respeta). El sitemap necesita la base de datos (los
+perfiles salen de ella): sin base o sin paquete responde 503, nunca una lista a medias. Tras el primer despliegue,
+darlo de alta en Google Search Console y en Bing Webmaster Tools.
+
 Datos y errores: `/elecciones` y `/metodo/backtest` leen solo el paquete (sin base): sin elecciones o sin backtest
 publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400 ("Fecha no válida.") y una
 elección no publicada, 404 ("Elección no publicada."); una subpágina del método desconocida, 404 ("Página del método

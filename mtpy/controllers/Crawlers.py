@@ -48,3 +48,19 @@ class Crawlers(Page):
             The text of ``pages.robots_txt``, as ``text/plain``.
         """
         return self.respond(pages.robots_txt(), 'text/plain')
+
+    async def sitemap_action(self) -> str:
+        """
+        Answer ``/sitemap.xml``.
+
+        Returns
+        -------
+        str
+            The XML of ``pages.sitemap_xml``, as ``application/xml``.
+
+        Raises
+        ------
+        HttpError
+            503 without a bundle or without a database, shown as the error page.
+        """
+        return self.respond(pages.sitemap_xml(), 'application/xml')

@@ -147,6 +147,8 @@ check /metodo/rating 200 html
 check /metodo/nope 404 html
 check /modelo 301 none
 check /nope 404 html
+check /robots.txt 200 none text/plain
+check_db_only /sitemap.xml 200 none application/xml
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
 check_nginx_only /dist/vendor/html2canvas-1.4.1.min.js application/javascript
 check_nginx_only /dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2 font/woff2
