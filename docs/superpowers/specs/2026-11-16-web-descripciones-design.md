@@ -32,8 +32,9 @@ no prometa lo que la página no tiene.
    el corte de cada plataforma.
 2. **Sólo reescribir**, y dejar los subtítulos de los estudios como están. Descartado: son los más largos y los
    que más se comparten.
-3. **Una descripción corta propia en cada estudio** (un campo nuevo publicado). Descartado: el subtítulo ya es la
-   mejor frase del estudio, y su primera oración lleva el hallazgo.
+3. **Una descripción corta propia en cada estudio** (un campo nuevo publicado). Fuera de este paso: pide textos
+   nuevos para estudios de Luis y republicarlos. Sigue abierto: el corte deja el hallazgo en uno de los cuatro
+   subtítulos (ver «Detalles»).
 
 ## Diseño
 
@@ -51,7 +52,7 @@ Filtro de las plantillas, aplicado en `base.html` a la descripción de todas las
 | Página | Hoy | Nueva |
 |---|---|---|
 | `/es` | Encuestas, promedio de sondeos y escaños previstos por partido, bloque y circunscripción, con la probabilidad de mayoría absoluta, de Elecciones generales. | Elecciones generales 2026: promedio de las encuestas, escaños previstos por partido y circunscripción y probabilidad de mayoría absoluta. |
-| un sondeo | Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio. | Elecciones generales 2026: sondeo de Sigma Dos realizado hasta el 5 oct 2026. Voto y escaños por partido, cambio frente al anterior y peso en el promedio. |
+| un sondeo | Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio. | Elecciones generales 2026: sondeo de Sigma Dos para El Mundo (5 oct 2026). Voto y escaños, cambio frente al anterior y peso en el promedio. |
 | `/elecciones` | Histórico Errores: cuánto se equivocaron las encuestas frente al resultado en cada elección pasada. | Cuánto se equivocaron las encuestas frente al resultado oficial en cada elección general y autonómica: su error medio y hacia qué bloque fallaron. |
 | una elección pasada | Resultado de la elección del 23 jul 2023 y cuánto se equivocaron frente a él los sondeos, cada encuestadora y el modelo. | Elecciones Generales Julio 2023: el resultado oficial y cuánto se equivocaron frente a él los sondeos, cada encuestadora y el modelo. |
 | `/casas` | Ranking Encuestadoras: qué encuestadoras aciertan más, cuánto se separa cada una del promedio y cuáles se ciñen al resto. | Qué encuestadoras aciertan más: el ranking por rating, cuánto se separa cada una del promedio de todas (su efecto de casa) y cuáles se ciñen al resto. |
@@ -64,16 +65,23 @@ Filtro de las plantillas, aplicado en `base.html` a la descripción de todas las
 
 Detalles:
 
-- El evento y el sondeo nombran la elección como el título («Elecciones autonómicas Madrid 2027: …»), sin el punto
-  medio de la barra del evento. El sondeo dice «realizado hasta el»: su fecha es el último día del trabajo de
-  campo, nunca la de publicación. Con «con trabajo de campo hasta el» y «rating», el sondeo más corriente (con
-  escaños y entrega anterior) pasaba de 160 y perdía su segunda frase; con un medio de nombre largo se queda en la
-  primera, que dice de quién es y de cuándo.
+- El evento y el sondeo nombran la elección como el título («Elecciones autonómicas Madrid 2027: …»), sin el
+  punto medio de la barra del evento.
+- El sondeo da su fecha entre paréntesis, como su título (es el último día del trabajo de campo; la página lo
+  dice), y su segunda frase dice lo que la página tiene: «y escaños» sólo si los publicó, «cambio frente al
+  anterior» sólo si hay una entrega anterior, y «por partido» cuando no la hay. Así cabe entero el sondeo
+  corriente: 276 de los 315 de las generales llevan medio, y con los nombres reales caben todos (el más largo,
+  «Ateneo del Dato para elDiario.es», también), y casi todos en un ámbito autonómico; en los tres de nombre más
+  largo (Comunidad Valenciana, Castilla-La Mancha, Castilla y León) un sondeo con escaños y entrega anterior se
+  queda a menudo en su primera frase, que dice de qué elección es, de quién y de cuándo.
 - La elección pasada lleva su nombre (sin nombre, «Elección del 23 jul 2023») y sólo dice «y el modelo» si la
   página tiene la tarjeta «Lo que dijo el modelo».
-- Los estudios conservan su subtítulo publicado; el corte lo deja en su primera oración o en unas 25 palabras.
-  Con los subtítulos de hoy: «Desde el nombramiento de José Félix Tezanos en 2018, el CIS ha dado al bloque de
-  izquierdas más voto del que obtuvo en 38 de 41 elecciones generales…».
+- Los estudios conservan su subtítulo publicado; el corte lo deja en sus primeras oraciones o en unas 25
+  palabras. Con los subtítulos de hoy, el del sesgo del CIS conserva el hallazgo («Desde el nombramiento de José
+  Félix Tezanos en 2018, el CIS ha dado al bloque de izquierdas más voto del que obtuvo en 38 de 41 elecciones
+  generales…»); el del voto oculto se queda en la creencia que el estudio examina, el de Andorra en sus dos
+  frases de contexto y el del rebaño pierde el «por azar, 1 entre N». No es peor que antes (un buscador cortaba
+  esos textos más o menos en el mismo sitio), pero tampoco es la mejor frase de cada estudio.
 - Sin cambios: la portada, `/metodo/backtest`, `/analisis`, el estudio del voto CERA, `/privacidad` y la
   descripción por defecto (la de la página de error).
 
@@ -93,6 +101,19 @@ Detalles:
   `og:description`, sin la etiqueta del menú delante y distinta de las demás.
 - El texto exacto de cada tipo de página de la tabla, y que los fijos acaban en punto (no cortados).
 - Una elección sin tarjeta del modelo, un sondeo con un nombre largo y un ámbito autonómico de nombre largo.
+- Las cuatro variantes del sondeo (con o sin escaños, con o sin entrega anterior), y que el de las generales con
+  el nombre más largo cabe entero.
+- El subtítulo largo de un estudio sale cortado igual en las dos etiquetas; un nombre con «&» llega escapado una
+  sola vez también cuando la descripción cabe; los textos fijos de las plantillas caben sin el corte.
+
+## Corregido tras la revisión
+
+- **El texto del sondeo.** El primero («… realizado hasta el 5 oct 2026. Voto y escaños por partido, cambio
+  frente al anterior y peso en el promedio.») sólo cabía entero sin medio: con los nombres reales de las
+  generales, el sondeo con escaños y entrega anterior se quedaba en su primera frase entre 68 y 86 veces de cada
+  100, según lo larga que sea la fecha. El de ahora cabe en todos.
+- **Pruebas que no probaban**: `og:description` cuando hay corte, la regla de la mitad del tope, el escapado de
+  una descripción que cabe y que los textos fijos caben enteros. Cada una falla ahora si se rompe lo que protege.
 
 ## Fuera de este paso
 
@@ -104,5 +125,9 @@ Detalles:
 - **Todos los textos de la tabla.**
 - **El corte a 160** y su regla (frases completas, o palabra entera con «…»), también para los subtítulos de los
   estudios, que son texto de Luis: la página los sigue enseñando enteros.
-- **«su rebaño» sale de la descripción del perfil** (fuera de la web no se entiende) y entra «sus efectos de casa».
+- **«su rebaño» sale de la descripción del perfil** (fuera de la web no se entiende) y entra «sus efectos de
+  casa».
+- **La fecha del sondeo entre paréntesis**, sin «con trabajo de campo hasta el», y «por partido» sólo cuando no
+  hay entrega anterior: es lo que hace que quepa.
+- **Los estudios se quedan con su subtítulo cortado** en vez de una descripción corta propia (enfoque 3).
 - La portada no se toca.

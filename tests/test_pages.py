@@ -7797,9 +7797,9 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     # the table of the vote and the weight card share a row
     assert page.index('<div class="poll-pair">') < page.index('id="vote"') < page.index('id="weight"') < page.index('id="house"')
     assert '2.000 entrevistas · ' in card and 'El arco gris, «Otros», completa la cámara' in card
-    # the commonest poll (seats, a previous delivery, no outlet) keeps its two sentences within the snippet
-    assert ('<meta name="description" content="Elecciones generales 2026: sondeo de Sigma Dos realizado hasta el 5 oct '
-            '2026. Voto y escaños por partido, cambio frente al anterior y peso en el promedio.">') in page
+    # a poll with seats and a previous delivery says so in its description
+    assert ('<meta name="description" content="Elecciones generales 2026: sondeo de Sigma Dos (5 oct 2026). Voto y '
+            'escaños, cambio frente al anterior y peso en el promedio.">') in page
     # the table: % Voto, vs Anterior, Escaños and vs Anterior (midpoints of the ranges); nothing of the average nor of the
     # house effect (Luis, 2026-11-09)
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
