@@ -23,7 +23,8 @@
 
 - A tracking parameter (`utm_source`, `fbclid`, `gclid`) on every kind of page: the canonical and `og:url` stay clean. (Task 1, `test_every_sitemap_page_declares_its_path_whatever_the_query`)
 - `?scope=` on a global page (`/casas`, `/elecciones`, `/metodo/*`, `/analisis/*`, `/privacidad`): the canonical is the path. (Task 1, same test and the two older ones)
-- A page that still passes its own canonical (profile, past election, poll) asked through a non-clean path (`/elecciones/es/generales/2023-07-23`): its canonical stays the clean one. (Task 1, `test_profile_and_detail_canonicals_are_the_clean_urls`)
+- A page that still passes its own canonical (profile, past election, poll) asked through a non-clean path (`/casas/2`, `/es/sondeos/2026-10-05/7`, `/elecciones/es/generales/2023-07-23`): its canonical stays the clean one. (Task 1, `test_page_asked_by_an_id_declares_its_clean_url` and `test_profile_and_detail_canonicals_are_the_clean_urls`)
+- A regional scope on the two global pages whose cards change with it (`/casas`, `/metodo/backtest`): the canonical is the national page. (Task 1, `test_regional_scope_of_a_global_page_declares_the_path`)
 - `web.site_url` configured with a trailing slash: no doubled slash. (Task 1, `test_canonical_is_the_path_without_the_query`)
 - A query value with reserved characters (`"`, `<`, `&`): nothing of it reaches the head. (Task 1, `test_no_query_value_reaches_the_head`)
 

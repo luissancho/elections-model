@@ -87,9 +87,10 @@ class Page(Controller):
         """
         Canonical URL of the page of the request: the public origin and the path, without the query.
 
-        No parameter selects the content of a page: ``mode``, ``run``, ``region`` and ``seccion`` change the view
-        of an event, ``scope`` sets the filter and the links of a global page, and the rest come from outside
-        (``utm_*``, ``fbclid``, ``gclid``). One page, one address.
+        No parameter gives a page an address of its own: ``mode``, ``run``, ``region`` and ``seccion`` change the
+        view of an event; ``scope`` sets the filter and the links of a global page and, in ``/casas`` and
+        ``/metodo/backtest``, the cards of that scope, which stay views of the national page; the rest come from
+        outside (``utm_*``, ``fbclid``, ``gclid``). One page, one address.
 
         Returns
         -------

@@ -9,7 +9,8 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, webapi
 from tests.test_api_asgi import call
 from tests.test_pages import api, houses, houses_without_analysis, html, site_api  # noqa: F401
-from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, use_database, write_study  # noqa: F401
+from tests.test_webapi_unit import (ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis,  # noqa: F401
+                                    write_backtest, write_bundle, write_study)
 
 SITE = 'https://demoscopio.es'
 NS = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
@@ -113,6 +114,38 @@ def test_every_sitemap_page_declares_its_path_whatever_the_query(houses, fresh_a
         assert status == 200 and '<link rel="canonical" href="{}">'.format(loc) in head, loc
         assert '<meta property="og:url" content="{}">'.format(loc) in head, loc
         assert 'utm_' not in head and 'fbclid' not in head and 'gclid' not in head, loc
+
+
+def canonical_of(api, path, query=''):
+    """`(canónica, og:url)` de una página que responde 200."""
+    status, _, body = call(api, path, query=query)
+    assert status == 200, (path, query, status)
+    head = head_of(html(body))
+    canonical = re.findall(r'<link rel="canonical" href="([^"]*)">', head)
+    og_url = re.findall(r'<meta property="og:url" content="([^"]*)">', head)
+    assert len(canonical) == 1 and len(og_url) == 1, path
+    return canonical[0], og_url[0]
+
+
+def test_page_asked_by_an_id_declares_its_clean_url(houses):
+    """El perfil de una encuestadora y la página de un sondeo, pedidos con el identificador de la casa en vez de
+    con su nombre, declaran la dirección con el nombre: la fija su controlador, no la ruta de la petición."""
+    assert canonical_of(houses, '/casas/2') == (SITE + '/casas/gad3',) * 2
+    assert canonical_of(houses, '/es/sondeos/2026-10-05/7') == (SITE + POLL_PATH,) * 2
+
+
+def test_regional_scope_of_a_global_page_declares_the_path(houses, fresh_app):
+    """Con el ámbito de una autonómica, una página global declara la misma dirección que sin él, también las dos
+    que cambian tarjetas con el ámbito (`/casas` y `/metodo/backtest`): son vistas de la página nacional."""
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    write_analysis(fresh_app.fs, scope='es-md')
+    write_backtest(fresh_app.fs, scope='es-md')
+    webapi.site().manifest_cache_clear()
+
+    for path in ('/casas', '/metodo/backtest', '/elecciones', '/metodo', '/analisis', '/privacidad'):
+        assert canonical_of(houses, path, 'scope=es-md&utm_source=x') == (SITE + path,) * 2, path
+    # the event of that scope has its own address, the path
+    assert canonical_of(houses, '/es-md', 'scope=es&mode=forecast') == (SITE + '/es-md',) * 2
 
 
 def test_no_query_value_reaches_the_head(houses, fresh_app):

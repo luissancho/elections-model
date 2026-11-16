@@ -245,10 +245,11 @@ las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en 
 X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
 `fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
 edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
-más la ruta, sin consulta: ningún parámetro elige el contenido (`mode`, `run`, `region` y `seccion` cambian la vista
-del evento; `scope`, el filtro y los enlaces de una página global), y los de fuera (`utm_*`, `fbclid`, `gclid`) no
-deben dar otra dirección a la misma página. `twitter:creator` es la cuenta del autor (`AUTHOR_HANDLE`, en
-`pages/common.py`). Cada página declara
+más la ruta, sin consulta: ningún parámetro da a una página una dirección propia. `mode`, `run`, `region` y
+`seccion` cambian la vista del evento; `scope`, el filtro y los enlaces de una página global y, en `/casas` y
+`/metodo/backtest`, las tarjetas de ese ámbito, que quedan como vistas de la página nacional; y los de fuera
+(`utm_*`, `fbclid`, `gclid`) no deben dar otra dirección a la misma página. `twitter:creator` es la cuenta del
+autor (`AUTHOR_HANDLE`, en `pages/common.py`). Cada página declara
 también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`: la imagen de marca con `?v=` y el hash
 del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
 controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
