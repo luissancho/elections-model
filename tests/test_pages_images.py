@@ -364,19 +364,21 @@ def test_poll_png_marks_the_change_after_the_figure():
 
 def test_figures_never_reach_the_seats_column():
     """Con la barra más larga, la cifra más ancha, un cambio de dos cifras y la horquilla más ancha, queda aire
-    entre lo que sigue a la barra y los escaños; también cuando unas siglas largas empujan las barras."""
+    entre lo que sigue a la barra y los escaños; también cuando unas siglas largas empujan las barras o cuando los
+    escaños son un texto que no cabe en su columna."""
     images = pages.images
     change = {'direction': 'down', 'text': '10,0'}
 
-    for name in ('PP', 'COMPROMIS', 'W' * 12):
-        image = drawn(card([row_of(name, 100, change=change, seats='125–136'), row_of('PSOE', 0, seats='0')]))
+    for name, seats in (('PP', '125–136'), ('COMPROMIS', '125–136'), ('W' * 12, '125–136'),
+                        ('PP', '1.000.000–2.000.000')):
+        image = drawn(card([row_of(name, 100, change=change, seats=seats), row_of('PSOE', 0, seats='0')]))
         top, bottom = row_band(0)
         columns = [blank(image, (x, top, x + 1, bottom)) for x in range(images.BAR_RIGHT + 1, images.RIGHT + 1)]
         inked = [index for index, empty in enumerate(columns) if not empty]
         # the figure right after the bar and the seats against the right edge
-        assert inked and inked[0] < 20 and inked[-1] > len(columns) - 8, name
+        assert inked and inked[0] < 20 and inked[-1] > len(columns) - 8, (name, seats)
         gaps = [second - first - 1 for first, second in zip(inked, inked[1:])]
-        assert max(gaps) >= 24, (name, max(gaps))
+        assert max(gaps) >= 24, (name, seats, max(gaps))
 
 
 def test_poll_png_leaves_the_corner_of_the_link_title_free():
