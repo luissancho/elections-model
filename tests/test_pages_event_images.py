@@ -17,7 +17,7 @@ from mtpy.lib.pages import elecciones
 from mtpy.lib.pages.filters import SNIPPET_LENGTH
 from tests.test_api_asgi import call
 from tests.test_pages import api, houses, houses_without_analysis, site_api  # noqa: F401
-from tests.test_pages_crawlers import sitemap
+from tests.test_pages_crawlers import POLL_PATH, sitemap
 from tests.test_pages_images import BRAND_ALT, SITE, meta_of, page_of
 from tests.test_webapi_unit import RUN, fixture_data, write_event
 
@@ -264,8 +264,10 @@ def test_event_preview_refuses_what_the_page_refuses(houses, fresh_app):
 
 def test_event_image_route_answers_a_cacheable_png(houses, fresh_app):
     """La imagen de una elección vive en la dirección de su página acabada en `.png`: un PNG de 1200×675 con un
-    día de caché y su ETag, igual pedida por el mes o por la fecha y con cualquier consulta."""
-    status, headers, body = call(houses, EVENT_IMAGE)
+    día de caché (pedida con su huella) y su ETag, igual pedida por el mes o por la fecha y con cualquier
+    consulta."""
+    version = pages.latest_event_preview('es', '2023-07-23')['version']
+    status, headers, body = call(houses, EVENT_IMAGE, query='v=' + version)
     assert status == 200 and headers['content-type'] == 'image/png'
     assert headers['cache-control'] == 'public, max-age=86400'
     assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
@@ -390,6 +392,38 @@ def test_event_image_of_a_scope_without_forecast(houses, fresh_app):
     assert meta_of(page, 'og:image') == SITE + path + '.png?v=' + data['version']
     status, headers, body = call(houses, path + '.png')
     assert status == 200 and headers['content-type'] == 'image/png' and body == pages.images.result_png(data)
+
+
+def test_declared_image_addresses_keep_a_day(houses, fresh_app):
+    """La dirección que cada página declara en su `og:image` (la de un sondeo, la de una elección y la de una
+    elección con un run fijado), pedida tal cual, responde la imagen con su día de caché."""
+    for path, query in ((POLL_PATH, ''), (EVENT_PATH, ''), (EVENT_PATH, 'run=' + RUN)):
+        declared = meta_of(page_of(houses, path, query), 'og:image')
+        assert declared.startswith(SITE + path + '.png?v='), declared
+        address, _, asked = declared[len(SITE):].partition('?')
+        status, headers, _ = call(houses, address, query=asked)
+        assert status == 200 and headers['content-type'] == 'image/png', declared
+        assert headers['cache-control'] == 'public, max-age=86400', declared
+
+
+def test_election_image_under_an_old_fingerprint_keeps_a_minute(houses, fresh_app):
+    """Con la huella de un dibujo que ya no es el de ahora (un enlace antiguo, o un worker atrasado justo tras
+    publicar), la dirección responde la imagen de ahora con el minuto de las páginas; con la de ahora, su día."""
+    write_event(fresh_app.fs, date='2019-11-10', model=False)
+    write_results(fresh_app.fs, '2019-11-10', [{'party': 'PP', 'pct': 20.82, 'seats': 89}])
+    data = pages.latest_event_preview('es', '2023-07-23')
+    rows = [{'party': row['name'], 'pct': row['value'], 'seats': int(row['seats']), 'color': row['color']}
+            for row in data['rows']]
+    # the fingerprint the same election had before the previous one was published
+    old = elecciones.result_preview(data['title'], '2023-07-23', rows, None, HOST)['version']
+    assert old != data['version']
+    status, headers, body = call(houses, EVENT_IMAGE, query='v=' + old)
+    assert status == 200 and body == pages.images.result_png(data)
+    assert headers['cache-control'] == 'public, max-age=60'
+    assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
+    status, headers, same = call(houses, EVENT_IMAGE, query='v=' + data['version'])
+    assert status == 200 and same == body and headers['cache-control'] == 'public, max-age=86400'
+    assert call(houses, EVENT_IMAGE)[1]['cache-control'] == 'public, max-age=60'
 
 
 def check_api_lines():

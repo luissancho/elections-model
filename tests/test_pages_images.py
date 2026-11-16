@@ -12,7 +12,7 @@ import pytest
 from PIL import Image, ImageChops, ImageColor, ImageFont
 
 from mtpy.core.api import HttpError
-from mtpy.lib import pages
+from mtpy.lib import pages, webapi
 from mtpy.lib.pages import sondeos
 from tests.test_api_asgi import call
 from tests.test_pages import api, houses, houses_without_analysis, html, site_api  # noqa: F401
@@ -485,8 +485,9 @@ def meta_of(page, name):
 
 def test_poll_image_route_answers_a_cacheable_png(houses, fresh_app):
     """La imagen de un sondeo vive en la dirección de su página acabada en `.png`: un PNG de 1200×675 con un día
-    de caché y su ETag, que dibuja el sondeo de lo último publicado."""
-    status, headers, body = call(houses, IMAGE_PATH)
+    de caché (pedida con su huella) y su ETag, que dibuja el sondeo de lo último publicado."""
+    version = pages.latest_poll_preview('es', '2026-10-05', 'sigma-dos')['version']
+    status, headers, body = call(houses, IMAGE_PATH, query='v=' + version)
     assert status == 200 and headers['content-type'] == 'image/png'
     assert headers['cache-control'] == 'public, max-age=86400'
     assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
@@ -496,6 +497,36 @@ def test_poll_image_route_answers_a_cacheable_png(houses, fresh_app):
     status, head_headers, nothing = call(houses, IMAGE_PATH, method='HEAD')
     assert status == 200 and nothing == b'' and head_headers['content-type'] == 'image/png'
     assert head_headers['etag'] == headers['etag']
+
+
+def test_poll_image_keeps_a_day_only_under_its_fingerprint(houses, fresh_app, monkeypatch):
+    """El día de caché sólo vale cuando la `v` pedida es la huella de lo que se dibuja (la dirección que la página
+    declara), con otros parámetros o sin ellos; con otra `v`, vacía, repetida o sin ella, la misma imagen sale con
+    el tiempo de las páginas, sea el que sea."""
+    version = pages.latest_poll_preview('es', '2026-10-05', 'sigma-dos')['version']
+    day, minute = 'public, max-age=86400', 'public, max-age=60'
+    _, headers, body = call(houses, IMAGE_PATH, query='v=' + version)
+    assert headers['cache-control'] == day
+
+    for query in ('v={}&utm_source=x&mode=forecast&run=nope'.format(version), 'zz=1&v=' + version):
+        status, headers, other = call(houses, IMAGE_PATH, query=query)
+        assert status == 200 and headers['cache-control'] == day and other == body, query
+
+    for query in ('', 'v=', 'v=abc', 'v=' + version.upper() + 'x', 'v=abc&v=' + version, 'V=' + version,
+                  'utm_source=x'):
+        status, headers, other = call(houses, IMAGE_PATH, query=query)
+        assert status == 200 and headers['cache-control'] == minute and other == body, query
+        assert headers['content-type'] == 'image/png', query
+        assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest()), query
+
+    assert call(houses, IMAGE_PATH, query='v=' + version, method='HEAD')[1]['cache-control'] == day
+    assert call(houses, IMAGE_PATH, method='HEAD')[1]['cache-control'] == minute
+    # the short time is the one of the pages, whatever it is
+    settings = webapi.settings()
+    monkeypatch.setattr(webapi, 'settings', lambda: settings | {'cache_ttl': 300.0})
+    assert call(houses, POLL_PATH)[1]['cache-control'] == 'public, max-age=300'
+    assert call(houses, IMAGE_PATH)[1]['cache-control'] == 'public, max-age=300'
+    assert call(houses, IMAGE_PATH, query='v=' + version)[1]['cache-control'] == day
 
 
 def test_poll_image_route_by_house_id_and_with_outlet(houses, fresh_app):

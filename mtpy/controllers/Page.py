@@ -18,9 +18,10 @@ class Page(Controller):
     active : str or None
         ``href`` of the page in the navigation; subclasses set it (``None`` for the event pages).
     IMAGE_TTL : int
-        Seconds a cache may keep the image of the link previews of a page (``png``): the pages that have one do
-        not change, and when what they draw is corrected the page declares another address (the ``?v=`` of its
-        ``og:image``).
+        Seconds a cache may keep the image of the link previews of a page (``png``) under the address the page
+        declares: the pages that have one do not change, and when what they draw is corrected the page declares
+        another address (the ``?v=`` of its ``og:image``). Under any other address the image is kept for the time
+        of the pages.
     """
 
     active = '/'
@@ -186,25 +187,33 @@ class Page(Controller):
         return {'og_image': '{}{}.png?v={}'.format(webapi.settings()['site_url'], href, preview['version']),
                 'og_image_alt': preview['alt']}
 
-    def png(self, image: bytes) -> bytes:
+    def png(self, image: bytes, version: str) -> bytes:
         """
         Answer an image the server draws for the link previews of a page.
 
-        Sets ``image/png``, an ETag (MD5 of the bytes) and ``public, max-age=<IMAGE_TTL>``.
+        Sets ``image/png``, an ETag (MD5 of the bytes) and how long a cache may keep it: ``IMAGE_TTL`` only when
+        the ``v`` of the request is the fingerprint of what was drawn, which is the address the page declares.
+        Any other address (another ``v``, an empty one or none) does not name this drawing: for a minute after a
+        publication a worker may still draw the previous run under the new address, and an old link keeps its old
+        ``v`` after a correction. Those get the time of the pages (``cache_ttl``), so a drawing never outlives a
+        page in a cache under an address that names another one.
 
         Parameters
         ----------
         image : bytes
             The PNG (``pages.images``).
+        version : str
+            Fingerprint of what the image draws (the ``version`` of its preview).
 
         Returns
         -------
         bytes
             The same bytes.
         """
+        named = self.request.query.get('v') == version
         self.response.set_content_type('image/png', charset=None)
         self.response.set_etag(hashlib.md5(image).hexdigest())
-        self.response.set_cache(self.IMAGE_TTL)
+        self.response.set_cache(self.IMAGE_TTL if named else int(webapi.settings()['cache_ttl']))
 
         return image
 

@@ -259,7 +259,13 @@ no lleva etiquetas `og:`.
 La página de un sondeo tiene imagen propia, con sus cifras: su misma dirección acabada en `.png`
 (`/es/sondeos/2026-11-05/gad3/vocento.png`, acción `image` del controlador `Sondeos`). El servidor la dibuja con
 Pillow cuando se la piden y no la guarda en ningún sitio: la respuesta lleva un día de caché (`Page.IMAGE_TTL`)
-y nginx la conserva mientras se siga pidiendo. Lo que dice (la casa y el medio, la elección, el campo y la muestra,
+y nginx la conserva mientras se siga pidiendo. El día sólo vale para la dirección que la página declara, la que
+lleva en `?v=` la huella de lo que se dibuja; con otra `v` o sin ella, la misma imagen sale con el minuto de las
+páginas (`cache_ttl`). Así un dibujo viejo no se queda un día en nginx bajo una dirección que nombra otro: justo
+tras publicar, un worker puede seguir un minuto con el run anterior, y un enlace antiguo conserva su `v` después
+de una corrección. Lo que una red ya se haya llevado en ese minuto no se arregla desde aquí: conviene esperar un
+par de minutos tras publicar antes de compartir un enlace.
+Lo que dice (la casa y el medio, la elección, el campo y la muestra,
 los seis partidos con más voto con su cambio frente a la entrega anterior, los escaños de la casa y el pie con los
 partidos que no caben) lo compone `pages.preview_of` con las funciones de la página del sondeo, y lo dibuja
 `pages.images.poll_png` (1200×675, con las fuentes de `web/dist/vendor/fonts` tal como están y `wordmark.png`). La
@@ -273,7 +279,7 @@ faltan las fuentes o `wordmark.png`, o su Pillow no lee las fuentes) lo comprueb
 responde entonces 500. `deploy/check-api.sh` pide la imagen del primer sondeo que enlaza `/es` y falla si no llega
 un PNG: así se ve en la imagen de Docker (`smoke.sh` lo ejecuta) y tras desplegar.
 
-El detalle de una elección pasada tiene la suya, con la misma tarjeta y las mismas reglas
+El detalle de una elección pasada tiene la suya, con la misma tarjeta y las mismas reglas, también la de la caché
 (`/elecciones/es/generales/2023-07.png`, acción `image` del controlador `Elecciones`; responde igual con la fecha
 completa): los seis partidos con más voto con su resultado oficial, sus escaños y, en el triángulo, su cambio frente
 a la elección anterior publicada del mismo ámbito. Los partidos se casan por sus siglas, así que uno que no se

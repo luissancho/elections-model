@@ -84,7 +84,8 @@ class Sondeos(Page):
         Returns
         -------
         bytes
-            The PNG (``pages.images.poll_png`` of ``pages.poll_preview``), answered as a cacheable image (``png``).
+            The PNG (``pages.images.poll_png`` of ``pages.poll_preview``), answered as a cacheable image (``png``:
+            a day under the fingerprint of what it draws, the time of the pages under any other address).
 
         Raises
         ------
@@ -93,4 +94,6 @@ class Sondeos(Page):
         """
         code = pages.resolve_event_scope(scope)
         check_date(date)
-        return self.png(pages.images.poll_png(pages.poll_preview(pages.parse_state({}, code), date, pollster, sponsor)))
+        preview = pages.poll_preview(pages.parse_state({}, code), date, pollster, sponsor)
+
+        return self.png(pages.images.poll_png(preview), preview['version'])

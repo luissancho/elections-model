@@ -93,7 +93,7 @@ class Elecciones(Page):
         -------
         bytes
             The PNG (``pages.images.result_png`` of ``pages.event_preview``), answered as a cacheable image
-            (``png``).
+            (``png``: a day under the fingerprint of what it draws, the time of the pages under any other address).
 
         Raises
         ------
@@ -102,4 +102,6 @@ class Elecciones(Page):
         """
         code, date = pages.resolve_event_path(country, scope, date)
 
-        return self.png(pages.images.result_png(pages.event_preview(pages.parse_state({}, code), date)))
+        preview = pages.event_preview(pages.parse_state({}, code), date)
+
+        return self.png(pages.images.result_png(preview), preview['version'])
