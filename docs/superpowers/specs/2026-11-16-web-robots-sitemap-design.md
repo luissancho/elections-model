@@ -60,7 +60,9 @@ Un `<urlset>` del protocolo sitemaps.org con una `<url>` por página, en este or
 4. `/casas` y el perfil de cada encuestadora con slug (`pollster_slugs`), por orden alfabético.
 5. `/metodo` y sus subpáginas con texto.
 6. `/analisis` y cada estudio publicado con página (`study_cards`).
-7. La página de cada sondeo de la última actualización de cada ámbito publicado (`poll_detail_href`), sin repetir.
+7. La página de cada sondeo de la última actualización de cada ámbito publicado (`poll_detail_href`), si su página
+   lo encuentra (`find_poll`): dos registros con el mismo día, casa y patrocinador comparten una URL que responde
+   404, y no se lista.
 
 Sólo URL canónicas, absolutas con `site_url` y sin parámetros. Sin `<changefreq>` ni `<priority>` (Google los
 ignora) y con `<lastmod>` sólo donde hay una fecha cierta y barata (los dos primeros grupos).
@@ -73,8 +75,9 @@ rastreador reintenta, y así nunca se guarda una lista a medias.
 
 ### Cabeceras
 
-Las dos respuestas llevan ETag y `cache-control: public, max-age=3600`: nginx las guarda una hora (su caché respeta
-la cabecera de la aplicación), así que un sondeo nuevo tarda como mucho eso en aparecer en el sitemap.
+Las dos respuestas llevan ETag y `cache-control: public, max-age=3600`: la caché de nginx respeta la cabecera de la
+aplicación y las guarda como mucho una hora, pero suelta antes lo que nadie pide en 10 minutos (`inactive=10m`), así
+que la visita de un rastreador casi siempre las recalcula. Un sondeo nuevo tarda como mucho una hora en aparecer.
 
 ### Código
 
@@ -97,6 +100,14 @@ la cabecera de la aplicación), así que un sondeo nuevo tarda como mucho eso en
 1. `curl` de `/robots.txt` y de `/sitemap.xml` (también en `deploy/check-api.sh`).
 2. Dar de alta `https://demoscopio.es/sitemap.xml` en Google Search Console y en Bing Webmaster Tools (paso de
    Luis: hay que verificar el dominio).
+
+## Corregido tras la revisión
+
+- El sitemap listaba la URL que comparten dos registros de sondeo con el mismo día, casa y patrocinador, y esa
+  página responde 404 (hay un par así en el paquete local del 8 de octubre: Data10, 2025-03-28, «Okdiario» y
+  «OKDiario»). Ahora cada URL de sondeo pasa por la misma regla que su página. La tabla de sondeos de la página
+  del evento sigue enlazando esa URL: es anterior a este paso y queda fuera.
+- La hora de caché de nginx estaba contada de más (`inactive=10m`).
 
 ## Fuera de este paso
 

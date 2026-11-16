@@ -5,13 +5,15 @@ never drift from what is published.
 """
 from xml.sax.saxutils import escape
 
+from ...core.api import HttpError
 from ..webapi import settings, site
 from .analisis import study_cards
 from .common import bundle_part, published_scopes
 from .metodo import METODO_SECTIONS
 from .slugs import DETAIL_PATH, PROFILE_PATH, event_href, poll_detail_href, pollster_slugs
+from .sondeos import find_poll
 
-# Seconds both answers stay fresh: a new page takes at most this long to reach the sitemap
+# Seconds both answers stay fresh (``max-age``): a new page takes at most this long to reach a cached sitemap
 CRAWLERS_TTL = 3600
 SITEMAP_PATH = '/sitemap.xml'
 # The API serves the data of the pages as JSON and CSV: crawling those links only loads S3 and the database
@@ -120,6 +122,34 @@ def study_paths() -> list:
     return ['/analisis'] + [card['href'] for card in study_cards()]
 
 
+def page_finds_poll(polls: list, href: str) -> bool:
+    """
+    Whether the page of a poll answers: its route finds exactly one poll for the URL.
+
+    Parameters
+    ----------
+    polls : list of dict
+        Records of the ``polls`` part of the scope (those of the day of the poll are enough).
+    href : str
+        Link to the page (``poll_detail_href``): ``'/{scope}/sondeos/{date}/{house}'`` plus the sponsor, when it
+        has one.
+
+    Returns
+    -------
+    bool
+        False when ``find_poll`` answers 404: two records share the day, the house and the sponsor, or the page
+        cannot tell the poll from another of the same house and day.
+    """
+    date, house, *sponsor = href.split('/')[3:]
+
+    try:
+        find_poll(polls, date, house, sponsor[0] if sponsor else None)
+    except HttpError:
+        return False
+
+    return True
+
+
 def poll_paths() -> list:
     """
     Paths of the pages of the polls of every published scope.
@@ -128,18 +158,22 @@ def poll_paths() -> list:
     -------
     list of str
         ``poll_detail_href`` of each poll of the ``polls`` part of the latest run of every published scope, in
-        that order and without repeats (two polls of the same day, house and sponsor share a page); the polls
-        without a page (no valid date or no house) and the scopes without the part are left out.
+        that order. The polls without a link (no valid date or no house), those whose page does not answer
+        (``page_finds_poll``) and the scopes without the part are left out.
     """
     paths = {}
 
     for row in published_scopes():
-        polls = bundle_part(site().run_file, row['code'], row['latest'], 'polls') or {}
+        polls = (bundle_part(site().run_file, row['code'], row['latest'], 'polls') or {}).get('polls') or []
+        by_day = {}
 
-        for poll in polls.get('polls') or []:
+        for poll in polls:
+            by_day.setdefault(str(poll.get('date'))[:10], []).append(poll)
+
+        for poll in polls:
             href = poll_detail_href(row['code'], poll)
 
-            if href is not None:
+            if href is not None and page_finds_poll(by_day[str(poll.get('date'))[:10]], href):
                 paths.setdefault(href)
 
     return list(paths)

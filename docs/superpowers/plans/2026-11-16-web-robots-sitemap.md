@@ -24,7 +24,7 @@
 ## Review Focus
 
 - A published scope whose latest run has no `polls` part: the sitemap still answers, without poll pages for it. (Task 2, `test_sitemap_skips_the_scopes_without_polls_part`)
-- Two polls with the same day, house and sponsor, or a poll without a valid date: one URL, none. (Task 2, `test_poll_paths_are_unique_and_skip_the_polls_without_page`)
+- Two polls with the same day, house and sponsor, or a poll without a valid date: no URL (the page of the former answers 404; the plan first said «one URL», corrected after the final review). (Task 2, `test_poll_paths_list_only_the_polls_their_page_resolves`)
 - A character that XML reserves in a URL (`&` in `site_url`): escaped. (Task 2, `test_sitemap_xml_escapes_the_urls`)
 - Nothing published yet: `/sitemap.xml` is a 503, `/robots.txt` still a 200. (Task 2, `test_sitemap_without_bundle_or_database_is_a_503_and_robots_still_answers`)
 - A path that only looks like the file (`/robotsxtxt`): a 404, because the dot of the route is escaped. (Task 1, `test_robots_route_takes_the_dot_literally`)
