@@ -27,9 +27,9 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PAT
 from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OG_IMAGE, OTHERS_COLOR, PAGES, REPO_ROOT,
                      ROUTES, SITE_TAGLINE, SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog,
                      chamber_text, common_context, days_left, days_text, default_mode, environment, event_info,
-                     event_query, event_title, hemicycle_order, ink_color, og_image_url, og_image_version,
-                     parse_state, part, parties_catalogue, published_scopes, resolve_event_scope, resolve_scope,
-                     run_horizon, scope_query,
+                     event_phrase, event_query, event_title, hemicycle_order, ink_color, og_image_url,
+                     og_image_version, parse_state, part, parties_catalogue, published_scopes, resolve_event_scope,
+                     resolve_scope, run_horizon, scope_query,
                      subpage_event_bar, tabbar, title_of)
 from .crawlers import CRAWLERS_TTL, robots_txt, sitemap_entries, sitemap_xml
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,

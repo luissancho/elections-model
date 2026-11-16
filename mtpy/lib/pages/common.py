@@ -596,6 +596,32 @@ def event_title(scope: str, scopes: list) -> str:
     return 'Elecciones autonómicas · {}'.format(names.get(scope, scope))
 
 
+def event_phrase(scope: str, scopes: list) -> str:
+    """
+    Name of the event of a scope in running text, as people search for it (for the titles of the pages).
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    scopes : list of dict
+        Rows of ``published_scopes()`` (``code``, ``name``).
+
+    Returns
+    -------
+    str
+        ``'elecciones generales'`` for ``es``, otherwise ``'elecciones autonómicas {name}'`` with the catalogue
+        name (the code when the scope is not in ``scopes``): ``event_title`` in lower case and without its
+        middle dot.
+    """
+    if scope == 'es':
+        return 'elecciones generales'
+
+    names = {row['code']: row['name'] for row in scopes}
+
+    return 'elecciones autonómicas {}'.format(names.get(scope, scope))
+
+
 def chamber_text(scope: str, meta: dict) -> Optional[str]:
     """
     Name of the chamber of a scope with its seats.
@@ -677,7 +703,8 @@ def event_info(scope: str, meta: dict, state: dict, today: Optional[date] = None
     Returns
     -------
     dict
-        ``title`` (``event_title``), ``date`` (``event_date``), ``year`` (its first four characters, ``None``
+        ``title`` (``event_title``), ``phrase`` (``event_phrase``, for the ``<title>`` of the pages of the
+        event), ``date`` (``event_date``), ``year`` (its first four characters, ``None``
         without a date; for the ``<title>`` of the event page), ``days_left``, ``days_text``
         (``days_text``), ``chamber`` (``chamber_text``), ``run_at`` and ``n_polls`` (of the run), ``href``
         (``'/{scope}'``) and ``sections``: ``{'id', 'label', 'href'}`` per entry of ``EVENT_SECTIONS``, ``href``
@@ -691,6 +718,7 @@ def event_info(scope: str, meta: dict, state: dict, today: Optional[date] = None
 
     return {
         'title': event_title(scope, scopes),
+        'phrase': event_phrase(scope, scopes),
         'date': event_date,
         'year': event_date[:4] if days is not None else None,
         'days_left': days,
