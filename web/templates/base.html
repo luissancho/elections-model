@@ -3,12 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ site_title }} · {% block title %}{% endblock %}</title>
-  <meta name="description" content="{% block description %}{{ site_title }}: {{ site_tagline|lower }} en España.{% endblock %}">
+  {# The page first and the brand last: `title` is what the page is, `title_brand` the brand (the home, which leads
+     with it, empties the block). #}
+  <title>{% block title %}{% endblock %}{% block title_brand %} · {{ site_title }}{% endblock %}</title>
+  {# What the page holds, in a sentence or two (block `description`); `snippet` cuts what a search result would
+     not show, at the end of a sentence or of a word. #}
+  {% set meta_description %}{% block description %}{{ site_title }}: {{ site_tagline|lower }} en España.{% endblock %}{% endset %}
+  <meta name="description" content="{{ meta_description|snippet }}">
   <link rel="canonical" href="{{ canonical }}">
   <meta property="og:site_name" content="{{ site_title }}">
-  <meta property="og:title" content="{{ site_title }} · {{ self.title() }}">
-  <meta property="og:description" content="{{ self.description() }}">
+  <meta property="og:title" content="{{ self.title() }}">
+  <meta property="og:description" content="{{ meta_description|snippet }}">
   <meta property="og:url" content="{{ canonical }}">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="es_ES">
@@ -18,6 +23,12 @@
   <meta property="og:image:height" content="675">
   <meta property="og:image:alt" content="{{ site_title }}: {{ site_tagline|lower }}">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:creator" content="{{ author_handle }}">
+  {# What the page is for a search engine (schema.org blocks built by `pages.structured`); `tojson` escapes
+     what would close the tag. #}
+  {% for item in structured %}
+  <script type="application/ld+json">{{ item|tojson }}</script>
+  {% endfor %}
   {% include '_icons.html' +%}
   <link rel="preload" href="/dist/vendor/fonts/DMSans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/dist/vendor/fonts/Outfit.woff2" as="font" type="font/woff2" crossorigin>
@@ -37,6 +48,9 @@
   <div id="freeze-banner">{{ manifest.freeze.message or 'Actualizaciones congeladas.' }} <a href="/metodo#limitaciones">Más información</a></div>
   {% endif %}
   {% include '_header.html' +%}
+  {# The <h1> of the page: its title, for screen readers and crawlers only. A page with a visible <h1> empties
+     the block. It goes before the event bar, so that reading on from it goes through the bar and the content. #}
+  {% block heading %}<h1 class="sr-only">{{ self.title() }}</h1>{% endblock +%}
   {% if is_event %}
   {% include '_event_bar.html' +%}
   {% endif %}

@@ -83,26 +83,42 @@ class Page(Controller):
 
         return ''
 
-    def canonical_url(self, *extra: str) -> str:
+    def canonical_url(self) -> str:
         """
-        Canonical URL of the page of the request: the public origin, the path and the query without the
-        parameters that only change the view of the same page.
+        Canonical URL of the page of the request: the public origin and the path, without the query.
 
-        ``mode`` (the default view is the canonical one) and ``run`` (a pinned run is a snapshot of the
-        page) are dropped; the parameters that select the content (``scope``, ``region``, ``date``,
-        ``id``...) are kept in their order.
-
-        Parameters
-        ----------
-        *extra : str
-            More parameters to drop (``scope`` on the profile of a pollster, which is the same in every scope).
+        No parameter gives a page an address of its own: ``mode``, ``run``, ``region`` and ``seccion`` change the
+        view of an event; ``scope`` sets the filter and the links of a global page and, in ``/casas`` and
+        ``/metodo/backtest``, the cards of that scope, which stay views of the national page; the rest come from
+        outside (``utm_*``, ``fbclid``, ``gclid``). One page, one address.
 
         Returns
         -------
         str
-            ``'<site_url>/<path><query>'``, for ``<link rel="canonical">`` and ``og:url``.
+            ``'<site_url>/<path>'``, for ``<link rel="canonical">`` and ``og:url``.
         """
-        return '{}/{}{}'.format(webapi.settings()['site_url'], self.request.uri, self.query_without('mode', 'run', *extra))
+        return '{}/{}'.format(webapi.settings()['site_url'], self.request.uri)
+
+    def section_trail(self, href: str, name: str) -> dict:
+        """
+        Breadcrumbs of a page of the second level: its section of the menu, then the page.
+
+        Parameters
+        ----------
+        href : str
+            ``href`` of the section in ``pages.PAGES`` (``'/metodo'``).
+        name : str
+            Name of the page, as the page shows it.
+
+        Returns
+        -------
+        dict
+            The ``BreadcrumbList`` block (``pages.structured.breadcrumbs``): the label of the section in the menu
+            with its URL, and ``name`` without one (the page itself).
+        """
+        label = next(page['label'] for page in pages.PAGES if page['href'] == href)
+
+        return pages.structured.breadcrumbs(webapi.settings()['site_url'], [(label, href), (name, None)])
 
     def render(self, template: str, **context) -> str:
         """
@@ -116,8 +132,9 @@ class Page(Controller):
             Template name in ``web/templates``.
         **context
             Template variables; ``canonical`` (``canonical_url``), ``og_image`` (``pages.og_image_url``, the
-            brand image of the link previews) and ``analytics`` (``pages.analytics_config``, the settings of
-            the cookie notice, ``None`` when the visits are not measured) are added when missing.
+            brand image of the link previews), ``analytics`` (``pages.analytics_config``, the settings of
+            the cookie notice, ``None`` when the visits are not measured) and ``structured`` (the schema.org
+            blocks of the page, ``pages.structured``; none by default) are added when missing.
 
         Returns
         -------
@@ -127,6 +144,7 @@ class Page(Controller):
         context.setdefault('canonical', self.canonical_url())
         context.setdefault('og_image', pages.og_image_url())
         context.setdefault('analytics', pages.analytics_config())
+        context.setdefault('structured', [])
         html = pages.environment().get_template(template).render(**context)
 
         self.response.set_content_type('text/html')

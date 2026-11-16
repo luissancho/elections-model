@@ -103,7 +103,7 @@ def test_privacy_page_tells_what_is_measured_and_how_to_choose(api, fresh_app):
     status, headers, body = call(api, '/privacidad')
     page = html(body)
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
-    assert '<title>Demoscopio · Privacidad y cookies</title>' in page
+    assert '<title>Privacidad y cookies · Demoscopio</title>' in page
     assert '<link rel="canonical" href="https://demoscopio.es/privacidad">' in page
     assert 'aria-current="page"' not in page
     for anchor in ('responsable', 'datos', 'cookies', 'eleccion', 'derechos'):

@@ -91,7 +91,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
     page = html(body)
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'public, max-age=60' and headers['etag'].startswith('"')
-    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026</title>' in page
+    assert '<title>Encuestas elecciones generales 2026: promedio y escaños · Demoscopio</title>' in page
     assert 'pronóstico para el' in page and '<a href="#promedio">Promedio</a>' in page
     # `?mode=` switches the page, but no control is rendered: only the district form keeps it hidden
     assert page.count('name="mode"') == 1 and '<input type="hidden" name="mode" value="forecast">' in page
@@ -197,7 +197,7 @@ def test_event_pages_live_under_the_scope_and_default_to_the_forecast_near_the_e
     status, headers, body = call(api, '/es')
     page = html(body)
     assert status == 200 and headers['cache-control'] == 'public, max-age=60'
-    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026</title>' in page
+    assert '<title>Encuestas elecciones generales 2026: promedio y escaños · Demoscopio</title>' in page
     assert 'pronóstico para el 29 nov 2026' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
     assert 'estimación a' not in page and '<input type="hidden" name="mode" value="forecast">' in page
     assert 'href="/es?mode=forecast&amp;region=28&amp;seccion=escanos#districts"' in page and 'id="controls"' not in page
@@ -384,13 +384,14 @@ def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
     status, headers, body = call(api, '/es', query='mode=forecast')
     page = html(body)
     assert status == 200
-    assert '<h1><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="574" height="100"></a></h1>' in page
+    assert ('<p class="wordmark"><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="574" '
+            'height="100"></a></p>') in page
     assert 'brand-tagline' not in page  # the tagline only lives in the description since phase 8
     assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
     assert '<link rel="icon" href="/dist/img/favicon.ico" sizes="16x16 32x32 48x48">' in page
     assert '<link rel="apple-touch-icon" href="/dist/img/apple-touch-icon.png">' in page
     assert '<meta property="og:site_name" content="Demoscopio">' in page
-    assert '<meta property="og:title" content="Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026">' in page
+    assert '<meta property="og:title" content="Encuestas elecciones generales 2026: promedio y escaños">' in page
     assert '<link rel="canonical" href="https://demoscopio.es/es">' in page
     assert '<meta property="og:url" content="https://demoscopio.es/es">' in page
     description = re.search(r'<meta name="description" content="([^"]+)">', page).group(1)
@@ -398,9 +399,10 @@ def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
     assert 'Pronóstico electoral' not in page
 
 
-def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fresh_app):
-    """La canonical es la URL pública de la página sin `mode` ni `run` (vistas de la misma página), con `scope` y los
-    demás parámetros que eligen el contenido, y el origen sale de `web.site_url` (`WEB_SITE_URL`)."""
+def test_canonical_is_the_path_without_the_query(api, fresh_app):
+    """La canonical es la URL pública de la página sin su consulta: ningún parámetro elige el contenido (`mode`,
+    `run`, `region`, `seccion` y `scope` son vistas de la misma página), y el origen sale de `web.site_url`
+    (`WEB_SITE_URL`)."""
     status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
     # ``region`` (the district of the detail table) and ``seccion`` (the 301 of the old seats page, the district
@@ -412,8 +414,10 @@ def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fre
     assert '<meta property="og:url" content="https://demoscopio.es/es">' in html(body)
     status, headers, body = call(api, '/es', query='seccion=resultados')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
+    # the scope of a global page only sets its filter and its links: one canonical, the one of the sitemap
     status, headers, body = call(api, '/metodo', query='scope=es')
-    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/metodo?scope=es">' in html(body)
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/metodo">' in html(body)
+    assert '<meta property="og:url" content="https://demoscopio.es/metodo">' in html(body)
     status, headers, body = call(api, '/')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/">' in html(body)
     from mtpy.core.app import Config
@@ -438,6 +442,7 @@ def test_pages_carry_the_share_image_and_the_large_card(api, fresh_app):
     assert ('<meta property="og:image:alt" content="Demoscopio: promedio de encuestas, previsión de escaños y ranking '
             'de encuestadoras">') in page
     assert '<meta name="twitter:card" content="summary_large_image">' in page and 'content="summary"' not in page
+    assert '<meta name="twitter:creator" content="@luis_sancho">' in page  # the account that signs the footer
     for path, query in (('/', ''), ('/metodo', 'scope=es')):
         assert '<meta property="og:image" content="{}">'.format(image) in html(call(api, path, query=query)[2])
     assert 'og:image' not in html(call(api, '/nope')[2])
@@ -463,7 +468,7 @@ def test_error_page_carries_the_brand_and_the_default_description(api):
     descripción por defecto de `base.html`, que todas las páginas sobrescriben)."""
     status, headers, body = call(api, '/nope')
     page = html(body)
-    assert status == 404 and '<title>Demoscopio · Error 404</title>' in page
+    assert status == 404 and '<title>Error 404 · Demoscopio</title>' in page
     assert ('<meta name="description" content="Demoscopio: promedio de encuestas, previsión de escaños y ranking de '
             'encuestadoras en España.">') in page
     assert '<img src="/dist/img/logo.svg" alt="Demoscopio" width="574" height="100">' in page
@@ -989,8 +994,9 @@ def test_event_page_merges_promedios_and_escanos_in_order(api):
 
 def test_event_page_title_and_index(api):
     page = html(call(api, '/es', query='mode=forecast')[2])
-    assert '<title>Demoscopio · Encuestas, promedios y escaños · Elecciones generales 2026</title>' in page
-    assert re.search(r'<meta name="description" content="Encuestas, [^"]*Elecciones generales\.">', page)
+    assert '<title>Encuestas elecciones generales 2026: promedio y escaños · Demoscopio</title>' in page
+    assert re.search(r'<meta name="description" content="Elecciones generales 2026: promedio de las encuestas, [^"]*">',
+                     page)
     bar = page[page.index('id="event-bar"'):page.index('<main')]
     index = re.search(r'<nav class="seg lg event-index" aria-label="Secciones de la página">(.*?)</nav>', bar, re.S).group(1)
     assert re.findall(r'<a href="#(\w+)">([^<]+)</a>', index) == [
@@ -2078,7 +2084,7 @@ def test_pages_package_layout():
     assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common',
                      'crawlers', 'elecciones', 'escanos', 'filters',
                      'herd', 'inicio', 'lean', 'metodo', 'privacidad', 'promedios', 'seat_charts', 'seat_odds', 'shy', 'slugs',
-                     'sondeos']
+                     'sondeos', 'structured']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -3001,7 +3007,7 @@ def test_backtest_without_backtest_shows_a_notice(api):
     status, _, body = call(api, '/metodo/backtest', query='scope=es')
     page = html(body)
     assert status == 200 and 'Backtest no publicado todavía' in page and 'initial-data' not in page
-    assert '/dist/js/pages/metodo.js' in page and '<title>Demoscopio · Cuánto acierta el modelo</title>' in page
+    assert '/dist/js/pages/metodo.js' in page and '<title>Cuánto acierta el modelo · Demoscopio</title>' in page
     assert 'action="/metodo/backtest"' in page and 'aria-current="page">Método</a>' in page
 
 
@@ -3198,7 +3204,7 @@ def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
 def test_metodo_promedio_text(api):
     status, _, body = call(api, '/metodo/promedio')
     page = html(body)
-    assert status == 200 and '<title>Demoscopio · ¿Cómo promediamos las encuestas?</title>' in page
+    assert status == 200 and '<title>¿Cómo promediamos las encuestas? · Demoscopio</title>' in page
     for anchor in ('que-entra', 'peso', 'efectos-de-casa', 'regresion', 'banda', 'voto-estimado'):
         assert 'id="' + anchor + '"' in page, anchor
     assert 'id="metodo-nav"' in page and '<math' in page and 'id="resumen"' in page
@@ -3860,7 +3866,7 @@ def test_houses_pages_use_encuestadora(houses):
         assert_public_wording(page, path)
         assert '/dist/js/pages/casas.js' in page
     page = html(call(houses, '/casas')[2])
-    assert '<title>Demoscopio · Ranking Encuestadoras</title>' in page
+    assert '<title>Ranking de encuestadoras: cuáles aciertan más · Demoscopio</title>' in page
     assert 'aria-current="page">Ranking Encuestadoras</a>' in page
     status, _, body = call(houses, '/casas', query='id=999')
     assert status == 404 and 'Encuestadora no encontrada' in html(body)
@@ -3869,7 +3875,7 @@ def test_houses_pages_use_encuestadora(houses):
 def test_menu_labels_and_titles(api):
     page = html(call(api, '/elecciones')[2])
     assert '>Histórico Errores</a>' in page and '>Ranking Encuestadoras</a>' in page
-    assert '<title>Demoscopio · Histórico Errores</title>' in page
+    assert '<title>Errores de las encuestas en las elecciones pasadas · Demoscopio</title>' in page
     assert [entry['label'] for entry in pages.PAGES] == ['Inicio', 'Histórico Errores', 'Ranking Encuestadoras',
                                                           'Análisis', 'Método']
 
@@ -4714,11 +4720,12 @@ def test_profile_and_detail_canonicals_are_the_clean_urls(houses, fresh_app):
     assert '<link rel="canonical" href="https://demoscopio.es/casas/gad3">' in page
     assert '<meta property="og:url" content="https://demoscopio.es/casas/gad3">' in page
     ranking = html(call(houses, '/casas', query='scope=es')[2])
-    assert '<link rel="canonical" href="https://demoscopio.es/casas?scope=es">' in ranking
+    assert '<link rel="canonical" href="https://demoscopio.es/casas">' in ranking
     write_event(fresh_app.fs)
     detail = html(call(houses, '/elecciones/es/generales/2023-07-23', query='scope=es&mode=forecast')[2])
     assert '<link rel="canonical" href="https://demoscopio.es/elecciones/es/generales/2023-07">' in detail
-    assert '<title>Demoscopio · Generales 2023</title>' in detail and 'og:title" content="Demoscopio · Generales 2023"' in detail
+    assert '<title>Generales 2023: resultado y errores de las encuestas · Demoscopio</title>' in detail
+    assert 'og:title" content="Generales 2023: resultado y errores de las encuestas"' in detail
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -4805,7 +4812,8 @@ def test_resolve_pollster_finds_the_id_by_slug_or_by_number(houses, monkeypatch)
 def test_casa_profile_has_a_clean_url_and_the_old_one_redirects(houses):
     status, _, body = call(houses, '/casas/gad3')
     page = html(body)
-    assert status == 200 and '<title>Demoscopio · GAD3</title>' in page and 'id="profile-effects"' in page
+    assert status == 200 and 'id="profile-effects"' in page
+    assert '<title>GAD3: rating e historial de la encuestadora · Demoscopio</title>' in page
     assert initial(body)['path'][0]['event_date'] == '2021-05-04'  # el primer punto del camino
     status, headers, _ = call(houses, '/casas', query='id=2')
     assert status == 301 and headers['location'] == '/casas/gad3' and headers['cache-control'] == 'no-store'
@@ -4832,7 +4840,8 @@ def test_casas_and_the_election_detail_link_the_profiles_by_slug(houses, fresh_a
 def test_eleccion_detail_has_a_clean_url_and_the_old_one_redirects(events_site):
     status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
     page = html(body)
-    assert status == 200 and '<title>Demoscopio · Generales 2023</title>' in page and 'id="last-table"' in page
+    assert status == 200 and 'id="last-table"' in page
+    assert '<title>Generales 2023: resultado y errores de las encuestas · Demoscopio</title>' in page
     assert initial(body)['meta']['event_date'] == '2023-07-23'
     status, headers, _ = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
     assert status == 301 and headers['location'] == '/elecciones/es/generales/2023-07' and headers['cache-control'] == 'no-store'
@@ -5747,7 +5756,7 @@ def test_menu_has_analisis_between_ranking_and_metodo(api):
 def test_analisis_index_lists_the_study_or_says_none(api, fresh_app):
     status, _, body = call(api, '/analisis')
     page = html(body)
-    assert status == 200 and '<title>Demoscopio · Análisis</title>' in page
+    assert status == 200 and '<title>Análisis electorales con datos oficiales · Demoscopio</title>' in page
     assert 'href="/analisis" aria-current="page">Análisis</a>' in page
     assert 'Preguntas del debate electoral contestadas con datos oficiales, comprobables después de cada elección' in page
     assert 'Todavía no hay ningún análisis publicado.' in page and 'href="/analisis/voto-cera"' not in page
@@ -5772,7 +5781,7 @@ def test_analisis_unknown_study_is_404(api, fresh_app):
     status, _, body = call(api, '/analisis/voto-cera')
     page = html(body)
     assert status == 200
-    assert '<title>Demoscopio · El voto CERA en España y el efecto de la «Ley de Nietos»</title>' in page
+    assert '<title>El voto CERA en España y el efecto de la «Ley de Nietos» · Demoscopio</title>' in page
     assert '¿Es posible orquestar con éxito un fraude electoral significativo a través del censo exterior?' in page
     assert 'href="/analisis" aria-current="page">Análisis</a>' in page
     assert 'class="kpis"' in page and '2.769.645' in page
@@ -7111,7 +7120,7 @@ def cera_page(api):
 def test_cera_page_head_and_question_1(api, fresh_app):
     publish_study(fresh_app.fs, parts={'census': cera_census(12)})
     page = cera_page(api)
-    assert '<title>Demoscopio · El voto CERA en España y el efecto de la «Ley de Nietos»</title>' in page
+    assert '<title>El voto CERA en España y el efecto de la «Ley de Nietos» · Demoscopio</title>' in page
     assert ('<p class="study-subtitle">¿Es posible orquestar con éxito un fraude electoral significativo a través '
             'del censo exterior?</p>') in page
     head = page[page.index('id="study-head"'):page.index('class="study-title"')]
@@ -7764,7 +7773,7 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     status, headers, body = call(api, '/es/sondeos/2026-10-05/sigma-dos')
     page = html(body)
     assert status == 200 and headers['cache-control'] == 'public, max-age=60'
-    assert '<title>Demoscopio · Sigma Dos · 5 oct 2026 · Elecciones generales 2026</title>' in page
+    assert '<title>Encuesta Sigma Dos · 5 oct 2026 · Elecciones generales 2026 · Demoscopio</title>' in page
     assert '<link rel="canonical" href="https://demoscopio.es/es/sondeos/2026-10-05/sigma-dos">' in page
     assert 'id="event-bar"' in page and 'href="/es?mode=forecast#promedio"' in page  # the index goes back to the event page
     assert '<a href="/es?mode=forecast#tabla">← Todas las encuestas</a>' in page
@@ -7792,8 +7801,9 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     # the table of the vote and the weight card share a row
     assert page.index('<div class="poll-pair">') < page.index('id="vote"') < page.index('id="weight"') < page.index('id="house"')
     assert '2.000 entrevistas · ' in card and 'El arco gris, «Otros», completa la cámara' in card
-    assert ('<meta name="description" content="Sondeo de Sigma Dos con trabajo de campo hasta el 5 oct 2026 para Elecciones generales 2026: '
-            'voto y escaños por partido, su cambio frente a la entrega anterior, rating y peso en el promedio.">') in page
+    # a poll with seats and a previous delivery says so in its description
+    assert ('<meta name="description" content="Elecciones generales 2026: sondeo de Sigma Dos (5 oct 2026). Voto y '
+            'escaños, cambio frente al anterior y peso en el promedio.">') in page
     # the table: % Voto, vs Anterior, Escaños and vs Anterior (midpoints of the ranges); nothing of the average nor of the
     # house effect (Luis, 2026-11-09)
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
@@ -7844,7 +7854,7 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     assert 'vs Anterior' not in page and 'Las columnas «vs Anterior»' not in page and 'El arco gris' not in page
     assert 'Primer sondeo de Sigma Dos para El Mundo en este ciclo: no hay entrega anterior con la que comparar.' in page
     description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
-    assert description.endswith(': voto por partido, rating y peso en el promedio.') and 'escaños' not in description
+    assert description.endswith('. Voto por partido y peso en el promedio.') and 'escaños' not in description
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
     assert '<th scope="col">Escaños</th>' not in vote and 'Promedio' not in vote
     weight = page[page.index('id="weight"'):page.index('id="house"')]

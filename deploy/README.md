@@ -133,7 +133,7 @@ hace scroll a la sección de `seccion` y lo quita de la URL); `/escanos` va dire
 `/X/circunscripciones` y `/X/circunscripciones/{circunscripción}` (la página aparte de «Escaños que bailan», retirada
 el 2026-11-13; controlador `Circunscripciones`) → `/X?…#seat-odds` (su tarjeta, bajo la tabla del territorio), sin `partido`, `vista` ni `circunscripcion` (404
 si `X` no está publicado); `/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
-(`proxy_cache_valid 200 60s`). La canonical de `/X` no lleva `mode`, `run` ni `seccion`.
+(`proxy_cache_valid 200 60s`). La canonical de `/X` es `/X`, sin consulta, como la de todas las páginas.
 
 Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
 el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
@@ -245,10 +245,44 @@ las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en 
 X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
 `fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
 edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
-más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página. Cada página declara
+más la ruta, sin consulta: ningún parámetro da a una página una dirección propia. `mode`, `run`, `region` y
+`seccion` cambian la vista del evento; `scope`, el filtro y los enlaces de una página global y, en `/casas` y
+`/metodo/backtest`, las tarjetas de ese ámbito, que quedan como vistas de la página nacional; y los de fuera
+(`utm_*`, `fbclid`, `gclid`) no deben dar otra dirección a la misma página. `twitter:creator` es la cuenta del
+autor (`AUTHOR_HANDLE`, en `pages/common.py`). Cada página declara
 también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`: la imagen de marca con `?v=` y el hash
 del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
 controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
+
+El título de cada página lo compone `base.html`: el bloque `title` de la plantilla (qué es la página, con las
+palabras con que se busca) y detrás la marca, « · Demoscopio» (bloque `title_brand`); la portada es la excepción,
+con la marca delante. `og:title` es el bloque `title` a secas: la vista previa de un enlace ya enseña el dominio.
+Cada página tiene un solo `<h1>`: el logotipo de la cabecera es un enlace (`.wordmark`), no un título, y
+`base.html` pone tras la cabecera un `<h1 class="sr-only">` con el título de la página, que sólo leen los lectores
+de pantalla y los buscadores (bloque `heading`). Una plantilla nueva sólo tiene que rellenar `title`; si pinta su
+propio `<h1>` visible, vacía `heading` (`{% block heading %}{% endblock %}`), y una prueba lo exige en los dos
+sentidos. La página de error, que no hereda de `base.html`, lleva los suyos.
+
+La descripción (`<meta name="description">` y `og:description`, el mismo texto) es el bloque `description` de la
+plantilla: una o dos frases que digan qué hay en la página, escritas para caber en 160 caracteres, que es lo que
+enseña un resultado de búsqueda. `base.html` le pasa el filtro `snippet` (`pages/filters.py`), que deja igual lo
+que cabe y corta lo que no: en el final de una frase si las primeras suman al menos 80 caracteres, y si no en una
+palabra entera seguida de «…». Así el subtítulo de un estudio o un sondeo con un nombre largo acaban limpios; un
+texto fijo no debería necesitar el corte, y las pruebas comprueban que los de hoy caben enteros.
+
+Los datos estructurados (schema.org, en JSON-LD) dicen a un buscador lo que el lector ya ve. Cada bloque lo
+construye `mtpy/lib/pages/structured.py` como un diccionario, el controlador de la página los pasa a `render` en
+`structured=` y `base.html` escribe un `<script type="application/ld+json">` por bloque con `tojson`, que escapa lo
+que cerraría la etiqueta. La portada lleva `WebSite` (el nombre que el buscador pone sobre cada resultado) y
+`Organization` (nombre, lema, la lente como logotipo y el autor del pie como `founder`); un estudio, `Article`
+(su titular, su descripción, su canónica, el autor, y como `dateModified` el `published_at` del estudio en el
+manifiesto, si lo hay); y las páginas de segundo nivel, `BreadcrumbList` con dos elementos: la sección, con la
+etiqueta del menú (`Page.section_trail`), y la página; en un sondeo, la elección (la página del evento) y el
+sondeo. Las páginas de primer nivel y `/privacidad` no llevan ninguno. Ningún texto es nuevo: el titular y la
+descripción salen de los bloques `title` y `description` de la plantilla (`structured.block_text`), y todas las
+direcciones son las canónicas. Una página nueva de segundo nivel pasa `structured=[self.section_trail(...)]`.
+Estos bloques van en línea, como las islas JSON de las páginas: son datos (`type="application/ld+json"`), el
+navegador no los ejecuta y la política de seguridad de nginx, que no admite scripts en línea, no les aplica.
 
 Para los rastreadores (`mtpy/lib/pages/crawlers.py`, controlador `Crawlers`): `/robots.txt` deja todo abierto menos
 `/api/` (los mismos datos de las páginas en JSON y CSV) y da la URL del sitemap; `/sitemap.xml` lista las URL

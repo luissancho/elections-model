@@ -110,7 +110,9 @@ def test_referenced_assets_exist():
             # cada página carga su módulo, salvo el Inicio, que es sólo HTML
             assert 'type="module"' in text and '<script' in text
         assert 'onclick=' not in text  # CSP: sin inline
-        assert re.findall(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/json")[^>]*>', text) == []
+        # sólo van en línea los bloques de datos, que el navegador no ejecuta (y la CSP no les aplica): las islas
+        # JSON de las páginas y los datos estructurados de `base.html` (`application/ld+json`)
+        assert re.findall(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/(?:ld\+)?json")[^>]*>', text) == []
     assert missing == []
 
 

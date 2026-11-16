@@ -35,7 +35,8 @@ class Metodo(Page):
         Returns
         -------
         str
-            The HTML of the template of the subpage (``metodo_backtest.html`` for ``backtest``).
+            The HTML of the template of the subpage (``metodo_backtest.html`` for ``backtest``), with its
+            breadcrumbs.
 
         Raises
         ------
@@ -43,5 +44,7 @@ class Metodo(Page):
             404 ``section not found`` for an unknown subpage or one without text yet.
         """
         context = pages.metodo_section_context(self.state(), section)
+        template = pages.METODO_SECTIONS[section]['template']
+        trail = self.section_trail(self.active, pages.structured.block_text(template, 'title', context))
 
-        return self.render(pages.METODO_SECTIONS[section]['template'], **context)
+        return self.render(template, structured=[trail], **context)

@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{{ study_meta.get('title') or '¿Se comportan las encuestadoras como un rebaño?' }}{% endblock %}
+{% block heading %}{% endblock %}
 {% block description %}{{ study_meta.get('subtitle') or 'Si las mismas encuestadoras se parecen más entre sí según se acerca la elección.' }}{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/analisis-rebano.js"></script>

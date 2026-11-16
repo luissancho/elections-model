@@ -44,11 +44,13 @@ class Casas(Page):
         Returns
         -------
         str
-            The HTML of ``casa.html``; its canonical is the slug URL, whatever the query (the profile is
-            global: the scope of the ranking page does not change it).
+            The HTML of ``casa.html``, with its breadcrumbs; its canonical is the slug URL, whatever the query
+            (the profile is global: the scope of the ranking page does not change it).
         """
         pollster_id = pages.resolve_pollster(pollster)
         context = pages.casa_context(self.state(), pollster_id, active=self.active)
-        href = pages.pollster_href(context['profile']['pollster'].get('name'), pollster_id)
+        name = context['profile']['pollster'].get('name')
+        canonical = webapi.settings()['site_url'] + pages.pollster_href(name, pollster_id)
 
-        return self.render('casa.html', canonical=webapi.settings()['site_url'] + href, **context)
+        return self.render('casa.html', canonical=canonical, structured=[self.section_trail(self.active, name)],
+                           **context)

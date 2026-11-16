@@ -4,8 +4,9 @@ Server-rendered web pages: routes, the Jinja2 environment, formatting filters an
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
 ``backtest``, ``analisis``, ``sondeos``, ``privacidad``, with the view models of the CERA study in ``cera``, the card «Escaños que
 bailan» of the event page in ``seat_odds`` and the layout of its drawings in ``seat_charts``),
-plus ``common`` (routes, messages, environment and shared context), ``filters`` (formatting filters) and ``crawlers``
-(``/robots.txt`` and ``/sitemap.xml``, the files for the crawlers). This facade
+plus ``common`` (routes, messages, environment and shared context), ``filters`` (formatting filters), ``crawlers``
+(``/robots.txt`` and ``/sitemap.xml``, the files for the crawlers) and ``structured`` (the schema.org blocks of the
+pages, used as ``pages.structured.<name>``). This facade
 re-exports every public name, so callers use ``pages.<name>``.
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
@@ -18,7 +19,7 @@ does not import the model nor ``publish``, so the web workers stay light.
 """
 from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, ban_context, cera_context,
                        herd_context, lean_context, shy_context, study_cards, study_context, study_part,
-                       verdict_rows)
+                       study_published_at, verdict_rows)
 from .backtest import backtest_context, backtest_part, model_record, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PATH_COLUMNS, RANKING_COLUMNS, RANKING_KEYS,
                     RANKING_SHOWN, analysis_part, block_bar_colors, casa_context, table_columns,
@@ -27,10 +28,11 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PAT
 from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OG_IMAGE, OTHERS_COLOR, PAGES, REPO_ROOT,
                      ROUTES, SITE_TAGLINE, SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog,
                      chamber_text, common_context, days_left, days_text, default_mode, environment, event_info,
-                     event_query, event_title, hemicycle_order, ink_color, og_image_url, og_image_version,
-                     parse_state, part, parties_catalogue, published_scopes, resolve_event_scope, resolve_scope,
-                     run_horizon, scope_query,
+                     event_phrase, event_query, event_title, hemicycle_order, ink_color, og_image_url,
+                     og_image_version, parse_state, part, parties_catalogue, published_scopes, resolve_event_scope,
+                     resolve_scope, run_horizon, scope_query,
                      subpage_event_bar, tabbar, title_of)
+from . import structured
 from .crawlers import CRAWLERS_TTL, robots_txt, sitemap_entries, sitemap_xml
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
@@ -49,7 +51,7 @@ from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, h
                       seats_context)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,
                       fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around,
-                      shade_scale)
+                      shade_scale, snippet)
 from .inicio import INTRO, card_headline, event_cards, inicio_context
 from . import ban, herd, lean, shy
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,

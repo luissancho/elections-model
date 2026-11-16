@@ -51,12 +51,15 @@ class Elecciones(Page):
         Returns
         -------
         str
-            The HTML of ``eleccion.html``; its canonical is the month URL (``pages.event_href``), whatever the
-            segment and the query.
+            The HTML of ``eleccion.html``, with its breadcrumbs (the election by its name or, without one, by its
+            date, like its title); its canonical is the month URL (``pages.event_href``), whatever the segment and
+            the query.
         """
         code, date = pages.resolve_event_path(country, scope, date)
         context = pages.eleccion_context(self.state(code), date, active=self.active)
 
         canonical = webapi.settings()['site_url'] + pages.event_href(code, date)
+        event = context['event']
+        trail = self.section_trail(self.active, event.get('name') or pages.fmt_date(event['event_date']))
 
-        return self.render('eleccion.html', canonical=canonical, **context)
+        return self.render('eleccion.html', canonical=canonical, structured=[trail], **context)

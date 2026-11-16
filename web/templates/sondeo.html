@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}{{ poll_title }} · {{ poll_date }} · {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}{% endblock %}
-{% block description %}Sondeo de {{ poll_title }} con trabajo de campo hasta el {{ poll_date }} para {{ event_bar.title }}{% if event_bar.year %} {{ event_bar.year }}{% endif %}: voto{% if has_seats %} y escaños{% endif %} por partido{% if previous %}, su cambio frente a la entrega anterior{% endif %}, rating y peso en el promedio.{% endblock %}
+{% block title %}Encuesta {{ poll_title }} · {{ poll_date }} · {{ event_bar.election }}{% endblock %}
+{% block description %}{{ event_bar.election }}: sondeo de {{ poll_title }} ({{ poll_date }}). Voto{% if has_seats %} y escaños{% endif %}{% if previous %}, cambio frente al anterior{% else %} por partido{% endif %} y peso en el promedio.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/sondeo.js"></script>
 {% endblock %}
