@@ -281,6 +281,8 @@ etiqueta del menú (`Page.section_trail`), y la página; en un sondeo, la elecci
 sondeo. Las páginas de primer nivel y `/privacidad` no llevan ninguno. Ningún texto es nuevo: el titular y la
 descripción salen de los bloques `title` y `description` de la plantilla (`structured.block_text`), y todas las
 direcciones son las canónicas. Una página nueva de segundo nivel pasa `structured=[self.section_trail(...)]`.
+Estos bloques van en línea, como las islas JSON de las páginas: son datos (`type="application/ld+json"`), el
+navegador no los ejecuta y la política de seguridad de nginx, que no admite scripts en línea, no les aplica.
 
 Para los rastreadores (`mtpy/lib/pages/crawlers.py`, controlador `Crawlers`): `/robots.txt` deja todo abierto menos
 `/api/` (los mismos datos de las páginas en JSON y CSV) y da la URL del sitemap; `/sitemap.xml` lista las URL
