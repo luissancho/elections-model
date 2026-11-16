@@ -2083,7 +2083,8 @@ def test_pages_package_layout():
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
     assert names == ['analisis', 'backtest', 'ban', 'casas', 'cera', 'common',
                      'crawlers', 'elecciones', 'escanos', 'filters',
-                     'herd', 'images', 'inicio', 'lean', 'metodo', 'privacidad', 'promedios', 'seat_charts', 'seat_odds',
+                     'herd', 'images', 'inicio', 'lean', 'metodo', 'previews', 'privacidad', 'promedios', 'seat_charts',
+                     'seat_odds',
                      'shy', 'slugs', 'sondeos', 'structured']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
@@ -7801,9 +7802,9 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     # the table of the vote and the weight card share a row
     assert page.index('<div class="poll-pair">') < page.index('id="vote"') < page.index('id="weight"') < page.index('id="house"')
     assert '2.000 entrevistas · ' in card and 'El arco gris, «Otros», completa la cámara' in card
-    # a poll with seats and a previous delivery says so in its description
-    assert ('<meta name="description" content="Elecciones generales 2026: sondeo de Sigma Dos (5 oct 2026). Voto y '
-            'escaños, cambio frente al anterior y peso en el promedio.">') in page
+    # the description says whose poll it is and its figures
+    assert ('<meta name="description" content="Elecciones generales 2026: sondeo de Sigma Dos (5 oct 2026). '
+            'PP 33,5%.">') in page
     # the table: % Voto, vs Anterior, Escaños and vs Anterior (midpoints of the ranges); nothing of the average nor of the
     # house effect (Luis, 2026-11-09)
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
@@ -7854,7 +7855,7 @@ def test_sondeo_page_without_seats_factors_or_parts_degrades(api, fresh_app):
     assert 'vs Anterior' not in page and 'Las columnas «vs Anterior»' not in page and 'El arco gris' not in page
     assert 'Primer sondeo de Sigma Dos para El Mundo en este ciclo: no hay entrega anterior con la que comparar.' in page
     description = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
-    assert description.endswith('. Voto por partido y peso en el promedio.') and 'escaños' not in description
+    assert description == 'Elecciones generales 2026: sondeo de Sigma Dos para El Mundo (24 sept 2026). PP 32,0%.'
     vote = page[page.index('id="vote"'):page.index('id="weight"')]
     assert '<th scope="col">Escaños</th>' not in vote and 'Promedio' not in vote
     weight = page[page.index('id="weight"'):page.index('id="house"')]
