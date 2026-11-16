@@ -82,6 +82,9 @@ ROUTES = [
     ('/casas/{pollster}', 'casas', 'profile', ['GET']),
     ('/elecciones', 'elecciones', 'index', ['GET']),
     ('/elecciones/{country:loc}/{scope}/{date}', 'elecciones', 'detail', ['GET']),
+    # the image of the link previews of a past election (``og:image``): the address of its page ending in ``.png``.
+    # The date segment has no dots, so the page never takes it
+    (r'/elecciones/{country:loc}/{scope}/{date}\.png', 'elecciones', 'image', ['GET']),
     ('/metodo', 'metodo', 'index', ['GET']),
     ('/metodo/{section:str}', 'metodo', 'section', ['GET']),
     ('/analisis', 'analisis', 'index', ['GET']),

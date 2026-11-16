@@ -662,14 +662,16 @@ def test_poll_page_keeps_the_brand_image_when_nothing_can_be_drawn(houses, fresh
 
 
 def test_other_pages_keep_the_brand_image(houses, fresh_app):
-    """Sólo la página de un sondeo tiene imagen propia: el resto sigue con la de marca y su texto alternativo."""
+    """Sólo la página de un sondeo y el detalle de una elección pasada tienen imagen propia: el resto sigue con la
+    de marca y su texto alternativo."""
     write_study(fresh_app.fs)
     paths = site_paths(houses)
-    assert POLL_PATH in paths and len(paths) > 10
+    with_image = {POLL_PATH, '/elecciones/es/generales/2023-07'}
+    assert with_image <= set(paths) and len(paths) > 10
 
     for path in paths:
         page = page_of(houses, path)
-        own = path == POLL_PATH
+        own = path in with_image
         assert (meta_of(page, 'og:image') == pages.og_image_url()) is not own, path
         assert (meta_of(page, 'og:image:alt') == BRAND_ALT) is not own, path
         assert meta_of(page, 'og:image:type') == 'image/png', path

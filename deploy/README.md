@@ -258,21 +258,37 @@ no lleva etiquetas `og:`.
 
 La página de un sondeo tiene imagen propia, con sus cifras: su misma dirección acabada en `.png`
 (`/es/sondeos/2026-11-05/gad3/vocento.png`, acción `image` del controlador `Sondeos`). El servidor la dibuja con
-Pillow cuando se la piden y no la guarda en ningún sitio: la respuesta lleva un día de caché (`Sondeos.IMAGE_TTL`)
+Pillow cuando se la piden y no la guarda en ningún sitio: la respuesta lleva un día de caché (`Page.IMAGE_TTL`)
 y nginx la conserva mientras se siga pidiendo. Lo que dice (la casa y el medio, la elección, el campo y la muestra,
 los seis partidos con más voto con su cambio frente a la entrega anterior, los escaños de la casa y el pie con los
 partidos que no caben) lo compone `pages.preview_of` con las funciones de la página del sondeo, y lo dibuja
 `pages.images.poll_png` (1200×675, con las fuentes de `web/dist/vendor/fonts` tal como están y `wordmark.png`). La
 imagen es siempre la de lo último publicado (no lee `mode`, `run` ni ningún otro parámetro), y la página la declara
 en `og:image` con `?v=` y una huella de lo que pinta: si el sondeo se corrige, la dirección cambia y las redes
-piden la nueva. Si cambia el dibujo, sube `PREVIEW_DESIGN` (`pages/sondeos.py`) para que cambien todas las
+piden la nueva. Si cambia el dibujo, sube `PREVIEW_DESIGN` (`pages/previews.py`) para que cambien todas las
 huellas. El dibujo necesita que Pillow lea las fuentes woff2, y los paquetes de Pillow de PyPI lo hacen (su
 FreeType trae brotli); `tests/test_pages_images.py` falla donde no sea así. Un proceso que no puede dibujar (le
 faltan las fuentes o `wordmark.png`, o su Pillow no lee las fuentes) lo comprueba una vez
 (`pages.images.available`), avisa y deja sus páginas de sondeo con la imagen de marca; la dirección de la imagen
 responde entonces 500. `deploy/check-api.sh` pide la imagen del primer sondeo que enlaza `/es` y falla si no llega
-un PNG: así se ve en la imagen de Docker (`smoke.sh` lo ejecuta) y tras desplegar. El resto de páginas sigue con
-la imagen de marca.
+un PNG: así se ve en la imagen de Docker (`smoke.sh` lo ejecuta) y tras desplegar.
+
+El detalle de una elección pasada tiene la suya, con la misma tarjeta y las mismas reglas
+(`/elecciones/es/generales/2023-07.png`, acción `image` del controlador `Elecciones`; responde igual con la fecha
+completa): los seis partidos con más voto con su resultado oficial, sus escaños y, en el triángulo, su cambio frente
+a la elección anterior publicada del mismo ámbito. Los partidos se casan por sus siglas, así que uno que no se
+presentó con ellas la vez anterior va sin triángulo, y la primera elección publicada de un ámbito, sin ninguno; la
+fila «-» (el resto de candidaturas) no cuenta, y el pie dice cuántos partidos con escaño no caben. Lo compone
+`pages.result_preview` y lo dibuja `pages.images.result_png`, que es la tarjeta del sondeo con esos datos;
+`deploy/check-api.sh` pide la de las generales de 2023. El resto de páginas sigue con la imagen de marca.
+
+Esas dos páginas, que no cambian, dicen también sus cifras en la descripción (`<meta name="description">` y
+`og:description`): las de su imagen, por orden de voto, tantas como quepan enteras en 160 caracteres
+(`pages.previews.with_figures`), detrás de la elección, la casa y el día en un sondeo («Elecciones generales 2026:
+sondeo de GAD3 para Vocento (5 nov 2026). PP 31,9%, PSOE 25,9%…») y del nombre de la elección en una elección
+pasada, con los escaños («…: PP 33,1% (137 escaños), PSOE 31,7% (121)…»). Una elección sin resultado publicado
+se describe con lo que la página tiene. Las reglas comunes a las dos vistas previas viven en
+`pages/previews.py`.
 
 El título de cada página lo compone `base.html`: el bloque `title` de la plantilla (qué es la página, con las
 palabras con que se busca) y detrás la marca, « · Demoscopio» (bloque `title_brand`); la portada es la excepción,
@@ -403,9 +419,12 @@ nginx; sin nginx lo marca `n/a`) y si hay base a partir de `/api/v1/parties` (un
 por ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `/` (200 HTML),
 `/es?mode=nowcast` (200 HTML), `/es?region=abc` (400 HTML), `/es/escanos?mode=forecast`, `/promedio` y
 `/modelo` (301), `/es-zz` (404 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
-`/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML), `/elecciones?scope=es&date=2023-07-23` (200 HTML
-si la elección está publicada), `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y
-`/metodo/rating` (200 HTML), `/metodo/nope` y `/nope` (404 HTML), con nginx también
+`/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML),
+`/elecciones/es/generales/2023-07` (200 HTML si la elección está publicada; desde el 2026-11-16: antes pedía la
+dirección antigua con `?date=`, que redirige con un 301 desde que las elecciones tienen dirección limpia, y la
+daba por fallo) y su imagen `/elecciones/es/generales/2023-07.png` (`image/png`), `/metodo/backtest?scope=es`,
+`/metodo`, `/metodo/promedio`, `/metodo/escanos` y `/metodo/rating` (200 HTML), `/metodo/nope` y `/nope` (404
+HTML), con nginx también
 `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`), `/dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2`
 (`font/woff2`) y `/dist/css/site.css` (`text/css`), y 21 rutas de la API (código, tipo y JSON válido): las 10 del
 paquete, `/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23`,

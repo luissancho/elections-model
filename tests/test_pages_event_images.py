@@ -1,6 +1,7 @@
 """Tests de la imagen propia del enlace de una elección pasada: lo que dice (como datos, con el cambio frente a la
 elección anterior), su dibujo (el de la tarjeta de un sondeo) y su dirección."""
 import copy
+import hashlib
 import io
 import re
 
@@ -11,8 +12,11 @@ from mtpy.core.api import HttpError
 from mtpy.lib import bundle, pages
 from mtpy.lib.pages import elecciones
 from mtpy.lib.pages.filters import SNIPPET_LENGTH
+from tests.test_api_asgi import call
 from tests.test_pages import api, houses, houses_without_analysis, site_api  # noqa: F401
-from tests.test_webapi_unit import fixture_data, write_event
+from tests.test_pages_crawlers import sitemap
+from tests.test_pages_images import BRAND_ALT, SITE, meta_of, page_of
+from tests.test_webapi_unit import RUN, fixture_data, write_event
 
 HOST = 'demoscopio.es'
 TITLE = 'Elecciones Generales Julio 2023'
@@ -37,6 +41,8 @@ ROWS = [
 BEFORE = {'date': '2019-11-10',
           'pct': {'PP': 20.82, 'PSOE': 28.0, 'VOX': 15.09, 'UP': 12.86, 'ERC': 3.61, 'JxCat': 2.19, '-': 1.0}}
 LEGEND = 'Resultado oficial del 23 jul 2023 · Cambio frente a la elección anterior (10 nov 2019)'
+EVENT_PATH = '/elecciones/es/generales/2023-07'  # the only election of the fixture bundle
+EVENT_IMAGE = EVENT_PATH + '.png'
 
 
 def preview(rows=None, previous=BEFORE, title=TITLE, date=DATE, host=HOST):
@@ -136,6 +142,9 @@ def test_result_preview_of_odd_elections():
     assert seatless['description'].startswith('Elecciones Generales Julio 2023: PP 33,1%, PSOE 31,7%, ')
     # seats published as floats are told as whole numbers
     assert preview(rows_with(PP={'seats': 137.0}))['rows'][0]['seats'] == '137'
+    # an election without a name is told by its date
+    assert elecciones.result_title({'name': None}, DATE) == 'Elección del 23 jul 2023'
+    assert elecciones.result_title({'name': TITLE}, DATE) == TITLE
 
 
 def test_result_preview_version_follows_what_is_drawn():
@@ -247,3 +256,133 @@ def test_event_preview_refuses_what_the_page_refuses(houses, fresh_app):
     with pytest.raises(HttpError) as error:
         pages.latest_event_preview('es', '2023-13-45')
     assert error.value.status == 400
+
+
+def test_event_image_route_answers_a_cacheable_png(houses, fresh_app):
+    """La imagen de una elección vive en la dirección de su página acabada en `.png`: un PNG de 1200×675 con un
+    día de caché y su ETag, igual pedida por el mes o por la fecha y con cualquier consulta."""
+    status, headers, body = call(houses, EVENT_IMAGE)
+    assert status == 200 and headers['content-type'] == 'image/png'
+    assert headers['cache-control'] == 'public, max-age=86400'
+    assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
+    assert body == pages.images.result_png(pages.latest_event_preview('es', '2023-07-23'))
+    assert Image.open(io.BytesIO(body)).size == (1200, 675)
+    assert call(houses, '/elecciones/es/generales/2023-07-23.png')[2] == body
+
+    for query in ('mode=forecast', 'mode=zz', 'run=' + RUN, 'run=20200101-000000', 'run=nope', 'scope=zz', 'v=abc',
+                  'zz=1&utm_source=x'):
+        status, headers, other = call(houses, EVENT_IMAGE, query=query)
+        assert status == 200 and headers['content-type'] == 'image/png' and other == body, query
+
+    # a HEAD answers the same headers without a body
+    status, head_headers, nothing = call(houses, EVENT_IMAGE, method='HEAD')
+    assert status == 200 and nothing == b'' and head_headers['content-type'] == 'image/png'
+    assert head_headers['etag'] == headers['etag']
+
+
+def test_event_image_route_refuses_what_the_page_refuses(houses, monkeypatch):
+    """Donde la página de la elección responde 404 o 400, su imagen también, con la página de error y sin dibujar
+    nada; y sólo `.png` es una imagen."""
+    def never(preview):
+        raise AssertionError('an image was drawn')
+
+    monkeypatch.setattr(pages.images, 'result_png', never)
+    refused = (('/elecciones/es/generales/2020-01', 404), ('/elecciones/es/generales/2020-01-01', 404),
+               ('/elecciones/es/generales/2023-13', 400), ('/elecciones/es/generales/abc', 400),
+               ('/elecciones/es/nadie/2023-07', 404), ('/elecciones/es/madrid/2023-05', 404))
+
+    for path, code in refused:
+        assert call(houses, path)[0] == code, path
+        status, headers, body = call(houses, path + '.png')
+        assert status == code and headers['content-type'] == 'text/html; charset=utf-8', path
+        assert headers['cache-control'] == 'no-store' and 'etag' not in headers and b'<html' in body, path
+
+    for path in (EVENT_PATH + '.jpg', EVENT_PATH + '.PNG', EVENT_PATH + '.png.png', '/elecciones.png',
+                 '/elecciones/es/generales.png'):
+        assert call(houses, path)[0] == 404, path
+
+
+def test_election_page_declares_its_image(houses, fresh_app):
+    """La página de una elección declara su imagen como `og:image`: su dirección canónica acabada en `.png`,
+    absoluta y con la huella de lo que pinta, con un texto alternativo que dice las cifras. Nada más la enlaza y
+    no entra en el sitemap."""
+    data = pages.latest_event_preview('es', '2023-07-23')
+    page = page_of(houses, EVENT_PATH)
+    address = SITE + EVENT_IMAGE + '?v=' + data['version']
+    assert meta_of(page, 'og:image') == address
+    assert meta_of(page, 'og:image:alt') == data['alt'] == (
+        'Generales 2023, resultado oficial del 23 jul 2023: PP 33,1%, PSOE 31,4%, VOX 12,3%, Cs 0,1%.')
+    assert meta_of(page, 'og:image:type') == 'image/png'
+    assert (meta_of(page, 'og:image:width'), meta_of(page, 'og:image:height')) == ('1200', '675')
+    assert page.count(EVENT_IMAGE) == 1 and 'og-image.png' not in page
+
+    # asked by its full date or with parameters, the same address
+    for odd, query in (('/elecciones/es/generales/2023-07-23', ''), (EVENT_PATH, 'mode=nowcast&utm_source=x')):
+        assert meta_of(page_of(houses, odd, query=query), 'og:image') == address, (odd, query)
+
+    # and the address answers the image
+    status, headers, _ = call(houses, EVENT_IMAGE, query='v=' + data['version'])
+    assert status == 200 and headers['content-type'] == 'image/png'
+    assert not [loc for loc in sitemap(houses) if '.png' in loc]
+
+
+def test_election_image_version_follows_the_result_before(houses, fresh_app):
+    """Con la elección anterior publicada, la imagen gana los cambios y la página declara la huella de esa imagen,
+    que no es la de la misma elección sin con qué compararse."""
+    write_event(fresh_app.fs, date='2019-11-10', model=False)
+    write_results(fresh_app.fs, '2019-11-10', [{'party': 'PP', 'pct': 20.82, 'seats': 89}])
+    data = pages.latest_event_preview('es', '2023-07-23')
+    assert data['rows'][0]['change'] == {'direction': 'up', 'text': '12,2'}
+    assert meta_of(page_of(houses, EVENT_PATH), 'og:image') == SITE + EVENT_IMAGE + '?v=' + data['version']
+    rows = [{'party': row['name'], 'pct': row['value'], 'seats': int(row['seats']), 'color': row['color']}
+            for row in data['rows']]
+    alone = elecciones.result_preview(data['title'], '2023-07-23', rows, None, HOST)
+    assert alone['version'] != data['version'] and alone['alt'] == data['alt']
+    assert call(houses, EVENT_IMAGE)[2] == pages.images.result_png(data) != pages.images.result_png(alone)
+
+
+def test_pinned_election_page_declares_the_latest_image(houses, fresh_app, monkeypatch):
+    """La imagen siempre dibuja lo último publicado: una página con un run fijado declara la huella y el texto de
+    ese último run, y la imagen de marca si la elección ya no está."""
+    own = pages.latest_event_preview('es', '2023-07-23')
+    latest = dict(own, version='0badcafe', alt='Generales 2023, resultado oficial del 23 jul 2023: PP 35,0%.')
+    asked = []
+    monkeypatch.setattr(pages, 'latest_event_preview', lambda *args: asked.append(args) or latest)
+    pinned = page_of(houses, EVENT_PATH, query='run=' + RUN)
+    assert meta_of(pinned, 'og:image') == SITE + EVENT_IMAGE + '?v=0badcafe'
+    assert meta_of(pinned, 'og:image:alt') == latest['alt'] and asked == [('es', '2023-07-23')]
+    # without a pinned run the page already shows the latest: its own data, read once
+    plain = page_of(houses, EVENT_PATH)
+    assert meta_of(plain, 'og:image') == SITE + EVENT_IMAGE + '?v=' + own['version']
+    assert meta_of(plain, 'og:image:alt') == own['alt'] and len(asked) == 1
+    monkeypatch.setattr(pages, 'latest_event_preview', lambda *args: None)
+    gone = page_of(houses, EVENT_PATH, query='run=' + RUN)
+    assert meta_of(gone, 'og:image') == pages.og_image_url() and meta_of(gone, 'og:image:alt') == BRAND_ALT
+
+
+def test_election_page_keeps_the_brand_image_when_nothing_can_be_drawn(houses, fresh_app, monkeypatch):
+    """Si este proceso no puede dibujar, la página de una elección sigue con la imagen de marca en vez de declarar
+    una imagen que respondería un error."""
+    assert meta_of(page_of(houses, EVENT_PATH), 'og:image').startswith(SITE + EVENT_IMAGE + '?v=')
+    monkeypatch.setattr(pages.images, 'available', lambda: False)
+    page = page_of(houses, EVENT_PATH)
+    assert meta_of(page, 'og:image') == pages.og_image_url() and meta_of(page, 'og:image:alt') == BRAND_ALT
+    assert EVENT_IMAGE not in page
+    assert meta_of(page_of(houses, EVENT_PATH, query='run=' + RUN), 'og:image') == pages.og_image_url()
+
+
+def test_event_image_of_a_scope_without_forecast(houses, fresh_app):
+    """Un ámbito sin previsión publicada tiene el detalle de sus elecciones, y con él su imagen: se dibuja con el
+    catálogo del run nacional."""
+    write_event(fresh_app.fs, scope='es-md', date='2023-05-28', model=False)
+    path = pages.event_href('es-md', '2023-05-28')
+    assert path == '/elecciones/es/madrid/2023-05'
+    data = pages.latest_event_preview('es-md', '2023-05-28')
+    assert [row['name'] for row in data['rows']] == ['PP', 'PSOE', 'VOX', 'Cs']
+    assert data['subtitle'] == 'Resultado oficial del 28 may 2023'  # the national elections are not its previous one
+    assert [row['color'] for row in data['rows']] == [
+        row['color'] for row in pages.latest_event_preview('es', '2023-07-23')['rows']]
+    page = page_of(houses, path)
+    assert meta_of(page, 'og:image') == SITE + path + '.png?v=' + data['version']
+    status, headers, body = call(houses, path + '.png')
+    assert status == 200 and headers['content-type'] == 'image/png' and body == pages.images.result_png(data)

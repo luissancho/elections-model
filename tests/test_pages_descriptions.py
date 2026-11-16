@@ -13,6 +13,7 @@ from tests.test_api_asgi import call
 from tests.test_pages import (api, houses, houses_without_analysis, html, publish_study, site_api,  # noqa: F401
                               write_event)
 from tests.test_pages_crawlers import POLL_PATH, write_polls
+from tests.test_pages_event_images import write_results
 from tests.test_pages_images import COLORS, GAD3, PARTIES
 from tests.test_pages_titles import site_paths
 from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, use_database, write_study  # noqa: F401
@@ -24,8 +25,8 @@ DESCRIPTIONS = {
     POLL_PATH: 'Elecciones generales 2026: sondeo de Sigma Dos (5 oct 2026). PP 33,1%.',
     '/elecciones': ('Cuánto se equivocaron las encuestas frente al resultado oficial en cada elección general y '
                     'autonómica: su error medio y hacia qué bloque fallaron.'),
-    '/elecciones/es/generales/2023-07': ('Generales 2023: el resultado oficial y cuánto se equivocaron frente a él '
-                                         'los sondeos, cada encuestadora y el modelo.'),
+    '/elecciones/es/generales/2023-07': ('Generales 2023: PP 33,1% (160 escaños), PSOE 31,4% (150), VOX 12,3% (40), '
+                                         'Cs 0,1% (0).'),
     '/casas': ('Qué encuestadoras aciertan más: el ranking por rating, cuánto se separa cada una del promedio de '
                'todas (su efecto de casa) y cuáles se ciñen al resto.'),
     '/casas/gad3': ('Perfil de la encuestadora GAD3: su rating, lo que se sabe de cómo trabaja, sus errores en cada '
@@ -183,24 +184,28 @@ def test_no_description_repeats_or_leads_with_a_menu_label(houses, fresh_app):
         assert not any(description.startswith(entry['label'] + ':') for entry in pages.PAGES), path
 
 
-def test_election_description_only_names_the_model_when_the_page_has_it(houses, fresh_app):
-    """Una elección sin la tarjeta «Lo que dijo el modelo» no dice «y el modelo» en su descripción."""
+def test_election_without_results_keeps_its_sentence(houses, fresh_app):
+    """Una elección sin resultado publicado no tiene cifras que decir: se describe con lo que la página tiene, y
+    sólo nombra el modelo si lleva la tarjeta «Lo que dijo el modelo»."""
     write_event(fresh_app.fs, date='2019-11-10', model=False, featured=False)
+    write_results(fresh_app.fs, '2019-11-10', [])
+    write_results(fresh_app.fs, '2023-07-23', [])
     status, _, body = call(houses, '/elecciones/es/generales/2019-11')
     page = html(body)
     assert status == 200 and 'Lo que dijo el modelo' not in page
-    description = description_of(page)
-    assert description.endswith(': el resultado oficial y cuánto se equivocaron frente a él los sondeos y cada '
-                                'encuestadora.')
+    assert description_of(page) == ('Generales 2023: el resultado oficial y cuánto se equivocaron frente a él los '
+                                    'sondeos y cada encuestadora.')
     page = html(call(houses, '/elecciones/es/generales/2023-07')[2])
     assert 'Lo que dijo el modelo' in page
-    assert description_of(page) == DESCRIPTIONS['/elecciones/es/generales/2023-07']
+    assert description_of(page) == ('Generales 2023: el resultado oficial y cuánto se equivocaron frente a él los '
+                                    'sondeos, cada encuestadora y el modelo.')
 
 
 def test_election_without_a_name_is_described_by_its_date():
-    """Sin nombre, la elección se describe por su fecha (bloque de la plantilla)."""
+    """Sin nombre y sin resultado publicado, la elección se describe por su fecha (bloque de la plantilla)."""
     template = pages.environment().get_template('eleccion.html')
-    context = template.new_context({'event': {'name': None, 'event_date': '2023-07-23'}, 'horizon_tables': []})
+    context = template.new_context({'event': {'name': None, 'event_date': '2023-07-23'}, 'horizon_tables': [],
+                                    'preview': {'description': None}})
     assert unescape(''.join(template.blocks['description'](context))) == (
         'Elección del 23 jul 2023: el resultado oficial y cuánto se equivocaron frente a él los sondeos y cada '
         'encuestadora.')

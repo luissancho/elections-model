@@ -2,7 +2,6 @@
 Controller of the page of a poll (``/{scope}/sondeos/{date}/{pollster}[/{sponsor}]``) and of the image of its link
 previews (the same address ending in ``.png``).
 """
-import hashlib
 from typing import Optional
 
 from ..lib import pages, webapi
@@ -15,16 +14,9 @@ class Sondeos(Page):
     Page of a poll: its card to share (the vote against the average of its day, the seats of the house, its rating
     and weight), the detail of its vote and of its weight, the chart of its house in the cycle and its sheet. And the
     image a network shows when the page is shared (``image_action``), which the page declares as its ``og:image``.
-
-    Attributes
-    ----------
-    IMAGE_TTL : int
-        Seconds a cache may keep the image of a poll: a published poll does not change, and when it is corrected
-        the page declares another address (the ``?v=`` of its ``og:image``).
     """
 
     active = None
-    IMAGE_TTL = 86400
 
     async def detail_action(self, scope: str, date: str, pollster: str, sponsor: Optional[str] = None) -> str:
         """
@@ -46,11 +38,10 @@ class Sondeos(Page):
         str
             The HTML of ``sondeo.html``, with its breadcrumbs (the election, linking to the page of the event, and
             the poll); its canonical is the URL of the poll (``pages.poll_detail_href``), without ``mode`` nor
-            ``run``. Its ``og:image`` is the image of the poll (``image_action``): the canonical ending in ``.png``,
-            with the fingerprint of what it draws in ``?v=`` (the networks keep an image by its address) and a text
-            alternative with its figures. The image always draws the latest run, so a page with a pinned run
-            declares the fingerprint of the latest one, and the brand image when the poll is not in it. The
-            brand image stays too when this process cannot draw (``pages.images.available``).
+            ``run``. Its ``og:image`` is the image of the poll (``image_action``, ``preview_image``): the canonical
+            ending in ``.png``, with the fingerprint of what it draws and a text alternative with its figures. The
+            image always draws the latest run, so a page with a pinned run declares the fingerprint of the latest
+            one, and the brand image when the poll is not in it.
 
         Raises
         ------
@@ -69,14 +60,8 @@ class Sondeos(Page):
         if context['state']['pinned']:
             preview = pages.latest_poll_preview(code, date, pollster, sponsor)
 
-        image = {}
-
-        if preview is not None and pages.images.available():
-            image = {'og_image': '{}{}.png?v={}'.format(origin, context['detail_href'], preview['version']),
-                     'og_image_alt': preview['alt']}
-
-        return self.render('sondeo.html', canonical=origin + context['detail_href'], structured=[trail], **image,
-                           **context)
+        return self.render('sondeo.html', canonical=origin + context['detail_href'], structured=[trail],
+                           **self.preview_image(context['detail_href'], preview), **context)
 
     async def image_action(self, scope: str, date: str, pollster: str, sponsor: Optional[str] = None) -> bytes:
         """
@@ -99,8 +84,7 @@ class Sondeos(Page):
         Returns
         -------
         bytes
-            The PNG (``pages.images.poll_png`` of ``pages.poll_preview``), answered as ``image/png`` with an ETag
-            (MD5 of the bytes) and ``public, max-age=<IMAGE_TTL>``.
+            The PNG (``pages.images.poll_png`` of ``pages.poll_preview``), answered as a cacheable image (``png``).
 
         Raises
         ------
@@ -109,10 +93,4 @@ class Sondeos(Page):
         """
         code = pages.resolve_event_scope(scope)
         check_date(date)
-        png = pages.images.poll_png(pages.poll_preview(pages.parse_state({}, code), date, pollster, sponsor))
-
-        self.response.set_content_type('image/png', charset=None)
-        self.response.set_etag(hashlib.md5(png).hexdigest())
-        self.response.set_cache(self.IMAGE_TTL)
-
-        return png
+        return self.png(pages.images.poll_png(pages.poll_preview(pages.parse_state({}, code), date, pollster, sponsor)))

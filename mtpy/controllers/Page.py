@@ -17,9 +17,14 @@ class Page(Controller):
     ----------
     active : str or None
         ``href`` of the page in the navigation; subclasses set it (``None`` for the event pages).
+    IMAGE_TTL : int
+        Seconds a cache may keep the image of the link previews of a page (``png``): the pages that have one do
+        not change, and when what they draw is corrected the page declares another address (the ``?v=`` of its
+        ``og:image``).
     """
 
     active = '/'
+    IMAGE_TTL = 86400
 
     def state(self, scope: Optional[str] = None) -> dict:
         """
@@ -154,6 +159,54 @@ class Page(Controller):
         self.response.set_cache(int(webapi.settings()['cache_ttl']))
 
         return html
+
+    def preview_image(self, href: str, preview: Optional[dict]) -> dict:
+        """
+        The image of its own a page declares for its link previews.
+
+        Parameters
+        ----------
+        href : str
+            Canonical path of the page (``'/es/sondeos/2026-11-05/gad3'``); its image is that address ending in
+            ``.png``.
+        preview : dict or None
+            What the image says (``pages.preview_of``, ``pages.result_preview``), with its ``version`` and its
+            ``alt``; ``None`` when there is nothing to draw.
+
+        Returns
+        -------
+        dict
+            The ``og_image`` (absolute, with the fingerprint of what it draws in ``?v=``: the networks keep an
+            image by its address) and ``og_image_alt`` of ``render``. Empty without a preview or when this process
+            cannot draw (``pages.images.available``): the page keeps the brand image.
+        """
+        if preview is None or not pages.images.available():
+            return {}
+
+        return {'og_image': '{}{}.png?v={}'.format(webapi.settings()['site_url'], href, preview['version']),
+                'og_image_alt': preview['alt']}
+
+    def png(self, image: bytes) -> bytes:
+        """
+        Answer an image the server draws for the link previews of a page.
+
+        Sets ``image/png``, an ETag (MD5 of the bytes) and ``public, max-age=<IMAGE_TTL>``.
+
+        Parameters
+        ----------
+        image : bytes
+            The PNG (``pages.images``).
+
+        Returns
+        -------
+        bytes
+            The same bytes.
+        """
+        self.response.set_content_type('image/png', charset=None)
+        self.response.set_etag(hashlib.md5(image).hexdigest())
+        self.response.set_cache(self.IMAGE_TTL)
+
+        return image
 
     def error_page(self, status: int, message: str) -> str:
         """
