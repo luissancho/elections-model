@@ -115,8 +115,9 @@ class Page(Controller):
         template : str
             Template name in ``web/templates``.
         **context
-            Template variables; ``canonical`` (``canonical_url``) and ``og_image`` (``pages.og_image_url``, the
-            brand image of the link previews) are added when missing.
+            Template variables; ``canonical`` (``canonical_url``), ``og_image`` (``pages.og_image_url``, the
+            brand image of the link previews) and ``analytics`` (``pages.analytics_config``, the settings of
+            the cookie notice, ``None`` when the visits are not measured) are added when missing.
 
         Returns
         -------
@@ -125,6 +126,7 @@ class Page(Controller):
         """
         context.setdefault('canonical', self.canonical_url())
         context.setdefault('og_image', pages.og_image_url())
+        context.setdefault('analytics', pages.analytics_config())
         html = pages.environment().get_template(template).render(**context)
 
         self.response.set_content_type('text/html')

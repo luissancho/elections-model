@@ -230,12 +230,12 @@ def test_lru_cache_evicts_the_oldest():
 
 
 def test_settings_defaults_without_config(fresh_app):
-    assert webapi.settings() == {'prefix': 'site/v1', 'cache_ttl': 60.0, 'site_url': 'https://demoscopio.es'}
+    assert webapi.settings() == {'prefix': 'site/v1', 'cache_ttl': 60.0, 'site_url': 'https://demoscopio.es', 'gtm_id': ''}
     from mtpy.core.app import Config
     fresh_app.set('config', Config({'web': {'prefix': 'site-dry/v1', 'cache_ttl': '5', 'site_url': 'https://demoscopio.dev/'}}))
-    assert webapi.settings() == {'prefix': 'site-dry/v1', 'cache_ttl': 5.0, 'site_url': 'https://demoscopio.dev'}
+    assert webapi.settings() == {'prefix': 'site-dry/v1', 'cache_ttl': 5.0, 'site_url': 'https://demoscopio.dev', 'gtm_id': ''}
     fresh_app.set('config', Config({'web': {'prefix': '', 'cache_ttl': '', 'site_url': ''}}))
-    assert webapi.settings() == {'prefix': 'site/v1', 'cache_ttl': 60.0, 'site_url': 'https://demoscopio.es'}
+    assert webapi.settings() == {'prefix': 'site/v1', 'cache_ttl': 60.0, 'site_url': 'https://demoscopio.es', 'gtm_id': ''}
 
 
 def test_site_reads_the_bundle_and_resolves_latest(site_app):
@@ -437,7 +437,8 @@ def test_settings_fall_back_to_the_default_ttl_on_garbage(monkeypatch):
     fake = SimpleNamespace(config=SimpleNamespace(web=SimpleNamespace(prefix='', cache_ttl='abc')))
     monkeypatch.setattr(App, 'get_', staticmethod(lambda: fake))
     with pytest.warns(UserWarning):
-        assert webapi.settings() == {'prefix': bundle.PREFIX, 'cache_ttl': 60.0, 'site_url': webapi.DEFAULT_SITE_URL}
+        assert webapi.settings() == {'prefix': bundle.PREFIX, 'cache_ttl': 60.0, 'site_url': webapi.DEFAULT_SITE_URL,
+                                     'gtm_id': ''}
 
 
 def test_check_region_accepts_integers_only():

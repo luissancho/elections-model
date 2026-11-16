@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}Privacidad y cookies{% endblock %}
+{% block description %}Qué guarda Demoscopio de quien lo lee, las cookies de la medición de visitas y cómo aceptarlas o rechazarlas.{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/common.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{#- The privacy page. The measurement of visits is described as it works in production; the buttons of «Tu
+    elección» only exist when the site has a container (`analytics`), and `consent.js` attends them and shows the
+    text of the current choice (`data-consent-when`). -#}
+    <div id="content" class="stack">
+      {{ m.headline('Para leer Demoscopio no tienes que darnos ningún dato. Medimos las visitas con Google Analytics, y sólo si lo aceptas.') }}
+      <section id="responsable" class="card">
+        <h2>Quién responde</h2>
+        <p>
+          Demoscopio es un proyecto personal de Luis Sancho (<a href="{{ author_url }}" rel="me">{{ author_handle }}</a>),
+          que responde del sitio y de lo que esta página cuenta. Para cualquier duda sobre tus datos, escríbele por X.
+        </p>
+      </section>
+      <section id="datos" class="card">
+        <h2>Qué guardamos de ti</h2>
+        <p>
+          No hay registro, formularios ni publicidad. Las fuentes, los gráficos y los datos se sirven desde nuestro
+          propio servidor: no cargamos nada de terceros, salvo la medición de visitas si la aceptas.
+        </p>
+        <p>
+          Como cualquier servidor web, el nuestro anota cada petición que recibe: la dirección IP, la página pedida,
+          la fecha y el navegador. Usamos esos registros para mantener el servicio y resolver fallos; no los usamos
+          para identificar a nadie ni los cruzamos con otros datos.
+        </p>
+      </section>
+      <section id="cookies" class="card">
+        <h2>La medición de visitas</h2>
+        <p>
+          Para saber cuánta gente nos lee, qué páginas se ven y desde dónde se llega usamos Google Analytics, un
+          servicio de Google Ireland Limited. Sólo se activa si aceptas en el aviso: hasta entonces no se carga nada
+          de Google ni se guarda ninguna cookie, y si rechazas, tampoco.
+        </p>
+        <p>Si aceptas, Google Analytics guarda dos cookies en tu navegador:</p>
+        <dl>
+          <dt><code>_ga</code></dt>
+          <dd>Distingue un navegador de otro, para contar visitantes y no sólo páginas vistas. Dura 2 años.</dd>
+          <dt><code>_ga_…</code></dt>
+          <dd>Acaba con el identificador de nuestra cuenta y lleva la cuenta de cada visita: sabe si dos páginas vistas son de la misma. Dura 2 años.</dd>
+        </dl>
+        <p>
+          Con ellas recibimos estadísticas de conjunto: páginas vistas, país y tipo de dispositivo aproximados y la
+          web desde la que llegas. No sabemos quién eres, no usamos los datos para publicidad ni para hacer perfiles,
+          y las funciones publicitarias de Google van siempre desactivadas. Google puede tratar esos datos en
+          servidores de fuera de la Unión Europea; lo explica en su
+          <a href="https://policies.google.com/privacy?hl=es" rel="noopener">política de privacidad</a>.
+        </p>
+        <p>
+          La medición se apoya en tu consentimiento, que puedes retirar cuando quieras en esta misma página. Tu
+          elección, aceptes o rechaces, se guarda en el almacenamiento local de tu navegador durante
+          {{ consent_months }} meses, para no preguntarte en cada visita; no es una cookie y no sale de tu
+          dispositivo. Pasado ese tiempo volvemos a preguntar.
+        </p>
+      </section>
+      <section id="eleccion" class="card">
+        <h2>Tu elección</h2>
+        {% if analytics %}
+        <p>
+          <span data-consent-when="granted" hidden>Ahora mismo: has aceptado la medición.</span>
+          <span data-consent-when="denied" hidden>Ahora mismo: has rechazado la medición.</span>
+          <span data-consent-when="unset" hidden>Ahora mismo: todavía no has elegido.</span>
+        </p>
+        <div class="consent-actions">
+          <button type="button" data-consent="denied">Rechazar</button>
+          <button type="button" data-consent="granted">Aceptar</button>
+        </div>
+        <p class="lead">Si rechazas después de haber aceptado, borramos las cookies de Google Analytics de este sitio y recargamos la página.</p>
+        {% else %}
+        <p class="notice">La medición de visitas no está activa en este servidor.</p>
+        {% endif %}
+      </section>
+      <section id="derechos" class="card">
+        <h2>Tus derechos</h2>
+        <p>
+          Puedes pedirnos acceder a los datos que tengamos sobre ti, rectificarlos o borrarlos, y oponerte a su uso
+          o limitarlo. Como no sabemos quién hay detrás de cada visita, lo más directo es rechazar la medición aquí
+          arriba y borrar las cookies de este sitio en tu navegador.
+        </p>
+        <p>
+          Si crees que no hemos respetado tus derechos, puedes reclamar ante la
+          <a href="https://www.aepd.es" rel="noopener">Agencia Española de Protección de Datos</a>.
+        </p>
+      </section>
+    </div>
+{% endblock %}

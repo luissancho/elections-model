@@ -315,9 +315,24 @@ la web, también sus jobs quedan limitados a 10 s. Mientras `deploy/docker/cront
 conflicto; si un día el contenedor ejecuta publicaciones o cargas, ejecútalas en otro contenedor con la
 variable vacía (un `RUN_JOB` es siempre un `docker run` aparte: `-e DB_STATEMENT_TIMEOUT=` lo anula, porque
 `-e` gana a `--env-file`). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
-paquete, por defecto `site/v1`), `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60) y
+paquete, por defecto `site/v1`), `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60),
 `WEB_SITE_URL` (origen público del sitio para las `canonical`, por defecto `https://demoscopio.es`; en el
-`.env` local va el host de desarrollo, `https://demoscopio.dev`).
+`.env` local va el host de desarrollo, `https://demoscopio.dev`) y `WEB_GTM_ID` (el contenedor de Google Tag
+Manager que mide las visitas, `GTM-…`; vacío, que es lo normal en local y en los tests, la web no mide ni lleva
+aviso de cookies).
+
+Medición de visitas (2026-11-16): con `WEB_GTM_ID` cada página lleva el aviso de cookies (`_consent.html`, oculto
+en el HTML) y su módulo (`web/dist/js/consent.js`), que es quien carga el contenedor, y sólo cuando el lector
+acepta: antes no se pide nada a Google ni se guarda ninguna cookie. La elección se guarda 12 meses en el
+almacenamiento local del navegador (`pages.CONSENT_MONTHS`) y se cambia en `/privacidad`; rechazar después de
+aceptar borra las cookies `_ga…` y recarga la página. Las señales de Consent Mode v2 van con la publicidad siempre
+denegada. Google Analytics (el ID `G-…`) se configura dentro del contenedor, no aquí. El fragmento de Google no
+va en línea porque la política de seguridad de nginx (`Content-Security-Policy`, repetida en los tres sitios de
+`nginx.conf` que añaden cabeceras) no admite scripts en línea ni `eval`: sólo abre a Google los scripts de Tag
+Manager y de su vista previa, las imágenes y conexiones de Analytics sin funciones publicitarias y los estilos y
+fuentes de la vista previa. Por eso en el contenedor no funcionan las etiquetas «HTML personalizado» ni las
+variables de «JavaScript personalizado»; una etiqueta que llame a otro dominio (publicidad, otro proveedor)
+necesita abrirle la política antes. La página de error no mide.
 Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
 en HTML.
 

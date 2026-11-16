@@ -88,6 +88,7 @@ ROUTES = [
     # the files for the crawlers; the dot is escaped because the patterns are regular expressions
     (r'/robots\.txt', 'crawlers', 'robots', ['GET']),
     (r'/sitemap\.xml', 'crawlers', 'sitemap', ['GET']),
+    ('/privacidad', 'privacidad', 'index', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
     # the old seats page of a scope (before 2026-11-04): a 301 to its section of the event page
     ('/{scope}/escanos', 'redirect', 'seats', ['GET']),

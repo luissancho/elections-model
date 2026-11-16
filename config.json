@@ -33,7 +33,8 @@
     "web": {
         "prefix": "${WEB_PREFIX}",
         "cache_ttl": "${WEB_CACHE_TTL}",
-        "site_url": "${WEB_SITE_URL}"
+        "site_url": "${WEB_SITE_URL}",
+        "gtm_id": "${WEB_GTM_ID}"
     },
     "cwl": {
         "group": "${CWL_GROUP}"

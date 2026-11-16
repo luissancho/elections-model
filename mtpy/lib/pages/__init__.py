@@ -2,7 +2,7 @@
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
-``backtest``, ``analisis``, ``sondeos``, with the view models of the CERA study in ``cera``, the card «Escaños que
+``backtest``, ``analisis``, ``sondeos``, ``privacidad``, with the view models of the CERA study in ``cera``, the card «Escaños que
 bailan» of the event page in ``seat_odds`` and the layout of its drawings in ``seat_charts``),
 plus ``common`` (routes, messages, environment and shared context), ``filters`` (formatting filters) and ``crawlers``
 (``/robots.txt`` and ``/sitemap.xml``, the files for the crawlers). This facade
@@ -54,6 +54,7 @@ from .inicio import INTRO, card_headline, event_cards, inicio_context
 from . import ban, herd, lean, shy
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, quality_rubric, subpages, thresholds_rows)
+from .privacidad import CONSENT_MONTHS, analytics_config, privacidad_context
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, poll_detail_href, pollster_href, pollster_slugs,
                     resolve_event_path, resolve_pollster, scope_paths, scope_slug, slugify)
 from .sondeos import (HOUSE_CHANGES_DAYS, fieldwork_overlaps, fieldwork_text, find_poll, house_changes, poll_kpis,

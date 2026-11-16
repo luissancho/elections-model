@@ -1,0 +1,11 @@
+{#- Notice of the measurement cookies, on every page when the site has a Tag Manager container (`analytics`,
+    `pages.analytics_config`). It is rendered hidden: `consent.js` shows it while the reader has not chosen, and
+    loads nothing of Google until they accept. The two buttons weigh the same: rejecting is as easy as accepting.
+    It goes first in the body, so that a screen reader meets it before the page. -#}
+<section id="consent" class="consent" aria-label="Aviso de cookies" data-gtm-id="{{ analytics.gtm_id }}" data-months="{{ analytics.months }}" hidden>
+  <p>Usamos cookies de Google Analytics para medir las visitas: cuánta gente nos lee y qué páginas se ven. Sólo se activan si aceptas. <a href="/privacidad">Más información</a></p>
+  <div class="consent-actions">
+    <button type="button" data-consent="denied">Rechazar</button>
+    <button type="button" data-consent="granted">Aceptar</button>
+  </div>
+</section>
