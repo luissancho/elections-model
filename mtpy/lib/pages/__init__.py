@@ -4,8 +4,9 @@ Server-rendered web pages: routes, the Jinja2 environment, formatting filters an
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
 ``backtest``, ``analisis``, ``sondeos``, ``privacidad``, with the view models of the CERA study in ``cera``, the card «Escaños que
 bailan» of the event page in ``seat_odds`` and the layout of its drawings in ``seat_charts``),
-plus ``common`` (routes, messages, environment and shared context), ``filters`` (formatting filters) and ``crawlers``
-(``/robots.txt`` and ``/sitemap.xml``, the files for the crawlers). This facade
+plus ``common`` (routes, messages, environment and shared context), ``filters`` (formatting filters), ``crawlers``
+(``/robots.txt`` and ``/sitemap.xml``, the files for the crawlers) and ``structured`` (the schema.org blocks of the
+pages, used as ``pages.structured.<name>``). This facade
 re-exports every public name, so callers use ``pages.<name>``.
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
@@ -31,6 +32,7 @@ from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OG_I
                      og_image_version, parse_state, part, parties_catalogue, published_scopes, resolve_event_scope,
                      resolve_scope, run_horizon, scope_query,
                      subpage_event_bar, tabbar, title_of)
+from . import structured
 from .crawlers import CRAWLERS_TTL, robots_txt, sitemap_entries, sitemap_xml
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,

@@ -28,7 +28,9 @@ SITE_TAGLINE = 'Promedio de encuestas, previsión de escaños y ranking de encue
 # served by nginx under ``/dist/img``
 OG_IMAGE = 'og-image.png'
 OG_IMAGE_PATH = os.path.join(REPO_ROOT, 'web', 'dist', 'img', OG_IMAGE)
-# The author, linked from the footer next to the model attribution
+# The author, linked from the footer next to the model attribution (which names him) and named in the structured
+# data of the pages
+AUTHOR_NAME = 'Luis Sancho'
 AUTHOR_HANDLE = '@luis_sancho'
 AUTHOR_URL = 'https://x.com/luis_sancho'
 # Main menu: the global pages. The event page is reached from the home and from the bottom bar.
