@@ -133,7 +133,7 @@ hace scroll a la sección de `seccion` y lo quita de la URL); `/escanos` va dire
 `/X/circunscripciones` y `/X/circunscripciones/{circunscripción}` (la página aparte de «Escaños que bailan», retirada
 el 2026-11-13; controlador `Circunscripciones`) → `/X?…#seat-odds` (su tarjeta, bajo la tabla del territorio), sin `partido`, `vista` ni `circunscripcion` (404
 si `X` no está publicado); `/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
-(`proxy_cache_valid 200 60s`). La canonical de `/X` no lleva `mode`, `run` ni `seccion`.
+(`proxy_cache_valid 200 60s`). La canonical de `/X` es `/X`, sin consulta, como la de todas las páginas.
 
 Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
 el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
@@ -245,7 +245,10 @@ las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en 
 X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
 `fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
 edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
-más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página. Cada página declara
+más la ruta, sin consulta: ningún parámetro elige el contenido (`mode`, `run`, `region` y `seccion` cambian la vista
+del evento; `scope`, el filtro y los enlaces de una página global), y los de fuera (`utm_*`, `fbclid`, `gclid`) no
+deben dar otra dirección a la misma página. `twitter:creator` es la cuenta del autor (`AUTHOR_HANDLE`, en
+`pages/common.py`). Cada página declara
 también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`: la imagen de marca con `?v=` y el hash
 del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
 controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.

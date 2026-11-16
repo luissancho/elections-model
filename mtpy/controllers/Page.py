@@ -83,26 +83,20 @@ class Page(Controller):
 
         return ''
 
-    def canonical_url(self, *extra: str) -> str:
+    def canonical_url(self) -> str:
         """
-        Canonical URL of the page of the request: the public origin, the path and the query without the
-        parameters that only change the view of the same page.
+        Canonical URL of the page of the request: the public origin and the path, without the query.
 
-        ``mode`` (the default view is the canonical one) and ``run`` (a pinned run is a snapshot of the
-        page) are dropped; the parameters that select the content (``scope``, ``region``, ``date``,
-        ``id``...) are kept in their order.
-
-        Parameters
-        ----------
-        *extra : str
-            More parameters to drop (``scope`` on the profile of a pollster, which is the same in every scope).
+        No parameter selects the content of a page: ``mode``, ``run``, ``region`` and ``seccion`` change the view
+        of an event, ``scope`` sets the filter and the links of a global page, and the rest come from outside
+        (``utm_*``, ``fbclid``, ``gclid``). One page, one address.
 
         Returns
         -------
         str
-            ``'<site_url>/<path><query>'``, for ``<link rel="canonical">`` and ``og:url``.
+            ``'<site_url>/<path>'``, for ``<link rel="canonical">`` and ``og:url``.
         """
-        return '{}/{}{}'.format(webapi.settings()['site_url'], self.request.uri, self.query_without('mode', 'run', *extra))
+        return '{}/{}'.format(webapi.settings()['site_url'], self.request.uri)
 
     def render(self, template: str, **context) -> str:
         """

@@ -94,6 +94,36 @@ def test_every_sitemap_url_is_a_live_page_and_its_own_canonical(houses, fresh_ap
         assert '<link rel="canonical" href="{}">'.format(loc) in html(body), loc
 
 
+def head_of(page):
+    """La cabecera (`<head>`) de una página."""
+    return page[page.index('<head>'):page.index('</head>')]
+
+
+def test_every_sitemap_page_declares_its_path_whatever_the_query(houses, fresh_app):
+    """Ningún parámetro llega a la canónica ni a `og:url`: ni el ámbito de una página global ni los de las
+    campañas y las redes (`utm_*`, `fbclid`, `gclid`). Cada página tiene una sola dirección, la del sitemap."""
+    write_study(fresh_app.fs)
+    tracking = 'utm_source=x&utm_medium=social&fbclid=abc&gclid=1'
+
+    for loc in list(sitemap(houses)) + [SITE + '/privacidad']:
+        # the home sends its old `?scope=` to the event of the scope (a 301): it is asked without it
+        query = tracking if loc == SITE + '/' else 'scope=es&' + tracking
+        status, _, body = call(houses, loc[len(SITE):], query=query)
+        head = head_of(html(body)) if status == 200 else ''
+        assert status == 200 and '<link rel="canonical" href="{}">'.format(loc) in head, loc
+        assert '<meta property="og:url" content="{}">'.format(loc) in head, loc
+        assert 'utm_' not in head and 'fbclid' not in head and 'gclid' not in head, loc
+
+
+def test_no_query_value_reaches_the_head(houses, fresh_app):
+    """Lo que venga en la consulta no se copia en la página, tampoco escapado."""
+    for path in ('/', '/es', '/metodo', '/casas', '/elecciones', '/privacidad'):
+        status, _, body = call(houses, path, query='zzq=%22%3E%3Cscript%3Ealert(1)%3C/script%3E&zzr=a%26b')
+        page = html(body)
+        assert status == 200 and '<link rel="canonical" href="{}{}">'.format(SITE, path) in head_of(page), path
+        assert 'zzq' not in page and 'zzr' not in page and 'alert(1)' not in page, path
+
+
 def test_sitemap_without_database_is_a_503_page(api):
     """Sin base de datos no hay perfiles de encuestadoras: 503 sin caché, nunca una lista a medias."""
     status, headers, body = call(api, '/sitemap.xml')

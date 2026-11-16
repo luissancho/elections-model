@@ -399,9 +399,10 @@ def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
     assert 'Pronóstico electoral' not in page
 
 
-def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fresh_app):
-    """La canonical es la URL pública de la página sin `mode` ni `run` (vistas de la misma página), con `scope` y los
-    demás parámetros que eligen el contenido, y el origen sale de `web.site_url` (`WEB_SITE_URL`)."""
+def test_canonical_is_the_path_without_the_query(api, fresh_app):
+    """La canonical es la URL pública de la página sin su consulta: ningún parámetro elige el contenido (`mode`,
+    `run`, `region`, `seccion` y `scope` son vistas de la misma página), y el origen sale de `web.site_url`
+    (`WEB_SITE_URL`)."""
     status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
     # ``region`` (the district of the detail table) and ``seccion`` (the 301 of the old seats page, the district
@@ -413,8 +414,10 @@ def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fre
     assert '<meta property="og:url" content="https://demoscopio.es/es">' in html(body)
     status, headers, body = call(api, '/es', query='seccion=resultados')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
+    # the scope of a global page only sets its filter and its links: one canonical, the one of the sitemap
     status, headers, body = call(api, '/metodo', query='scope=es')
-    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/metodo?scope=es">' in html(body)
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/metodo">' in html(body)
+    assert '<meta property="og:url" content="https://demoscopio.es/metodo">' in html(body)
     status, headers, body = call(api, '/')
     assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/">' in html(body)
     from mtpy.core.app import Config
@@ -439,6 +442,7 @@ def test_pages_carry_the_share_image_and_the_large_card(api, fresh_app):
     assert ('<meta property="og:image:alt" content="Demoscopio: promedio de encuestas, previsión de escaños y ranking '
             'de encuestadoras">') in page
     assert '<meta name="twitter:card" content="summary_large_image">' in page and 'content="summary"' not in page
+    assert '<meta name="twitter:creator" content="@luis_sancho">' in page  # the account that signs the footer
     for path, query in (('/', ''), ('/metodo', 'scope=es')):
         assert '<meta property="og:image" content="{}">'.format(image) in html(call(api, path, query=query)[2])
     assert 'og:image' not in html(call(api, '/nope')[2])
@@ -4716,7 +4720,7 @@ def test_profile_and_detail_canonicals_are_the_clean_urls(houses, fresh_app):
     assert '<link rel="canonical" href="https://demoscopio.es/casas/gad3">' in page
     assert '<meta property="og:url" content="https://demoscopio.es/casas/gad3">' in page
     ranking = html(call(houses, '/casas', query='scope=es')[2])
-    assert '<link rel="canonical" href="https://demoscopio.es/casas?scope=es">' in ranking
+    assert '<link rel="canonical" href="https://demoscopio.es/casas">' in ranking
     write_event(fresh_app.fs)
     detail = html(call(houses, '/elecciones/es/generales/2023-07-23', query='scope=es&mode=forecast')[2])
     assert '<link rel="canonical" href="https://demoscopio.es/elecciones/es/generales/2023-07">' in detail
