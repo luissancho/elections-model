@@ -59,9 +59,10 @@ from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, met
 from .privacidad import CONSENT_MONTHS, analytics_config, privacidad_context
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, poll_detail_href, pollster_href, pollster_slugs,
                     resolve_event_path, resolve_pollster, scope_paths, scope_slug, slugify)
-from .sondeos import (HOUSE_CHANGES_DAYS, fieldwork_overlaps, fieldwork_text, find_poll, house_changes, poll_kpis,
-                      poll_title, previous_poll, rating_badge, sample_text, seats_text, sheet_rows, sondeo_context,
-                      vote_rows, weight_card)
+from .sondeos import (HOUSE_CHANGES_DAYS, PREVIEW_DESIGN, PREVIEW_ROWS, fieldwork_compact, fieldwork_overlaps,
+                      fieldwork_text, find_poll, house_changes, latest_poll_preview, poll_kpis, poll_preview,
+                      poll_title, preview_of, previous_poll, rating_badge, sample_text, seats_text, sheet_rows,
+                      sondeo_context, vote_rows, weight_card)
 from .promedios import (BLOCK_ORDER, PAGE_SIZE, RATING_COLORS, block_result_rows, chart_polls, fieldwork_label, inherited_results,
                         lineage_blocks, party_cards,
                         poll_href, poll_months, poll_name, polls_table, pollster_options, promedios_context, result_rows,
