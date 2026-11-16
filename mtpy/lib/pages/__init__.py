@@ -19,7 +19,7 @@ does not import the model nor ``publish``, so the web workers stay light.
 """
 from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, ban_context, cera_context,
                        herd_context, lean_context, shy_context, study_cards, study_context, study_part,
-                       verdict_rows)
+                       study_published_at, verdict_rows)
 from .backtest import backtest_context, backtest_part, model_record, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PATH_COLUMNS, RANKING_COLUMNS, RANKING_KEYS,
                     RANKING_SHOWN, analysis_part, block_bar_colors, casa_context, table_columns,
@@ -51,7 +51,7 @@ from .escanos import (CSV_PARTS, csv_links, default_coalition, district_table, h
                       seats_context)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,
                       fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around,
-                      shade_scale)
+                      shade_scale, snippet)
 from .inicio import INTRO, card_headline, event_cards, inicio_context
 from . import ban, herd, lean, shy
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,

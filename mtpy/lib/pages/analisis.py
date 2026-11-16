@@ -610,8 +610,21 @@ def cera_context(state: dict) -> dict:
     return context
 
 
-def _published_at(study: str) -> Optional[str]:
-    """``published_at`` of a study in the manifest, or ``None`` without a manifest or without the entry."""
+def study_published_at(study: str) -> Optional[str]:
+    """
+    Time of the last publication of a study.
+
+    Parameters
+    ----------
+    study : str
+        Study slug.
+
+    Returns
+    -------
+    str or None
+        ``published_at`` of the study in the manifest (ISO, UTC), or ``None`` without a manifest or without the
+        entry.
+    """
     try:
         return _get(site().manifest_data(), 'studies', study, 'published_at')
     except HttpError:
@@ -665,7 +678,7 @@ def lean_context(state: dict) -> dict:
         sources=meta.get('sources') or [],
         csv_links=_csv_links(lean.LEAN),
         initial=dict(lean.island(parts), state=context['state']),
-        published_at=_published_at(lean.LEAN),
+        published_at=study_published_at(lean.LEAN),
     )
 
     return context
@@ -749,7 +762,7 @@ def herd_context(state: dict) -> dict:
         sigmas=herd.sigmas(chance),
         csv_links=csv_links,
         sources=meta.get('sources') or [],
-        published_at=_published_at(herd.HERD),
+        published_at=study_published_at(herd.HERD),
         initial={'weeks': parts['weeks'], 'chance': chance, 'state': context['state']},
     )
 
@@ -799,7 +812,7 @@ def shy_context(state: dict) -> dict:
         texts=shy.texts(summary, elections, meta),
         csv_links=_csv_links(shy.SHY),
         sources=meta.get('sources') or [],
-        published_at=_published_at(shy.SHY),
+        published_at=study_published_at(shy.SHY),
         initial=dict(shy.island(parts), state=context['state']),
     )
 
@@ -871,7 +884,7 @@ def ban_context(state: dict) -> dict:
         counts=ban.counts(summary, params),
         sources=meta.get('sources') or [],
         csv_links=_csv_links(ban.BAN),
-        published_at=_published_at(ban.BAN),
+        published_at=study_published_at(ban.BAN),
         initial=dict(ban.island(parts['pairs'], params), state=context['state']),
     )
 

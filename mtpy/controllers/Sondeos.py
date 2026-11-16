@@ -34,8 +34,9 @@ class Sondeos(Page):
         Returns
         -------
         str
-            The HTML of ``sondeo.html``; its canonical is the URL of the poll (``pages.poll_detail_href``), without
-            ``mode`` nor ``run``.
+            The HTML of ``sondeo.html``, with its breadcrumbs (the election, linking to the page of the event, and
+            the poll); its canonical is the URL of the poll (``pages.poll_detail_href``), without ``mode`` nor
+            ``run``.
 
         Raises
         ------
@@ -45,5 +46,9 @@ class Sondeos(Page):
         code = pages.resolve_event_scope(scope)
         check_date(date)
         context = pages.sondeo_context(self.state(code), date, pollster, sponsor)
+        origin = webapi.settings()['site_url']
+        trail = pages.structured.breadcrumbs(origin, [
+            (context['event_bar']['election'], '/' + code),
+            ('{} · {}'.format(context['poll_title'], context['poll_date']), None)])
 
-        return self.render('sondeo.html', canonical=webapi.settings()['site_url'] + context['detail_href'], **context)
+        return self.render('sondeo.html', canonical=origin + context['detail_href'], structured=[trail], **context)

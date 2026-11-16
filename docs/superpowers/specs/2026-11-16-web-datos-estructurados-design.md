@@ -56,7 +56,8 @@ primer nivel y no son artículos.
 - **`Article`** de un estudio: `headline` (el titular visible de la página), `description` (la misma que
   `<meta name="description">`), `url` y `mainEntityOfPage` (la canónica), `inLanguage`, `author` (la misma
   `Person`), `publisher` (la organización, con su logotipo) y `dateModified` (el `published_at` del manifiesto,
-  la fecha que la página enseña como «actualizada»; sin ella, sin la propiedad). Sin `datePublished` ni `image`:
+  la fecha que cuatro de los cinco estudios enseñan como «actualizada»; el del voto CERA no la enseña y la lleva
+  igual; sin ella en el manifiesto, sin la propiedad). Sin `datePublished` ni `image`:
   no hay fecha de primera publicación guardada, y la imagen de marca no es una imagen del artículo.
 - **`BreadcrumbList`**, dos elementos: la sección y la página.
 

@@ -19,7 +19,8 @@ class Index(Page):
         Returns
         -------
         str
-            The HTML of ``index.html`` (the index of events), or the empty body of the 301.
+            The HTML of ``index.html`` (the index of events), with the blocks that name the site and its publisher
+            (``pages.structured``), or the empty body of the 301.
         """
         scope = self.request.query.get('scope')
 
@@ -28,4 +29,7 @@ class Index(Page):
 
             return self.redirect('/' + scope + self.query_without('scope'))
 
-        return self.render('index.html', **pages.inicio_context(self.state()))
+        origin = webapi.settings()['site_url']
+        structured = [pages.structured.website(origin), pages.structured.organization(origin)]
+
+        return self.render('index.html', structured=structured, **pages.inicio_context(self.state()))

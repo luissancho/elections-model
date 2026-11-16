@@ -99,6 +99,27 @@ class Page(Controller):
         """
         return '{}/{}'.format(webapi.settings()['site_url'], self.request.uri)
 
+    def section_trail(self, href: str, name: str) -> dict:
+        """
+        Breadcrumbs of a page of the second level: its section of the menu, then the page.
+
+        Parameters
+        ----------
+        href : str
+            ``href`` of the section in ``pages.PAGES`` (``'/metodo'``).
+        name : str
+            Name of the page, as the page shows it.
+
+        Returns
+        -------
+        dict
+            The ``BreadcrumbList`` block (``pages.structured.breadcrumbs``): the label of the section in the menu
+            with its URL, and ``name`` without one (the page itself).
+        """
+        label = next(page['label'] for page in pages.PAGES if page['href'] == href)
+
+        return pages.structured.breadcrumbs(webapi.settings()['site_url'], [(label, href), (name, None)])
+
     def render(self, template: str, **context) -> str:
         """
         Render a page template as a cacheable HTML response.

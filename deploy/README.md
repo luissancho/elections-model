@@ -270,6 +270,18 @@ que cabe y corta lo que no: en el final de una frase si las primeras suman al me
 palabra entera seguida de «…». Así el subtítulo de un estudio o un sondeo con un nombre largo acaban limpios; un
 texto fijo no debería necesitar el corte, y las pruebas comprueban que los de hoy caben enteros.
 
+Los datos estructurados (schema.org, en JSON-LD) dicen a un buscador lo que el lector ya ve. Cada bloque lo
+construye `mtpy/lib/pages/structured.py` como un diccionario, el controlador de la página los pasa a `render` en
+`structured=` y `base.html` escribe un `<script type="application/ld+json">` por bloque con `tojson`, que escapa lo
+que cerraría la etiqueta. La portada lleva `WebSite` (el nombre que el buscador pone sobre cada resultado) y
+`Organization` (nombre, lema, la lente como logotipo y el autor del pie como `founder`); un estudio, `Article`
+(su titular, su descripción, su canónica, el autor, y como `dateModified` el `published_at` del estudio en el
+manifiesto, si lo hay); y las páginas de segundo nivel, `BreadcrumbList` con dos elementos: la sección, con la
+etiqueta del menú (`Page.section_trail`), y la página; en un sondeo, la elección (la página del evento) y el
+sondeo. Las páginas de primer nivel y `/privacidad` no llevan ninguno. Ningún texto es nuevo: el titular y la
+descripción salen de los bloques `title` y `description` de la plantilla (`structured.block_text`), y todas las
+direcciones son las canónicas. Una página nueva de segundo nivel pasa `structured=[self.section_trail(...)]`.
+
 Para los rastreadores (`mtpy/lib/pages/crawlers.py`, controlador `Crawlers`): `/robots.txt` deja todo abierto menos
 `/api/` (los mismos datos de las páginas en JSON y CSV) y da la URL del sitemap; `/sitemap.xml` lista las URL
 canónicas de lo publicado, calculadas en cada petición con los enlaces de las propias páginas: la portada y cada
