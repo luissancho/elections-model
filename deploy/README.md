@@ -245,7 +245,10 @@ las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en 
 X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
 `fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
 edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
-más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página.
+más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página. Cada página declara
+también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`: la imagen de marca con `?v=` y el hash
+del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
+controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
 
 Datos y errores: `/elecciones` y `/metodo/backtest` leen solo el paquete (sin base): sin elecciones o sin backtest
 publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400 ("Fecha no válida.") y una
