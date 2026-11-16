@@ -1,6 +1,8 @@
 """Tests de la imagen propia del enlace de un sondeo: la marca con la que dibuja el servidor, lo que la imagen dice
 (como datos), el dibujo y su dirección."""
 import copy
+import hashlib
+import html as html_escapes
 import inspect
 import io
 import os
@@ -12,8 +14,11 @@ from PIL import Image, ImageChops, ImageColor, ImageFont
 from mtpy.core.api import HttpError
 from mtpy.lib import pages
 from mtpy.lib.pages import sondeos
+from tests.test_api_asgi import call
 from tests.test_pages import api, houses, houses_without_analysis, html, site_api  # noqa: F401
-from tests.test_webapi_unit import ROOT
+from tests.test_pages_crawlers import POLL_PATH, head_of, sitemap, write_polls
+from tests.test_pages_titles import site_paths
+from tests.test_webapi_unit import ROOT, RUN, fixture_data, write_study
 
 IMG_DIR = os.path.join(ROOT, 'web', 'dist', 'img')
 INK = (26, 28, 34)  # --color-text
@@ -34,6 +39,9 @@ HOST = 'demoscopio.es'
 CHARS = '0123456789%,.:=–·…-+()/&ABCDEFGHIJKLMNÑOPQRSTUVWXYZabcdefghijklmnñopqrstuvwxyzáéíóúüçàèòÁÉÍÓÚ'
 UP = (22, 163, 74)  # --color-ok
 DOWN = (220, 38, 38)  # --color-bad
+SITE = 'https://demoscopio.es'
+IMAGE_PATH = POLL_PATH + '.png'  # the image of the only poll of the fixture bundle
+BRAND_ALT = 'Demoscopio: promedio de encuestas, previsión de escaños y ranking de encuestadoras'
 HALO = 4  # shrinking the drawing leaves a faint halo of 3 px around any ink: an empty area is checked from further
 
 
@@ -437,3 +445,165 @@ def test_poll_png_survives_odd_inputs():
 
     # a line break in a name does not break the line of the image
     assert blank(drawn(odd[3]), (0, 160, 1200, pages.images.ROW_TOP + pages.images.BAR_TOP - HALO))
+
+
+def page_of(api, path, query=''):
+    """El HTML de una página que responde 200."""
+    status, _, body = call(api, path, query=query)
+    assert status == 200, (path, query, status)
+    return html(body)
+
+
+def meta_of(page, name):
+    """El contenido de una etiqueta `og:` de la cabecera, tal como va escrito (y va una sola vez)."""
+    found = re.findall(r'<meta property="{}" content="([^"]*)">'.format(re.escape(name)), head_of(page))
+    assert len(found) == 1, (name, found)
+    return found[0]
+
+
+def test_poll_image_route_answers_a_cacheable_png(houses, fresh_app):
+    """La imagen de un sondeo vive en la dirección de su página acabada en `.png`: un PNG de 1200×675 con un día
+    de caché y su ETag, que dibuja el sondeo de lo último publicado."""
+    status, headers, body = call(houses, IMAGE_PATH)
+    assert status == 200 and headers['content-type'] == 'image/png'
+    assert headers['cache-control'] == 'public, max-age=86400'
+    assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
+    assert body == pages.images.poll_png(pages.latest_poll_preview('es', '2026-10-05', 'sigma-dos'))
+    assert Image.open(io.BytesIO(body)).size == (1200, 675)
+    # a HEAD answers the same headers without drawing a body
+    status, head_headers, nothing = call(houses, IMAGE_PATH, method='HEAD')
+    assert status == 200 and nothing == b'' and head_headers['content-type'] == 'image/png'
+    assert head_headers['etag'] == headers['etag']
+
+
+def test_poll_image_route_by_house_id_and_with_outlet(houses, fresh_app):
+    """La imagen responde igual pedida por el nombre de la casa o por su identificador, y la de un sondeo con
+    medio lleva el medio en su dirección, como su página."""
+    write_polls(fresh_app.fs, [{}, {'sponsor': 'El Mundo', 'PP': 34.0}])
+    status, _, plain = call(houses, IMAGE_PATH)
+    assert status == 200 and call(houses, '/es/sondeos/2026-10-05/7.png')[2] == plain
+    status, headers, outlet = call(houses, POLL_PATH + '/el-mundo.png')
+    assert status == 200 and headers['content-type'] == 'image/png' and outlet != plain
+    data = pages.latest_poll_preview('es', '2026-10-05', 'sigma-dos', 'el-mundo')
+    assert data['title'] == 'Sigma Dos para El Mundo' and data['rows'][0]['share'] == '34,0%'
+    assert outlet == pages.images.poll_png(data)
+    assert call(houses, '/es/sondeos/2026-10-05/7/el-mundo.png')[2] == outlet
+
+
+def test_poll_image_route_refuses_what_the_page_refuses(houses, monkeypatch):
+    """Donde la página del sondeo responde 404 o 400, su imagen también, con la página de error y sin dibujar
+    nada; y sólo `.png` es una imagen."""
+    def never(preview):
+        raise AssertionError('an image was drawn')
+
+    monkeypatch.setattr(pages.images, 'poll_png', never)
+    refused = (('/es/sondeos/2026-10-05/nadie', 404), ('/es/sondeos/2026-10-06/sigma-dos', 404),
+               ('/es/sondeos/2026-10-05/sigma-dos/nadie', 404), ('/es/sondeos/2026-13-45/sigma-dos', 400),
+               ('/zz/sondeos/2026-10-05/sigma-dos', 404))
+
+    for path, code in refused:
+        assert call(houses, path)[0] == code, path
+        status, headers, body = call(houses, path + '.png')
+        assert status == code and headers['content-type'] == 'text/html; charset=utf-8', path
+        assert headers['cache-control'] == 'no-store' and 'etag' not in headers and b'<html' in body, path
+
+    for path in (POLL_PATH + '.jpg', POLL_PATH + '.PNG', POLL_PATH + '.png.png', POLL_PATH + 'xpng', '/es.png'):
+        assert call(houses, path)[0] == 404, path
+
+
+def test_poll_image_ignores_the_query(houses, fresh_app):
+    """La imagen es siempre la de lo último publicado: ni `mode`, ni `run`, ni la huella `v`, ni un parámetro
+    inválido la cambian o la hacen fallar."""
+    body = call(houses, IMAGE_PATH)[2]
+
+    for query in ('mode=forecast', 'mode=nowcast', 'mode=zz', 'run=' + RUN, 'run=20200101-000000', 'run=nope',
+                  'scope=zz', 'v=abc', 'zz=1&utm_source=x'):
+        status, headers, other = call(houses, IMAGE_PATH, query=query)
+        assert status == 200 and headers['content-type'] == 'image/png' and other == body, query
+
+
+def test_poll_page_declares_its_image(houses, fresh_app):
+    """La página de un sondeo declara su imagen como `og:image`: la dirección limpia de la página acabada en
+    `.png`, absoluta y con la huella de lo que pinta, con un texto alternativo que dice las cifras. Nada más la
+    enlaza y no entra en el sitemap."""
+    data = pages.latest_poll_preview('es', '2026-10-05', 'sigma-dos')
+    page = page_of(houses, POLL_PATH)
+    address = SITE + IMAGE_PATH + '?v=' + data['version']
+    assert meta_of(page, 'og:image') == address
+    assert meta_of(page, 'og:image:alt') == 'Sondeo de Sigma Dos (5 oct 2026): PP 33,1%.' == data['alt']
+    assert meta_of(page, 'og:image:type') == 'image/png'
+    assert (meta_of(page, 'og:image:width'), meta_of(page, 'og:image:height')) == ('1200', '675')
+    assert '<meta name="twitter:card" content="summary_large_image">' in page
+    assert page.count(IMAGE_PATH) == 1 and 'og-image.png' not in page
+    # asked by the id of the house or with parameters, the same address
+    for odd, query in (('/es/sondeos/2026-10-05/7', ''), (POLL_PATH, 'mode=nowcast&utm_source=x')):
+        assert meta_of(page_of(houses, odd, query=query), 'og:image') == address, (odd, query)
+    # and the address answers the image
+    status, headers, _ = call(houses, IMAGE_PATH, query='v=' + data['version'])
+    assert status == 200 and headers['content-type'] == 'image/png'
+    assert not [loc for loc in sitemap(houses) if '.png' in loc]
+
+
+def test_poll_image_address_follows_the_configured_origin(houses, fresh_app):
+    """La dirección de la imagen sale de `web.site_url`, sin barra doble aunque venga con barra final."""
+    fresh_app.config.offset_set('web', {'site_url': 'https://demoscopio.dev/'})  # the database stays
+    image = meta_of(page_of(houses, POLL_PATH), 'og:image')
+    assert image.startswith('https://demoscopio.dev' + IMAGE_PATH + '?v=') and 'demoscopio.es' not in image
+
+
+def test_poll_image_alt_is_escaped_once(houses, fresh_app):
+    """El nombre de una casa con marcas de HTML, comillas y `&` llega al texto alternativo escapado una vez, sin
+    abrir ninguna etiqueta, y su imagen se dibuja."""
+    change = {'pollster': 'A <b> & "C"'}
+    write_polls(fresh_app.fs, [change])
+    path = pages.poll_detail_href('es', fixture_data('polls')['polls'][0] | change)
+    page = page_of(houses, path)
+    alt = meta_of(page, 'og:image:alt')
+    assert alt == 'Sondeo de A &lt;b&gt; &amp; &#34;C&#34; (5 oct 2026): PP 33,1%.'
+    assert html_escapes.unescape(alt) == 'Sondeo de A <b> & "C" (5 oct 2026): PP 33,1%.'
+    assert '<b>' not in head_of(page) and meta_of(page, 'og:image').startswith(SITE + path + '.png?v=')
+    status, headers, body = call(houses, path + '.png')
+    assert status == 200 and headers['content-type'] == 'image/png' and body.startswith(b'\x89PNG')
+
+
+def test_image_version_follows_the_figures(houses, fresh_app):
+    """Si una cifra del sondeo cambia, cambia la huella de la dirección de su imagen, y las redes piden la nueva."""
+    poll = fixture_data('polls')['polls'][0]
+    before = sondeos.preview_of(poll, None, ['PP'], {'PP': '#1d84ce'}, ELECTION, HOST)
+    write_polls(fresh_app.fs, [{'PP': 34.0}])
+    after = pages.latest_poll_preview('es', '2026-10-05', 'sigma-dos')
+    assert after['rows'][0]['share'] == '34,0%' and after['version'] != before['version']
+    assert after == sondeos.preview_of(poll | {'PP': 34.0}, None, ['PP'], {'PP': '#1d84ce'}, ELECTION, HOST)
+    assert meta_of(page_of(houses, POLL_PATH), 'og:image') == SITE + IMAGE_PATH + '?v=' + after['version']
+
+
+def test_pinned_run_page_declares_the_latest_image_or_the_brand_one(houses, fresh_app, monkeypatch):
+    """La imagen siempre dibuja lo último publicado: una página con un run fijado declara la huella y el texto de
+    ese último run, y la imagen de marca si el sondeo ya no está en él."""
+    own = pages.latest_poll_preview('es', '2026-10-05', 'sigma-dos')
+    latest = dict(own, version='0badcafe', alt='Sondeo de Sigma Dos (5 oct 2026): PP 35,0%.')
+    monkeypatch.setattr(pages, 'latest_poll_preview', lambda *args: latest)
+    pinned = page_of(houses, POLL_PATH, query='run=' + RUN)
+    assert meta_of(pinned, 'og:image') == SITE + IMAGE_PATH + '?v=0badcafe'
+    assert meta_of(pinned, 'og:image:alt') == latest['alt']
+    # without a pinned run the page already shows the latest: its own data, read once
+    plain = page_of(houses, POLL_PATH)
+    assert meta_of(plain, 'og:image') == SITE + IMAGE_PATH + '?v=' + own['version']
+    assert meta_of(plain, 'og:image:alt') == own['alt']
+    monkeypatch.setattr(pages, 'latest_poll_preview', lambda *args: None)
+    gone = page_of(houses, POLL_PATH, query='run=' + RUN)
+    assert meta_of(gone, 'og:image') == pages.og_image_url() and meta_of(gone, 'og:image:alt') == BRAND_ALT
+
+
+def test_other_pages_keep_the_brand_image(houses, fresh_app):
+    """Sólo la página de un sondeo tiene imagen propia: el resto sigue con la de marca y su texto alternativo."""
+    write_study(fresh_app.fs)
+    paths = site_paths(houses)
+    assert POLL_PATH in paths and len(paths) > 10
+
+    for path in paths:
+        page = page_of(houses, path)
+        own = path == POLL_PATH
+        assert (meta_of(page, 'og:image') == pages.og_image_url()) is not own, path
+        assert (meta_of(page, 'og:image:alt') == BRAND_ALT) is not own, path
+        assert meta_of(page, 'og:image:type') == 'image/png', path

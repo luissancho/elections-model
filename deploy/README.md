@@ -242,7 +242,8 @@ también el favicon (`favicon.svg`, `favicon.ico` en 16/32/48 y `apple-touch-ico
 Del mismo script sale `og-image.png`, la imagen de 1200×675 de los enlaces compartidos: el logotipo, el lema, el
 dominio y la lente ampliada sobre una nube de sondeos y su promedio, sin cifras para que no caduque en la caché de
 las redes (X guarda la vista previa de cada URL unos siete días) y sin nada en las franjas de arriba y de abajo que
-X y Facebook recortan. Los cinco ficheros los genera `python web/brand/build.py` desde la fuente (necesita
+X y Facebook recortan. Y `wordmark.png`, el logotipo sobre fondo transparente, para las imágenes que dibuja el
+servidor (abajo), que no puede leer el SVG. Los seis ficheros los genera `python web/brand/build.py` desde la fuente (necesita
 `fonttools[woff]` y Pillow, que no son dependencias de la web): para cambiar el nombre, los colores o la lente,
 edita las constantes del script y vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
 más la ruta, sin consulta: ningún parámetro da a una página una dirección propia. `mode`, `run`, `region` y
@@ -252,7 +253,22 @@ más la ruta, sin consulta: ningún parámetro da a una página una dirección p
 autor (`AUTHOR_HANDLE`, en `pages/common.py`). Cada página declara
 también `og:image` con su tamaño y su texto alternativo (`pages.og_image_url`: la imagen de marca con `?v=` y el hash
 del fichero, para que las redes pidan la nueva cuando cambie) y la tarjeta grande de X (`summary_large_image`); un
-controlador puede pasar otra imagen a `render` con `og_image=`. La página de error no lleva etiquetas `og:`.
+controlador puede pasar otra imagen a `render` con `og_image=`, y su texto con `og_image_alt=`. La página de error
+no lleva etiquetas `og:`.
+
+La página de un sondeo tiene imagen propia, con sus cifras: su misma dirección acabada en `.png`
+(`/es/sondeos/2026-11-05/gad3/vocento.png`, acción `image` del controlador `Sondeos`). El servidor la dibuja con
+Pillow cuando se la piden y no la guarda en ningún sitio: la respuesta lleva un día de caché (`Sondeos.IMAGE_TTL`)
+y nginx la conserva mientras se siga pidiendo. Lo que dice (la casa y el medio, la elección, el campo y la muestra,
+los seis partidos con más voto con su cambio frente a la entrega anterior, los escaños de la casa y el pie con los
+partidos que no caben) lo compone `pages.preview_of` con las funciones de la página del sondeo, y lo dibuja
+`pages.images.poll_png` (1200×675, con las fuentes de `web/dist/vendor/fonts` tal como están y `wordmark.png`). La
+imagen es siempre la de lo último publicado (no lee `mode`, `run` ni ningún otro parámetro), y la página la declara
+en `og:image` con `?v=` y una huella de lo que pinta: si el sondeo se corrige, la dirección cambia y las redes
+piden la nueva. Si cambia el dibujo, sube `PREVIEW_DESIGN` (`pages/sondeos.py`) para que cambien todas las
+huellas. El dibujo necesita que Pillow lea las fuentes woff2, y los paquetes de Pillow de PyPI lo hacen (su
+FreeType trae brotli); `tests/test_pages_images.py` falla donde no sea así. El resto de páginas sigue con la imagen
+de marca.
 
 El título de cada página lo compone `base.html`: el bloque `title` de la plantilla (qué es la página, con las
 palabras con que se busca) y detrás la marca, « · Demoscopio» (bloque `title_brand`); la portada es la excepción,

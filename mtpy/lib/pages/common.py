@@ -100,6 +100,10 @@ ROUTES = [
     # the page of a poll: its day (the last day of its fieldwork), its house and, when it has one, its sponsor
     ('/{scope}/sondeos/{date}/{pollster}', 'sondeos', 'detail', ['GET']),
     ('/{scope}/sondeos/{date}/{pollster}/{sponsor}', 'sondeos', 'detail', ['GET']),
+    # the image of the link previews of a poll (``og:image``): the address of its page ending in ``.png``. A segment
+    # of a poll has no dots, so the page never takes these
+    (r'/{scope}/sondeos/{date}/{pollster}\.png', 'sondeos', 'image', ['GET']),
+    (r'/{scope}/sondeos/{date}/{pollster}/{sponsor}\.png', 'sondeos', 'image', ['GET']),
 ]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MESSAGES = {

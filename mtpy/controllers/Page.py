@@ -132,7 +132,9 @@ class Page(Controller):
             Template name in ``web/templates``.
         **context
             Template variables; ``canonical`` (``canonical_url``), ``og_image`` (``pages.og_image_url``, the
-            brand image of the link previews), ``analytics`` (``pages.analytics_config``, the settings of
+            brand image of the link previews), ``og_image_alt`` (``None``: the text alternative of the brand
+            image; a page with an image of its own passes both), ``analytics`` (``pages.analytics_config``, the
+            settings of
             the cookie notice, ``None`` when the visits are not measured) and ``structured`` (the schema.org
             blocks of the page, ``pages.structured``; none by default) are added when missing.
 
@@ -143,6 +145,7 @@ class Page(Controller):
         """
         context.setdefault('canonical', self.canonical_url())
         context.setdefault('og_image', pages.og_image_url())
+        context.setdefault('og_image_alt', None)
         context.setdefault('analytics', pages.analytics_config())
         context.setdefault('structured', [])
         html = pages.environment().get_template(template).render(**context)

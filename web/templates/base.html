@@ -21,7 +21,8 @@
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="675">
-  <meta property="og:image:alt" content="{{ site_title }}: {{ site_tagline|lower }}">
+  {# The text alternative of the brand image, or the one of the image of its own that a page declares. #}
+  <meta property="og:image:alt" content="{{ og_image_alt or site_title ~ ': ' ~ site_tagline|lower }}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:creator" content="{{ author_handle }}">
   {# What the page is for a search engine (schema.org blocks built by `pages.structured`); `tojson` escapes
