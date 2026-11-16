@@ -32,8 +32,9 @@ enlace antiguo (`?v=<huella vieja>`) después de una corrección: la dirección 
 
 ## Enfoques considerados
 
-- **Un minuto si la huella no coincide (elegido).** Un dibujo viejo dura como mucho un minuto en nginx, igual que
-  una página, y nginx sigue absorbiendo las ráfagas de un enlace antiguo muy compartido.
+- **Un minuto si la huella no coincide (elegido).** Un dibujo viejo dura como mucho un minuto en nginx desde que
+  se guarda, igual que una página (hasta dos minutos tras la publicación: uno de worker atrasado y otro de
+  nginx), y nginx sigue absorbiendo las ráfagas de un enlace antiguo muy compartido.
 - `no-store` si no coincide: un enlace antiguo muy compartido obligaría a dibujar en cada petición.
 - Que los workers se enteren de la publicación al momento: arregla también el 404 de un sondeo recién publicado,
   pero toca el flujo de publicación; fuera, y no antes del 29-N.
@@ -45,6 +46,7 @@ enlace antiguo (`?v=<huella vieja>`) después de una corrección: la dirección 
 
 ## Fuera
 
-La copia que una red ya se haya llevado en ese minuto (X la guarda unos siete días: sólo lo evita esperar un par
-de minutos antes de compartir); el 404 de un sondeo recién publicado en un worker atrasado; la memoria de imágenes
+La copia que una red ya se haya llevado en esos dos minutos (X la guarda unos siete días: sólo lo evita esperar
+tres minutos antes de compartir); la copia de un día que nginx ya tuviera de una dirección antigua antes de una
+corrección; el 404 de un sondeo recién publicado en un worker atrasado; la memoria de imágenes
 ya dibujadas (descartada: nginx ya las guarda por dirección); cambios en nginx.

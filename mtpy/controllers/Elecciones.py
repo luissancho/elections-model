@@ -78,7 +78,8 @@ class Elecciones(Page):
         Draw the image of the link previews of a past election.
 
         It is always drawn with the latest published run (the colours of the parties): the query (``mode``,
-        ``run``, the ``v`` of the address the page declares, anything else) is not read.
+        ``run``, anything else) does not change the drawing. The ``v`` of the address the page declares only
+        decides how long a cache may keep the answer (``png``).
 
         Parameters
         ----------

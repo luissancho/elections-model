@@ -262,14 +262,18 @@ Pillow cuando se la piden y no la guarda en ningún sitio: la respuesta lleva un
 y nginx la conserva mientras se siga pidiendo. El día sólo vale para la dirección que la página declara, la que
 lleva en `?v=` la huella de lo que se dibuja; con otra `v` o sin ella, la misma imagen sale con el minuto de las
 páginas (`cache_ttl`). Así un dibujo viejo no se queda un día en nginx bajo una dirección que nombra otro: justo
-tras publicar, un worker puede seguir un minuto con el run anterior, y un enlace antiguo conserva su `v` después
-de una corrección. Lo que una red ya se haya llevado en ese minuto no se arregla desde aquí: conviene esperar un
-par de minutos tras publicar antes de compartir un enlace.
+tras publicar, un worker puede seguir hasta un minuto con el run anterior, y lo que responda entonces bajo la
+dirección nueva dura otro minuto en nginx. La ventana es de dos minutos (dos veces `cache_ttl`), no de un día. Lo
+que una red ya se haya llevado en esos dos minutos no se arregla desde aquí: conviene esperar tres minutos tras
+publicar antes de compartir un enlace. Un enlace antiguo conserva su `v` después de una corrección: nginx puede
+seguir sirviendo la copia que tenía de antes mientras se siga pidiendo (hasta un día) y, después, la imagen
+corregida con un minuto de caché.
 Lo que dice (la casa y el medio, la elección, el campo y la muestra,
 los seis partidos con más voto con su cambio frente a la entrega anterior, los escaños de la casa y el pie con los
 partidos que no caben) lo compone `pages.preview_of` con las funciones de la página del sondeo, y lo dibuja
 `pages.images.poll_png` (1200×675, con las fuentes de `web/dist/vendor/fonts` tal como están y `wordmark.png`). La
-imagen es siempre la de lo último publicado (no lee `mode`, `run` ni ningún otro parámetro), y la página la declara
+imagen es siempre la de lo último publicado (`mode`, `run` o cualquier otro parámetro no cambian el dibujo; la `v`
+sólo decide el tiempo de caché), y la página la declara
 en `og:image` con `?v=` y una huella de lo que pinta: si el sondeo se corrige, la dirección cambia y las redes
 piden la nueva. Si cambia el dibujo, sube `PREVIEW_DESIGN` (`pages/previews.py`) para que cambien todas las
 huellas. El dibujo necesita que Pillow lea las fuentes woff2, y los paquetes de Pillow de PyPI lo hacen (su

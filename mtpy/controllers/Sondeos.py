@@ -67,8 +67,9 @@ class Sondeos(Page):
         """
         Draw the image of the link previews of a poll.
 
-        It is always the poll of the latest published run: the query (``mode``, ``run``, the ``v`` of the address
-        the page declares, anything else) is not read.
+        It is always the poll of the latest published run: the query (``mode``, ``run``, anything else) does not
+        change the drawing. The ``v`` of the address the page declares only decides how long a cache may keep the
+        answer (``png``).
 
         Parameters
         ----------
