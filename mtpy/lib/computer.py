@@ -3668,13 +3668,24 @@ class Computer(Core):
     def get_herding_data(
         self,
         n_series: int = 4,
-        min_polls: int = 5
+        min_polls: int = 5,
+        event_dates: Optional[list[str]] = None
     ) -> pd.DataFrame:
         """
         Measure the herding of each pollster in every election cycle with polls, the current one included (it
         does not need the result): the dispersion of its published figures around the average fitted without
         its own polls, relative to the sampling error of its samples, over the `n_series` main series of the
         cycle (`Forecaster.measure_herding` on the raw polls, without house effects nor effective sample).
+
+        Parameters
+        ----------
+        n_series : int, default 4
+            Main series of the cycle pooled in the measure.
+        min_polls : int, default 5
+            Polls with a published sample a pollster needs to be measured.
+        event_dates : list of str, optional
+            Cycles to measure (`YYYY-MM-DD`), among those with polls; every cycle by default. The herding of a
+            cycle is fitted on its own polls only, so the light compute asks just for the cycles still open.
 
         Returns
         -------
@@ -3686,6 +3697,9 @@ class Computer(Core):
 
         columns = ['event_date', 'event_scope', 'pollster_id', 'pollster', 'n', 'n_series', 'ss_obs', 'ss_exp', 'dof', 'ratio', 'p_value']
         events = sorted(self.polls.index.get_level_values('event_date').unique().strftime('%Y-%m-%d'))
+        if event_dates is not None:
+            wanted = {pd.Timestamp(d).strftime('%Y-%m-%d') for d in event_dates}
+            events = [e for e in events if e in wanted]
         frames = []
 
         events_ = tqdm(events) if self.verbose > 0 else events
@@ -3726,8 +3740,9 @@ class Computer(Core):
         **kwargs
     ) -> pd.DataFrame:
         """
-        Compute the herding table of the current events (see `get_herding_data`) and, optionally, save it into
-        the `pollsters_herding` table of the database, replacing the rows of the same events.
+        Compute the herding table of the current events (see `get_herding_data`, which takes `kwargs`: with
+        `event_dates`, only those cycles) and, optionally, save it into the `pollsters_herding` table of the
+        database, replacing the rows of the same events and leaving the other cycles as stored.
         """
         if self.verbose > 0:
             print('Compute herding...')

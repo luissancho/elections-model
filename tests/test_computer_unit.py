@@ -1099,6 +1099,13 @@ def test_get_herding_data_builds_its_forecasters_with_every_poll_context(monkeyp
     assert [kw['event_date'] for kw in calls] == ['2019-11-10', '2023-07-23']
     assert all(kw['drop_ctypes'] is None for kw in calls) and df.shape[0] == 0
 
+    # con `event_dates`, sólo esos ciclos (el compute ligero pide el que está en curso); uno sin sondeos no cuenta
+    calls.clear()
+    df = c.get_herding_data(event_dates=['2023-07-23', '2026-11-29'])
+    assert [kw['event_date'] for kw in calls] == ['2023-07-23'] and df.shape[0] == 0
+    calls.clear()
+    assert c.get_herding_data(event_dates=[]).shape[0] == 0 and calls == []
+
 def test_get_average_error_data_skips_what_cannot_be_measured(monkeypatch):
     """Sin resultado oficial la elección no entra; un partido sin resultado o sin promedio, tampoco; un caso con
     menos de `min_polls` sondeos o sin sondeos (el Forecaster lo rechaza) se salta con aviso."""

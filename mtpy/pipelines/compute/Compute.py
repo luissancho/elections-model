@@ -46,7 +46,7 @@ class Compute(ScopePipeline):
         (the first two flags only for the series; the mode only when requested).
         """
         super().start(**kwargs)
-        self.mode = self.mode_reason = None
+        self.mode = self.mode_reason = self.results = None
         series = self.ACTION == 'compute'
         flags = ((' · overwrite' if overwrite and series else '')
                  + (' · ' + mode if series and mode != compute.AUTO else '')
@@ -77,6 +77,7 @@ class Compute(ScopePipeline):
         result (`compute.resolve_mode`) ends the scope as ``failed`` with its reason.
         """
         self.start_progress(chunk, position)
+        self.results = results
         if self.ACTION != 'compute':
             return
 
@@ -88,6 +89,8 @@ class Compute(ScopePipeline):
                           'warnings': []})
             needs_results = bool(dates) and ((mode == compute.AUTO and not overwrite) or light)
             with_results = (results or compute.result_dates)(chunk) if needs_results else None
+            if with_results is not None:  # read once: the light herding leaves the same cycles out
+                self.results = lambda scope: with_results
             self.mode, self.mode_reason = compute.resolve_mode(mode, overwrite, dates, with_results)
         except PipelineEnd:  # the skip is not a failure
             raise
@@ -117,10 +120,15 @@ class Compute(ScopePipeline):
                                                    **self.unit(chunk, dry_run, computer, featured)}, action=name)
 
     def unit(self, chunk, dry_run, computer, featured) -> dict:
-        """Run `compute.compute_scope` on the scope in ``self.mode`` and return its figures, with the reason."""
+        """
+        Run `compute.compute_scope` on the scope in ``self.mode`` and return its figures, with the reason. The
+        elections with a result read to pick the mode (or their replacement for tests) go along: the ``light``
+        mode leaves their cycles out of the herding.
+        """
         return {'dry_run': dry_run, 'mode_reason': self.mode_reason,
                 **compute.compute_scope(chunk, save=not dry_run, verbose=self.model_verbose, progress=self.progress,
-                                        computer=computer, featured=featured, mode=self.mode)}
+                                        computer=computer, featured=featured, mode=self.mode,
+                                        results=self.results)}
 
     def line_of(self, chunk, result, **kwargs):
         """Format the summary line of one result of any action, with the count of its model warnings."""

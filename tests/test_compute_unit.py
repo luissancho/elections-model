@@ -45,8 +45,9 @@ class FakeComputer:
             def compute_house_effects(self, save=False):
                 return self._phase('house_effects', save)
 
-            def compute_herding(self, save=False):
-                return self._phase('herding', save)
+            def compute_herding(self, save=False, event_dates=None):
+                kwargs = {} if event_dates is None else {'event_dates': event_dates}
+                return self._phase('herding', save, **kwargs)
 
             def compute_average_errors(self, save=False):
                 return self._phase('average_errors', save)
@@ -164,7 +165,8 @@ def test_compute_scope_light_runs_weights_and_herding_only():
     result = compute.compute_scope('es', save=True, verbose=1, mode='light',
                                    progress=lambda step, seconds: steps.append(step), computer=factory,
                                    featured=lambda scope: featured.append(scope) or 7,
-                                   mark=lambda scope, at: marks.append((scope, at)), clock=lambda: 'T0')
+                                   mark=lambda scope, at: marks.append((scope, at)), clock=lambda: 'T0',
+                                   results=lambda scope: ['2019-11-10'])
     # una pasada de pesos sobre el ámbito entero (copia a cada sondeo el destacado de su elección) y, con una serie
     # fresca que lee esos pesos, el rebaño; sin destacados: exigen resultado oficial y en auto el light sólo sale sin él
     assert phases(factory) == ['weights', 'herding'] and steps == ['weights', 'herding'] and featured == []
@@ -173,6 +175,18 @@ def test_compute_scope_light_runs_weights_and_herding_only():
     assert result['mode'] == 'light' and result['featured'] is None and result['n_polls'] == 2
     assert set(result['seconds']) == {'weights', 'herding', 'total'}
     assert tuple(dict.fromkeys(steps)) == compute.MODES['light']
+
+
+def test_compute_scope_light_measures_the_herding_of_the_open_cycles_only():
+    # el rebaño de un ciclo sólo lo mueven sus propios sondeos: el ligero rehace el de los ciclos sin resultado
+    # oficial (el que está en curso) y deja como estaban los cerrados; el completo los rehace todos y no pregunta
+    factory, asked = FakeComputer(), []
+    kwargs = dict(save=True, computer=factory, featured=lambda scope: 0, mark=lambda scope, at: None,
+                  clock=lambda: 'T0', results=lambda scope: asked.append(scope) or ['2011-11-20', '2019-11-10'])
+    compute.compute_scope('es', mode='light', **kwargs)
+    assert factory.calls[-1] == ('herding', True, ('event_dates', ['2023-07-23'])) and asked == ['es']
+    compute.compute_scope('es', mode='full', **kwargs)
+    assert factory.calls[-1] == ('herding', True) and asked == ['es']
 
 
 def test_compute_scope_light_dry_run_only_weighs_and_does_not_mark():
