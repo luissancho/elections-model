@@ -2001,8 +2001,8 @@ Procesador de la tarea de ECS (2026-11-20, simulador real de `es` en tareas de s
 300 simulaciones, extrapoladas a 10.000): el tiempo lo decide el procesador que Fargate asigna a cada tarea, no su
 tamaño ni los hilos de numpy. En x86, Xeon 6975P-C (4 vCPU, un hilo) 100 s de ajuste y 543 s por simulación; Xeon
 8488C (4 vCPU) 122 s y 665 s; Xeon 8259CL (2 vCPU, con un hilo y con dos) 214 s y 1.165-1.185 s. En ARM (Graviton,
-definición `elections-model-job-arm64` con la imagen `arm64-test`): 2 vCPU 170 s y 968 s, y en otra tarea 209 s y
-1.180 s; 4 vCPU 168 s y 949 s. El `update` de `es` con `--cpu 4` de esa noche tardó 44 min 7 s (ajuste 213 s,
+con una imagen arm64 de prueba ya retirada): 2 vCPU 170 s y 968 s, y en otra tarea 209 s y 1.180 s; 4 vCPU 168 s
+y 949 s. El `update` de `es` con `--cpu 4` de esa noche tardó 44 min 7 s (ajuste 213 s,
 simulaciones de 1.115 s y 1.123 s), como el Xeon 8259CL; el de la tarde anterior con 2 vCPU, 27 min 36 s (101 s y
 550 s). El portátil (M5) hace cada simulación en 275 s.
 
