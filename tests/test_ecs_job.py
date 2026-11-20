@@ -185,6 +185,32 @@ def test_env_file_overrides_the_network(env_file, monkeypatch):
     assert request['overrides']['containerOverrides'][0]['environment'][0]['value'] == 'backtest {"scopes":"all"}'
 
 
+def test_cpu_and_memory_override_the_size_of_the_task(env_file):
+    # sin opciones la tarea sale con el tamaño de la definición; `--cpu` lo cambia para esa tarea y, sin `--memory`,
+    # pide 2 GB por vCPU (la proporción de la definición); `--memory` sola deja la CPU de la definición
+    ecs = FakeEcs()
+    assert run(['backtest'], ecs)[0] == 0
+    assert run(['update', '{"scopes":["es"]}', '--cpu', '4'], ecs)[0] == 0
+    assert run(['update', '{"scopes":["es"]}', '--cpu', '4', '--memory', '16'], ecs)[0] == 0
+    assert run(['backtest', '--memory', '8'], ecs)[0] == 0
+    plain, four, wide, memory = [kw['overrides'] for name, kw in ecs.calls if name == 'run_task']
+    assert set(plain) == {'containerOverrides'}
+    assert (four['cpu'], four['memory']) == ('4096', '8192') and (wide['cpu'], wide['memory']) == ('4096', '16384')
+    assert memory['memory'] == '8192' and 'cpu' not in memory
+    assert four['containerOverrides'][0]['environment'] == [{'name': 'RUN_JOB', 'value': 'update {"scopes":["es"]}'}]
+
+
+def test_a_wrong_size_exits_2_without_launching(env_file):
+    ecs = FakeEcs()
+    code, _, err = run(['backtest', '--cpu', '3'], ecs)
+    assert code == 2 and '--cpu takes 1, 2, 4, 8 or 16 vCPU' in err
+    code, _, err = run(['backtest', '--memory', '0'], ecs)
+    assert code == 2 and '--memory takes a whole number of GB' in err
+    code, _, err = run(['--register', '--cpu', '4'], ecs)
+    assert code == 2 and '--register takes no size' in err
+    assert not [c for c in ecs.calls if c[0] in ('run_task', 'register_task_definition')]
+
+
 def test_placement_failure_exits_1_with_the_reason(env_file):
     code, out, err = run(['backtest'], FakeEcs(fail=True))
     assert code == 1 and 'RESOURCE:CPU' in err
