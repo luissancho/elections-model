@@ -198,8 +198,47 @@ def network_from(config: dict, live: dict) -> dict:
     return network
 
 
-def run_task_request(config: dict, network: dict, run_job: str) -> dict:
-    """Build the keyword arguments of ``ecs.run_task`` for one job."""
+VCPUS = (1, 2, 4, 8, 16)
+
+
+def task_size(cpu: Optional[int], memory: Optional[int]) -> dict:
+    """Build the task-level size overrides of ``run_task`` (empty without options).
+
+    Parameters
+    ----------
+    cpu : int, optional
+        vCPU of the task (1, 2, 4, 8 or 16). Without `memory`, the task asks for 2 GB per vCPU, the
+        proportion of the job definition.
+    memory : int, optional
+        Memory of the task in GB. Alone, the task keeps the vCPU of the definition.
+
+    Returns
+    -------
+    dict
+        ``cpu`` and ``memory`` in the units of ECS (1024 per vCPU, MiB), as text; only the keys set.
+
+    Raises
+    ------
+    UsageError
+        If either value is not valid. The combinations Fargate accepts are checked by AWS on launch.
+    """
+    if cpu is not None and cpu not in VCPUS:
+        raise UsageError('--cpu takes 1, 2, 4, 8 or 16 vCPU')
+    if memory is not None and memory < 1:
+        raise UsageError('--memory takes a whole number of GB')
+    if cpu is not None and memory is None:
+        memory = 2 * cpu
+    size = {}
+    if cpu is not None:
+        size['cpu'] = str(1024 * cpu)
+    if memory is not None:
+        size['memory'] = str(1024 * memory)
+    return size
+
+
+def run_task_request(config: dict, network: dict, run_job: str, size: Optional[dict] = None) -> dict:
+    """Build the keyword arguments of ``ecs.run_task`` for one job; `size` (``task_size``) overrides the
+    vCPU and the memory of the definition for this task only."""
     return {
         'cluster': config['ECS_CLUSTER'],
         'taskDefinition': config.get('ECS_TASK_FAMILY') or 'elections-model-job',
@@ -208,7 +247,7 @@ def run_task_request(config: dict, network: dict, run_job: str) -> dict:
         'networkConfiguration': {'awsvpcConfiguration': network},
         'overrides': {'containerOverrides': [
             {'name': CONTAINER, 'environment': [{'name': 'RUN_JOB', 'value': run_job}]}
-        ]},
+        ], **(size or {})},
     }
 
 
@@ -395,6 +434,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('params', nargs='?', help='job parameters as JSON text')
     parser.add_argument('--follow', action='store_true', help='stream the log and exit with the container exit code')
     parser.add_argument('--register', action='store_true', help='register the job task definition from the live web one')
+    parser.add_argument('--cpu', type=int, help='vCPU of this task (1, 2, 4, 8 or 16) instead of the ones of the definition')
+    parser.add_argument('--memory', type=int, help='memory of this task in GB (2 per vCPU by default with --cpu)')
     return parser
 
 
@@ -434,6 +475,9 @@ def main(argv: list, ecs=None, logs=None, out=None, err=None) -> int:
             raise UsageError('job name is required')
         if args.register and args.job:
             raise UsageError('--register takes no job')
+        if args.register and (args.cpu is not None or args.memory is not None):
+            raise UsageError('--register takes no size')
+        size = task_size(args.cpu, args.memory)
         env_file = default_env_file()
         config = load_config(env_file)
         if not config.get('ECS_CLUSTER') or not config.get('ECS_SERVICE'):
@@ -461,7 +505,7 @@ def main(argv: list, ecs=None, logs=None, out=None, err=None) -> int:
         return 0
     try:
         network = network_from(config, service_network(ecs, cluster, config['ECS_SERVICE']))
-        arn = launch(ecs, run_task_request(config, network, run_job))
+        arn = launch(ecs, run_task_request(config, network, run_job, size))
     except LaunchError as e:
         say(err, str(e))
         return 1

@@ -816,7 +816,7 @@ para `es`, o para recalcular sin volver a cargar, se lanza directamente. Lógica
 | Acción | Qué escribe | Cuándo lanzarla |
 | --- | --- | --- |
 | `catalogues` | Los catálogos versionados de `data/` (`save_catalogues()`): ámbitos, distritos y la réplica de la calidad previa (`elections.pollsters_quality`), de la que sale `pollsters.quality` de cada encuestadora con el criterio «Implantación» a hoy. Es una acción global: corre una sola vez, antes que las demás, sea cual sea `scopes` | Tras editar la rúbrica (`data/pollsters-quality-criteria.json`) o las evaluaciones (`data/pollsters-quality.csv`), o el catálogo de ámbitos y distritos; y siempre antes de `ratings`, que toma la calidad de ahí. Con `dry_run` solo valida los dos ficheros de la calidad, sin escribir |
-| `compute` | Las series derivadas del ámbito, en uno de dos modos. `full`, en este orden: pesos, eventos destacados (`polls.featured`), pesos otra vez, errores, desviaciones, deriva, efectos de casa y rebaño (los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos). `light`: una pasada de pesos sobre el ámbito entero y el rebaño, lo único que cambian los sondeos del ciclo en curso (el peso de solape de un sondeo depende de sus vecinos del ciclo, y el Forecaster descarta un sondeo sin pesar); los errores, las desviaciones, la deriva y los efectos de casa sólo cambian con un resultado nuevo, datos de ciclos pasados, los catálogos o el método, y quedan como estaban. Con `mode` `auto` (por defecto) el pipeline elige: `full` con `overwrite` o cuando una elección pendiente del ámbito tiene resultado oficial, `light` cuando lo pendiente son sólo ciclos sin resultado | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo, y `update` lo encadena) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores (en `auto` sale `full` solo). Sólo corre en los ámbitos con algo cargado desde su último compute (marcas `loaded_at` y `computed_at` de `events`, que escriben los cargadores y el propio compute, en los dos modos), salvo con `overwrite`; el resto termina `skipped`, sea cual sea `mode` |
+| `compute` | Las series derivadas del ámbito, en uno de dos modos. `full`, en este orden: pesos, eventos destacados (`polls.featured`), pesos otra vez, errores, desviaciones, deriva, efectos de casa y rebaño (los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos). `light`: una pasada de pesos sobre el ámbito entero y el rebaño de los ciclos sin resultado oficial (el que está en curso), lo único que cambian los sondeos del ciclo en curso (el peso de solape de un sondeo depende de sus vecinos del ciclo, y el Forecaster descarta un sondeo sin pesar; el rebaño de un ciclo se ajusta sólo con sus sondeos, así que el de los ciclos cerrados queda como estaba y lo rehace el `full`); los errores, las desviaciones, la deriva y los efectos de casa sólo cambian con un resultado nuevo, datos de ciclos pasados, los catálogos o el método, y quedan como estaban. Con `mode` `auto` (por defecto) el pipeline elige: `full` con `overwrite` o cuando una elección pendiente del ámbito tiene resultado oficial, `light` cuando lo pendiente son sólo ciclos sin resultado | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo, y `update` lo encadena) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores (en `auto` sale `full` solo). Sólo corre en los ámbitos con algo cargado desde su último compute (marcas `loaded_at` y `computed_at` de `events`, que escriben los cargadores y el propio compute, en los dos modos), salvo con `overwrite`; el resto termina `skipped`, sea cual sea `mode` |
 | `ratings` | Los ratings de las encuestadoras de las elecciones del ámbito, calculados con los sondeos de todos los ámbitos (`Computer.compute_ratings(scopes='all')`) | Tras `compute`, cuando han cambiado los errores de algún ámbito (una elección con resultados nuevos, sondeos corregidos). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`), así que el cambio se ve sin publicar nada |
 | `average_errors` | Los errores del promedio de sondeos en las elecciones pasadas del ámbito (tabla `elections.average_errors`, ver más abajo): un ajuste del promedio por elección destacada con resultado y por horizonte (`Computer.compute_average_errors`) | Sólo para las opciones del método 15 (`error_model='average'` y `drift_scale='auto'` del `Simulator` y del backtest), que no son las de por defecto: el modelo publicado no la lee. Tras un compute `full` del ámbito, porque sus ajustes toman de la base el prior de los efectos de casa. Nunca se salta y no marca `computed_at` |
 
@@ -1632,6 +1632,11 @@ python deploy/ecs/job.py update '{"scopes":["es"],"n_sim":10000}' --follow
 - Toma la red (subredes, grupos de seguridad e IP pública) del despliegue actual del servicio; `ECS_SUBNETS`,
   `ECS_SECURITY_GROUPS` y `ECS_PUBLIC_IP` de `deploy/elections.env` la sustituyen si se rellenan. Lanza la tarea con el
   override `RUN_JOB='<job> <json>'` y la definición `ECS_TASK_FAMILY` (`elections-model-job`).
+- `--cpu <vCPU>` y `--memory <GB>` cambian el tamaño sólo para esa tarea, sin tocar la definición (2 vCPU y 4 GB):
+  `python deploy/ecs/job.py update '{"scopes":["es"],"n_sim":10000}' --cpu 4 --follow`. `--cpu` admite 1, 2, 4, 8 o
+  16 y, sin `--memory`, pide 2 GB por vCPU; `--memory` sola deja la CPU de la definición. Un valor no válido sale
+  con código 2 sin lanzar nada, igual que cualquiera de las dos con `--register`; las combinaciones que admite
+  Fargate las comprueba AWS al lanzar (código 1 con su motivo).
 - Imprime `task <id>`, el comando `aws logs tail /ecs/elections-model --log-stream-names job/Main/<id> --follow
   --since 1h` y, si `AWS_REGION` está definida, el enlace a la tarea en la consola de ECS. Si ECS no puede arrancarla
   (`failures` en la respuesta) o AWS devuelve un error del cliente, imprime el motivo y sale con código 1.
@@ -1976,8 +1981,55 @@ tardó 44 s en el test de integración contra la RDS (2026-10-10).
 Compute de `es` (2026-11-03, contra la RDS, portátil): la serie entera con los errores del promedio como última fase,
 unos 45 minutos (`average_errors` ≈ 37, las otras fases ≈ 8-13). Desde ese día la serie tiene dos modos y los errores
 del promedio son una acción aparte: el `light` (una pasada de pesos sobre el ámbito entero y un Forecaster por ciclo
-para el rebaño) debería estar en el orden de cinco minutos desde el portátil, pendiente de medir por Luis con
-`"verbose": 2` (una línea por fase con sus segundos); el `full` sin `average_errors`, en los 8-13 minutos de antes.
+para el rebaño) tardó 4 min 58 s en ECS y 4 min 50 s desde el portátil (2026-11-19, 17 ciclos), casi todo en el
+rebaño; el `full` sin `average_errors`, en los 8-13 minutos de antes.
+
+Rebaño de `es` (2026-11-19, perfil con cProfile desde el portátil, sin guardar): con los 17 ciclos, 325 s con el
+medidor (unos 240 s sin él), el 78 % en los ajustes del promedio sin cada casa (432 ajustes, unas 459.000
+regresiones locales, casi la mitad del tiempo en el `MultiIndex` que construye cada una en `mtpy/core/utils/stat.py`)
+y el 20 % en 255 consultas a la base (cada ciclo crea su Forecaster). Desde el 2026-11-20 el `light` sólo mide los
+ciclos sin resultado oficial: 26 s para el ciclo del 29-N (15 casas, las mismas cifras que la tabla guardada, con
+una diferencia máxima de 0,00005 por el redondeo de la tabla).
+
+Núcleos de la tarea de ECS (2026-11-20, el mismo bucle de pandas y numpy solo y en varios procesos a la vez, una
+tarea por tamaño): con 2 vCPU y 4 GB (Intel Xeon 8259CL, un núcleo con dos hilos) tarda 56 s solo y 85 s cada uno con
+dos a la vez, 1,32 veces más rápido que en serie; con 4 vCPU y 8 GB (AMD EPYC 9R14, cuatro núcleos) tarda 27 s solo,
+27 s cada uno con dos a la vez y 45 s con cuatro. El portátil (M5) lo hace en 11 s. Es una muestra por tamaño y
+Fargate no garantiza el procesador.
+
+Procesador de la tarea de ECS (2026-11-20, simulador real de `es` en tareas de sólo lectura: ajuste del promedio y
+300 simulaciones, extrapoladas a 10.000): el tiempo lo decide el procesador que Fargate asigna a cada tarea, no su
+tamaño ni los hilos de numpy. En x86, Xeon 6975P-C (4 vCPU, un hilo) 100 s de ajuste y 543 s por simulación; Xeon
+8488C (4 vCPU) 122 s y 665 s; Xeon 8259CL (2 vCPU, con un hilo y con dos) 214 s y 1.165-1.185 s. En ARM (Graviton,
+con una imagen arm64 de prueba ya retirada): 2 vCPU 170 s y 968 s, y en otra tarea 209 s y 1.180 s; 4 vCPU 168 s
+y 949 s. El `update` de `es` con `--cpu 4` de esa noche tardó 44 min 7 s (ajuste 213 s,
+simulaciones de 1.115 s y 1.123 s), como el Xeon 8259CL; el de la tarde anterior con 2 vCPU, 27 min 36 s (101 s y
+550 s). El portátil (M5) hace cada simulación en 275 s.
+
+Perfil del bucle del simulador (2026-11-20, portátil, cProfile sobre 300 simulaciones de `es`; igual en las de hoy
+y en las de la elección, 265 s y 272 s por 10.000): casi todo el tiempo es indexado de pandas, no cálculo.
+`simulate` se lleva el 47 %, y de eso el reparto D'Hondt de las 52 circunscripciones es el 2 %: el resto son los
+`.loc` del bucle por provincia. `build_umat` el 44 % (`apply_source_rules` 15 %, `_add_swing_noise` 12 %,
+`apply_geo_rules` 5 %, `swing_shares` 4 %, montaje del resultado 8 %) y `build_frame` el 7 %. Cada simulación hace
+unas 260.000 llamadas a funciones para un cálculo que cabe en unas pocas operaciones de numpy. Primer paso, el
+mismo día: `simulate` lee las tablas una vez como matrices en lugar de indexarlas provincia a provincia, y las
+10.000 simulaciones bajan en el portátil de unos 280-300 s a unos 150 s, con `frames`, `units`, `results` y el
+reparto central idénticos a los de antes (300 simulaciones de cada modo, semilla 42). Segundo paso: `build_umat` y
+sus piezas (`apply_source_rules`, `logistic_swing`, `apply_geo_share`, el ruido regional y provincial y el montaje
+de la tabla) hacen la aritmética sobre matrices, con las mismas firmas, y `run` lee la tabla sin indexarla: unos
+50 s por 10.000 simulaciones en el portátil (270-280 s con el código de partida), con las cifras guardadas
+idénticas en `es`, `es-cn`, `es-ct` y `es-vc` y la tabla de `build_umat` igual bit a bit antes de redondear. Lo
+que queda es sobre todo `build_frame` (más del 40 %). Tercer paso: `build_frame` llena el marco como una
+matriz y el bucle queda en unos 32-34 s por 10.000 simulaciones, con las mismas cifras guardadas.
+
+Ajuste del promedio (2026-11-20, portátil, `es`): en cada punto del promedio la regresión local ajustaba su recta y
+predecía con ella todos los puntos (más de mil) para quedarse con el suyo, montando un índice de pandas cada vez:
+de 94 s con cProfile, 39 s eran esas predicciones y otros 12 s el indexado del resultado. Ahora cada ajuste local
+predice sólo su punto (`LeastSquaresEstimator.predict_values`) y la tabla se monta una vez: `fit_forecast` baja de
+47 s a 11 s. La media sale idéntica bit a bit, y con ella los efectos de casa, la dispersión y las 300 simulaciones
+de cada modo; el error de la regresión (`err`, y con él `cmin` y `cmax`) cambia en el último bit (diferencia
+relativa de hasta 2e-13), porque numpy no suma igual una fila que mil. Lo que queda del ajuste son los 142.000
+ajustes locales de un `update` de `es`, a unos 80 microsegundos cada uno.
 
 Carga de sondeos (2026-10-26, contra la RDS, sólo lectura): `python job.py load '{"scopes":["es"],"dry_run":true}'`
 tarda 3 s (descarga del artículo, 521 sondeos leídos, nombres y selección); con `scopes: "all"` el ensayo de los

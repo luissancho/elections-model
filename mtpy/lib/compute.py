@@ -65,6 +65,11 @@ def _phase(name: str, action: Callable, seconds: dict, progress: Optional[Callab
     return result
 
 
+def _date(value) -> str:
+    """Format an election date (text or timestamp) as `YYYY-MM-DD`."""
+    return value if isinstance(value, str) else value.strftime('%Y-%m-%d')
+
+
 def compute_scope(
     scope: str,
     save: bool = True,
@@ -74,7 +79,8 @@ def compute_scope(
     featured: Optional[Callable] = None,
     mark: Optional[Callable] = None,
     clock: Optional[Callable] = None,
-    mode: str = 'full'
+    mode: str = 'full',
+    results: Optional[Callable] = None
 ) -> dict:
     """
     Compute the poll series of a scope in one of two modes.
@@ -88,7 +94,8 @@ def compute_scope(
     `light` recomputes only what the polls of the current cycle can change: one pass of the weights over the whole
     scope (the overlap weight of a poll depends on its neighbours of the cycle, and the pass copies to every new poll
     the featured flag of its election) and, with `save` and a fresh series that reads those weights, the herding of
-    every cycle. No featured events: `update_featured` needs an official result, and the pipeline only picks `light`
+    the cycles without an official result (the one in course: the herding of a cycle is fitted on its own polls, so
+    the closed ones stay as stored; `full` measures every cycle). No featured events: `update_featured` needs an official result, and the pipeline only picks `light`
     when no pending election has one (`resolve_mode`). Errors, deviations, drift and house effects only change with a
     new result, data of past cycles, the catalogues or the method: they are left as stored. A dry run only weighs.
 
@@ -119,6 +126,9 @@ def compute_scope(
         without `save`.
     mode : {'light', 'full'}, default 'full'
         Phases to run (see above).
+    results : callable, optional
+        ``result_dates(scope) -> list of str`` with the elections that have an official result; the real one by
+        default. Only called in `light` with `save`, to leave their cycles out of the herding.
 
     Returns
     -------
@@ -163,7 +173,12 @@ def compute_scope(
         if mode == 'full':
             _phase('drift', lambda: comp.compute_drift(save=save), seconds, progress)
             _phase('house_effects', lambda: comp.compute_house_effects(save=save), seconds, progress)
-        _phase('herding', lambda: comp.compute_herding(save=save), seconds, progress)
+        if mode == 'light':
+            closed = set((result_dates if results is None else results)(scope))
+            open_dates = [d for d in map(_date, comp.event_dates) if d not in closed]
+            _phase('herding', lambda: comp.compute_herding(save=save, event_dates=open_dates), seconds, progress)
+        else:
+            _phase('herding', lambda: comp.compute_herding(save=save), seconds, progress)
         mark(scope, started_at)
 
     seconds['total'] = time.perf_counter() - start
