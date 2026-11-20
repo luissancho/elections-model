@@ -2385,41 +2385,50 @@ class Simulator(Core):
 
         cats = self.categories()
         names = self.params['names']
+        n_names = len(names)  # The parties come first in `cats`, then the residual
 
-        # Initialize the feature frame with the forecasted results for each party and the residual '-'
-        df = pd.DataFrame(columns=(self.cols_frame), index=cats, dtype=float)
-        df.loc[cats, self.cols_forecast] = self.forecast.loc[cats].values
+        # The frame is filled as one array per column (it is built in every simulation) and assembled at the end
+        col = {c: np.full(len(cats), np.nan) for c in self.cols_frame}
+        # Forecasted results for each party and the residual '-'
+        forecast = self.forecast.loc[cats].to_numpy(dtype=float)
+        if forecast.shape[1] != len(self.cols_forecast):
+            raise ValueError('The forecast must carry the columns {}'.format(self.cols_forecast))
+        for j, c in enumerate(self.cols_forecast):
+            col[c] = forecast[:, j].copy()
+        # Is the party a regional party (only representing a certain region)? An integer flag
+        col['regional'] = np.trunc(col['regional'])
 
-        df['pct'] = df['mean']  # Estimated global vote percentage calculated by the forcaster for this party
-        df['regional'] = df['regional'].astype(int)  # Is the party a regional party (only representing a certain region)?
-        vind = df['pct'] > 0  # Only parties with a forecasted percentage greater than 0 are considered
-        vind[self.OTHERS] = False  # The residual is never drawn: it absorbs the deviation of the parties' draws
+        pct = col['pct'] = col['mean'].copy()  # Estimated global vote percentage calculated by the forcaster for this party
+        vind = pct > 0  # Only parties with a forecasted percentage greater than 0 are considered
+        vind[cats.index(self.OTHERS)] = False  # The residual is never drawn: it absorbs the deviation of the parties' draws
 
         # If random is set to True, add noise to the forecasted percentage, based on the forcasted error
         if self.params['random']:
             # Drift of the opinion over the horizon (relative to the level of each party), added in quadrature
             if self.v2drift is not None and horizon:
-                ages = self.ages.reindex(df.index[vind]).to_numpy(dtype=float) if self.ages is not None else None
-                drift = np.asarray(self.v2drift.sigma(horizon, df.loc[vind, 'pct'].fillna(0), age=ages), dtype=float)
+                drawn = pd.Index(cats)[vind]
+                ages = self.ages.reindex(drawn).to_numpy(dtype=float) if self.ages is not None else None
+                level = pd.Series(pct[vind], index=drawn, name='pct')
+                drift = np.asarray(self.v2drift.sigma(horizon, level, age=ages), dtype=float)
             else:
                 drift = 0.
-            df.loc[vind, 'drift'] = drift
+            col['drift'][vind] = drift
 
             if self.v2err is not None:
                 # If an error estimator is available, use it to estimate the error of the forecasted percentage
                 # This estimator uses historical data to estimate the error of the forecasted percentage
                 # See Computer.get_error_estimator() for more details
                 p = np.column_stack([
-                    df.loc[vind, ['pct', 'regional']].fillna(0).values,
-                    np.repeat(weeks, df.loc[vind].shape[0])
+                    _zero_nan(pct[vind]), _zero_nan(col['regional'][vind]),
+                    np.repeat(weeks, int(vind.sum()))
                 ])
-                df.loc[vind, 'pct_err'] = np.asarray(self.v2err.predict(p))
-                df.loc[vind, 'std_err'] = np.sqrt(
-                    np.square(df.loc[vind, 'err']) + np.square(df.loc[vind, 'pct_err']) + np.square(drift)
+                col['pct_err'][vind] = np.asarray(self.v2err.predict(p)).reshape(-1)
+                col['std_err'][vind] = np.sqrt(
+                    np.square(col['err'][vind]) + np.square(col['pct_err'][vind]) + np.square(drift)
                 )
             else:
                 # If no error estimator available, use the purely statistical error provided by the forcaster
-                df.loc[vind, 'std_err'] = np.sqrt(np.square(df.loc[vind, 'err']) + np.square(drift))
+                col['std_err'][vind] = np.sqrt(np.square(col['err'][vind]) + np.square(drift))
 
             # Add noise to the forecasted percentage, based on the calculated error: a Student t per party
             # (`nobs - 2` degrees of freedom, or `tail_dof` for all, see `degrees_of_freedom`), drawn jointly for
@@ -2427,11 +2436,11 @@ class Simulator(Core):
             # copula, so the marginals are the same), or independently when the ratio is 1. The frame keeps them
             # (`dof`) for every category with a positive share: the residual, never drawn, carries the one it
             # would have (3, without polls, or `tail_dof`)
-            positive = df['pct'] > 0
-            df.loc[positive, 'dof'] = self.degrees_of_freedom(df.loc[positive, 'nobs'])
-            dof = df.loc[vind, 'dof'].to_numpy(dtype=float)
-            sig = df.loc[vind, 'std_err'].to_numpy(dtype=float)
-            national = (df.loc[vind, 'regional'].to_numpy() == 0) & np.isfinite(sig)
+            positive = pct > 0
+            col['dof'][positive] = self.degrees_of_freedom(col['nobs'][positive])
+            dof = col['dof'][vind]
+            sig = col['std_err'][vind]
+            national = (col['regional'][vind] == 0) & np.isfinite(sig)
             if self.composition_ratio < 1 and national.sum() >= 2:
                 rho, corr_nat = self.equicorrelation(sig[national], self.composition_ratio)
                 corr = np.eye(len(sig))
@@ -2442,17 +2451,20 @@ class Simulator(Core):
             else:
                 self.composition_rho = 0.
                 noise = self.rng.standard_t(dof)
-            df.loc[vind, 'rand'] = np.clip(df.loc[vind, 'pct'] + df.loc[vind, 'std_err'] * noise, 0, None)
+            col['rand'][vind] = np.clip(pct[vind] + sig * noise, 0, None)
 
-            df['vpred'] = df['rand']
+            col['vpred'] = col['rand'].copy()
         else:
-            df['vpred'] = df['pct']
+            col['vpred'] = pct.copy()
 
         # Other candidatures and blank votes: the remainder of the simulated national shares
-        df.loc[self.OTHERS, 'vpred'] = max(0., 100. - df.loc[names, 'vpred'].sum())
+        col['vpred'][cats.index(self.OTHERS)] = max(0., 100. - _zero_nan(col['vpred'][:n_names]).sum())
 
-        return df[self.cols_frame]
-    
+        df = pd.DataFrame(np.column_stack([col[c] for c in self.cols_frame]), index=cats, columns=self.cols_frame)
+        df['regional'] = df['regional'].astype(int)
+
+        return df
+
     def geo_rules(self) -> list[tuple[str, list[str], list[int]]]:
         """
         Rules `geo` of the source map that apply: ``(party, names, province codes)`` of each simulated party
@@ -2784,7 +2796,10 @@ class Simulator(Core):
                 umat = self.build_umat(frame)
 
             # Shares of the whole scope in this simulation, for the alternative threshold of some communities
-            scope_shares = frame.loc[names, 'vpred'].fillna(0).to_dict()
+            located = frame.index.get_indexer(names)
+            if (located < 0).any():
+                raise KeyError([n for n, i in zip(names, located) if i < 0])
+            scope_shares = dict(zip(names, _zero_nan(frame['vpred'].to_numpy(dtype=float)[located]).tolist()))
 
             # The tables are read once as arrays (one row per region, in the order of `regions`): indexing them
             # region by region took far longer than the allocation itself
@@ -2857,7 +2872,10 @@ class Simulator(Core):
 
             result = self.simulate(frame, umat)
 
-            self.frames[i] = frame.loc[cats, self.cols_frame].values
+            if frame.index.tolist() == cats and frame.columns.tolist() == self.cols_frame:
+                self.frames[i] = frame.to_numpy(dtype=float)
+            else:
+                self.frames[i] = frame.loc[cats, self.cols_frame].values
             self.units[i] = units
             self.results[i] = np.array(result)
 

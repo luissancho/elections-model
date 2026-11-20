@@ -2019,7 +2019,17 @@ sus piezas (`apply_source_rules`, `logistic_swing`, `apply_geo_share`, el ruido 
 de la tabla) hacen la aritmética sobre matrices, con las mismas firmas, y `run` lee la tabla sin indexarla: unos
 50 s por 10.000 simulaciones en el portátil (270-280 s con el código de partida), con las cifras guardadas
 idénticas en `es`, `es-cn`, `es-ct` y `es-vc` y la tabla de `build_umat` igual bit a bit antes de redondear. Lo
-que queda es sobre todo `build_frame` (más del 40 %).
+que queda es sobre todo `build_frame` (más del 40 %). Tercer paso: `build_frame` llena el marco como una
+matriz y el bucle queda en unos 32-34 s por 10.000 simulaciones, con las mismas cifras guardadas.
+
+Ajuste del promedio (2026-11-20, portátil, `es`): en cada punto del promedio la regresión local ajustaba su recta y
+predecía con ella todos los puntos (más de mil) para quedarse con el suyo, montando un índice de pandas cada vez:
+de 94 s con cProfile, 39 s eran esas predicciones y otros 12 s el indexado del resultado. Ahora cada ajuste local
+predice sólo su punto (`LeastSquaresEstimator.predict_values`) y la tabla se monta una vez: `fit_forecast` baja de
+47 s a 11 s. La media sale idéntica bit a bit, y con ella los efectos de casa, la dispersión y las 300 simulaciones
+de cada modo; el error de la regresión (`err`, y con él `cmin` y `cmax`) cambia en el último bit (diferencia
+relativa de hasta 2e-13), porque numpy no suma igual una fila que mil. Lo que queda del ajuste son los 142.000
+ajustes locales de un `update` de `es`, a unos 80 microsegundos cada uno.
 
 Carga de sondeos (2026-10-26, contra la RDS, sólo lectura): `python job.py load '{"scopes":["es"],"dry_run":true}'`
 tarda 3 s (descarga del artículo, 521 sondeos leídos, nombres y selección); con `scopes: "all"` el ensayo de los

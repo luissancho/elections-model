@@ -1,4 +1,5 @@
 import inspect
+import functools
 import itertools
 import warnings
 import numpy as np
@@ -545,6 +546,12 @@ class Kernel(object):
         return kws
 
 
+@functools.lru_cache(maxsize=4096)
+def t_quantile(q: float, dof: float) -> float:
+    """Quantile `q` of a Student t with `dof` degrees of freedom, remembered: the local fits ask for few."""
+    return float(t.ppf(q, dof))
+
+
 class Estimator(object):
 
     def __init__(
@@ -902,22 +909,37 @@ class LeastSquaresEstimator(Estimator):
 
         return self
 
+    def predict_values(
+        self,
+        p: Optional[np.ndarray] = None,
+        alpha: Optional[float] = None
+    ) -> np.ndarray:
+        """
+        The arithmetic of `predict`, without its table: the mean at each point, and with `alpha` the standard
+        error of the prediction (`perr`) and the half-width of its band (`cint`), kept in the estimator. The
+        local regression calls it at a single point for each of its fits.
+        """
+        self.build_pred(p)
+
+        y_hat = np.dot(self.pred, self.coef).squeeze()
+
+        if alpha is not None:
+            # self.perr = np.sqrt(np.diag(self.pred @ self.mcov @ self.pred.T))
+            self.perr = np.sqrt(np.einsum('ij,jk,ik->i', self.pred, self.mcov, self.pred))
+            self.cint = t_quantile(1 - alpha / 2, float(self.dof_t)) * self.perr
+
+        return y_hat
+
     def predict(
         self,
         p: Optional[np.ndarray] = None,
         alpha: Optional[float] = None
     ) -> pd.Series | pd.DataFrame:
-        self.build_pred(p)
-
-        y_hat = np.dot(self.pred, self.coef).squeeze()
+        y_hat = self.predict_values(p, alpha)
 
         result = pd.Series(y_hat, index=pd.MultiIndex.from_arrays(self.points.T), name='mean')
 
         if alpha is not None:
-            # self.perr = np.sqrt(np.diag(self.pred @ self.mcov @ self.pred.T))
-            self.perr = np.sqrt(np.einsum('ij,jk,ik->i', self.pred, self.mcov, self.pred))
-            self.cint = t.ppf(1 - alpha / 2, self.dof_t) * self.perr
-
             result = pd.DataFrame(result)
             result['cmin'] = y_hat - self.cint
             result['cmax'] = y_hat + self.cint
@@ -1074,16 +1096,10 @@ class LocalKernelEstimator(Estimator):
 
         kws = self.get_kernel().get_weights(self.pred)
 
-        if alpha is not None:
-            result = pd.DataFrame(
-                columns=['mean', 'cmin', 'cmax', 'err', 'nobs', 'neff'],
-                index=pd.MultiIndex.from_arrays(self.pred.T)
-            )
-        else:
-            result = pd.Series(
-                index=pd.MultiIndex.from_arrays(self.pred.T),
-                name='mean'
-            )
+        # One row per prediction point: each local fit predicts its own point only (it used to predict them all
+        # and keep one), and the table is assembled once at the end
+        columns = ['mean', 'cmin', 'cmax', 'err', 'nobs', 'neff'] if alpha is not None else ['mean']
+        values = np.full((self.pred.shape[0], len(columns)), np.nan)
 
         locs_ = tqdm(np.arange(self.pred.shape[0])) if self.verbose > 1 else np.arange(self.pred.shape[0])
         # The local fits repeat the same warning (e.g. the cluster fallback) at every point: emit each once
@@ -1093,18 +1109,21 @@ class LocalKernelEstimator(Estimator):
                 loc_est = self.get_local_estimator(kws, pos)
 
                 if loc_est is not None:
-                    rloc = loc_est.fit(self.pred, alpha=alpha)
-
-                    if not isinstance(rloc.index, pd.MultiIndex):
-                        rloc.index = pd.MultiIndex.from_arrays([rloc.index])
+                    y_hat = float(loc_est.fit().predict_values(self.pred[pos:(pos + 1)], alpha))
 
                     if alpha is not None:
-                        rloc['nobs'] = loc_est.nobs
-                        rloc['neff'] = loc_est.neff
-
-                    result.loc[tuple(self.pred[pos])] = rloc.loc[tuple(self.pred[pos])]
+                        cint, perr = float(loc_est.cint[0]), float(loc_est.perr[0])
+                        values[pos] = [y_hat, y_hat - cint, y_hat + cint, perr, loc_est.nobs, loc_est.neff]
+                    else:
+                        values[pos] = y_hat
         for category, message in dict.fromkeys((w.category, str(w.message)) for w in caught):
             warnings.warn(message, category, stacklevel=2)
+
+        index = pd.MultiIndex.from_arrays(self.pred.T)
+        if alpha is not None:
+            result = pd.DataFrame(values, columns=columns, index=index)
+        else:
+            result = pd.Series(values[:, 0], index=index, name='mean')
 
         for i in np.arange(self.kvar):
             if self.is_ts[i]:
