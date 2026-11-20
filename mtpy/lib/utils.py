@@ -347,11 +347,26 @@ def logistic_swing(
         The swung shares, with the layout of `prev_pcts`. A party keeps no base where it had none; without a
         finite ratio it gets no projection (NaN), as with the proportional swing.
     """
-    out = prev_pcts.mul(ratios)
+    # Over arrays when the ratios carry the parties of the table in its order (the swing runs in every
+    # simulation); with other labels, the product of pandas, whose table takes them too
+    arrays = ratios.index.equals(prev_pcts.columns)
+    if arrays:
+        values = prev_pcts.to_numpy(dtype=float)
+        rows = prev_pcts.index.get_indexer(districts)
+        if (rows < 0).any():
+            raise KeyError([d for d, i in zip(districts, rows) if i < 0])
 
-    p = prev_pcts.loc[districts].to_numpy(dtype=float)
+        p = values[rows]
+        r = ratios.to_numpy(dtype=float)
+        out = values * r
+    else:
+        out = prev_pcts.mul(ratios)
+        p = prev_pcts.loc[districts].to_numpy(dtype=float)
+        r = ratios.reindex(prev_pcts.columns).to_numpy(dtype=float)
     w = weights.loc[districts].to_numpy(dtype=float)[:, None]
-    r = ratios.reindex(prev_pcts.columns).to_numpy(dtype=float)
+    # One party after another in memory (as pandas hands a table over): the sums over the districts below
+    # then add each party in the same order whatever the layout of the table given, to the last bit
+    p = np.asfortranarray(p)
 
     has = np.isfinite(p) & (p > 0)
     solve = np.isfinite(r) & (r > 0) & has.any(axis=0)
@@ -370,7 +385,13 @@ def logistic_swing(
         lo, hi = np.where(below, mid, lo), np.where(below, hi, mid)
 
     swung = 100. / (1. + np.exp(-(x + (lo + hi) / 2.)))
-    out.loc[districts] = np.where(has & solve, swung, p * r)
+    swung = np.where(has & solve, swung, p * r)
+    if arrays:
+        out[rows] = swung
+
+        return pd.DataFrame(out, index=prev_pcts.index, columns=prev_pcts.columns)
+
+    out.loc[districts] = swung
 
     return out
 

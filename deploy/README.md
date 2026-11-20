@@ -2011,7 +2011,15 @@ y en las de la elección, 265 s y 272 s por 10.000): casi todo el tiempo es inde
 `simulate` se lleva el 47 %, y de eso el reparto D'Hondt de las 52 circunscripciones es el 2 %: el resto son los
 `.loc` del bucle por provincia. `build_umat` el 44 % (`apply_source_rules` 15 %, `_add_swing_noise` 12 %,
 `apply_geo_rules` 5 %, `swing_shares` 4 %, montaje del resultado 8 %) y `build_frame` el 7 %. Cada simulación hace
-unas 260.000 llamadas a funciones para un cálculo que cabe en unas pocas operaciones de numpy.
+unas 260.000 llamadas a funciones para un cálculo que cabe en unas pocas operaciones de numpy. Primer paso, el
+mismo día: `simulate` lee las tablas una vez como matrices en lugar de indexarlas provincia a provincia, y las
+10.000 simulaciones bajan en el portátil de unos 280-300 s a unos 150 s, con `frames`, `units`, `results` y el
+reparto central idénticos a los de antes (300 simulaciones de cada modo, semilla 42). Segundo paso: `build_umat` y
+sus piezas (`apply_source_rules`, `logistic_swing`, `apply_geo_share`, el ruido regional y provincial y el montaje
+de la tabla) hacen la aritmética sobre matrices, con las mismas firmas, y `run` lee la tabla sin indexarla: unos
+50 s por 10.000 simulaciones en el portátil (270-280 s con el código de partida), con las cifras guardadas
+idénticas en `es`, `es-cn`, `es-ct` y `es-vc` y la tabla de `build_umat` igual bit a bit antes de redondear. Lo
+que queda es sobre todo `build_frame` (más del 40 %).
 
 Carga de sondeos (2026-10-26, contra la RDS, sólo lectura): `python job.py load '{"scopes":["es"],"dry_run":true}'`
 tarda 3 s (descarga del artículo, 521 sondeos leídos, nombres y selección); con `scopes: "all"` el ensayo de los

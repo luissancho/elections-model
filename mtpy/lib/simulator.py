@@ -28,6 +28,37 @@ from .utils import (
 )
 
 
+def _zero_nan(values: np.ndarray) -> np.ndarray:
+    """The array with its NaN as 0 (the `fillna(0)` of the sums)."""
+    return np.where(np.isnan(values), 0., values)
+
+
+def _row_sums(values: np.ndarray) -> np.ndarray:
+    """
+    Sum of each row of a matrix, NaN as 0, adding the columns one by one in their order: the order of the
+    sum is written down so that the last bit of the result does not depend on how the table is stored.
+    """
+    filled = _zero_nan(np.asarray(values, dtype=float))
+    total = np.zeros(filled.shape[0])
+    for j in range(filled.shape[1]):
+        total = filled[:, j].copy() if j == 0 else total + filled[:, j]
+
+    return total
+
+
+def _col_sums(values: np.ndarray) -> np.ndarray:
+    """Sum of each column of a matrix, each one added as numpy adds a vector (NaN propagates)."""
+    return np.ascontiguousarray(np.asarray(values, dtype=float).T).sum(axis=1)
+
+
+def _aligned(series: pd.Series, index: pd.Index) -> np.ndarray:
+    """Values of a series in the order of `index` (NaN where it has no label)."""
+    if series.index is index or series.index.equals(index):
+        return series.to_numpy()
+
+    return series.reindex(index).to_numpy()
+
+
 class Simulator(Core):
 
     OTHERS = '-'  # Residual category: other candidatures and blank votes (same label as the Forecaster)
@@ -1638,14 +1669,32 @@ class Simulator(Core):
         pd.DataFrame
             A copy of `prev_pcts` with the rules applied.
         """
-        prev_pcts = prev_pcts.copy()
+        # The table is worked as one array per party (and rebuilt at the end): the rules run in every simulation
+        index, columns = prev_pcts.index, prev_pcts.columns
+        labels = index.tolist()
+        cols = dict(zip(columns, np.array(prev_pcts.to_numpy(dtype=float).T, order='C')))
+        added = []
         # The regional list of the Canary Islands (100) gathers the same voters as its provinces: not a province
-        provinces = [r for r in prev_pcts.index if r not in (default_region, REGIONAL_LIST_ID)]
+        provinces = np.array([r not in (default_region, REGIONAL_LIST_ID) for r in labels], dtype=bool)
+        votes = _aligned(reg_votes, index)
+        vpred = dict(zip(frame.index, frame['vpred'].to_numpy(dtype=float)))
+
+        def total(names: list[str], loc=None) -> np.ndarray:
+            """Sum of the columns `names`, NaN as 0 (of one row with `loc`)."""
+            parts = [_zero_nan(cols[n] if loc is None else cols[n][loc]) for n in names]
+            out = parts[0].copy() if len(parts) > 0 else np.zeros(len(labels) if loc is None else ())
+            for part in parts[1:]:
+                out = out + part
+
+            return out
+
+        def assign(col: str, values: np.ndarray) -> None:
+            if col not in cols:
+                added.append(col)
+            cols[col] = values
 
         def national(col: str) -> float:
-            return np.round(
-                (prev_pcts.loc[provinces, col] * reg_votes.loc[provinces]).sum() / reg_votes.loc[default_region], 2
-            )
+            return np.round((cols[col][provinces] * votes[provinces]).sum() / votes[index.get_loc(default_region)], 2)
 
         for key, rules in smap.items():
             for rule in (rules if isinstance(rules, list) else [rules]):
@@ -1662,28 +1711,29 @@ class Simulator(Core):
                     # Regions are province codes (`region_id`), given as strings or ints in params.json
                     if 'exclude' in regions:
                         excluded = [int(r) for r in regions['exclude']]
-                        kept = [r == default_region or r not in excluded for r in prev_pcts.index]
+                        kept = np.array([r == default_region or r not in excluded for r in labels], dtype=bool)
                     else:
                         included = [int(r) for r in regions]
-                        kept = [r == default_region or r in included for r in prev_pcts.index]
+                        kept = np.array([r == default_region or r in included for r in labels], dtype=bool)
 
                 if names is not None:
                     if type == 'agg':
-                        prev_pcts[key] = prev_pcts[[key] + names].sum(axis=1)
+                        assign(key, total([key] + names))
                     elif type == 'sub':
-                        if key not in frame.index or any(n not in frame.index for n in names):
+                        if key not in vpred or any(n not in vpred for n in names):
                             # The rule needs forecasts for every party involved: skip it otherwise
                             continue
 
-                        fc_k = frame.loc[key]['vpred']
-                        fc_v = frame.loc[names]['vpred'].sum()
-                        prev_v = prev_pcts[names].sum(axis=1)
+                        fc_k = vpred[key]
+                        fc_v = _zero_nan(np.array([vpred[n] for n in names], dtype=float)).sum()
+                        prev_v = total(names)
 
                         # Share of the previous vote of the source parties inherited by the new party,
                         # in proportion to the current forecasts: prev_v * fc_k / (fc_k + fc_v)
                         share = fc_k / (fc_k + fc_v) if fc_k + fc_v > 0 else 0.
-                        nat_k = prev_pcts.loc[default_region, key]
-                        nat_v = prev_pcts.loc[default_region, names].sum()
+                        default = index.get_loc(default_region)
+                        nat_k = cols[key][default]
+                        nat_v = total(names, default)
                         if keep and nat_k > 0 and nat_v > 0 and fc_v > 0:
                             # The party has its own base (and its own swing) elsewhere: inherit the share that,
                             # when each party moves by its national ratio, makes key + sources grow like the
@@ -1698,31 +1748,35 @@ class Simulator(Core):
                         inherited = np.round(prev_v * share, 2)
                         if kept is not None:
                             # Only where the new party runs: the sources keep their whole base elsewhere
-                            inherited = inherited.where(kept, 0.)
+                            inherited = np.where(kept, inherited, 0.)
 
                         if keep:
                             # The party keeps its own base and adds the inherited share where listed
-                            prev_pcts[key] = prev_pcts[key] + inherited
+                            assign(key, cols[key] + inherited)
                         else:
-                            prev_pcts[key] = inherited
-                        prev_pcts[names] = prev_pcts[names].sub(inherited / len(names), axis=0)
+                            assign(key, inherited.copy())
+                        for name in names:
+                            assign(name, cols[name] - inherited / len(names))
 
                         if kept is not None:
                             for col in [key] + names:
-                                prev_pcts.loc[default_region, col] = national(col)
+                                cols[col][default] = national(col)
                     elif type == 'split':
-                        prev_k = prev_pcts[key]
+                        prev_k = cols[key]
                         for name in names:
-                            prev_pcts[name] += (prev_k / len(names))
+                            assign(name, cols[name] + prev_k / len(names))
 
                 if kept is not None and not keep:
-                    prev_pcts[key] = prev_pcts[key].where(kept, .0)
+                    assign(key, np.where(kept, cols[key], .0))
 
                     # Keep the national share consistent with the provinces kept by the rule, so that the
                     # swing reproduces the national forecast within those provinces
-                    prev_pcts.loc[default_region, key] = national(key)
+                    cols[key][index.get_loc(default_region)] = national(key)
 
-        return prev_pcts
+        for col in added:
+            columns = columns.insert(len(columns), col)
+
+        return pd.DataFrame(np.array([cols[c] for c in columns]).T, index=index, columns=columns)
 
     # --- Rule `geo`: share of the vote of a party cast in some provinces, from the polls (pure functions) ------
 
@@ -1832,24 +1886,28 @@ class Simulator(Core):
             ``(frame, base)``: a rescaled copy of `vpred_pcts` and the share of `regions` before the rescaling
             (the one implied by the previous election).
         """
-        out = vpred_pcts.copy()
-        provinces = [r for r in out.index if r not in (default_region, REGIONAL_LIST_ID)]
-        inside = [r for r in provinces if r in set(regions)]
-        outside = [r for r in provinces if r not in set(regions)]
+        index, columns = vpred_pcts.index, vpred_pcts.columns
+        out = vpred_pcts.to_numpy(dtype=float, copy=True)
+        col = columns.get_loc(key)
+        wanted = set(regions)
+        provinces = [i for i, r in enumerate(index.tolist()) if r not in (default_region, REGIONAL_LIST_ID)]
+        inside = np.array([i for i in provinces if index[i] in wanted], dtype=int)
+        outside = np.array([i for i in provinces if index[i] not in wanted], dtype=int)
 
-        votes = out.loc[provinces, key].fillna(0) * valid.loc[provinces]
-        v_in, v_out = float(votes.loc[inside].sum()), float(votes.loc[outside].sum())
+        weights = _aligned(valid, index)
+        v_in = float((_zero_nan(out[inside, col]) * weights[inside]).sum())
+        v_out = float((_zero_nan(out[outside, col]) * weights[outside]).sum())
         total = v_in + v_out
         if total <= 0:
-            return out, 0.
+            return pd.DataFrame(out, index=index, columns=columns), 0.
 
         base = v_in / total
         if v_in > 0:
-            out.loc[inside, key] = out.loc[inside, key] * (share * total / v_in)
+            out[inside, col] = out[inside, col] * (share * total / v_in)
         if v_out > 0:
-            out.loc[outside, key] = out.loc[outside, key] * ((1. - share) * total / v_out)
+            out[outside, col] = out[outside, col] * ((1. - share) * total / v_out)
 
-        return out, base
+        return pd.DataFrame(out, index=index, columns=columns), base
 
     # --- Summaries of the simulated distributions (pure functions) ---------------------------------
 
@@ -2081,27 +2139,62 @@ class Simulator(Core):
         others : str
             Residual category, untouched by the shocks and adjusted by the renormalisation.
         """
-        out = shares.copy()
-        w = weights.reindex(out.index).astype(float)
-        cols = [n for n in names if n in out.columns]
-        grp = groups.reindex(out.index)
+        index, columns = shares.index, shares.columns
+        cols = [n for n in names if n in columns]
+        w = weights.reindex(index).to_numpy(dtype=float)
+        grp = groups.reindex(index).to_numpy()
 
-        eps = shocks_region.reindex(index=grp.to_numpy(), columns=cols).fillna(0.).to_numpy(dtype=float)
-        eta = shocks_province.reindex(index=out.index, columns=cols).fillna(0.).to_numpy(dtype=float)
-        out[cols] = out[cols].to_numpy(dtype=float) * np.exp(eps + eta)
+        def shocks(table: pd.DataFrame, rows: np.ndarray) -> np.ndarray:
+            """Shocks of `table` for the labels `rows` and the parties `cols`, 0 where it has none."""
+            out = np.zeros((len(rows), len(cols)))
+            if table.shape[0] == 0 or table.shape[1] == 0:
+                return out
+            i, j = table.index.get_indexer(rows), table.columns.get_indexer(cols)
+            found = np.ix_(i >= 0, j >= 0)
+            out[found] = _zero_nan(table.to_numpy(dtype=float)[np.ix_(i[i >= 0], j[j >= 0])])
+
+            return out
+
+        eps = shocks(shocks_region, grp)
+        eta = shocks(shocks_province, index.to_numpy())
+        target = [float(target.get(n, np.nan)) for n in cols]
+
+        out = Simulator._swing_noise(
+            shares.to_numpy(dtype=float), columns.get_indexer(cols), w, np.array(target), eps + eta, n_pass
+        )
+
+        return pd.DataFrame(out, index=index, columns=columns)
+
+    @staticmethod
+    def _swing_noise(
+        shares: np.ndarray,
+        cols: np.ndarray,
+        weights: np.ndarray,
+        target: np.ndarray,
+        shocks: np.ndarray,
+        n_pass: int = 2
+    ) -> np.ndarray:
+        """
+        `apply_swing_noise` over arrays: `shares` by province (rows) and category (columns), `cols` the
+        positions of the parties that receive the shocks, `target` and `shocks` (ε + η, by province) in the
+        order of `cols`.
+        """
+        out = np.array(shares, dtype=float)
+        out[:, cols] = out[:, cols] * np.exp(shocks)
+        w_total = _zero_nan(weights).sum()
 
         for _ in range(max(int(n_pass), 1)):
             # Each party back to its national share
-            for n in cols:
-                col = out[n].to_numpy(dtype=float)
+            for k, c in enumerate(cols):
+                col = out[:, c]
                 present = np.isfinite(col)
-                mean = float((col[present] * w.to_numpy()[present]).sum() / w.sum()) if present.any() else 0.
-                tgt = float(target.get(n, np.nan))
-                if mean > 0 and np.isfinite(tgt):
-                    out[n] = col * (tgt / mean)
+                mean = float((col[present] * weights[present]).sum() / w_total) if present.any() else 0.
+                if mean > 0 and np.isfinite(target[k]):
+                    out[:, c] = col * (target[k] / mean)
             # Each province back to 100 with the residual
-            total = out.fillna(0.).sum(axis=1).replace(0., np.nan)
-            out = out.mul(100. / total, axis=0)
+            total = _row_sums(out)
+            total[total == 0.] = np.nan
+            out = out * (100. / total)[:, None]
 
         return out
 
@@ -2441,45 +2534,85 @@ class Simulator(Core):
 
         return logistic_swing(prev_pcts, ratios, valid, districts)
 
+    def unit_columns(self) -> pd.MultiIndex:
+        """
+        Columns of the table of `build_umat`: `cols_unit` by `categories()`. Kept between simulations (the
+        table is built in each one) and renewed when the parties change.
+        """
+        cats = tuple(self.categories())
+        cached = getattr(self, '_unit_columns', None)
+        if cached is None or cached[0] != cats:
+            cached = (cats, pd.MultiIndex.from_product([self.cols_unit, list(cats)], names=[None, 'party']))
+            self._unit_columns = cached
+
+        return cached[1]
+
     def build_umat(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """
+        Shares of one simulation by region: the previous ones after the rules of the source map (`prev_pct`)
+        and the projected ones (`vpred_pct`: swing to the national shares of `frame`, rules `geo`, regional
+        and provincial deviations), for each category. The arithmetic between the steps runs over arrays (it
+        is repeated in every simulation); the steps take and return tables.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `region_id` (`params['regions']`), with the columns of `unit_columns`, rounded to 2
+            decimals.
+        """
         prev_pcts = self.apply_source_rules(
             self.prev_results['pct'].fillna(0), self.smap, frame, self.default_region, self.prev_totals['votes']
         )
 
         names = self.params['names']
-        prev_pcts = prev_pcts.where(prev_pcts > 0, np.nan)[names]
+        index = prev_pcts.index
+        default = index.get_loc(self.default_region)
+        prev = prev_pcts[names].to_numpy(dtype=float)
+        prev = np.where(prev > 0, prev, np.nan)
 
         # Base: valid votes (candidatures + blank) of the previous election, per region
         valid = self.prev_totals['votes']
-        blank = self.prev_totals['blank_pct']
+        votes = _aligned(valid, index)
+        blank = _aligned(self.prev_totals['blank_pct'], index)
         # Other candidatures: everything not simulated (nor moved by the smap rules), net of blank votes
-        prev_otros = (100. - prev_pcts.fillna(0).sum(axis=1) - blank).clip(lower=0.).round(2)
+        prev_otros = np.round(np.clip(100. - _row_sums(prev) - blank, 0., None), 2)
 
-        n_votes = valid.loc[self.default_region]
-        prev_votes = prev_pcts.mul(valid / 100, axis=0).round()
-        fc_votes = (frame['vpred'] * n_votes / 100).round()
+        n_votes = votes[default]
+        prev_votes = np.round(prev * (votes / 100)[:, None])
+        vpred = frame['vpred']
+        fc_votes = np.round(vpred.reindex(names).to_numpy(dtype=float) * n_votes / 100)
 
         # Swing: each party keeps its previous geography, moved to its national ratio with the rule of `swing`
-        fmul = fc_votes[names] / prev_votes.loc[self.default_region][names]
-        vpred_pcts = self.swing_shares(prev_pcts, fmul, valid)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            fmul = fc_votes / prev_votes[default]
+        vpred_pcts = self.swing_shares(
+            pd.DataFrame(prev, index=index, columns=names), pd.Series(fmul, index=names), valid
+        )
 
         # Rules `geo`: the share of the vote of a party cast in some provinces comes from the polls that break it
         # down (drawn in each simulation with its standard error), not from the previous geography alone
         vpred_pcts = self.apply_geo_rules(vpred_pcts, valid)
 
-        orphans = [n for n in names if fc_votes[n] > 0 and not np.isfinite(fmul[n])]
-        if len(orphans) > 0 and self.verbose > 0:
-            warnings.warn('Parties without previous results nor an applicable smap rule get no seats: {}'.format(orphans))
+        if self.verbose > 0:
+            orphans = [n for n, v, f in zip(names, fc_votes, fmul) if v > 0 and not np.isfinite(f)]
+            if len(orphans) > 0:
+                warnings.warn('Parties without previous results nor an applicable smap rule get no seats: {}'.format(orphans))
 
         # The residual of the poll average, net of the (constant) blank share, swings like any other party
-        otros_fc = max(0., frame.loc[self.OTHERS, 'vpred'] - blank.loc[self.default_region])
-        if prev_otros.loc[self.default_region] > 0:
-            ratio = pd.Series({self.OTHERS: otros_fc / prev_otros.loc[self.default_region]})
-            vpred_otros = self.swing_shares(prev_otros.to_frame(self.OTHERS), ratio, valid)[self.OTHERS]
+        otros_fc = max(0., vpred.loc[self.OTHERS] - blank[default])
+        if prev_otros[default] > 0:
+            ratio = pd.Series({self.OTHERS: otros_fc / prev_otros[default]})
+            vpred_otros = self.swing_shares(
+                pd.DataFrame({self.OTHERS: prev_otros}, index=index), ratio, valid
+            )[self.OTHERS].to_numpy(dtype=float)
         else:
-            vpred_otros = pd.Series(otros_fc, index=prev_otros.index)
-        prev_pcts[self.OTHERS] = prev_otros + blank
-        vpred_pcts[self.OTHERS] = vpred_otros + blank
+            vpred_otros = np.full(len(index), otros_fc)
+
+        cats = names + [self.OTHERS]
+        prev = np.column_stack([prev, prev_otros + blank])
+        vpred_pcts = pd.DataFrame(
+            np.column_stack([vpred_pcts[names].to_numpy(dtype=float), vpred_otros + blank]), index=index, columns=cats
+        )
 
         # Regional and provincial deviations from the swing (M9), keeping the national shares
         if self.regional_noise and self.params['random'] and self.v2swing is not None and self.rng_swing is not None:
@@ -2487,15 +2620,19 @@ class Simulator(Core):
 
         # Shares fed to the allocation: renormalized over all the categories, so that only the small
         # inconsistencies of the swing are corrected (not the votes to other candidatures)
-        vpred_pcts = vpred_pcts.mul(100. / vpred_pcts.fillna(0).sum(axis=1).replace(0., np.nan), axis=0)
+        pred = vpred_pcts[cats].to_numpy(dtype=float)
+        total = _row_sums(pred)
+        total[total == 0.] = np.nan
+        pred = pred * (100. / total)[:, None]
 
-        cats = self.categories()
-        ix = pd.Index(self.params['regions'], name='region_id')
-        cols = pd.MultiIndex.from_product([self.cols_unit, cats], names=[None, 'party'])
+        rows = index.get_indexer(self.params['regions'])
+        if (rows < 0).any():
+            raise KeyError([r for r, i in zip(self.params['regions'], rows) if i < 0])
 
-        df = pd.concat([prev_pcts, vpred_pcts], axis=1, keys=self.cols_unit).loc[ix, cols].round(2)
-
-        return df
+        return pd.DataFrame(
+            np.round(np.hstack([prev[rows], pred[rows]]), 2),
+            index=pd.Index(self.params['regions'], name='region_id'), columns=self.unit_columns()
+        )
 
     def _add_swing_noise(
         self,
@@ -2510,41 +2647,51 @@ class Simulator(Core):
         """
         # The Canarian regional list is voted by the whole scope: it is not one more district to perturb, and
         # with the valid votes of the whole archipelago it would dominate the mean the shocks must preserve
-        provinces = [r for r in vpred_pcts.index if r not in (self.default_region, REGIONAL_LIST_ID)]
-        if len(provinces) < 2:
+        index, columns = vpred_pcts.index, vpred_pcts.columns
+        outside = (self.default_region, REGIONAL_LIST_ID)
+        rows = np.array([i for i, r in enumerate(index.tolist()) if r not in outside], dtype=int)
+        if len(rows) < 2:
             return vpred_pcts  # A single district is the whole scope: nothing to redistribute
+        provinces = index[rows]
+        cols = columns.get_indexer(names)
+        if (cols < 0).any():
+            raise KeyError([n for n, c in zip(names, cols) if c < 0])
         # Work on the provincial shares as the allocation will see them (each province renormalised to 100
         # with the residual): the shocks must keep the mean structure of the deterministic projection, whose
         # raw swing rows do not sum to 100 (e.g. below it in the Basque provinces)
-        prov = vpred_pcts.loc[provinces]
-        prov = prov.mul(100. / prov.fillna(0.).sum(axis=1).replace(0., np.nan), axis=0)
+        out = vpred_pcts.to_numpy(dtype=float, copy=True)
+        prov = out[rows]
+        total = _row_sums(prov)
+        total[total == 0.] = np.nan
+        prov = prov * (100. / total)[:, None]
         groups = pd.Series({r: self.region_groups.get(int(r), np.nan) for r in provinces})
-        w = valid.loc[provinces].astype(float)
+        w = _aligned(valid, index)[rows].astype(float)
+        w_total = _zero_nan(w).sum()
         # Target: the national share implied by the (normalised) provincial projection itself, so that the
         # shocks never shift a province on average
-        target = prov[names].fillna(0.).mul(w, axis=0).sum() / w.sum()
+        level_prov = _zero_nan(prov[:, cols])
+        target = _col_sums(level_prov * w[:, None]) / w_total
 
-        level_prov = prov[names].fillna(0.)
         if groups.nunique(dropna=False) > 1:
-            level_reg = level_prov.mul(w, axis=0).groupby(groups.to_numpy()).sum().div(w.groupby(groups.to_numpy()).sum(), axis=0)
-
-            eps = pd.DataFrame(
-                self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_region(level_reg.to_numpy())),
-                index=level_reg.index, columns=names
+            keys = groups.to_numpy()
+            weights = pd.Series(w, index=provinces)
+            level_reg = pd.DataFrame(level_prov * w[:, None], index=provinces, columns=names).groupby(keys).sum().div(
+                weights.groupby(keys).sum(), axis=0
             )
+
+            eps = self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_region(level_reg.to_numpy()))
+            # Shock of the community of each province (none where the province has no community)
+            loc = level_reg.index.get_indexer(keys)
+            eps = np.where((loc >= 0)[:, None], eps[np.clip(loc, 0, None)], 0.)
         else:
             # Every district belongs to the same community (a regional scope): no shock per community, which
             # would be a shift of the whole scope
-            eps = pd.DataFrame()
-        eta = pd.DataFrame(
-            self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_province(level_prov.to_numpy())),
-            index=prov.index, columns=names
-        )
+            eps = np.zeros(level_prov.shape)
+        eta = self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_province(level_prov))
 
-        out = vpred_pcts.copy()
-        out.loc[provinces] = self.apply_swing_noise(prov, w, target, eps, eta, groups, names, self.OTHERS)
+        out[rows] = self._swing_noise(prov, cols, w, target, _zero_nan(eps) + _zero_nan(eta))
 
-        return out
+        return pd.DataFrame(out, index=index, columns=columns)
 
     def unit_summary(
         self,
@@ -2630,32 +2777,38 @@ class Simulator(Core):
         if frame is None:
             frame = self.build_frame()
 
-        result = pd.DataFrame(index=self.params['regions'], columns=self.params['names'], dtype=float)
+        names, regions = self.params['names'], self.params['regions']
 
         if self.params['split']:
             if umat is None:
                 umat = self.build_umat(frame)
 
             # Shares of the whole scope in this simulation, for the alternative threshold of some communities
-            scope_shares = frame.loc[self.params['names'], 'vpred'].fillna(0).to_dict()
+            scope_shares = frame.loc[names, 'vpred'].fillna(0).to_dict()
 
-            for region in self.params['regions']:
+            # The tables are read once as arrays (one row per region, in the order of `regions`): indexing them
+            # region by region took far longer than the allocation itself
+            # Shares over valid votes (already summing 100 with the residual, see `build_umat`)
+            shares = umat['vpred_pct'].loc[regions, names].fillna(0).to_numpy(dtype=float)
+            valid = self.prev_totals['votes'].loc[regions].to_numpy(dtype=float)
+            seats = self.reg_totals['seats'].loc[regions].to_numpy()
+            votes = np.round(shares * valid[:, None] / 100)
+
+            values = np.full((len(regions), len(names)), np.nan)
+            for loc, region in enumerate(regions):
                 if region == self.default_region:
                     continue
 
-                # Shares over valid votes (already summing 100 with the residual, see `build_umat`)
-                shares = umat.loc[region]['vpred_pct'].fillna(0)
-                valid = float(self.prev_totals.loc[region, 'votes'])
-                d_votes = (shares[self.params['names']] * valid / 100).round().to_dict()
-                n_seats = int(self.reg_totals.loc[region]['seats'])
-
-                result.loc[region] = self.alloc_seats(
-                    d_votes, n_seats, valid_votes=valid, threshold=self.threshold,
-                    scope_shares=scope_shares, threshold_scope=self.threshold_scope
+                allocated = self.alloc_seats(
+                    dict(zip(names, votes[loc].tolist())), int(seats[loc]), valid_votes=float(valid[loc]),
+                    threshold=self.threshold, scope_shares=scope_shares, threshold_scope=self.threshold_scope
                 )
+                values[loc] = [allocated[name] for name in names]
 
+            result = pd.DataFrame(values, index=regions, columns=names)
             result.loc[self.default_region] = result.loc[result.index != self.default_region].sum(axis=0)
         else:
+            result = pd.DataFrame(index=regions, columns=names, dtype=float)
             p = frame.loc[self.params['names'], ['vpred', 'regional']].fillna(0).values
 
             # The estimator predicts the share of the seats of the chamber (see `Computer.get_seats_estimator`)
@@ -2696,7 +2849,11 @@ class Simulator(Core):
         for i in _iters:
             frame = self.build_frame(horizon=int(self.horizons[i]))
             umat = self.build_umat(frame)
-            units = np.stack([umat[m].loc[self.params['regions'], cats].values for m in self.cols_unit], axis=-1)
+            if umat.columns is self.unit_columns() and umat.index.tolist() == self.params['regions']:
+                # The table of `build_umat`: its values, by region, measure and category
+                units = umat.to_numpy().reshape(len(umat), len(self.cols_unit), len(cats)).transpose(0, 2, 1)
+            else:
+                units = np.stack([umat[m].loc[self.params['regions'], cats].values for m in self.cols_unit], axis=-1)
 
             result = self.simulate(frame, umat)
 
