@@ -81,7 +81,9 @@ Cómo y cuándo se produjo el run. Fuente: `Simulator`, `Forecaster` y `provenan
 usado), `date_fit_last` (o `null`), `horizon_max`, `n_sim`, `seed`, `drange`, `max_fc`, `alpha`,
 `correctors` (los interruptores del modelo con los que se hizo el run; desde el 2026-11-10 incluye `swing`, la
 regla que lleva el voto del conjunto a las circunscripciones: `logistic`; un run sin esa clave usó la
-proporcional), `n_polls`, `n_pollsters` (sondeos y casas usados), `db_polls`, `db_last_poll` (sondeos del
+proporcional; desde el 2026-11-21 incluye `census`, `true` (el valor por defecto) si el run pidió pesar cada circunscripción por sus
+votos válidos anteriores multiplicados por el cambio de su censo residente, lo que sólo tiene efecto en un
+ámbito con `data/census/{scope}.csv`; un run sin la clave no lo hizo), `n_polls`, `n_pollsters` (sondeos y casas usados), `db_polls`, `db_last_poll` (sondeos del
 evento en la base y fecha del último), `n_seats`, `majority`, `parties` (lista de `{name, id, fullname,
 color, block, regional}` en el orden de la simulación), `bmaps`, `smap`, `regions` (`{id, name, seats}`;
 incluye el total del ámbito, `id` 0, que es la cámara entera),

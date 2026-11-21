@@ -20,11 +20,12 @@ from .forecaster import Forecaster, check_rating_exponent
 from .computer import Computer, check_drift_scale
 from .data import (
     get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds,
-    get_districts, get_scope_parent
+    get_census, get_districts, get_scope_parent
 )
 from .mtypes import DROP_MTYPES
 from .utils import (
-    build_blocks, group_results, logistic_swing, norm_range, partial_parties, REGIONAL_LIST_ID
+    build_blocks, census_factors, census_shares, census_totals, group_results, logistic_swing, norm_range,
+    partial_parties, REGIONAL_LIST_ID
 )
 
 
@@ -107,6 +108,7 @@ class Simulator(Core):
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
         swing: Literal['logistic', 'proportional'] = 'logistic',
+        census: bool = True,
         min_events: Optional[int] = None,
         weight_ratings: Optional[pd.Series | str] = None,
         weight_overrides: Optional[pd.DataFrame] = None,
@@ -222,6 +224,13 @@ class Simulator(Core):
             its national ratio, and a share never passes 100. `'proportional'` multiplies the share itself by
             the national ratio, the rule used up to 2026-11-10; it is kept to compare both in the backtest.
             The deviations of `regional_noise` are measured against the same rule.
+        census : bool, optional
+            Weigh each district by the valid votes of the previous election times the change of its resident
+            electoral census since then (`data/census/{scope}.csv`), instead of by those votes alone: the
+            districts whose census grew more count more in the national share, and the national ratio of each
+            party is measured against the previous result recomputed with those weights (`apply_census`).
+            On by default since 2026-11-21 (method 19); a scope without the census of both elections is left untouched
+            (`census_applied`).
         min_events : int, optional
             Featured elections of the scope held before the event needed to fit the estimators (polling
             error, drift, seats, composition) on the scope itself; with fewer, they are fitted on its parent
@@ -271,6 +280,9 @@ class Simulator(Core):
         self.composition = composition
         self.regional_noise = bool(regional_noise)
         self.swing = swing
+        self.census = bool(census)
+        self.census_applied = False  # Set by `apply_census`
+        self.census_pcts = None  # Previous shares with the national row reweighted, see `apply_census`
         self.min_events = None if min_events is None else int(min_events)
         self.weight_ratings = weight_ratings
         self.weight_overrides = weight_overrides
@@ -449,6 +461,8 @@ class Simulator(Core):
 
         self.prev_results = self.get_prev_results()
         self.prev_totals = self.get_prev_totals()
+        if self.census:
+            self.apply_census()
 
         self.params = None
         self.rng = None
@@ -743,6 +757,34 @@ class Simulator(Core):
         totals.index.name = 'region_id'
 
         return totals
+
+    def apply_census(self) -> bool:
+        """
+        Reweigh the districts by the change of their resident census since the previous election (`census`).
+
+        `prev_totals['votes']` becomes the valid votes of the previous election scaled by that change
+        (`utils.census_totals`) and `census_pcts` the previous shares with the total of the scope recomputed
+        from the districts with those weights (`utils.census_shares`), the base of the swing of `build_umat`.
+        `prev_results` keeps the official result. Nothing changes in a scope without the census of both
+        elections.
+
+        Returns
+        -------
+        bool
+            Whether the census was applied (`census_applied`).
+        """
+        factors = census_factors(get_census(self.scope), self.event_date, self.prev_date)
+        if factors is None:
+            return False
+
+        districts = [r for r in self.regions if r not in (self.default_region, REGIONAL_LIST_ID)]
+        self.prev_totals = census_totals(self.prev_totals, factors, districts, self.default_region)
+        self.census_pcts = census_shares(
+            self.prev_results['pct'].fillna(0), self.prev_totals['votes'], districts, self.default_region
+        )
+        self.census_applied = True
+
+        return True
 
     def categories(self) -> list[str]:
         """
@@ -2572,9 +2614,9 @@ class Simulator(Core):
             Indexed by `region_id` (`params['regions']`), with the columns of `unit_columns`, rounded to 2
             decimals.
         """
-        prev_pcts = self.apply_source_rules(
-            self.prev_results['pct'].fillna(0), self.smap, frame, self.default_region, self.prev_totals['votes']
-        )
+        census_pcts = getattr(self, 'census_pcts', None)  # Only with `census` (see `apply_census`)
+        base = self.prev_results['pct'].fillna(0) if census_pcts is None else census_pcts
+        prev_pcts = self.apply_source_rules(base, self.smap, frame, self.default_region, self.prev_totals['votes'])
 
         names = self.params['names']
         index = prev_pcts.index

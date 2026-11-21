@@ -43,9 +43,11 @@ WEIGHTS_COLUMNS = ['name', 'date', 'pollster_id', 'pollster', 'sponsor', 'sample
 
 
 # Switches of the model given to the `Simulator` and recorded in `meta.correctors`; `swing` is the rule that
-# projects the national shares to the provinces (`'logistic'` since 2026-11-10, `'proportional'` before)
+# projects the national shares to the provinces (`'logistic'` since 2026-11-10, `'proportional'` before);
+# `census` weighs each district by its previous valid votes times the change of its resident census (method 19;
+# on since 2026-11-21, without effect in a scope without `data/census/{scope}.csv`)
 DEFAULT_CORRECTORS = {'house_effects': True, 'dispersion': True, 'regional_noise': True, 'industry_bias': False,
-                      'composition': None, 'swing': 'logistic'}
+                      'composition': None, 'swing': 'logistic', 'census': True}
 
 
 SUMMARY_COLS = ('pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats')

@@ -7,7 +7,7 @@ Usage (from the repository root):
                                     [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 1000] [--seed 42] [--nowcast-only]
                                     [--no-house-effects] [--recompute-ratings | --flat-ratings] [--rating-exponent 1.5] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
                                     [--error-model polls|average] [--drift-scale auto|1.5] [--tail-dof 5]
-                                    [--swing logistic|proportional]
+                                    [--swing logistic|proportional] [--no-census]
                                     [--config backtest/tuning/best.json]
 
 The national scope (`es`) writes to `backtest/results/`; every other scope to `backtest/results/{scope}/`.
@@ -55,6 +55,9 @@ def main():
     parser.add_argument('--swing', choices=['logistic', 'proportional'], default='logistic',
                         help='rule that projects the national shares to the provinces: a common factor on the odds of each '
                              'party (`logistic`, default) or on its shares (`proportional`, the rule used up to 2026-11-10)')
+    parser.add_argument('--no-census', dest='census', action='store_false',
+                        help='weigh each district by its previous valid votes alone, without the change of its resident '
+                             'census (`data/census/{scope}.csv`, method 19; on by default since 2026-11-21)')
     parser.add_argument('--min-events', type=int, default=None, help='featured elections of a regional scope needed to fit the estimators on the scope itself instead of on `es` (M11); by default always `es`, 1 forces the own ones')
     parser.add_argument('--error-model', choices=['polls', 'average'], default='polls',
                         help='terminal error of the simulation: a single poll (`polls`, default) or the poll average '
@@ -97,7 +100,7 @@ def main():
         regional_noise=args.regional_noise, min_events=args.min_events, error_model=args.error_model,
         drift_scale=args.drift_scale, tail_dof=args.tail_dof, config=args.config,
         recompute_ratings=args.recompute_ratings, flat_ratings=args.flat_ratings,
-        rating_exponent=args.rating_exponent, swing=args.swing, out=args.out
+        rating_exponent=args.rating_exponent, swing=args.swing, census=args.census, out=args.out
     )
     print(push_hint(args.out, scopes, default_out))
 
