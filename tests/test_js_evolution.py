@@ -4,6 +4,7 @@ Los módulos de gráficos leen `window.echarts` al cargarse, así que el arnés 
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 
@@ -185,6 +186,17 @@ def test_wire_evolution_switches_metric():
                       'Evolución de las actualizaciones: los escaños de cada partido en cada actualización']
 
 
+def test_change_dates_pick_the_campaign_and_the_call_of_the_key_dates():
+    """La tabla compara con el inicio de la campaña y la convocatoria: las fechas de esos tipos entre las fechas clave."""
+    key_dates = [{'date': '2026-10-05', 'label': 'Convocatoria', 'kind': 'call'},
+                 {'date': '2026-11-01', 'label': 'Debate', 'kind': 'key'},
+                 {'date': '2026-11-13', 'label': 'Campaña', 'kind': 'campaign'}]
+    assert run_js('ew.changeDates(%s)' % json.dumps(key_dates)) == {'campaign': '2026-11-13', 'call': '2026-10-05'}
+    # before the call nothing is compared; other key dates are never a column
+    assert run_js('[ew.changeDates([]), ew.changeDates(undefined), ew.changeDates(%s)]' % json.dumps(key_dates[1:2])) == [
+        {'campaign': None, 'call': None}] * 3
+
+
 def day_runs(field, values, name='VOX'):
     """Runs of consecutive days from 2026-10-05 with `values` of `name` in `field` (None: the party missing)."""
     return [{'run_id': 'r%d' % i, 'run_at': '2026-10-%02dT12:00:00Z' % (5 + i), 'as_of': '2026-10-%02d' % (5 + i),
@@ -245,28 +257,33 @@ def change_runs():
     return runs
 
 
-def changes(runs=None, names=('PP', 'PSOE', 'SUMAR')):
-    return run_js('ch.evolutionChanges(%s, %s, "pct")' % (json.dumps(change_runs() if runs is None else runs), json.dumps(list(names))))
+def changes(runs=None, names=('PP', 'PSOE', 'SUMAR'), **dates):
+    """`evolutionChanges` del voto sobre `runs` (los de `change_runs` si no se dan), con las fechas clave `dates`
+    (`campaign`, `call`)."""
+    return run_js('ch.evolutionChanges(%s, %s, "pct", %s)' % (json.dumps(change_runs() if runs is None else runs),
+                                                             json.dumps(list(names)), json.dumps(dates)))
 
 
-def test_changes_compare_yesterday_a_week_and_the_start():
-    out = changes()
-    # the day ≤ 15 − 7 is the 07: the 08 has no run
-    assert out['days'] == {'last': '2026-10-15', 'previous': '2026-10-14', 'week': '2026-10-07', 'start': '2026-10-05'}
+def test_changes_compare_yesterday_the_campaign_and_the_call():
+    """Tres columnas: el día anterior, el inicio de la campaña y la convocatoria."""
+    out = changes(campaign='2026-10-12', call='2026-10-05')
+    assert out['days'] == {'last': '2026-10-15', 'previous': '2026-10-14', 'campaign': '2026-10-12', 'call': '2026-10-05'}
     assert set(out) == {'days', 'rows'}  # fixed headers (Luis, 2026-11-04): nothing depends on today
     rows = {row['name']: row for row in out['rows']}
     assert [row['name'] for row in out['rows']] == ['PP', 'PSOE', 'SUMAR']
-    # PP 31,9 against 32,0 / 32,4 / 32,7
-    assert rows['PP'] == {'name': 'PP', 'value': 31.9, 'day': -0.1, 'week': -0.5, 'start': -0.8}
+    # PP 31,9 against 32,0 / 32,3 / 32,7
+    assert rows['PP'] == {'name': 'PP', 'value': 31.9, 'day': -0.1, 'campaign': -0.4, 'call': -0.8}
     # PSOE 26,6 against 26,6 (26.55 → 26.58: a drift below the rounding) / 26,5 / 26,4
-    assert rows['PSOE'] == {'name': 'PSOE', 'value': 26.6, 'day': 0, 'week': 0.1, 'start': 0.2}
+    assert rows['PSOE'] == {'name': 'PSOE', 'value': 26.6, 'day': 0, 'campaign': 0.1, 'call': 0.2}
 
 
 def test_changes_missing_name_gives_a_dash():
-    rows = {row['name']: row for row in changes()['rows']}
-    assert rows['SUMAR'] == {'name': 'SUMAR', 'value': 7.2, 'day': 0, 'week': 0.2, 'start': None}  # no SUMAR on the 05
+    """Un partido sin cifra el día de la convocatoria: nulo en los datos y una raya en su celda."""
+    rows = {row['name']: row for row in changes(campaign='2026-10-12', call='2026-10-05')['rows']}
+    # no SUMAR on the 05
+    assert rows['SUMAR'] == {'name': 'SUMAR', 'value': 7.2, 'day': 0, 'campaign': 0.1, 'call': None}
     assert run_js('ch.evolutionChanges([], ["PP"], "pct")') is None
-    html = table_html()
+    html = table_html(campaign='2026-10-12', call='2026-10-05')
     sumar = html[html.index('data-name="SUMAR"'):]
     assert sumar[:sumar.index('</tr>')].endswith('<td><span class="dlt flat">–</span></td>')
 
@@ -274,36 +291,60 @@ def test_changes_missing_name_gives_a_dash():
 def test_changes_with_a_single_day():
     assert changes(runs=change_runs()[:1]) is None
     assert changes(runs=[]) is None
+    assert changes(runs=change_runs()[:1], campaign='2026-10-12', call='2026-10-05') is None
 
 
-def test_changes_week_is_null_without_a_day_a_week_back():
-    out = changes(runs=change_runs()[:3])  # 05, 06, 07: nothing on or before the 30-09
-    assert out['days']['week'] is None and all(row['week'] is None for row in out['rows'])
-    import re
-    heads = re.findall(r'<th[^>]*>([^<]*)</th>', table_html(runs=change_runs()[:3]))
-    assert heads == ['Partido', '7-oct', 'vs 6-oct', 'vs 5-oct']  # no column a week back
+def test_changes_leave_out_a_date_the_runs_do_not_reach():
+    """Sin fecha, antes de que empiece, con la serie empezada después o repetida en otra columna: sin columna."""
+    bare = changes()
+    assert bare['days'] == {'last': '2026-10-15', 'previous': '2026-10-14', 'campaign': None, 'call': None}
+    assert all(row['campaign'] is None and row['call'] is None for row in bare['rows'])
+    # the campaign starts on the last day, or later: two columns
+    assert changes(campaign='2026-10-15', call='2026-10-05')['days']['campaign'] is None
+    late = changes(campaign='2026-10-20', call='2026-10-05')
+    assert late['days']['campaign'] is None and late['days']['call'] == '2026-10-05'
+    assert all(row['campaign'] is None for row in late['rows']) and late['rows'][0]['call'] == -0.8
+    # the series starts after the call
+    assert changes(call='2026-10-01')['days']['call'] is None
+    # the 08 has no run: the reference of a campaign that starts that day is the 07
+    assert changes(campaign='2026-10-08', call='2026-10-05')['days']['campaign'] == '2026-10-07'
+    # the day before is the day of the campaign: one column for both
+    out = changes(campaign='2026-10-14', call='2026-10-05')
+    assert out['days'] == {'last': '2026-10-15', 'previous': '2026-10-14', 'campaign': None, 'call': '2026-10-05'}
+    # the day after the call: the day before is the call
+    first = changes(runs=change_runs()[:2], campaign='2026-10-12', call='2026-10-05')
+    assert first['days'] == {'last': '2026-10-06', 'previous': '2026-10-05', 'campaign': None, 'call': None}
+    heads = re.findall(r'<th[^>]*>([^<]*)</th>', table_html(runs=change_runs()[:2], campaign='2026-10-12', call='2026-10-05'))
+    assert heads == ['Partido', '6-oct', 'vs 5-oct']
 
 
-def table_html(runs=None, field='pct', formatter='fmtPct'):
+def table_html(runs=None, field='pct', formatter='fmtPct', **dates):
+    """`changesTableHtml` de los cambios de `runs` (los de `change_runs` si no se dan) con las fechas clave `dates`."""
     view = {'colors': {'PP': '#1e5aa8', 'PSOE': '#e3001b', 'SUMAR': '#e5007d'}, 'fullnames': {'PP': 'Partido Popular', 'PSOE': 'PSOE', 'SUMAR': 'Sumar'}}
-    return run_js('await (async () => { const f = await import("%s"); return ch.changesTableHtml(ch.evolutionChanges(%s, ["PP", "PSOE", "SUMAR"], "%s"), %s, {field: "%s", formatter: f.%s}); })()'
+    return run_js('await (async () => { const f = await import("%s"); return ch.changesTableHtml(ch.evolutionChanges(%s, ["PP", "PSOE", "SUMAR"], "%s", %s), %s, {field: "%s", formatter: f.%s}); })()'
                   % (pathlib.Path(DIST, 'js', 'format.js').as_uri(), json.dumps(change_runs() if runs is None else runs), field,
-                     json.dumps(view), field, formatter))
+                     json.dumps(dates), json.dumps(view), field, formatter))
 
 
 def test_changes_table_html():
-    import re
-    html = table_html()
+    """Cabeceras con fecha («vs 14-oct»), con lo que es cada una en el título; la columna sin día no sale."""
+    html = table_html(campaign='2026-10-12', call='2026-10-05')
     # Luis, 2026-11-04: the dates as headers, «d-mes», «vs» before those of the changes: the last run, the day
-    # before, a week back (the 07: no run on the 08) and the first run
-    assert re.findall(r'<th[^>]*>([^<]*)</th>', html) == ['Partido', '15-oct', 'vs 14-oct', 'vs 7-oct', 'vs 5-oct']
-    assert 'title="Frente al 14 oct 2026"' in html and 'title="Frente al 7 oct 2026"' in html and 'title="Frente al 5 oct 2026"' in html
+    # before and, since 2026-11-23, the start of the campaign and the call
+    assert re.findall(r'<th[^>]*>([^<]*)</th>', html) == ['Partido', '15-oct', 'vs 14-oct', 'vs 12-oct', 'vs 5-oct']
+    assert 'title="Frente al 14 oct 2026"' in html
+    assert 'title="Frente al 12 oct 2026, inicio de la campaña"' in html
+    assert 'title="Frente al 5 oct 2026, convocatoria"' in html
     # every name of the view, whatever the legend shows (Luis, 2026-11-04)
     assert re.findall(r'data-name="([^"]+)"', html) == ['PP', 'PSOE', 'SUMAR'] and 'hidden' not in html
     pp = html[html.index('data-name="PP"'):]
     pp = pp[:pp.index('</tr>')]
     assert 'title="Partido Popular"' in pp and '<span class="dot" style="background-color: #1e5aa8"></span>PP</span>' in pp
-    assert '<strong>31,9%</strong>' in pp and '<span class="dlt down">▼ 0,5</span>' in pp and '<span class="dlt down">▼ 0,1</span>' in pp
+    assert '<strong>31,9%</strong>' in pp and '<span class="dlt down">▼ 0,4</span>' in pp and '<span class="dlt down">▼ 0,1</span>' in pp
+    assert '<span class="dlt down">▼ 0,8</span>' in pp
+    # before the campaign starts: the day before and the call
+    two = table_html(call='2026-10-05')
+    assert re.findall(r'<th[^>]*>([^<]*)</th>', two) == ['Partido', '15-oct', 'vs 14-oct', 'vs 5-oct']
     seats = table_html(field='seats', formatter='fmtInt')  # whole seats
     assert '<strong>100</strong>' in seats
 
@@ -313,7 +354,7 @@ def test_shown_value_rounds_like_the_formatter_on_block_sums():
     assert run_js('e.shownValue(7.1499999999999995, "pct")') == 7.1
     assert donuts('pct', [7.1, 7.1499999999999995], name='Izquierda') == [False, False]
     rows = run_js('ch.evolutionChanges(%s, ["Izquierda"], "pct").rows' % json.dumps(day_runs('pct', [7.1, 7.1499999999999995], 'Izquierda')))
-    assert rows == [{'name': 'Izquierda', 'value': 7.1, 'day': 0, 'week': None, 'start': 0}]
+    assert rows == [{'name': 'Izquierda', 'value': 7.1, 'day': 0, 'campaign': None, 'call': None}]
 
 
 def test_tooltip_marker_keeps_the_party_colour_on_donuts():

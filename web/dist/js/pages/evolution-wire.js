@@ -100,14 +100,27 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
 const VOTE_ONLY = {pct: {field: 'pct', formatter: fmtPct, total: 100}};
 
 /**
+ * The dates the table of changes compares with (`evolutionChanges`), among the key dates of the election: the start
+ * of its campaign and its call; the other key dates are never a column.
+ *
+ * @param {object[]} [keyDates] key dates of the election, `[{date, label, kind}]`
+ * @returns {{campaign: (string|null), call: (string|null)}} ISO date of each kind, null without it
+ */
+export function changeDates(keyDates) {
+  const dateOf = (kind) => ((keyDates || []).find((entry) => entry.kind === kind) || {}).date || null;
+  return {campaign: dateOf('campaign'), call: dateOf('call')};
+}
+
+/**
  * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the % Voto/Escaños radios
  * (`#evolution-metric`, shown only with more than one metric), the Partidos/Bloques radios (`#evolution-view`, shown
  * only when the scope has blocks), the pill legend (`#evolution-legend`), which selects the names through the hidden
- * ECharts legend, the table of changes (`#evolution-changes`), with every name of the view whatever the legend shows,
- * shown only on demand by its button (`#evolution-changes-toggle`, «Ver los datos» / «Ocultar los datos», hidden with
- * fewer than two days; Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the chart as
- * shown, with the table under it, as a signed image (`share.js`), its file named after the metric
- * (`evolutionFile`). Changing the metric or the view resets the selection.
+ * ECharts legend, the table of changes (`#evolution-changes`), with every name of the view whatever the legend shows
+ * and its changes against the day before, the start of the campaign and the call (`changeDates`), shown only on
+ * demand by its button (`#evolution-changes-toggle`, «Ver los datos» / «Ocultar los datos», hidden with fewer than
+ * two days; Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the chart as shown, with
+ * the table under it, as a signed image (`share.js`), its file named after the metric (`evolutionFile`). Changing
+ * the metric or the view resets the selection.
  *
  * @param {object} initial the page's initial data (`runs`, the history part, `key_dates`, the key dates of the
  *   election as `[{date, label, kind}]`, and `inks`, the text colour over the colour of each name for the pills)
@@ -127,7 +140,8 @@ export function wireEvolution(initial, catalog, {parties = null, metrics = VOTE_
   const viewSet = document.getElementById('evolution-view');
   const metricSet = document.getElementById('evolution-metric');
   const runs = (initial.runs || {}).runs || [];
-  // the key dates of the election (its call, the start of its campaign…): the mark lines of the chart
+  // the key dates of the election (its call, the start of its campaign…): the mark lines of the chart, and the two
+  // dates its table of changes compares with
   const keyDates = initial.key_dates || [];
   const keys = Object.keys(metrics);
   const cache = {};
@@ -163,7 +177,7 @@ export function wireEvolution(initial, catalog, {parties = null, metrics = VOTE_
     }
     const current = viewsOf(state.metric)[state.view];
     const {field, formatter} = evolutionMetric(metrics, state.metric);
-    const changes = evolutionChanges(current.runs, current.parties, field);
+    const changes = evolutionChanges(current.runs, current.parties, field, changeDates(keyDates));
     changesEl.innerHTML = changes ? changesTableHtml(changes, current, {field, formatter}) : '';
     changesEl.hidden = !changes || !state.listOpen;
     if (toggleEl) {
