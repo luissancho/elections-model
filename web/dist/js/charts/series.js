@@ -143,6 +143,44 @@ function markAt(time, label, align = 'center') {
 }
 
 /**
+ * Vertical mark line of a date with its label inside the plot, written along the line from the top: never over the
+ * dates of the axis, and two dates a few weeks apart do not cover each other. The key dates of the election
+ * («Convocatoria», «Campaña»…) and the entry of a party in the polls are drawn with it, in the average and in the
+ * evolution.
+ *
+ * @param {{date: string, label: string}} entry the ISO date and its label
+ * @param {string} [position='insideEndTop'] side of the line the label is written on (`insideEndBottom`: the other)
+ * @returns {object} the item of the `markLine` data
+ */
+export function alongMark({date, label}, position = 'insideEndTop') {
+  return {xAxis: dayTime(date), label: {formatter: label, position, color: THEME.markColor}};
+}
+
+/**
+ * The mark lines of a chart on their own empty series, so hiding a party never hides them: silent, dashed, and kept
+ * as they are when another series is hovered.
+ *
+ * @param {object[]} data items of the `markLine` data (`markAt`, `alongMark`)
+ * @returns {object} the ECharts series, named `marks`
+ */
+export function marksSeries(data) {
+  return {
+    type: 'line',
+    name: 'marks',
+    data: [],
+    silent: true,
+    ...KEEP_LINE_ON_BLUR,
+    markLine: {
+      silent: true,
+      symbol: 'none',
+      lineStyle: {type: 'dashed', color: THEME.markColor},
+      blur: {lineStyle: {opacity: 1}, label: {opacity: 1}},
+      data,
+    },
+  };
+}
+
+/**
  * The 95 % range of a party at the election as a vertical bar from `lo` to `hi` at `time`, with a white point at
  * `mean`: a `custom` series named after the party (the legend toggles it with its line). Hovering its point brings
  * the bar to the front at full opacity while the other bars blur, so overlapping ranges can still be read one by
@@ -282,9 +320,9 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   with the result and the mark lines; `promedio`, the lines, projection and range bars alone, without the points)
  *   and `breakdown` (the block view: `{members, values, colors}`, the parties of each block, the series of each
  *   party and its colour, which break a day of a block line down into its parties; null for none) and `marks`
- *   (`[{date, label}]`: more dashed mark lines, the entry of a party in the polls in the block view, with their
- *   label inside the plot along the line, so that it covers neither the axis dates nor another entry; none by
- *   default)
+ *   (`[{date, label}]`: more dashed mark lines, the key dates of the election and, in the block view, the entry
+ *   of a party in the polls, with their label inside the plot along the line, so that it covers neither the axis
+ *   dates nor another mark; none by default)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
@@ -392,27 +430,9 @@ export function seriesOption({
   } else if (withProjection && when) {
     marks.push(markAt(dayTime(when), 'Elección', 'left'));
   }
-  for (const entry of entries || []) {
-    const mark = markAt(dayTime(entry.date), entry.label);
-    // inside the plot, written along its line from the top: never over the dates of the axis, and two entries a
-    // few weeks apart (UP and SALF on a phone) do not cover each other
-    marks.push({...mark, label: {...mark.label, position: 'insideEndTop', align: undefined}});
-  }
-  // Mark lines on their own empty series, so hiding a party never hides them.
-  const markSeries = {
-    type: 'line',
-    name: 'marks',
-    data: [],
-    silent: true,
-    ...KEEP_LINE_ON_BLUR,
-    markLine: {
-      silent: true,
-      symbol: 'none',
-      lineStyle: {type: 'dashed', color: THEME.markColor},
-      blur: {lineStyle: {opacity: 1}, label: {opacity: 1}},
-      data: marks,
-    },
-  };
+  // the key dates of the election and the entries of the parties: inside the plot, along their lines (`alongMark`)
+  marks.push(...(entries || []).map((entry) => alongMark(entry)));
+  const markSeries = marksSeries(marks);
 
   const axisDates = axisDatesOf(series, projection, result);
   const zoom = seriesWindow(windowChoice, axisDates, anchor);

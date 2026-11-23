@@ -5,7 +5,7 @@
 // and a vertical axis fitted to the names shown with the rule of the average (ticks every `AXIS_STEP` points on
 // multiples of it; every `SEATS_STEP` seats, Luis 2026-10-30), so marking a single party zooms on its changes.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
-import {AXIS_STEP, axisBounds, axisPctLabel, dayTime, isoDay} from './series.js';
+import {AXIS_STEP, alongMark, axisBounds, axisPctLabel, dayTime, isoDay, marksSeries} from './series.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtBadge, fmtDate, fmtDateShort, fmtPct} from '../format.js';
 
@@ -98,18 +98,20 @@ export function evolutionPoints(runs, parties, field = 'pct') {
 /**
  * ECharts option of the evolution: a line per name over the daily runs, hollow where the figure shown
  * (`shownValue`) changed from the previous point of the name, an axis tooltip per day with the arrow of each change
- * and the slider of the zoom under the chart.
+ * and the slider of the zoom under the chart. The key dates of the election (`marks`) are dashed vertical lines
+ * with their label along the line, on a series of their own after those of the names.
  *
  * @param {object} data `runs` (daily runs, `dailyRuns`), `parties` (names, legend order), `selected` (names shown
  *   at first; all when null), `colors` ({name: colour}), `fullnames` ({name: full name}, for the tooltip),
  *   `field` (party field drawn: `pct` or `seats`), `formatter` (value → text), `legend` (`'hidden'`: no legend
  *   drawn but a selectable one kept, for the HTML pill legend that drives it with `legendToggleSelect`; `true`:
- *   the legend drawn)
+ *   the legend drawn) and `marks` (`[{date, label}]`, the key dates of the election: its call, the start of its
+ *   campaign…; none by default)
  * @returns {object} the ECharts option
  */
 export function evolutionOption({
   runs = [], parties = [], selected = null, colors = {}, fullnames = {}, field = 'pct', formatter = fmtPct,
-  legend = 'hidden',
+  legend = 'hidden', marks = [],
 } = {}) {
   const colorOf = (name) => colors[name] || OTHERS_COLOR;
   const digits = FIELD_DIGITS[field] ?? 0;
@@ -139,6 +141,11 @@ export function evolutionOption({
   }));
   const hidden = legend === 'hidden';
   const step = field === 'seats' ? SEATS_STEP : AXIS_STEP;
+  // a mark on the first day of the runs (the call, when the runs start with it) sits on the left edge of the plot:
+  // its label goes on the other side of the line, inside the plot, off the labels of the axis
+  const firstDay = runs.length ? runDay(runs[0]) : null;
+  const markLines = (marks || [])
+    .map((entry) => alongMark(entry, entry.date === firstDay ? 'insideEndBottom' : undefined));
 
   /** Box of a day: its date and every name shown, highest first, with the arrow of its change when it changed. */
   function tooltip(params) {
@@ -199,14 +206,14 @@ export function evolutionOption({
       filterMode: 'filter',
       labelFormatter: (value) => fmtDate(isoDay(value)),
     }],
-    series,
+    series: markLines.length ? [...series, marksSeries(markLines)] : series,
   };
 }
 
 /**
  * Option of the image of the evolution (`share.js`): the chart as shown, with a static legend of the names shown
- * only (the others are left out) and, instead of the slider, an invisible zoom at `zoom` (`chartZoom` of the
- * chart on screen), so the image keeps the days and the names of the screen.
+ * only (the others are left out; the mark lines of the key dates stay) and, instead of the slider, an invisible
+ * zoom at `zoom` (`chartZoom` of the chart on screen), so the image keeps the days and the names of the screen.
  *
  * @param {object} data the arguments of `evolutionOption`
  * @param {object|null} [zoom=null] `{startValue, endValue}` of the chart on screen (null: every day)
@@ -221,7 +228,7 @@ export function evolutionImageOption(data, zoom = null) {
     legend: {show: true, type: 'plain', selectedMode: false, top: 0, data: shown},
     grid: {...option.grid, top: 40, bottom: 8},
     dataZoom: [{type: 'inside', filterMode: 'filter', disabled: true, ...(zoom || {})}],
-    series: option.series.filter((entry) => shown.includes(entry.name)),
+    series: option.series.filter((entry) => entry.name === 'marks' || shown.includes(entry.name)),
   };
 }
 

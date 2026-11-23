@@ -109,8 +109,8 @@ const VOTE_ONLY = {pct: {field: 'pct', formatter: fmtPct, total: 100}};
  * shown, with the table under it, as a signed image (`share.js`), its file named after the metric
  * (`evolutionFile`). Changing the metric or the view resets the selection.
  *
- * @param {object} initial the page's initial data (`runs`, the history part, and `inks`, the text colour over
- *   the colour of each name for the pills)
+ * @param {object} initial the page's initial data (`runs`, the history part, `key_dates`, the key dates of the
+ *   election as `[{date, label, kind}]`, and `inks`, the text colour over the colour of each name for the pills)
  * @param {Catalog} catalog party catalogue of the run
  * @param {object} [options] `parties` (party names, legend order: the list of the page) and `metrics`
  *   (`{key: {field, formatter, total}}`: `field` is the party field drawn, `formatter` value → text and `total` what
@@ -127,6 +127,8 @@ export function wireEvolution(initial, catalog, {parties = null, metrics = VOTE_
   const viewSet = document.getElementById('evolution-view');
   const metricSet = document.getElementById('evolution-metric');
   const runs = (initial.runs || {}).runs || [];
+  // the key dates of the election (its call, the start of its campaign…): the mark lines of the chart
+  const keyDates = initial.key_dates || [];
   const keys = Object.keys(metrics);
   const cache = {};
   /** The views of a metric, built once. */
@@ -150,6 +152,7 @@ export function wireEvolution(initial, catalog, {parties = null, metrics = VOTE_
       field,
       formatter,
       legend: 'hidden',
+      marks: keyDates,
     };
   }
 

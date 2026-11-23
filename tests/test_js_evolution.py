@@ -116,6 +116,29 @@ def test_evolution_image_option_shows_a_plain_legend_of_the_names_shown_and_free
     assert img['grid']['bottom'] == 8 and img['grid']['top'] == 40
 
 
+MARKS = [{'date': '2026-10-05', 'label': 'Convocatoria', 'kind': 'call'},
+         {'date': '2026-10-07', 'label': 'Campaña', 'kind': 'campaign'}]
+
+
+def test_evolution_option_draws_the_key_dates_as_mark_lines():
+    """Las fechas clave son líneas discontinuas de una serie aparte, que la leyenda no toca; sin ellas, ninguna."""
+    drawn = option(marks=MARKS)
+    marks = drawn['series'][-1]
+    assert marks['name'] == 'marks' and 'marks' not in drawn['legend']['data'] and marks['data'] == []
+    assert [m['label']['formatter'] for m in marks['markLine']['data']] == ['Convocatoria', 'Campaña']
+    # the mark on the first day of the runs writes its label on the plot side of its line, off the axis
+    assert [m['label']['position'] for m in marks['markLine']['data']] == ['insideEndBottom', 'insideEndTop']
+    assert all(entry['name'] != 'marks' for entry in option()['series'])
+    assert [entry['name'] for entry in drawn['series'][:-1]] == [entry['name'] for entry in option()['series']]
+
+
+def test_evolution_image_keeps_the_marks():
+    """La imagen deja fuera los partidos apagados, pero no las marcas."""
+    data = dict(DATA, marks=MARKS)
+    image = run_js('e.evolutionImageOption({...%s, runs: e.dailyRuns(runs)})' % json.dumps(data))
+    assert [entry['name'] for entry in image['series']] == ['PP', 'PSOE', 'marks']
+
+
 def test_evolution_views_take_the_parties_given_in_their_order_with_the_main_ones_by_default():
     # the same names and order as the legend of the average (Luis, 2026-10-30): the list of the page, as given
     views = run_js('ew.evolutionViews(runs, new c.Catalog(%s), {parties: ["PP", "VOX", "PSOE"]})' % (json.dumps(META)))

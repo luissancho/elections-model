@@ -120,6 +120,7 @@ function wireHouse(initial, catalog) {
       legend: 'hidden',
       layers: state.layers,
       breakdown: current.breakdown || null,
+      marks: current.marks || [],
     };
   }
 

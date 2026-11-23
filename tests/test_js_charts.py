@@ -604,6 +604,37 @@ def test_series_views_mark_the_entries_only_in_the_blocks_view():
     assert run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(bare), json.dumps(initial)))['bloques']['marks'] == []
 
 
+def test_series_views_carry_the_key_dates_in_both_views():
+    """Las fechas clave de la elección van en las dos vistas; las entradas de partidos, sólo en Bloques, detrás."""
+    initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'PSOE'], 'mean': {'PP': [30], 'PSOE': [28]},
+                          'lo': {}, 'hi': {}, 'first_polls': {'SALF': '2024-06-06'}},
+               'polls': {'parties': [], 'polls': []}, 'projection': None,
+               'key_dates': [{'date': '2026-10-05', 'label': 'Convocatoria', 'kind': 'call'},
+                             {'date': '2026-11-13', 'label': 'Campaña', 'kind': 'campaign'}],
+               'catalog': {'parties': [{'name': n, 'color': '#000000', 'fullname': n, 'block': None} for n in ('PP', 'PSOE')],
+                           'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}}}
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
+    key = [{'date': '2026-10-05', 'label': 'Convocatoria'}, {'date': '2026-11-13', 'label': 'Campaña'}]
+    assert views['partidos']['marks'] == key
+    assert views['bloques']['marks'] == key + [{'date': '2024-06-06', 'label': 'Entra SALF'}]
+
+
+def test_series_marks_keep_their_shape_through_the_shared_builders():
+    """`alongMark` y `marksSeries` dan lo mismo que `seriesOption` dibujaba: la etiqueta a lo largo de la línea."""
+    mark = run_js("s.alongMark({date: '2026-10-05', label: 'Convocatoria'})")
+    assert mark['label'] == {'formatter': 'Convocatoria', 'position': 'insideEndTop', 'color': '#555'}
+    assert mark['xAxis'] == run_js("s.dayTime('2026-10-05')")
+    assert run_js("s.alongMark({date: '2026-10-05', label: 'X'}, 'insideEndBottom')")['label']['position'] == 'insideEndBottom'
+    series = run_js("s.marksSeries([s.alongMark({date: '2026-10-05', label: 'Convocatoria'})])")
+    assert series['name'] == 'marks' and series['data'] == [] and series['silent'] is True
+    assert series['markLine']['lineStyle'] == {'type': 'dashed', 'color': '#555'} and len(series['markLine']['data']) == 1
+    # the option of the average builds its marks with them: the entry of a party, as before
+    args = BREAKDOWN_ARGS.replace("breakdown: {", "marks: [{date: '2026-10-01', label: 'Entra SALF'}], breakdown: {")
+    drawn = next(x for x in run_js('s.seriesOption(%s)' % args)['series'] if x['name'] == 'marks')
+    assert drawn['markLine']['data'][-1] == run_js("s.alongMark({date: '2026-10-01', label: 'Entra SALF'})")
+    assert {k: v for k, v in drawn.items() if k != 'markLine'} == {k: v for k, v in series.items() if k != 'markLine'}
+
+
 def test_ridge_rows_are_taller_on_desktop():
     assert run_js('r.ridgeRowHeight(1440)') == 110 and run_js('r.ridgeRowHeight(720)') == 110
     assert run_js('r.ridgeRowHeight(719)') == 64 and run_js('r.ridgeRowHeight(390)') == 64
