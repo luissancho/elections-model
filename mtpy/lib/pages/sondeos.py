@@ -9,7 +9,8 @@ from typing import Optional
 from ...core.api import HttpError
 from ..webapi import site
 from .casas import mtype_label
-from .common import block_color, bundle_part, common_context, ink_color, parse_state, part, subpage_event_bar
+from .common import (block_color, bundle_part, common_context, ink_color, parse_state, part, run_key_dates,
+                     subpage_event_bar)
 from .elecciones import chart_parties
 from .filters import DASH, MONTHS, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num, fmt_pct, gradient
 from .previews import PREVIEW_ROWS, preview_change, preview_version, with_figures
@@ -841,8 +842,9 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         (``weight_card``, its ``factors`` with an empty ``unit`` and no ``color`` for ``m.kpis``), ``weights_date``
         (the day of the ``weights`` part, ``None`` without it), ``sheet`` (``sheet_rows``), ``back_href`` (the polls
         table of the event page), ``detail_href``, ``image_file`` and ``image_sign`` (the image of the card),
-        ``chart_file`` (the image of the chart of the house), ``blocks`` (the names of ``meta.bmaps.blocks``) and
-        ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``polls`` (``chart_polls`` with the polls of
+        ``chart_file`` (the image of the chart of the house), ``blocks`` (the names of ``meta.bmaps.blocks``),
+        ``key_dates`` (``run_key_dates``: the key dates of the election, the marks of the chart of the house) and
+        ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``key_dates``, ``polls`` (``chart_polls`` with the polls of
         the house only), ``projection`` and ``vote`` (the parts of the mode), ``catalog`` (``parties`` and ``bmaps``,
         as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``, ``sponsor``, ``pollster`` and the
         percentages), ``previous`` (``values``, the shares, and ``seats``, the ranges, of the previous delivery, or
@@ -906,12 +908,14 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         'image_sign': '{} · {}'.format(context['site_host'], context['author_handle']),
         'chart_file': 'demoscopio-encuestadora-{}-{}-{}.png'.format(scope, house_slug, date),
         'blocks': blocks,
+        'key_dates': run_key_dates(scope, meta),
         'preview': _context_preview(context, found),
     })
     context['initial'] = {
         'state': full,
         'meta': meta,
         'series': round_series(series),
+        'key_dates': context['key_dates'],
         'polls': chart_polls(house_polls, scope),
         'projection': part(scope, run, 'projection', mode=mode),
         'vote': part(scope, run, 'vote', mode=mode),

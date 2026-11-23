@@ -32,7 +32,7 @@ from .common import (EVENT_SECTIONS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OG_I
                      chamber_text, common_context, days_left, days_text, default_mode, environment, event_info,
                      event_phrase, event_query, event_title, hemicycle_order, ink_color, key_dates, og_image_url,
                      og_image_version, parse_state, part, parties_catalogue, published_scopes, resolve_event_scope,
-                     resolve_scope, run_horizon, scope_query,
+                     resolve_scope, run_horizon, run_key_dates, scope_query,
                      subpage_event_bar, tabbar, title_of)
 from . import images, previews, structured
 from .crawlers import CRAWLERS_TTL, robots_txt, sitemap_entries, sitemap_xml

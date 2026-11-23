@@ -14,7 +14,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
-from ..webapi import check_mode, check_run, check_scope, scope_codes, settings, site
+from ..webapi import check_mode, check_run, check_scope, event_params, scope_codes, settings, site
 from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, gradient,
                       fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around,
                       shade_scale, snippet)
@@ -631,6 +631,25 @@ def key_dates(params: dict) -> list:
 
     # the sort is stable: on the same day, the order above
     return sorted(marks, key=lambda mark: mark['date'])
+
+
+def run_key_dates(scope: str, meta: dict) -> list:
+    """
+    Key dates of the election a run forecasts.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    meta : dict
+        Meta part of the run (``event_date``, an ISO date, with or without the time).
+
+    Returns
+    -------
+    list of dict
+        ``key_dates`` of the entry of the election in ``data/params.json``; empty without the date or the entry.
+    """
+    return key_dates(event_params(scope, str(meta.get('event_date') or '')[:10]))
 
 
 def event_title(scope: str, scopes: list) -> str:

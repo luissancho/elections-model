@@ -105,7 +105,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
 def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href', 'fan',
-                         'districts', 'scenario', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
+                         'districts', 'scenario', 'runs', 'key_dates', 'cards', 'inks', 'deltas', 'catalog'}
     assert data['catalog'] == {'parties': [dict(pages.catalog(data['meta'])['PP'], name='PP')], 'bmaps': data['meta']['bmaps']}
     assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}  # a 52 días: Elección
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
@@ -1057,11 +1057,90 @@ def test_event_page_result_rows_carry_the_probabilities():
     assert {row['name']: row['p_majority'] for row in blocks} == {'Izquierda': 0.2, 'Derecha': 0.2, 'Otros': None}
 
 
+CALL_29N = [{'date': '2026-10-05', 'label': 'Convocatoria', 'kind': 'call'},
+            {'date': '2026-11-13', 'label': 'Campaña', 'kind': 'campaign'}]
+KEY_DATES_SENTENCE = ('Las líneas verticales discontinuas marcan las fechas clave de la elección, como la convocatoria '
+                      'y el inicio de la campaña.')
+
+
+def test_event_page_passes_the_key_dates_of_its_election(api):
+    """El ámbito lleva la convocatoria y el inicio de la campaña del 29-N, y la tarjeta de la evolución."""
+    body = call(api, '/es', query='mode=forecast')[2]
+    assert initial(body)['key_dates'] == CALL_29N
+    page = ' '.join(html(body).split())
+    assert 'id="evolution-chart"' in page and 'frente al día anterior, al inicio de la campaña' in page
+    # the three charts with marks say what the dashed lines are: the average, the evolution and the house
+    assert page.count(KEY_DATES_SENTENCE) == 3
+    for start, end in (('id="series-chart"', 'id="resultados"'), ('id="evolution-chart"', 'id="pollster"'),
+                       ('id="pollster-chart"', 'id="tabla"')):
+        assert KEY_DATES_SENTENCE in page[page.index(start):page.index(end)]
+    assert_public_wording(html(body), '/es')
+
+
+def test_event_page_without_a_call_has_no_evolution_card(api, fresh_app):
+    """Sin convocatoria en params.json no hay tarjeta de la evolución; la sección sigue con la de la encuestadora."""
+    write_far_bundle(fresh_app.fs)
+    body = call(api, '/es')[2]
+    page = html(body)
+    assert initial(body)['key_dates'] == [] and 'id="evolution-chart"' not in page and 'id="evolution"' not in page
+    assert 'id="pollster-chart"' in page and '<section class="event-section" id="evolucion">' in page
+    assert 'href="#evolucion"' in page and 'fechas clave' not in page
+
+
+def without_polls(monkeypatch):
+    """La página del ámbito sin la parte `polls`: sin la tabla de sondeos ni la tarjeta de la encuestadora."""
+    from mtpy.lib.pages import promedios
+    real = promedios.bundle_part
+    monkeypatch.setattr(promedios, 'bundle_part',
+                        lambda read, scope, run, name: None if name == 'polls' else real(read, scope, run, name))
+
+
+def test_event_page_with_a_call_and_no_polls_keeps_the_evolution_section(api, monkeypatch):
+    """Convocada y sin sondeos: la tarjeta de la evolución sostiene la sección sin la de la encuestadora."""
+    without_polls(monkeypatch)
+    page = html(call(api, '/es')[2])
+    assert 'id="evolucion"' in page and 'href="#evolucion"' in page and 'id="evolution-chart"' in page
+    assert 'id="pollster-chart"' not in page
+
+
+def test_event_page_without_a_call_nor_polls_has_no_evolution_section(api, fresh_app, monkeypatch):
+    """Sin convocatoria ni sondeos, la sección de la evolución se queda vacía: ni se pinta ni sale en el índice."""
+    without_polls(monkeypatch)
+    write_far_bundle(fresh_app.fs)
+    page = html(call(api, '/es')[2])
+    assert 'id="evolucion"' not in page and 'href="#evolucion"' not in page and 'id="evolution-chart"' not in page
+    assert 'id="pollster-chart"' not in page and 'href="#tabla"' in page and 'href="#promedio"' in page
+
+
+def test_past_election_passes_its_key_dates(events_site):
+    """El detalle de una elección pasada lleva sus fechas clave, y su gráfico dice qué son las líneas."""
+    body = call(events_site, '/elecciones/es/generales/2023-07')[2]
+    data = initial(body)
+    assert [(entry['kind'], entry['date']) for entry in data['key_dates']] == [('call', '2023-05-29'),
+                                                                               ('campaign', '2023-07-07')]
+    assert ' '.join(html(body).split()).count(KEY_DATES_SENTENCE) == 1
+
+
+def test_past_election_without_dates_has_no_key_dates(events_site, monkeypatch):
+    """Una elección sin `dates` (las anteriores a 1994) se pinta sin marcas."""
+    from mtpy.lib.pages import elecciones
+    monkeypatch.setattr(elecciones, 'event_params', lambda scope, date: {})
+    body = call(events_site, '/elecciones/es/generales/2023-07')[2]
+    assert initial(body)['key_dates'] == [] and 'fechas clave' not in html(body)
+
+
+def test_past_election_without_the_series_does_not_explain_the_marks(events_site):
+    """Sin la serie publicada no hay gráfico: las fechas viajan, pero el texto no habla de líneas que no se ven."""
+    body = call(events_site, '/elecciones/es/generales/2019-11')[2]
+    assert [entry['kind'] for entry in initial(body)['key_dates']] == ['call', 'campaign']
+    assert 'id="series-chart"' not in html(body) and 'fechas clave' not in html(body)
+
+
 def test_event_page_initial_keys(api):
     body = call(api, '/es', query='mode=forecast')[2]
     data = initial(body)
     assert list(data) == ['state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href',
-                          'fan', 'districts', 'scenario', 'runs', 'cards', 'deltas', 'catalog', 'inks']
+                          'fan', 'districts', 'scenario', 'runs', 'key_dates', 'cards', 'deltas', 'catalog', 'inks']
     assert 'dist' not in data and data['dist_href'] == '/api/v1/forecast/es/forecast/dist?run=' + RUN
     assert data['districts']['regions'][0]['id'] == 28 and data['fan'] == fixture_data('fan')
     assert 'PP' in data['inks'] and 'Derecha' in data['inks']
@@ -1243,7 +1322,10 @@ def test_evolution_cards_share_the_markup_and_explain_the_revision(api):
             assert 'id="evolution-legend"' in card and '<div class="chart chart-tall" id="evolution-chart"' in page
             text = re.sub(r'\s+', ' ', page[page.index('id="evolution-chart"'):])
             text = text[:text.index('</section>')]
-            assert 'retrospectiva' not in text and 'cambió' in text and 'hace una semana' in text and 'su fecha' in text
+            assert 'retrospectiva' not in text and 'cambió' in text and 'su fecha' in text
+            assert ('frente al día anterior, al inicio de la campaña (cuando ya ha empezado) y a la convocatoria, cada '
+                    'columna con su fecha') in text
+            assert 'hace una semana' not in text and 'primer día de la serie' not in text
             assert 'todos los partidos' in text and 'marcados en la leyenda' in text and 'Sólo muestra' not in text
             # Luis, 2026-11-04: the table only on demand, behind a «Ver los datos» button the JS shows
             assert ('<button type="button" class="more" id="evolution-changes-toggle" aria-controls="evolution-changes" '
@@ -1348,7 +1430,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert re.search(r'<div class="series-controls" id="pollster-controls" hidden>.*?<label>Encuestadora', page, re.S)
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'dist_href', 'fan',
-                         'districts', 'scenario', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
+                         'districts', 'scenario', 'runs', 'key_dates', 'cards', 'inks', 'deltas', 'catalog'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
     assert 'pollster_id' in data['polls']['polls'][0]
 
@@ -2344,7 +2426,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
         ('Izquierda', '31,4%', '150'), ('Derecha', '45,5%', '200'), ('Otros', '23,1%', '0')]
     data = initial(body)
     assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls',
-                         'series', 'result', 'model_last', 'inks', 'model_point'}
+                         'series', 'result', 'model_last', 'inks', 'model_point', 'key_dates'}
     assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
     assert data['last'][0] == {'pollster': 'GAD3', 'pollster_id': 2, 'days': 7, 'sample_size': 3000, 'error_avg': 0.99,
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
@@ -7833,8 +7915,12 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert '/dist/js/pages/sondeo.js' in page  # the module that draws the charts
     assert_public_wording(page, 'sondeo')
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote', 'catalog', 'inks', 'poll', 'previous', 'seats',
-                         'n_seats', 'majority'}
+    assert set(data) == {'state', 'meta', 'series', 'key_dates', 'polls', 'projection', 'vote', 'catalog', 'inks',
+                         'poll', 'previous', 'seats', 'n_seats', 'majority'}
+    # the key dates of the election of the run, the marks of the chart of the house, and the sentence that reads them
+    assert data['key_dates'] == CALL_29N
+    house = ' '.join(page[page.index('id="poll-house-chart"'):page.index('id="closing"')].split())
+    assert KEY_DATES_SENTENCE in house
     assert data['previous'] == {'values': {'PP': 32.1}, 'seats': {'PP': [146, 148]}}
     assert [p['date'] for p in data['polls']['polls']] == ['2026-10-05', '2026-09-24', '2026-10-03', '2026-09-28']  # only the house's polls, in the order of the part
     assert data['poll']['PP'] == 33.5 and data['seats'] == {'PP': [150, 152]}

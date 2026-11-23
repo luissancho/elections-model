@@ -9,7 +9,8 @@ from typing import Optional
 
 from .. import bundle
 from ..webapi import site
-from .common import OTHERS_COLOR, REST_BLOCK, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
+from .common import (OTHERS_COLOR, REST_BLOCK, Catalog, api_url, block_color, bundle_part, common_context, ink_color,
+                     part, run_key_dates)
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
                       fmt_prob, fmt_range, gradient)
 from .slugs import poll_detail_href, pollster_href
@@ -770,8 +771,11 @@ def promedios_context(state: dict, region=None) -> dict:
     -------
     dict
         ``common_context`` of an event page, its ``event_bar['sections']`` without ``escanos`` when the run has
-        neither the card «Escaños que bailan» (``seat_odds``) nor districts (``tabla`` stays without polls: it also
-        holds the fan and the downloads), plus the keys of ``seats_context`` (but ``initial_extra``), ``headline`` (the headline of the mode), ``result_rows`` and ``block_result_rows`` (the
+        neither the card «Escaños que bailan» (``seat_odds``) nor districts and without ``evolucion`` when the page
+        has neither of its two cards (``tabla`` stays without polls: it also holds the fan and the downloads),
+        ``key_dates`` (``run_key_dates``: the key dates of the election, the marks of the time charts),
+        ``evolution`` (whether the election is called: the card of the evolution of the updates is only drawn then,
+        its table compares with the call and the start of the campaign), plus the keys of ``seats_context`` (but ``initial_extra``), ``headline`` (the headline of the mode), ``result_rows`` and ``block_result_rows`` (the
         one results table of the summary, with its probabilities and its differences against the last election),
         ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and
         ``results_date`` (of the last election with results, for the deltas; ``None`` without one),
@@ -782,7 +786,7 @@ def promedios_context(state: dict, region=None) -> dict:
         (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered, sorted and
         paginated in the browser), ``projection``, ``vote``, ``summary``, the ``initial_extra`` of the seats
         (``dist_href``, ``fan``, ``districts``, ``scenario``: the simulations themselves are asked for to the API),
-        ``runs``, ``cards`` (name and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``,
+        ``runs``, ``key_dates``, ``cards`` (name and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``,
         for the hemicycle), ``catalog`` (``parties``: the run's parties, those of the polls table and those of the
         last election, ``chart_parties``, with the entries of the page catalogue; ``bmaps``: those of the run; the
         browser's ``Catalog``) and ``inks`` (the ink over the colour of every party of the run and of the series and
@@ -839,9 +843,19 @@ def promedios_context(state: dict, region=None) -> dict:
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)
     context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
+    # the key dates of the election, the marks of the time charts; the evolution of the updates compares with them, so
+    # its card waits for the call (Luis, 2026-11-23)
+    dates = run_key_dates(scope, meta)
+    context['key_dates'] = dates
+    context['evolution'] = any(entry['kind'] == 'call' for entry in dates)
     # the index offers only the sections the page renders: all but the seats by district without the card «Escaños que
-    # bailan» nor districts (the table section always holds the fan and the downloads)
+    # bailan» nor districts (the table section always holds the fan and the downloads), and but the evolution without
+    # its two cards (the evolution of the updates and the house against the average)
     missing = {'escanos'} if not context['seat_odds'] and not context['district_table'] else set()
+
+    if not context['evolution'] and not context['pollsters']:
+        missing.add('evolucion')
+
     context['event_bar'] = dict(context['event_bar'], sections=[
         entry for entry in context['event_bar']['sections'] if entry['id'] not in missing])
     run_parties = [party['name'] for party in meta.get('parties') or []]
@@ -857,6 +871,7 @@ def promedios_context(state: dict, region=None) -> dict:
         'summary': summary,
         **extra,
         'runs': bundle.loads(site().history(scope))['data'],
+        'key_dates': dates,
         'cards': [{'name': card['name'], 'color': card['color']} for card in context['cards']],
         'deltas': seat_deltas(summary, meta, parties, previous),
         # the browser's catalogue: the run's parties, those of the polls table and those of the last election, with

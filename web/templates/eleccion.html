@@ -161,6 +161,11 @@
           la elección, es el resultado oficial de cada partido. El eje vertical no empieza en cero: se ajusta a la
           ventana y a los partidos visibles, con marcas de 5 en 5 puntos y la misma escala con Sondeos, Promedio o
           Ambos.
+          {#- only with the chart: without the series published the card is a notice -#}
+          {% if key_dates and has_series %}
+          Las líneas verticales discontinuas marcan las fechas clave de la elección, como la convocatoria y el
+          inicio de la campaña.
+          {% endif %}
         </p>
         <p>
           El hueco entre el final de la línea y el resultado es la veda: la línea se congeló a {{ series_horizon|int }}
