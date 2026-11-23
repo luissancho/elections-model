@@ -844,13 +844,14 @@ def sondeo_context(state: dict, date: str, pollster: str, sponsor: Optional[str]
         table of the event page), ``detail_href``, ``image_file`` and ``image_sign`` (the image of the card),
         ``chart_file`` (the image of the chart of the house), ``blocks`` (the names of ``meta.bmaps.blocks``),
         ``key_dates`` (``run_key_dates``: the key dates of the election, the marks of the chart of the house) and
-        ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``key_dates``, ``polls`` (``chart_polls`` with the polls of
-        the house only), ``projection`` and ``vote`` (the parts of the mode), ``catalog`` (``parties`` and ``bmaps``,
-        as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``, ``sponsor``, ``pollster`` and the
-        percentages), ``previous`` (``values``, the shares, and ``seats``, the ranges, of the previous delivery, or
-        ``None``), ``seats`` (``None`` without them), ``n_seats`` and ``majority``. The card of the poll draws the poll
-        and its change against the previous delivery, never the average (Luis, 2026-11-09). And ``preview``
-        (``preview_of``): what the image of its link previews says, in the run of the page.
+        ``initial``: ``state``, ``meta``, ``series`` (``round_series``), ``key_dates``, ``polls`` (``chart_polls``
+        with the polls of the house only), ``projection`` and ``vote`` (the parts of the mode), ``catalog``
+        (``parties`` and ``bmaps``, as on the event page), ``inks``, ``poll`` (``date``, ``pollster_id``,
+        ``sponsor``, ``pollster`` and the percentages), ``previous`` (``values``, the shares, and ``seats``, the
+        ranges, of the previous delivery, or ``None``), ``seats`` (``None`` without them), ``n_seats`` and
+        ``majority``. The card of the poll draws the poll and its change against the previous delivery, never the
+        average (Luis, 2026-11-09). And ``preview`` (``preview_of``): what the image of its link previews says, in
+        the run of the page.
 
     Raises
     ------

@@ -227,11 +227,13 @@ def test_params_dates_are_dates_in_their_order():
             assert order == sorted(order) and len(set(order)) == len(order), (scope, event)
             for day, label in list((dates.get('key') or {}).items()) + [(day, 'x') for day in order]:
                 assert date.fromisoformat(day).isoformat() == day and isinstance(label, str) and label, (scope, event)
-    assert params['es']['2026-11-29']['dates'] == {'call': '2026-10-05', 'campaign': '2026-11-13'}
-    assert params['es']['2023-07-23']['dates'] == {'call': '2023-05-29', 'campaign': '2023-07-07'}
-    assert params['es']['2019-11-10']['dates'] == {'call': '2019-09-24', 'campaign': '2019-11-01'}
-    assert params['es']['2016-06-26']['dates']['call'] == '2016-05-03'
-    assert params['es']['2004-03-14']['dates']['key'] == {'2004-03-11': '11-M'}
+    # the call and the campaign only: an election may get other key dates by hand at any time
+    seeded = {event: (entry.get('dates') or {}) for event, entry in params['es'].items()}
+    assert (seeded['2026-11-29']['call'], seeded['2026-11-29']['campaign']) == ('2026-10-05', '2026-11-13')
+    assert (seeded['2023-07-23']['call'], seeded['2023-07-23']['campaign']) == ('2023-05-29', '2023-07-07')
+    assert (seeded['2019-11-10']['call'], seeded['2019-11-10']['campaign']) == ('2019-09-24', '2019-11-01')
+    assert seeded['2016-06-26']['call'] == '2016-05-03'
+    assert seeded['2004-03-14']['key']['2004-03-11'] == '11-M'
     # sin fechas: las generales anteriores a 1994 y las elecciones que aún no se han convocado
     assert 'dates' not in params['es']['1993-06-06'] and 'dates' not in params['es-md']['2027-05-23']
 

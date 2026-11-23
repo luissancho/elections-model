@@ -1063,10 +1063,30 @@ KEY_DATES_SENTENCE = ('Las líneas verticales discontinuas marcan las fechas cla
                       'y el inicio de la campaña.')
 
 
+def call_and_campaign(key_dates: list) -> list:
+    """
+    The call and the campaign among the key dates of a page.
+
+    The page tests read the real ``data/params.json``, where an election may get other key dates by hand at any
+    time: they compare these two, not the whole list.
+
+    Parameters
+    ----------
+    key_dates : list
+        The ``key_dates`` of the initial data of a page.
+
+    Returns
+    -------
+    list
+        The entries whose ``kind`` is not ``key``, in their order.
+    """
+    return [entry for entry in key_dates if entry['kind'] != 'key']
+
+
 def test_event_page_passes_the_key_dates_of_its_election(api):
     """El ámbito lleva la convocatoria y el inicio de la campaña del 29-N, y la tarjeta de la evolución."""
     body = call(api, '/es', query='mode=forecast')[2]
-    assert initial(body)['key_dates'] == CALL_29N
+    assert call_and_campaign(initial(body)['key_dates']) == CALL_29N
     page = ' '.join(html(body).split())
     assert 'id="evolution-chart"' in page and 'frente al día anterior, al inicio de la campaña' in page
     # the three charts with marks say what the dashed lines are: the average, the evolution and the house
@@ -1116,8 +1136,8 @@ def test_past_election_passes_its_key_dates(events_site):
     """El detalle de una elección pasada lleva sus fechas clave, y su gráfico dice qué son las líneas."""
     body = call(events_site, '/elecciones/es/generales/2023-07')[2]
     data = initial(body)
-    assert [(entry['kind'], entry['date']) for entry in data['key_dates']] == [('call', '2023-05-29'),
-                                                                               ('campaign', '2023-07-07')]
+    assert [(entry['kind'], entry['date']) for entry in call_and_campaign(data['key_dates'])] == [
+        ('call', '2023-05-29'), ('campaign', '2023-07-07')]
     assert ' '.join(html(body).split()).count(KEY_DATES_SENTENCE) == 1
 
 
@@ -7918,7 +7938,7 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     assert set(data) == {'state', 'meta', 'series', 'key_dates', 'polls', 'projection', 'vote', 'catalog', 'inks',
                          'poll', 'previous', 'seats', 'n_seats', 'majority'}
     # the key dates of the election of the run, the marks of the chart of the house, and the sentence that reads them
-    assert data['key_dates'] == CALL_29N
+    assert call_and_campaign(data['key_dates']) == CALL_29N
     house = ' '.join(page[page.index('id="poll-house-chart"'):page.index('id="closing"')].split())
     assert KEY_DATES_SENTENCE in house
     assert data['previous'] == {'values': {'PP': 32.1}, 'seats': {'PP': [146, 148]}}

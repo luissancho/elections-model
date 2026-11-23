@@ -775,7 +775,8 @@ def promedios_context(state: dict, region=None) -> dict:
         has neither of its two cards (``tabla`` stays without polls: it also holds the fan and the downloads),
         ``key_dates`` (``run_key_dates``: the key dates of the election, the marks of the time charts),
         ``evolution`` (whether the election is called: the card of the evolution of the updates is only drawn then,
-        its table compares with the call and the start of the campaign), plus the keys of ``seats_context`` (but ``initial_extra``), ``headline`` (the headline of the mode), ``result_rows`` and ``block_result_rows`` (the
+        its table compares with the call and the start of the campaign), plus the keys of ``seats_context`` (but
+        ``initial_extra``), ``headline`` (the headline of the mode), ``result_rows`` and ``block_result_rows`` (the
         one results table of the summary, with its probabilities and its differences against the last election),
         ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and
         ``results_date`` (of the last election with results, for the deltas; ``None`` without one),
@@ -786,11 +787,11 @@ def promedios_context(state: dict, region=None) -> dict:
         (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered, sorted and
         paginated in the browser), ``projection``, ``vote``, ``summary``, the ``initial_extra`` of the seats
         (``dist_href``, ``fan``, ``districts``, ``scenario``: the simulations themselves are asked for to the API),
-        ``runs``, ``key_dates``, ``cards`` (name and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``,
-        for the hemicycle), ``catalog`` (``parties``: the run's parties, those of the polls table and those of the
-        last election, ``chart_parties``, with the entries of the page catalogue; ``bmaps``: those of the run; the
-        browser's ``Catalog``) and ``inks`` (the ink over the colour of every party of the run and of the series and
-        of every block, for the pills of the legends).
+        ``runs``, ``key_dates``, ``cards`` (name and colour of the party cards, for the sparklines), ``deltas``
+        (``seat_deltas``, for the hemicycle), ``catalog`` (``parties``: the run's parties, those of the polls table
+        and those of the last election, ``chart_parties``, with the entries of the page catalogue; ``bmaps``: those
+        of the run; the browser's ``Catalog``) and ``inks`` (the ink over the colour of every party of the run and
+        of the series and of every block, for the pills of the legends).
 
     Raises
     ------
