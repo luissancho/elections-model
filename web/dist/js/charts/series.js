@@ -134,27 +134,40 @@ export function axisPctLabel(value) {
 }
 
 /**
- * Vertical mark line at `time` with a label at the top. `align` places the text on one side of the line
+ * Vertical mark line at `time` with a label above the plot. `align` places the text on one side of the line
  * (`'right'`: the text ends at the line, so it reads to its left; `'left'`: it starts there): «Estimación» goes
- * left and «Elección» right, so the two labels never overlap on a short horizon (Luis, 2026-10-26).
+ * left and «Elección» right, so the two labels never overlap on a short horizon (Luis, 2026-10-26). The evolution
+ * writes its key dates with it, above its lines of points.
+ *
+ * @param {number} time timestamp of the day
+ * @param {string} label text of the label
+ * @param {string} [align='center'] side of the line the text is written on
+ * @returns {object} the item of the `markLine` data
  */
-function markAt(time, label, align = 'center') {
+export function markAt(time, label, align = 'center') {
   return {xAxis: time, label: {formatter: label, position: 'end', align, color: THEME.markColor}};
 }
 
 /**
- * Vertical mark line of a date with its label inside the plot, written along the line from the top: never over the
- * dates of the axis, and two dates a few weeks apart do not cover each other. The key dates of the election
- * («Convocatoria», «Campaña»…) and the entry of a party in the polls are drawn with it, in the average and in the
- * evolution.
+ * Vertical mark line of a date with its label inside the plot, written along the line: never over the dates of the
+ * axis nor over the labels above the plot («Estimación», «Elección»). The key dates of the election
+ * («Convocatoria», «Campaña»…) and the entry of a party in the polls are drawn with it in the average. The label
+ * starts at the top of the line unless the entry asks for the bottom (`KEY_MARK_ENDS`).
  *
- * @param {{date: string, label: string}} entry the ISO date and its label
- * @param {string} [position='insideEndTop'] side of the line the label is written on (`insideEndBottom`: the other)
+ * @param {{date: string, label: string, position: (string|undefined)}} entry the ISO date, its label and the end
+ *   of the line the label is written at (`insideEndTop`, the top, by default; `insideStartTop`: the bottom)
  * @returns {object} the item of the `markLine` data
  */
-export function alongMark({date, label}, position = 'insideEndTop') {
+export function alongMark({date, label, position = 'insideEndTop'}) {
   return {xAxis: dayTime(date), label: {formatter: label, position, color: THEME.markColor}};
 }
+
+/**
+ * Ends of their lines the key dates of an election write their label at, in turn by date: the first at the top,
+ * the next at the bottom… The call and the start of the campaign are a few weeks apart: with the whole cycle on a
+ * narrow screen their lines almost touch, and two labels at the same end would be written one over the other.
+ */
+export const KEY_MARK_ENDS = ['insideEndTop', 'insideStartTop'];
 
 /**
  * The mark lines of a chart on their own empty series, so hiding a party never hides them: silent, dashed, and kept
@@ -320,9 +333,10 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   with the result and the mark lines; `promedio`, the lines, projection and range bars alone, without the points)
  *   and `breakdown` (the block view: `{members, values, colors}`, the parties of each block, the series of each
  *   party and its colour, which break a day of a block line down into its parties; null for none) and `marks`
- *   (`[{date, label}]`: more dashed mark lines, the key dates of the election and, in the block view, the entry
- *   of a party in the polls, with their label inside the plot along the line, so that it covers neither the axis
- *   dates nor another mark; none by default)
+ *   (`[{date, label, position}]`: more dashed mark lines, the key dates of the election and, in the block view,
+ *   the entry of a party in the polls, with their label inside the plot along the line, at the end of it the
+ *   entry asks for (`alongMark`), so that it covers neither the axis dates nor the labels above the plot; none by
+ *   default)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
@@ -431,7 +445,7 @@ export function seriesOption({
     marks.push(markAt(dayTime(when), 'Elección', 'left'));
   }
   // the key dates of the election and the entries of the parties: inside the plot, along their lines (`alongMark`)
-  marks.push(...(entries || []).map((entry) => alongMark(entry)));
+  marks.push(...(entries || []).map(alongMark));
   const markSeries = marksSeries(marks);
 
   const axisDates = axisDatesOf(series, projection, result);

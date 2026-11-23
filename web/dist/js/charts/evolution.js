@@ -5,7 +5,7 @@
 // and a vertical axis fitted to the names shown with the rule of the average (ticks every `AXIS_STEP` points on
 // multiples of it; every `SEATS_STEP` seats, Luis 2026-10-30), so marking a single party zooms on its changes.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
-import {AXIS_STEP, alongMark, axisBounds, axisPctLabel, dayTime, isoDay, marksSeries} from './series.js';
+import {AXIS_STEP, axisBounds, axisPctLabel, dayTime, isoDay, markAt, marksSeries} from './series.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtBadge, fmtDate, fmtDateShort, fmtPct} from '../format.js';
 
@@ -99,7 +99,7 @@ export function evolutionPoints(runs, parties, field = 'pct') {
  * ECharts option of the evolution: a line per name over the daily runs, hollow where the figure shown
  * (`shownValue`) changed from the previous point of the name, an axis tooltip per day with the arrow of each change
  * and the slider of the zoom under the chart. The key dates of the election (`marks`) are dashed vertical lines
- * with their label along the line, on a series of their own after those of the names.
+ * with their label above the plot (`markAt`), on a series of their own after those of the names.
  *
  * @param {object} data `runs` (daily runs, `dailyRuns`), `parties` (names, legend order), `selected` (names shown
  *   at first; all when null), `colors` ({name: colour}), `fullnames` ({name: full name}, for the tooltip),
@@ -141,11 +141,12 @@ export function evolutionOption({
   }));
   const hidden = legend === 'hidden';
   const step = field === 'seats' ? SEATS_STEP : AXIS_STEP;
-  // a mark on the first day of the runs (the call, when the runs start with it) sits on the left edge of the plot:
-  // its label goes on the other side of the line, inside the plot, off the labels of the axis
-  const firstDay = runs.length ? runDay(runs[0]) : null;
+  // the labels of the marks go above the plot, where no line of a name passes, each one towards the inside of the
+  // chart: in the first half of the days the text starts at its line (the call, when the runs start with it, sits
+  // on the left edge: its label stays off the axis), in the second half it ends there
+  const middle = runs.length ? (dayTime(runDay(runs[0])) + dayTime(runDay(runs[runs.length - 1]))) / 2 : Infinity;
   const markLines = (marks || [])
-    .map((entry) => alongMark(entry, entry.date === firstDay ? 'insideEndBottom' : undefined));
+    .map(({date, label}) => markAt(dayTime(date), label, dayTime(date) <= middle ? 'left' : 'right'));
 
   /** Box of a day: its date and every name shown, highest first, with the arrow of its change when it changed. */
   function tooltip(params) {

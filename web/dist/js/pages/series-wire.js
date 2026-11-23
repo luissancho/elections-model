@@ -2,7 +2,7 @@
 // of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window, view and layers
 // controls (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
 import {REST_BLOCK, SERIES_KEYS, blockMembersText, blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
-import {chartZoom, setWindow} from '../charts/series.js';
+import {KEY_MARK_ENDS, chartZoom, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
 import {mergeHash} from '../url-state.js';
 import {wireDownload} from '../share.js';
@@ -23,9 +23,10 @@ export const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
  * @param {Catalog} catalog party catalogue of the run
  * @returns {object} `partidos` and `bloques` (null without blocks): `series`, `polls`, `projection`, `result`
  *   (null without one), `parties`, `colors`, `defaults` (names shown by default, null for all) and `toPolls`
- *   (polls of the view from polls by party) and `marks` (`[{date, label}]`, dashed lines of the chart: the key
- *   dates of the election, `initial.key_dates`, in both views and, after them in `bloques`, the entry of each
- *   party of `series.first_polls`, by date); in `bloques` the defaults
+ *   (polls of the view from polls by party) and `marks` (`[{date, label, position}]`, dashed lines of the chart:
+ *   the key dates of the election, `initial.key_dates`, in both views, with the end of the line each label is
+ *   written at (`KEY_MARK_ENDS`), and, after them in `bloques`, the entry of each party of `series.first_polls`, by
+ *   date, without a `position`: at the top); in `bloques` the defaults
  *   leave `REST_BLOCK` out (when the map has other blocks); `bloques` also `members`
  *   (the map of the blocks, for the line naming their parties) and `breakdown` (`{members, values, colors}`: the
  *   series and colour of each party, which break a day of a block down in the tooltip)
@@ -40,8 +41,10 @@ export function seriesViews(initial, catalog) {
   const entries = Object.entries(series.first_polls || {})
     .sort(([, a], [, b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([name, date]) => ({date, label: `Entra ${name}`}));
-  // the key dates of the election (its call, the start of its campaign…), dashed lines of both views
-  const keyMarks = (initial.key_dates || []).map(({date, label}) => ({date, label}));
+  // the key dates of the election (its call, the start of its campaign…), dashed lines of both views, their labels
+  // at the top and at the bottom of their lines in turn (`KEY_MARK_ENDS`)
+  const keyMarks = (initial.key_dates || [])
+    .map(({date, label}, i) => ({date, label, position: KEY_MARK_ENDS[i % KEY_MARK_ENDS.length]}));
   return {
     partidos: {
       series,

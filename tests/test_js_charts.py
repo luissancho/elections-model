@@ -614,9 +614,17 @@ def test_series_views_carry_the_key_dates_in_both_views():
                'catalog': {'parties': [{'name': n, 'color': '#000000', 'fullname': n, 'block': None} for n in ('PP', 'PSOE')],
                            'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}}}
     views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
-    key = [{'date': '2026-10-05', 'label': 'Convocatoria'}, {'date': '2026-11-13', 'label': 'Campaña'}]
+    # consecutive key dates write their label at opposite ends of their lines: the call at the top and the campaign
+    # at the bottom, so on a narrow screen with the whole cycle, where the two lines almost touch, both are read
+    key = [{'date': '2026-10-05', 'label': 'Convocatoria', 'position': 'insideEndTop'},
+           {'date': '2026-11-13', 'label': 'Campaña', 'position': 'insideStartTop'}]
     assert views['partidos']['marks'] == key
     assert views['bloques']['marks'] == key + [{'date': '2024-06-06', 'label': 'Entra SALF'}]
+    debate = {'date': '2026-11-20', 'label': 'Debate', 'kind': 'key'}
+    three = dict(initial, key_dates=initial['key_dates'] + [debate])
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(three), json.dumps(three)))
+    ends = [mark['position'] for mark in views['partidos']['marks']]
+    assert ends == ['insideEndTop', 'insideStartTop', 'insideEndTop']
 
 
 def test_series_marks_keep_their_shape_through_the_shared_builders():
@@ -624,7 +632,12 @@ def test_series_marks_keep_their_shape_through_the_shared_builders():
     mark = run_js("s.alongMark({date: '2026-10-05', label: 'Convocatoria'})")
     assert mark['label'] == {'formatter': 'Convocatoria', 'position': 'insideEndTop', 'color': '#555'}
     assert mark['xAxis'] == run_js("s.dayTime('2026-10-05')")
-    assert run_js("s.alongMark({date: '2026-10-05', label: 'X'}, 'insideEndBottom')")['label']['position'] == 'insideEndBottom'
+    bottom = run_js("s.alongMark({date: '2026-10-05', label: 'X', position: 'insideStartTop'})")
+    assert bottom['label']['position'] == 'insideStartTop'
+    # the label above the plot, on one side of its line
+    above = run_js("s.markAt(s.dayTime('2026-10-05'), 'Convocatoria', 'left')")
+    assert above == {'xAxis': run_js("s.dayTime('2026-10-05')"),
+                     'label': {'formatter': 'Convocatoria', 'position': 'end', 'align': 'left', 'color': '#555'}}
     series = run_js("s.marksSeries([s.alongMark({date: '2026-10-05', label: 'Convocatoria'})])")
     assert series['name'] == 'marks' and series['data'] == [] and series['silent'] is True
     assert series['markLine']['lineStyle'] == {'type': 'dashed', 'color': '#555'} and len(series['markLine']['data']) == 1
@@ -632,6 +645,10 @@ def test_series_marks_keep_their_shape_through_the_shared_builders():
     args = BREAKDOWN_ARGS.replace("breakdown: {", "marks: [{date: '2026-10-01', label: 'Entra SALF'}], breakdown: {")
     drawn = next(x for x in run_js('s.seriesOption(%s)' % args)['series'] if x['name'] == 'marks')
     assert drawn['markLine']['data'][-1] == run_js("s.alongMark({date: '2026-10-01', label: 'Entra SALF'})")
+    # and a mark that asks for the other end of its line keeps it
+    low = args.replace("label: 'Entra SALF'}", "label: 'Campaña', position: 'insideStartTop'}")
+    drawn_low = next(x for x in run_js('s.seriesOption(%s)' % low)['series'] if x['name'] == 'marks')
+    assert drawn_low['markLine']['data'][-1]['label']['position'] == 'insideStartTop'
     assert {k: v for k, v in drawn.items() if k != 'markLine'} == {k: v for k, v in series.items() if k != 'markLine'}
 
 

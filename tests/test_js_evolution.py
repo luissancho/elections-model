@@ -127,8 +127,18 @@ def test_evolution_option_draws_the_key_dates_as_mark_lines():
     marks = drawn['series'][-1]
     assert marks['name'] == 'marks' and 'marks' not in drawn['legend']['data'] and marks['data'] == []
     assert [m['label']['formatter'] for m in marks['markLine']['data']] == ['Convocatoria', 'Campaña']
-    # the mark on the first day of the runs writes its label on the plot side of its line, off the axis
-    assert [m['label']['position'] for m in marks['markLine']['data']] == ['insideEndBottom', 'insideEndTop']
+    # the labels go above the plot, where no line of a party passes, each one towards the inside: in the first half
+    # of the days it starts at its line (the call on the first day stays off the axis), in the second it ends there
+    assert [m['label']['position'] for m in marks['markLine']['data']] == ['end', 'end']
+    assert [m['label']['align'] for m in marks['markLine']['data']] == ['left', 'right']
+    days = [m['xAxis'] for m in marks['markLine']['data']]
+    assert days[1] - days[0] == 2 * 24 * 3600 * 1000  # the 5th and the 7th, as timestamps
+    # a single day of runs, or none: the mark of that day starts at its line; nothing breaks without runs
+    one = run_js('e.evolutionOption({...%s, runs: e.dailyRuns(runs).slice(0, 1), marks: %s})'
+                 % (json.dumps(DATA), json.dumps(MARKS)))
+    assert [m['label']['align'] for m in one['series'][-1]['markLine']['data']] == ['left', 'right']
+    none = run_js('e.evolutionOption({...%s, runs: [], marks: %s})' % (json.dumps(DATA), json.dumps(MARKS)))
+    assert len(none['series'][-1]['markLine']['data']) == 2
     assert all(entry['name'] != 'marks' for entry in option()['series'])
     assert [entry['name'] for entry in drawn['series'][:-1]] == [entry['name'] for entry in option()['series']]
 

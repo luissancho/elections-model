@@ -122,3 +122,33 @@ mía: Luis pidió las líneas, no lo dijo.)
   dos antes de la campaña y con una cuando dos fechas coinciden.
 - En el navegador, con los scripts de comprobación: `/es` a 3 meses y con todo el ciclo, la elección de 2004 con
   el 11-M, en escritorio y en móvil, que las marcas del final no se pisen.
+
+## Cambios tras la implementación (2026-11-23)
+
+Lo que quedó distinto de lo escrito arriba, y por qué.
+
+- **Dónde va cada etiqueta.** El diseño las ponía todas a lo largo de su línea, arriba, como «Entra SALF». En
+  el móvil (390 px) con todo el ciclo, que es la vista con la que abre la página, las líneas de la convocatoria y
+  de la campaña quedan a 9 px y las dos etiquetas se escribían una encima de la otra; en la evolución, la
+  etiqueta caía sobre las líneas de PP y PSOE. Queda así:
+  - En los gráficos del promedio, las fechas clave escriben su etiqueta por turnos en los dos extremos de su
+    línea (`KEY_MARK_ENDS`): la convocatoria arriba, la campaña abajo, una tercera fecha arriba. Las entradas de
+    partidos siguen arriba.
+  - En la evolución, las etiquetas van en horizontal por encima del gráfico, donde no pasa ninguna línea de
+    partido, cada una hacia dentro: en la primera mitad de los días el texto empieza en su línea y en la segunda
+    acaba en ella.
+- **La marca lleva su tipo.** `pages.key_dates` da `{date, label, kind}` (`call`, `campaign`, `key`): la tabla de
+  la evolución necesita saber cuál es la convocatoria y cuál la campaña. `pages.run_key_dates` da las de la
+  elección de un run.
+- **El «Cómo se lee».** La frase de las líneas discontinuas va también en «Una encuestadora frente al promedio»,
+  que las dibuja, y en el detalle de una elección pasada sólo cuando su serie está publicada.
+- **El fichero no se reescribió entero.** `params.json` tiene dos listas de la entrada del 29-N partidas a mano
+  (`event` y `polls`), que `format_params` volvería a unir. El relleno añadió `dates` sin tocar eso, y el test
+  comprueba cómo escribe `format_params` las fechas, no que el fichero entero coincida con su salida.
+- **Las dos repeticiones**, comprobadas en el BOE: el decreto se firmó y se publicó el mismo día (3 de mayo de
+  2016 y 24 de septiembre de 2019), y ese día es su `call`.
+- **Lo que no se pudo ver en el navegador.** La elección de 2004 no tiene la serie del promedio publicada, así
+  que su página no tiene gráfico y el 11-M no se pinta hasta que la tenga; una tercera fecha clave se probó sobre
+  la página de 2023. La comprobación se hizo sobre las páginas publicadas, con las fechas clave añadidas a sus
+  datos y el JavaScript de la rama: los gráficos, la tabla y las imágenes descargadas se vieron con datos reales
+  en escritorio y en móvil; los textos de las plantillas, sólo por sus tests.
