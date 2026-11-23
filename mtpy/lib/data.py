@@ -53,6 +53,29 @@ def get_districts(scope: Optional[str] = None) -> pd.DataFrame:
     return districts
 
 
+def get_census(scope: str) -> Optional[pd.DataFrame]:
+    """
+    Electoral census of the elections of a scope by district (`data/census/{scope}.csv`).
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the elections.
+
+    Returns
+    -------
+    pd.DataFrame, optional
+        One row per election and district: `date`, `region_id`, `residents` (electors living in Spain) and
+        `abroad` (electors living abroad, CERA). `None` for a scope without the file.
+    """
+    fname = 'census/{}.csv'.format(scope)
+    data = App.get_().data
+    if not data.exists(fname):
+        return None
+
+    return data.read_csv(fname)
+
+
 def get_district_communities(scope: str) -> dict:
     """
     Autonomous community of each district of a scope.

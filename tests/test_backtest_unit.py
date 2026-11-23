@@ -272,7 +272,7 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
                         'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
                         'error_model', 'drift_scale', 'tail_dof', 'config', 'rating_exponent', 'recompute_ratings', 'flat_ratings', 'events',
-                        'horizons', 'db_polls', 'db_last_poll', 'ban', 'swing'}
+                        'horizons', 'db_polls', 'db_last_poll', 'ban', 'swing', 'census'}
     assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
     assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
     assert run['error_model'] == 'polls' and seen['error_model'] == 'polls'
@@ -458,7 +458,7 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
     monkeypatch.setattr(sys, 'argv', ['run_backtest.py', '--scopes', 'es-md', 'es-cl', '--horizons', '6', '30',
                                       '--n-sim', '20', '--composition', 'auto', '--no-herding',
                                       '--error-model', 'average', '--drift-scale', 'auto', '--tail-dof', '5',
-                                      '--swing', 'proportional', '--out', 'x'])
+                                      '--swing', 'proportional', '--no-census', '--out', 'x'])
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
     script = importlib.util.module_from_spec(spec)
@@ -469,7 +469,7 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
                     'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None,
                     'error_model': 'average', 'drift_scale': 'auto', 'tail_dof': 5, 'config': None,
                     'rating_exponent': 1.0, 'recompute_ratings': False, 'flat_ratings': False, 'swing': 'proportional',
-                    'out': 'x'}
+                    'census': False, 'out': 'x'}
     hint = capsys.readouterr().out
     assert hint.startswith('Tables written to x. publish backtest/event read the app file system: run python job.py backtest ')
     assert '\'{"action":"push","scopes":["es-md","es-cl"],"out":"x"}\' (with S3_BUCKET set)' in hint

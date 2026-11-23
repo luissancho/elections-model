@@ -648,6 +648,16 @@ def test_publish_forecast_takes_another_swing_rule_from_the_correctors(tmp_path)
     assert writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']['correctors']['swing'] == 'proportional'
 
 
+def test_publish_forecast_uses_the_census_weights_unless_the_correctors_turn_them_off(tmp_path):
+    """El peso por censo (método 19) está activo salvo que `correctors` lo apague; `meta.correctors` lo guarda."""
+    writer, factory, _ = publish_es(tmp_path)
+    assert factory.calls[0][3]['census'] is True
+    assert writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']['correctors']['census'] is True
+    writer, factory, _ = publish_es(tmp_path / 'off', correctors={'census': False})
+    assert factory.calls[0][3]['census'] is False
+    assert writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']['correctors']['census'] is False
+
+
 def test_export_backtest_meta_takes_a_run_without_swing_as_proportional():
     """Un `run.json` anterior a la regla logística se hizo con la proporcional; uno posterior lleva la suya."""
     tables = synthetic_backtest()

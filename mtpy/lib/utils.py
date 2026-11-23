@@ -396,6 +396,133 @@ def logistic_swing(
     return out
 
 
+def census_factors(
+    census: Optional[pd.DataFrame],
+    event_date: str,
+    prev_date: str
+) -> Optional[pd.Series]:
+    """
+    Change of the resident electoral census of each district between two elections.
+
+    Parameters
+    ----------
+    census : pd.DataFrame, optional
+        Census by election and district (`data.get_census`): `date`, `region_id` and `residents`.
+    event_date : str
+        Date of the election being simulated.
+    prev_date : str
+        Date of the previous election.
+
+    Returns
+    -------
+    pd.Series, optional
+        Residents of `event_date` over residents of `prev_date`, indexed by `region_id` (the districts with a
+        positive figure in both). `None` without a census or when it lacks either election.
+    """
+    if census is None:
+        return None
+
+    dates = census['date'].astype(str).str[:10]
+    event = census.loc[dates == str(event_date)[:10]].set_index('region_id')['residents'].astype(float)
+    prev = census.loc[dates == str(prev_date)[:10]].set_index('region_id')['residents'].astype(float)
+    if event.shape[0] == 0 or prev.shape[0] == 0:
+        return None
+
+    factors = (event / prev.where(prev > 0)).dropna()
+    factors.index = factors.index.astype(int)
+    factors.index.name = 'region_id'
+
+    return factors.sort_index()
+
+
+def census_totals(
+    totals: pd.DataFrame,
+    factors: pd.Series,
+    districts: list,
+    default_region: int
+) -> pd.DataFrame:
+    """
+    Valid votes of the previous election as if it had been held with the census of the next one: the votes
+    of each district times the change of its resident census; the total of the scope grows like the sum of
+    its districts and its blank share is the one of the districts, weighted by their new votes.
+
+    Parameters
+    ----------
+    totals : pd.DataFrame
+        Indexed by `region_id`, with `votes` (valid votes) and `blank_pct` (see `Simulator.get_prev_totals`).
+    factors : pd.Series
+        Change of the census by `region_id` (`census_factors`).
+    districts : list
+        Rows of `totals` that are districts; every one needs a factor.
+    default_region : int
+        Row of the total of the scope. Other rows (a list voted by the whole scope) grow like the total.
+
+    Returns
+    -------
+    pd.DataFrame
+        A copy of `totals` with the scaled `votes` and the `blank_pct` of the total.
+
+    Raises
+    ------
+    ValueError
+        If a district has no factor.
+    """
+    missing = [r for r in districts if r not in factors.index]
+    if len(missing) > 0:
+        raise ValueError('Districts without census: {}'.format(missing))
+
+    out = totals.copy()
+    before = out.loc[districts, 'votes'].astype(float)
+    after = before * factors.loc[districts].to_numpy(dtype=float)
+    growth = after.sum() / before.sum()
+
+    others = [r for r in out.index if r not in districts]
+    out['votes'] = out['votes'].astype(float)
+    out.loc[districts, 'votes'] = after
+    out.loc[others, 'votes'] = out.loc[others, 'votes'] * growth
+    if default_region in out.index:
+        blank = out.loc[districts, 'blank_pct'].astype(float).fillna(0.)
+        out.loc[default_region, 'blank_pct'] = round(float((blank * after).sum() / after.sum()), 2)
+
+    return out
+
+
+def census_shares(
+    prev_pcts: pd.DataFrame,
+    votes: pd.Series,
+    districts: list,
+    default_region: int
+) -> pd.DataFrame:
+    """
+    Previous shares with the total of the scope recomputed from its districts, weighted by `votes`: the
+    result the previous election would have given with those valid votes in each district. It is the base
+    the national ratio of each party is measured against when the districts are reweighted (`census_totals`),
+    so that the swing still reproduces the national forecast.
+
+    Parameters
+    ----------
+    prev_pcts : pd.DataFrame
+        Previous shares by `region_id` (rows, the total of the scope included) and party, 0 where none.
+    votes : pd.Series
+        Valid votes by `region_id`.
+    districts : list
+        Rows that are districts.
+    default_region : int
+        Row of the total of the scope.
+
+    Returns
+    -------
+    pd.DataFrame
+        A copy of `prev_pcts` with the row `default_region` recomputed.
+    """
+    out = prev_pcts.copy()
+    weights = votes.loc[districts].to_numpy(dtype=float)
+    shares = out.loc[districts].fillna(0.).to_numpy(dtype=float)
+    out.loc[default_region] = (shares * weights[:, None]).sum(axis=0) / weights.sum()
+
+    return out
+
+
 def partial_parties(
     pct: pd.DataFrame,
     votes: pd.Series,

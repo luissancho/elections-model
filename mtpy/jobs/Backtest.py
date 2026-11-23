@@ -87,7 +87,7 @@ class Backtest(SequenceJob):
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
             regional_noise=True, min_events=None, error_model='polls', drift_scale=None, tail_dof=None, config=None,
             recompute_ratings=False, flat_ratings=False, rating_exponent=1.0, ban=False, out=None, verbose=1, runner=None, stats=None,
-            stop_on_error=None, action='run', swing='logistic', **kwargs):
+            stop_on_error=None, action='run', swing='logistic', census=True, **kwargs):
         """
         Run the backtest of the requested scopes.
 
@@ -125,6 +125,9 @@ class Backtest(SequenceJob):
             Rule that projects the national shares to the provinces (``Simulator(swing=...)``): ``'logistic'``
             (a common factor on the odds of each party) or ``'proportional'`` (on its shares, the rule used up
             to 2026-11-10), to compare both.
+        census : bool, default True
+            Weigh each district by its previous valid votes times the change of its resident census
+            (``Simulator(census=...)``); a scope without ``data/census/{scope}.csv`` is left untouched.
         min_events : int, optional
             Featured elections a regional scope needs to fit the estimators on itself instead of on ``es``
             (M11); by default always ``es``, 1 forces its own.
@@ -229,7 +232,8 @@ class Backtest(SequenceJob):
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, error_model=error_model,
                     drift_scale=drift_scale, tail_dof=tail_dof, config=config, recompute_ratings=recompute_ratings,
-                    flat_ratings=flat_ratings, rating_exponent=rating_exponent, ban=ban, swing=swing, out=out, verbose=verbose,
+                    flat_ratings=flat_ratings, rating_exponent=rating_exponent, ban=ban, swing=swing, census=bool(census), out=out,
+                    verbose=verbose,
                     runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
