@@ -1,6 +1,7 @@
 """Coherencia de los ficheros de entrada versionados en `data/`."""
 import json
 import os
+from datetime import date
 
 import pandas as pd
 import pytest
@@ -210,6 +211,29 @@ def test_params_2026_general_election_line_up():
     assert 'FV' not in conf['parties']['event'] and 'FV' in conf['parties']['polls']
     assert 'FV' in conf['bmaps']['blocks']['Izquierda'] and 'FV' in conf['bmaps']['vs']['Izquierda']
     assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}
+
+
+def test_params_dates_are_dates_in_their_order():
+    """Las fechas clave de cada elección son fechas válidas: la convocatoria antes de la campaña y ésta antes de
+    la elección; las próximas elecciones sin convocar no llevan ninguna."""
+    params = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))
+    for scope, events in params.items():
+        for event, entry in events.items():
+            dates = entry.get('dates')
+            if dates is None:
+                continue
+            assert set(dates) <= {'call', 'campaign', 'key'}, (scope, event)
+            order = [dates[key] for key in ('call', 'campaign') if key in dates] + [event]
+            assert order == sorted(order) and len(set(order)) == len(order), (scope, event)
+            for day, label in list((dates.get('key') or {}).items()) + [(day, 'x') for day in order]:
+                assert date.fromisoformat(day).isoformat() == day and isinstance(label, str) and label, (scope, event)
+    assert params['es']['2026-11-29']['dates'] == {'call': '2026-10-05', 'campaign': '2026-11-13'}
+    assert params['es']['2023-07-23']['dates'] == {'call': '2023-05-29', 'campaign': '2023-07-07'}
+    assert params['es']['2019-11-10']['dates'] == {'call': '2019-09-24', 'campaign': '2019-11-01'}
+    assert params['es']['2016-06-26']['dates']['call'] == '2016-05-03'
+    assert params['es']['2004-03-14']['dates']['key'] == {'2004-03-11': '11-M'}
+    # sin fechas: las generales anteriores a 1994 y las elecciones que aún no se han convocado
+    assert 'dates' not in params['es']['1993-06-06'] and 'dates' not in params['es-md']['2027-05-23']
 
 
 def test_wp_maps_skip_parties_is_a_clean_list():

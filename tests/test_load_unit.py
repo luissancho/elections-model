@@ -360,6 +360,15 @@ def test_merge_event_params_keeps_manual_keys_and_their_order():
     assert changed_keys({}, merged) == ['parties.event', 'parties.polls', 'bmaps.main', 'bmaps.blocks', 'bmaps.vs']
 
 
+def test_merge_event_params_keeps_the_key_dates():
+    """Las fechas clave de una elección, escritas a mano, sobreviven al autorrelleno."""
+    entry = {'parties': {'event': ['A'], 'polls': ['A']}, 'bmaps': {'main': ['A'], 'blocks': {}, 'vs': {}},
+             'dates': {'call': '2026-10-05', 'campaign': '2026-11-13'}}
+    derived = {'parties': {'event': ['B'], 'polls': ['B']}, 'bmaps': {'main': ['B'], 'blocks': {}, 'vs': {}}}
+    merged = merge_event_params(entry, derived)
+    assert merged['dates'] == {'call': '2026-10-05', 'campaign': '2026-11-13'} and list(merged)[-1] == 'dates'
+
+
 def test_load_params_rewrites_the_scope_and_reports_each_change():
     store = FakeParamsStore(FILE)
     seen = []
