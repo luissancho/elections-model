@@ -1,5 +1,7 @@
 # Web, Análisis: el voto CERA y la Ley de Nietos, anclado al 29-N
 
+> La pregunta 3 se rehízo el 2026-11-24 sobre la predicción del modelo para el 29-N: ver `docs/superpowers/specs/2026-11-24-web-analisis-voto-cera-mayoria-design.md`.
+
 Fecha: 2026-10-19. Estado: **construida** el 19 de octubre por desarrollo dirigido por subagentes: tareas 1–11
 en `dev` hasta `fefb3a9`; tareas 12–19 en la rama `analisis-voto-cera`, que sale de `fefb3a9` porque Luis tenía
 trabajo sin confirmar en el mismo checkout. Suite completa: 1.096 tests en verde, 75 omitidos y 1 fallo,

@@ -42,7 +42,7 @@ RULER_STEP = 2
 PROVINCES_RANKED = 10
 RULER = (('Electores nuevos desde 2023', (('new_electors', 0.09, 0.5, None, 'como 2023'),
                                           ('new_electors', 0.5, 0.8, None, None),
-                                          ('placement', 1.0, 1.0, 'Colocación a ciegas', '100 % voto + 100 % PSOE'))),
+                                          ('placement', 1.0, 1.0, 'Colocación a ciegas', '100% voto + 100% PSOE'))),
          ('Todo el censo exterior', (('grid', 0.3, 0.6, None, None), ('grid', 0.3, 0.8, None, None),
                                      ('grid', 0.5, 0.8, None, None), ('grid', 0.7, 0.8, None, None))))
 # The debate and the check: the period of ``participation.generales`` before the voto rogado (the historical
@@ -789,7 +789,7 @@ def _axis_label(x: float) -> str:
 
 def _cell_name(participation: float, frac: float) -> str:
     """
-    Name of a cell of a grid: «30 % voto + 60 % izq.».
+    Name of a cell of a grid: «30% voto + 60% izq.».
 
     Parameters
     ----------
@@ -801,7 +801,7 @@ def _cell_name(participation: float, frac: float) -> str:
     str
         The name.
     """
-    return '{} % voto + {} % izq.'.format(_axis_label(participation), _axis_label(frac))
+    return '{}% voto + {}% izq.'.format(_axis_label(participation), _axis_label(frac))
 
 
 def _cell(part: dict, source: str, participation: float, frac: float) -> Optional[dict]:
@@ -1022,12 +1022,12 @@ def _majority_grid(part: dict) -> dict:
         majority and the per cent of the simulations that lose it less those that gain it (unrounded).
     """
     grid, n_sim = part['grid'], part['run']['n_sim']
-    rows = [{'label': _axis_label(participation) + ' % voto',
+    rows = [{'label': _axis_label(participation) + '% voto',
              'cells': [{'seats': cell['central']['right'], 'p': _scenario_p(cell, part['base'], n_sim),
                         'drop': 100 * (cell['lost'] - cell['gained']) / n_sim} for cell in cells]}
             for participation, cells in zip(grid['participations'], grid['cells'])]
 
-    return {'electors': grid['electors'], 'cols': [_axis_label(frac) + ' % izq.' for frac in grid['left_fracs']],
+    return {'electors': grid['electors'], 'cols': [_axis_label(frac) + '% izq.' for frac in grid['left_fracs']],
             'rows': rows, 'max_drop': max(cell['drop'] for row in rows for cell in row['cells'])}
 
 

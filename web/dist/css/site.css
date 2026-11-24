@@ -1017,6 +1017,12 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .band-sub { color: var(--color-muted); }
 #majority-kpis { margin-bottom: var(--space-4); background: var(--color-bg); box-shadow: none; }
 #majority-kpis .kpi .l, #majority-kpis .kpi .s { white-space: normal; overflow: visible; text-overflow: clip; }
+/* the three figures are the headline of the card, as in the mockup: the label in small capitals, the value and its
+   unit at the same large size, the sentence under it in plain text */
+#majority-kpis .kpi .l { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+#majority-kpis .kpi .v { gap: .25em; font: 800 28px/1.1 var(--font-head); letter-spacing: -.01em; }
+#majority-kpis .kpi .v small { font: inherit; color: inherit; }
+#majority-kpis .kpi .s { font-size: 12.5px; font-weight: 400; }
 .qcard .card-h.sub-h { align-items: center; margin: 18px 0 6px; }
 .qcard .card-h.sub-h h3 { margin: 0; }
 .sims { margin-top: var(--space-4); }
@@ -1039,14 +1045,16 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .pkey i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
 .grid2 + .note { margin-top: var(--space-4); }
 .grid2.lead-left { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
-/* the ruler: a row per scenario (its label, the track with the bar, the range and the two lines of what it would
-   take, and the seats and the probability), a tick every `--step` of the axis */
+/* the ruler: a row per scenario (its label, the track with a grid line at every inner tick of the axis, the bar,
+   the range and the two lines of what it would take, and the seats and the probability); the grid lines are
+   elements placed like the numbers of the axis, so that they fall on them on screen and in the image */
 .ruler { margin: 10px 0 6px; }
 .rrow { display: grid; grid-template-columns: 148px minmax(0, 1fr) 92px; gap: 10px; align-items: center; padding: 5px 0; font-size: 12.5px; }
 .rgroup { margin: 8px 0 1px; font: 700 10.5px var(--font-head); letter-spacing: .06em; text-transform: uppercase; color: #9298ac; }
 .rl { line-height: 1.3; }
 .rl small { display: block; font-size: 11.5px; color: var(--color-muted); }
-.rtrack { position: relative; height: 16px; border-radius: 4px; background-color: #eceef2; background-image: linear-gradient(to left, rgba(0, 0, 0, .1) 1px, transparent 1px); background-size: var(--step) 100%; }
+.rtrack { position: relative; height: 16px; border-radius: 4px; background: #eceef2; }
+.rgl { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -1px; background: rgba(0, 0, 0, .1); }
 .rbar { position: absolute; top: 0; bottom: 0; left: 0; min-width: 3px; border-radius: 4px; background: #d1495b; }
 .rwh { position: absolute; top: 4px; height: 8px; border-left: 2px solid #1a1c22; border-right: 2px solid #1a1c22; }
 .rwh i { position: absolute; top: 3px; right: 0; left: 0; height: 2px; background: #1a1c22; }
@@ -1065,9 +1073,7 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .raxis .rtrack { height: 15px; }
 .raxis .rtrack span { position: absolute; top: 1px; transform: translateX(-50%); font-size: 10.5px; color: var(--color-muted); }
 .raxis-title { text-align: center; font-size: 11px; color: var(--color-muted); }
-/* the grid: two figures per cell, the seats over the probability */
-#majority-grid td { text-align: center; }
-#majority-grid td:first-child { text-align: left; }
+/* the grid: two figures per cell, the seats over the probability, aligned right under their header */
 .cell-seats { display: block; font: 800 15px/1.2 var(--font-head); }
 .cell-p { display: block; font-size: 11.5px; opacity: .85; }
 .aside { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-bg); font-size: 13px; color: var(--color-muted); }
@@ -1078,6 +1084,10 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 }
 /* on phones the figures of the simulations stack and the label of each scenario goes above its bar */
 @media (max-width: 719px) {
+  #majority-kpis { grid-template-columns: 1fr; }
+  #majority-kpis .kpi { min-height: 0; background: none; }
+  #majority-kpis .kpi + .kpi { border-top: 1px solid var(--color-line); }
+  #majority-kpis .kpi .v { font-size: 24px; }
   .sim-steps { grid-template-columns: 1fr; }
   .sim-step { border-right: 0; border-bottom: 1px solid var(--color-line); }
   .sim-step:last-child { border-bottom: 0; }
@@ -1085,6 +1095,12 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
   .rrow { grid-template-columns: minmax(0, 1fr) 88px; row-gap: 2px; }
   .rrow .rl { grid-column: 1 / -1; }
   .rrow > span:first-child:empty { display: none; }
+  /* the two tables of the card fit the phone: tighter cells, headers that may wrap and a first column that is not
+     held at the width of the long tables of the site */
+  #majority-table th, #majority-table td, #majority-grid th, #majority-grid td { padding-right: 4px; padding-left: 4px; }
+  #majority-table th, #majority-grid th { letter-spacing: 0; white-space: normal; }
+  .table-wrap #majority-table td:first-child, .table-wrap #majority-grid td:first-child,
+  .table-wrap #majority-table th:first-child, .table-wrap #majority-grid th:first-child { min-width: 0; }
 }
 /* The claims of the debate: what each one computes, what it lacks and the verdict (task 17) */
 .claim { padding: 12px 14px; border: 1px solid var(--color-line-strong); border-radius: 12px; background: var(--color-bg); }
