@@ -7,6 +7,9 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib.studies.cera import CeraStudy, compute_cera
 from mtpy.lib.studies.cera import study as study_module
+from mtpy.lib.studies.cera.data import check_majority
+from mtpy.lib.studies.cera.majority import seat_range
+from mtpy.lib.studies.cera.scenarios import expected_table
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -117,3 +120,38 @@ def test_read_scrutinies_skips_the_elections_without_results_and_needs_their_can
 
 def test_compute_cera_records_the_skipped_scrutinies(study):
     assert study.skipped_scrutinies == []
+
+
+def test_the_real_snapshot_is_the_run_of_23_n_and_agrees_with_the_study(study):
+    """La foto fija `cera/majority.json` es la del run 20261124-135758 (as_of 23-N) y cuadra con el estudio."""
+    snap = study.majority
+    assert {key: snap['run'][key] for key in ('scope', 'event_date', 'run_id', 'as_of', 'n_sim', 'seed')} == {
+        'scope': 'es', 'event_date': '2026-11-29', 'run_id': '20261124-135758', 'as_of': '2026-11-23',
+        'n_sim': 10000, 'seed': 42}
+    assert snap['majority'] == 176
+    assert snap['blocks'] == {
+        'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'FA', 'UP'],
+        'Otros': ['ERC', 'JxCat', 'EHB', 'PNV', 'BNG', 'CC', 'AA']}
+    assert snap['base']['with_majority'] == 8807 and snap['base']['central'] == {'Derecha': 190, 'Izquierda': 129}
+    assert snap['new_electors']['participations'] == snap['grid']['participations']
+    expected = snap['expected']['convocatoria']
+    assert expected['table'] == expected_table(study, 'convocatoria') and len(expected['provinces']) == 52
+    counts = expected['counts']
+    assert (counts['votes'], counts['lost'], counts['gained'], counts['moved']) == (30482, 8, 3, 817)
+    assert counts['right'] == {'-2': 7, '-1': 345, '0': 9482, '1': 164, '2': 2}
+    assert counts['central'] == {'right': 0, 'left': 0}
+    lit = snap['expected']['sin_litigio']['counts']
+    assert (lit['votes'], lit['lost'], lit['gained'], lit['moved']) == (22412, 6, 3, 625)
+    madrid = next(row for row in expected['provinces'] if row['region_id'] == 28)
+    assert (madrid['moved'], madrid['right_lost'], madrid['right_gained']) == (189, 77, 34)
+    assert sum(1 for row in expected['provinces'] if row['moved']) == 49
+    cells = [snap[key]['cells'][i][j] for key, i, j in (
+        ('grid', 0, 0), ('grid', 2, 1), ('grid', 2, 3), ('grid', 3, 3), ('grid', 4, 3), ('new_electors', 0, 0),
+        ('new_electors', 3, 3), ('placement', 3, 4), ('placement', 0, 0))]
+    assert [(c['lost'], c['gained'], c['central']['right']) for c in cells] == [
+        (32, 26, 0), (345, 11, -2), (1005, 0, -4), (1815, 0, -8), (2734, 0, -10), (13, 7, 0), (228, 0, -1),
+        (1234, 0, -5), (84, 0, -1)]
+    every = [cell for key in ('new_electors', 'grid', 'placement') for row in snap[key]['cells'] for cell in row]
+    assert len(every) == 60
+    assert all(seat_range(c['right'])[0] <= c['central']['right'] <= seat_range(c['right'])[1] for c in every)
+    assert check_majority(snap, study.params) == []
