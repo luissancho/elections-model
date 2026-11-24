@@ -82,7 +82,11 @@ def test_read_majority_refuses_a_snapshot_that_is_not_this_study_s(tmp_path, cer
                          (lambda s: s['grid']['cells'].pop(), 'grid'),
                          (lambda s: s['expected']['convocatoria']['counts'].update(lost=21), 'lost'),
                          (lambda s: s['expected']['sin_litigio']['provinces'].pop(), 'provinces'),
-                         (lambda s: s.pop('base'), 'base')):
+                         (lambda s: s.pop('base'), 'base'),
+                         (lambda s: s['base']['right_seats'].update({'1': 1}), 'right_seats'),
+                         (lambda s: s['base']['right_seats'].update({'99': 21}), 'right_seats'),
+                         (lambda s: s['base']['central'].pop('Izquierda'), 'central'),
+                         (lambda s: s['base']['central'].update(Derecha=-1), 'central')):
         bad = copy.deepcopy(good)
         change(bad)
         fs.write_bytes(json.dumps(bad).encode(), MAJORITY)

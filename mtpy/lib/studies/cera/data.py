@@ -652,10 +652,33 @@ def _count_problems(path: str, counts: dict, n_sim: int) -> list:
         if not isinstance(value, int) or not 0 <= value <= n_sim:
             problems.append(f'{path}.{key}: {value!r} is not a count between 0 and {n_sim}')
     for key in ('right', 'left'):
-        values = counts.get(key)
-        if not isinstance(values, dict) or sum(values.values()) != n_sim:
-            problems.append(f'{path}.{key}: the distribution does not add up to {n_sim}')
+        problems += _distribution_problems(f'{path}.{key}', counts.get(key), n_sim)
     return problems
+
+
+def _distribution_problems(path: str, values, n_sim: int) -> list:
+    """
+    Check a distribution over the simulations: counts between 0 and `n_sim` that add up to `n_sim`.
+
+    Parameters
+    ----------
+    path : str
+        Where the distribution is, to name it in the problems.
+    values : dict
+        The distribution, value to count.
+    n_sim : int
+        Simulations of the run.
+
+    Returns
+    -------
+    list
+        The texts of what is wrong, empty if nothing is.
+    """
+    if not isinstance(values, dict) or not all(isinstance(n, int) and 0 <= n <= n_sim for n in values.values()):
+        return [f'{path}: not a distribution of counts between 0 and {n_sim}']
+    if sum(values.values()) != n_sim:
+        return [f'{path}: the distribution does not add up to {n_sim}']
+    return []
 
 
 def _grid_problems(path: str, grid: dict, columns: str, n_sim: int) -> list:
@@ -720,6 +743,11 @@ def check_majority(snapshot: dict, params: Optional[dict] = None) -> list:
     with_majority = snapshot['base'].get('with_majority')
     if not isinstance(with_majority, int) or not 0 <= with_majority <= n_sim:
         problems.append(f'base.with_majority: not a count between 0 and {n_sim}')
+    problems += _distribution_problems('base.right_seats', snapshot['base'].get('right_seats'), n_sim)
+    central = snapshot['base'].get('central')
+    if not isinstance(central, dict) or not all(
+            isinstance(central.get(block), int) and central[block] >= 0 for block in ('Derecha', 'Izquierda')):
+        problems.append('base.central: without Derecha and Izquierda as non-negative seats')
 
     provinces = []
     for name, scenario in snapshot['expected'].items():
