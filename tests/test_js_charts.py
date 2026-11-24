@@ -614,17 +614,14 @@ def test_series_views_carry_the_key_dates_in_both_views():
                'catalog': {'parties': [{'name': n, 'color': '#000000', 'fullname': n, 'block': None} for n in ('PP', 'PSOE')],
                            'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}}}
     views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
-    # consecutive key dates write their label at opposite ends of their lines: the call at the top and the campaign
-    # at the bottom, so on a narrow screen with the whole cycle, where the two lines almost touch, both are read
-    key = [{'date': '2026-10-05', 'label': 'Convocatoria', 'position': 'insideEndTop'},
-           {'date': '2026-11-13', 'label': 'Campaña', 'position': 'insideStartTop'}]
-    assert views['partidos']['marks'] == key
-    assert views['bloques']['marks'] == key + [{'date': '2024-06-06', 'label': 'Entra SALF'}]
+    # a key date keeps its `kind`, which tells it from the entry of a party: a narrow chart takes the key dates off
+    # with a long window (`seriesOption`), never the entries
+    assert views['partidos']['marks'] == initial['key_dates']
+    assert views['bloques']['marks'] == initial['key_dates'] + [{'date': '2024-06-06', 'label': 'Entra SALF'}]
     debate = {'date': '2026-11-20', 'label': 'Debate', 'kind': 'key'}
     three = dict(initial, key_dates=initial['key_dates'] + [debate])
     views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(three), json.dumps(three)))
-    ends = [mark['position'] for mark in views['partidos']['marks']]
-    assert ends == ['insideEndTop', 'insideStartTop', 'insideEndTop']
+    assert [mark['kind'] for mark in views['partidos']['marks']] == ['call', 'campaign', 'key']
 
 
 def test_series_marks_keep_their_shape_through_the_shared_builders():
@@ -632,8 +629,6 @@ def test_series_marks_keep_their_shape_through_the_shared_builders():
     mark = run_js("s.alongMark({date: '2026-10-05', label: 'Convocatoria'})")
     assert mark['label'] == {'formatter': 'Convocatoria', 'position': 'insideEndTop', 'color': '#555'}
     assert mark['xAxis'] == run_js("s.dayTime('2026-10-05')")
-    bottom = run_js("s.alongMark({date: '2026-10-05', label: 'X', position: 'insideStartTop'})")
-    assert bottom['label']['position'] == 'insideStartTop'
     # the label above the plot, on one side of its line
     above = run_js("s.markAt(s.dayTime('2026-10-05'), 'Convocatoria', 'left')")
     assert above == {'xAxis': run_js("s.dayTime('2026-10-05')"),
@@ -645,11 +640,99 @@ def test_series_marks_keep_their_shape_through_the_shared_builders():
     args = BREAKDOWN_ARGS.replace("breakdown: {", "marks: [{date: '2026-10-01', label: 'Entra SALF'}], breakdown: {")
     drawn = next(x for x in run_js('s.seriesOption(%s)' % args)['series'] if x['name'] == 'marks')
     assert drawn['markLine']['data'][-1] == run_js("s.alongMark({date: '2026-10-01', label: 'Entra SALF'})")
-    # and a mark that asks for the other end of its line keeps it
-    low = args.replace("label: 'Entra SALF'}", "label: 'Campaña', position: 'insideStartTop'}")
-    drawn_low = next(x for x in run_js('s.seriesOption(%s)' % low)['series'] if x['name'] == 'marks')
-    assert drawn_low['markLine']['data'][-1]['label']['position'] == 'insideStartTop'
     assert {k: v for k, v in drawn.items() if k != 'markLine'} == {k: v for k, v in series.items() if k != 'markLine'}
+
+
+# A cycle of almost two years with the key dates of its election and, before them, the entry of a party
+LONG_ARGS = ("{series: {dates: ['2025-01-01', '2026-06-01', '2026-11-23'], parties: ['PP'], mean: {PP: [30, 31, 32]}, "
+             "lo: {}, hi: {}}, polls: {parties: [], polls: []}, projection: null, parties: ['PP'], selected: null, "
+             "colors: {}, asOf: '2026-11-23', when: '2026-11-29', anchor: '2026-11-23', legend: 'hidden', "
+             "marks: [{date: '2026-10-05', label: 'Convocatoria', kind: 'call'}, "
+             "{date: '2026-11-13', label: 'Campaña', kind: 'campaign'}, {date: '2025-06-06', label: 'Entra SALF'}]}")
+# Labels of the key dates an option draws (`key`; null without their series) and of its other marks (`marks`)
+DRAWN_MARKS = ("((o) => { const labels = (name) => { const found = o.series.find((x) => x.name === name); "
+               "return found ? found.markLine.data.map((m) => m.label.formatter) : null; }; "
+               "return {key: labels('key-dates'), marks: labels('marks')}; })")
+
+
+def test_series_draws_the_key_dates_on_their_own_series_left_of_their_line():
+    """Las fechas clave van en su propia serie de marcas, cada etiqueta arriba y a la izquierda de su línea (Luis,
+    2026-11-24), como la entrada de un partido, que sigue con las demás marcas. Sin fechas clave no hay serie."""
+    option = run_js('s.seriesOption({...%s, window: "all"})' % LONG_ARGS)
+    key = next(x for x in option['series'] if x['name'] == 'key-dates')
+    assert key['id'] == 'key-dates' and key['markLine']['data'] == [
+        run_js("s.alongMark({date: '2026-10-05', label: 'Convocatoria'})"),
+        run_js("s.alongMark({date: '2026-11-13', label: 'Campaña'})")]
+    marks = next(x for x in option['series'] if x['name'] == 'marks')
+    assert marks['markLine']['data'][-1] == run_js("s.alongMark({date: '2025-06-06', label: 'Entra SALF'})")
+    assert len(marks['markLine']['data']) == 2  # «Estimación» and the entry: the key dates are not drawn twice
+    assert {k: v for k, v in key.items() if k not in ('id', 'name')} == {
+        k: v for k, v in marks.items() if k != 'name'} | {'markLine': key['markLine']}
+    assert key['markLine']['lineStyle'] == marks['markLine']['lineStyle']
+    # a chart without key dates has no series for them
+    entry = BREAKDOWN_ARGS.replace("breakdown: {", "marks: [{date: '2026-10-01', label: 'Entra SALF'}], breakdown: {")
+    bare = run_js('%s(s.seriesOption(%s))' % (DRAWN_MARKS, entry))
+    assert bare == {'key': None, 'marks': ['Estimación', 'Entra SALF']}
+    # a chart is narrow under 600 px of container; one not laid out yet (no width) is taken as wide
+    widths = run_js('[390, 599, 600, 1280, 0].map((clientWidth) => s.isNarrow({clientWidth}))')
+    assert widths == [True, True, False, False, False]
+
+
+def test_narrow_series_draws_its_key_dates_only_up_to_the_six_month_window():
+    """En un gráfico estrecho (el móvil) las fechas clave sólo se dibujan con la ventana de 6 meses o menos (Luis,
+    2026-11-24): con más ciclo a la vista, las líneas de la convocatoria y de la campaña casi se tocan. La entrada de
+    un partido sigue en todas las ventanas; el gráfico ancho y la imagen dibujan siempre las fechas clave."""
+    both = ['Convocatoria', 'Campaña']
+    drawn = run_js(
+        "Object.fromEntries(['all', '1a', '6m', '3m'].map((window) => "
+        "[window, %s(s.seriesOption({...%s, window, narrow: true}))]))" % (DRAWN_MARKS, LONG_ARGS))
+    assert {window: got['key'] for window, got in drawn.items()} == {'all': [], '1a': [], '6m': both, '3m': both}
+    assert all(got['marks'] == ['Estimación', 'Entra SALF'] for got in drawn.values())
+    wide = run_js("['all', '6m'].map((window) => %s(s.seriesOption({...%s, window})).key)" % (DRAWN_MARKS, LONG_ARGS))
+    assert wide == [both, both]
+    # the image is drawn wide whatever the screen it is downloaded from
+    image = run_js('%s(s.seriesImageOption({...%s, window: "all", narrow: true}))' % (DRAWN_MARKS, LONG_ARGS))
+    assert image['key'] == both
+    # a cycle shorter than six months is whole in that window: its key dates are drawn with every choice
+    short = ("{...%s, series: {dates: ['2026-09-20', '2026-10-20', '2026-11-23'], parties: ['PP'], "
+             "mean: {PP: [30, 31, 32]}, lo: {}, hi: {}}, window: 'all', narrow: true}" % LONG_ARGS)
+    assert run_js('%s(s.seriesOption(%s))' % (DRAWN_MARKS, short))['key'] == both
+
+
+def test_key_dates_fit_a_window_up_to_the_six_month_one_of_the_chart():
+    """El tope es la ventana de «6 meses» del propio gráfico (con la proyección o el resultado que cierran su eje),
+    no 180 días justos; una ventana en pantalla cabe hasta ese largo, y sin ventana no cabe nada."""
+    span = run_js('s.keyDatesSpan(%s)' % LONG_ARGS)
+    assert span == run_js("s.dayTime('2026-11-23') - s.dayTime('2026-05-27')")
+    closed = run_js("s.keyDatesSpan({...%s, result: {date: '2026-11-29', values: {}}})" % LONG_ARGS)
+    assert closed == run_js("s.dayTime('2026-11-29') - s.dayTime('2026-05-27')")
+    day = 24 * 3600 * 1000
+    fits = run_js('[-30, 0, 1, 300].map((days) => s.keyDatesFit({startValue: 0, endValue: %d + days * %d}, %d))'
+                  % (span, day, span))
+    assert fits == [True, True, False, False]
+    assert run_js('s.keyDatesFit(null, %d)' % span) is False
+
+
+def test_narrow_chart_follows_its_window_with_the_key_dates():
+    """Un gráfico estrecho sigue su ventana: al pasar a 6 meses dibuja las fechas clave y al abrir más, con el
+    control o arrastrando el deslizador, las quita; si se redibuja ancho o sin fechas clave deja de seguirla."""
+    script = (
+        "(() => { const data = {...%s, window: 'all'}; "
+        "const chart = window.echarts.init(null, null, {renderer: 'svg', ssr: true, width: 320, height: 400}); "
+        "chart.setOption(s.seriesOption({...data, narrow: true})); s.followKeyDates(chart, data); "
+        "const count = () => chart.getOption().series.find((x) => x.id === 'key-dates').markLine.data.length; "
+        "const seen = [count()]; "
+        "s.setWindow(chart, '6m', data); seen.push(count()); "
+        "chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 0, start: 0, end: 100}); seen.push(count()); "
+        "chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 0, start: 97, end: 100}); seen.push(count()); "
+        "s.setWindow(chart, '1a', data); seen.push(count()); "
+        "s.followKeyDates(chart, null); s.setWindow(chart, '6m', data); seen.push(count()); "
+        "return seen; })()"
+    )
+    assert run_js(script % LONG_ARGS) == [0, 2, 0, 2, 0, 0]
+    # a wide chart, or one without key dates, is left alone: its zoom is not listened to nor read
+    idle = "(() => { s.followKeyDates({}, null); s.followKeyDates({}, {...%s, marks: []}); return 'idle'; })()"
+    assert run_js(idle % LONG_ARGS) == 'idle'
 
 
 def test_ridge_rows_are_taller_on_desktop():

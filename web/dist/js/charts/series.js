@@ -152,22 +152,75 @@ export function markAt(time, label, align = 'center') {
  * Vertical mark line of a date with its label inside the plot, written along the line: never over the dates of the
  * axis nor over the labels above the plot («Estimación», «Elección»). The key dates of the election
  * («Convocatoria», «Campaña»…) and the entry of a party in the polls are drawn with it in the average. The label
- * starts at the top of the line unless the entry asks for the bottom (`KEY_MARK_ENDS`).
+ * starts at the top of the line, to its left (Luis, 2026-11-24).
  *
- * @param {{date: string, label: string, position: (string|undefined)}} entry the ISO date, its label and the end
- *   of the line the label is written at (`insideEndTop`, the top, by default; `insideStartTop`: the bottom)
+ * @param {{date: string, label: string}} entry the ISO date and its label
  * @returns {object} the item of the `markLine` data
  */
-export function alongMark({date, label, position = 'insideEndTop'}) {
-  return {xAxis: dayTime(date), label: {formatter: label, position, color: THEME.markColor}};
+export function alongMark({date, label}) {
+  return {xAxis: dayTime(date), label: {formatter: label, position: 'insideEndTop', color: THEME.markColor}};
+}
+
+// Width of the container, in pixels, under which a chart of the average is narrow (a phone)
+const NARROW = 600;
+
+/**
+ * Whether the chart of a container is narrow: it draws the key dates of its election only with a short window
+ * (`NARROW_KEY_WINDOW`).
+ *
+ * @param {HTMLElement} el chart container
+ * @returns {boolean} narrower than `NARROW`; a container not laid out yet (no width) is taken as wide
+ */
+export function isNarrow(el) {
+  return el.clientWidth > 0 && el.clientWidth < NARROW;
 }
 
 /**
- * Ends of their lines the key dates of an election write their label at, in turn by date: the first at the top,
- * the next at the bottom… The call and the start of the campaign are a few weeks apart: with the whole cycle on a
- * narrow screen their lines almost touch, and two labels at the same end would be written one over the other.
+ * Choice of the window control with the longest window a narrow chart draws the key dates of its election with
+ * (Luis, 2026-11-24): with more of the cycle on a phone the lines of the call and of the campaign almost touch;
+ * with six months they are some 45 px apart and both labels are read.
  */
-export const KEY_MARK_ENDS = ['insideEndTop', 'insideStartTop'];
+export const NARROW_KEY_WINDOW = '6m';
+
+// Id and name of the series of the key dates of the election (`keyDatesSeries`)
+const KEY_DATES_ID = 'key-dates';
+
+/**
+ * The key dates of the election among the marks of a chart, as items of a `markLine`: the marks with a `kind`
+ * (`call`, `campaign`, `key`); the entry of a party in the polls has none.
+ *
+ * @param {object[]|null} marks `marks` of `seriesOption`
+ * @returns {object[]} the items (`alongMark`), in the order given
+ */
+function keyDateItems(marks) {
+  return (marks || []).filter((entry) => entry.kind).map(alongMark);
+}
+
+/**
+ * Longest window on screen, in milliseconds, a narrow chart draws the key dates of its election with: the window
+ * the `NARROW_KEY_WINDOW` choice gives on the axis of the chart, which the projection or the official result close
+ * some days after the anchor, so it is not a fixed number of days.
+ *
+ * @param {object} data `series`, `projection` (parts), `anchor` (ISO date the window counts back from) and
+ *   `result` (the official result marked) of `seriesOption`
+ * @returns {number} the length of that window; 0 without dates
+ */
+export function keyDatesSpan({series, projection, anchor = null, result = null}) {
+  const limit = seriesWindow(NARROW_KEY_WINDOW, axisDatesOf(series, projection, result), anchor);
+  return limit ? dayTime(limit.endValue) - dayTime(limit.startValue) : 0;
+}
+
+/**
+ * Whether the window on screen is short enough for a narrow chart to draw the key dates of its election.
+ *
+ * @param {{startValue: number, endValue: number}|null} zoom timestamps of the ends of the window (`chartZoom`)
+ * @param {number} span `keyDatesSpan` of the chart
+ * @returns {boolean} no longer than `span`; false without a window
+ */
+export function keyDatesFit(zoom, span) {
+  // half a day of slack: the window of the control must fit whatever ECharts rounds its ends to
+  return Boolean(zoom) && zoom.endValue - zoom.startValue <= span + DAY_MS / 2;
+}
 
 /**
  * The mark lines of a chart on their own empty series, so hiding a party never hides them: silent, dashed, and kept
@@ -191,6 +244,17 @@ export function marksSeries(data) {
       data,
     },
   };
+}
+
+/**
+ * The key dates of the election on a series of marks of their own (`marksSeries` with an id), so a narrow chart
+ * can take them off and draw them again as its window changes (`followKeyDates`) without touching the other marks.
+ *
+ * @param {object[]} data items of the `markLine` data (`keyDateItems`); none when the chart does not draw them
+ * @returns {object} the ECharts series, with `KEY_DATES_ID` as id and name
+ */
+function keyDatesSeries(data) {
+  return {...marksSeries(data), id: KEY_DATES_ID, name: KEY_DATES_ID};
 }
 
 /**
@@ -332,17 +396,19 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   `layers` (what is drawn: `ambos`, the default, the poll points and the average; `sondeos`, the points alone,
  *   with the result and the mark lines; `promedio`, the lines, projection and range bars alone, without the points)
  *   and `breakdown` (the block view: `{members, values, colors}`, the parties of each block, the series of each
- *   party and its colour, which break a day of a block line down into its parties; null for none) and `marks`
- *   (`[{date, label, position}]`: more dashed mark lines, the key dates of the election and, in the block view,
- *   the entry of a party in the polls, with their label inside the plot along the line, at the end of it the
- *   entry asks for (`alongMark`), so that it covers neither the axis dates nor the labels above the plot; none by
- *   default)
+ *   party and its colour, which break a day of a block line down into its parties; null for none), `marks`
+ *   (`[{date, label, kind}]`: more dashed mark lines, the key dates of the election (those with a `kind`, on a
+ *   series of their own, `keyDatesSeries`) and, in the block view, the entry of a party in the polls (without
+ *   one), with their label inside the plot along the line (`alongMark`), at its top and to its left, so that it
+ *   covers neither the axis dates nor the labels above the plot; none by default) and `narrow` (a narrow chart, a
+ *   phone: the key dates are drawn only when the window is no longer than the one of `NARROW_KEY_WINDOW`,
+ *   `keyDatesFit`; the entries of the parties, always; false by default)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
   series, polls, projection, parties, selected = null, colors = {}, asOf, when,
   window: windowChoice = DEFAULT_WINDOW, anchor = null, legend = true, result = null, asOfLabel = 'Estimación',
-  layers = 'ambos', breakdown = null, marks: entries = [],
+  layers = 'ambos', breakdown = null, marks: entries = [], narrow = false,
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
@@ -444,14 +510,20 @@ export function seriesOption({
   } else if (withProjection && when) {
     marks.push(markAt(dayTime(when), 'Elección', 'left'));
   }
-  // the key dates of the election and the entries of the parties: inside the plot, along their lines (`alongMark`)
-  marks.push(...(entries || []).map(alongMark));
+  // the entries of the parties: inside the plot, along their lines (`alongMark`)
+  marks.push(...(entries || []).filter((entry) => !entry.kind).map(alongMark));
   const markSeries = marksSeries(marks);
 
   const axisDates = axisDatesOf(series, projection, result);
-  const zoom = seriesWindow(windowChoice, axisDates, anchor);
+  const range = seriesWindow(windowChoice, axisDates, anchor);
+  const zoom = range && {startValue: dayTime(range.startValue), endValue: dayTime(range.endValue)};
 
-  const allSeries = [...means, ...points, ...projected, ...ranges, ...results, ...extents, markSeries];
+  // the key dates of the election, on their own series; a narrow chart draws them only with a short window
+  const keyDates = keyDateItems(entries);
+  const withKeyDates = !narrow || keyDatesFit(zoom, keyDatesSpan({series, projection, anchor, result}));
+  const keySeries = keyDates.length ? [keyDatesSeries(withKeyDates ? keyDates : [])] : [];
+
+  const allSeries = [...means, ...points, ...projected, ...ranges, ...results, ...extents, markSeries, ...keySeries];
 
   /** Box of the item under the pointer: a poll, a day of the average or of the projection, or the result. */
   function tooltip(params) {
@@ -524,8 +596,8 @@ export function seriesOption({
       type: 'slider',
       bottom: 8,
       filterMode: 'filter',
-      startValue: dayTime(zoom.startValue),
-      endValue: dayTime(zoom.endValue),
+      startValue: zoom.startValue,
+      endValue: zoom.endValue,
       labelFormatter: (value) => fmtDate(isoDay(value)),
     }] : [],
     series: allSeries,
@@ -547,14 +619,15 @@ export function chartZoom(chart) {
 /**
  * Option of the downloadable image of the poll average (`share.js`): the chart of `seriesOption` with a drawn,
  * static legend of the names shown only and, instead of the slider, an invisible zoom at `zoom` (`chartZoom` of
- * the chart on screen), so the image keeps the window, the parties and the vertical axis of the screen.
+ * the chart on screen), so the image keeps the window, the parties and the vertical axis of the screen. The image
+ * is wide whatever the screen it is downloaded from: it draws the key dates of the election with every window.
  *
  * @param {object} data the arguments of `seriesOption`
  * @param {object|null} [zoom=null] the zoom of the chart on screen (null: the `window` of `data`)
  * @returns {object} the ECharts option
  */
 export function seriesImageOption(data, zoom = null) {
-  const option = seriesOption({...data, legend: true});
+  const option = seriesOption({...data, legend: true, narrow: false});
   const shown = data.selected ? data.parties.filter((name) => data.selected.includes(name)) : data.parties;
   const [slider] = option.dataZoom;
   return {
@@ -567,13 +640,54 @@ export function seriesImageOption(data, zoom = null) {
   };
 }
 
+// What each chart whose zoom is listened to knows of its key dates (`followKeyDates`), by ECharts instance: null
+// when its last drawing has none to follow
+const followed = new WeakMap();
+
 /**
- * Render the poll average in `el` (see `seriesOption` for the data).
+ * Keep the key dates of a narrow chart in step with its window: the chart listens to its zoom (the window control
+ * and the drags of the slider alike) and draws its key dates while the window on screen fits (`keyDatesFit`),
+ * taking them off when it does not. Every drawing of a chart calls it, since the chart is the same instance from
+ * one drawing to the next and its data may change: the zoom is listened to once, from the first drawing with key
+ * dates to follow; a chart that never has any (a wide one, or one without key dates) is left alone.
+ *
+ * @param {object} chart the ECharts instance, with the option of `seriesOption` already set
+ * @param {object|null} data the arguments of `seriesOption` of a narrow chart; null for a wide one, which always
+ *   draws its key dates
+ */
+export function followKeyDates(chart, data) {
+  const items = data ? keyDateItems(data.marks) : [];
+  const span = items.length ? keyDatesSpan(data) : 0;
+  const state = items.length ? {items, span, shown: keyDatesFit(chartZoom(chart), span)} : null;
+  if (state && !followed.has(chart)) {
+    chart.on('datazoom', () => {
+      const current = followed.get(chart);
+      const shown = Boolean(current) && keyDatesFit(chartZoom(chart), current.span);
+      if (current && shown !== current.shown) {
+        current.shown = shown;
+        chart.setOption({series: [{id: KEY_DATES_ID, markLine: {data: shown ? current.items : []}}]});
+      }
+    });
+  }
+  if (state || followed.has(chart)) {
+    followed.set(chart, state);
+  }
+}
+
+/**
+ * Render the poll average in `el` (see `seriesOption` for the data), as a narrow chart when its container is
+ * (`isNarrow`): its key dates then follow the window on screen (`followKeyDates`).
  *
  * @param {HTMLElement} el chart container
  * @param {object} data the arguments of `seriesOption`
+ * @param {function|null} [decorate=null] `(option) => option`: what a page adds to the option before it is drawn
+ *   (the rings of the page of a poll)
  * @returns {object} the ECharts instance
  */
-export function renderSeries(el, data) {
-  return mountChart(el, seriesOption(data));
+export function renderSeries(el, data, decorate = null) {
+  const args = {narrow: isNarrow(el), ...data};
+  const option = seriesOption(args);
+  const chart = mountChart(el, decorate ? decorate(option) : option);
+  followKeyDates(chart, args.narrow ? args : null);
+  return chart;
 }

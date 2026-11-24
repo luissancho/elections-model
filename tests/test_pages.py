@@ -1061,6 +1061,8 @@ CALL_29N = [{'date': '2026-10-05', 'label': 'Convocatoria', 'kind': 'call'},
             {'date': '2026-11-13', 'label': 'Campaña', 'kind': 'campaign'}]
 KEY_DATES_SENTENCE = ('Las líneas verticales discontinuas marcan las fechas clave de la elección, como la convocatoria '
                       'y el inicio de la campaña.')
+# The charts of the average take the key dates off on a phone with a long window (`seriesOption`): their notes say it
+NARROW_KEY_DATES_SENTENCE = 'En el móvil sólo se dibujan con la ventana de 6 meses o menos.'
 
 
 def call_and_campaign(key_dates: list) -> list:
@@ -1094,6 +1096,13 @@ def test_event_page_passes_the_key_dates_of_its_election(api):
     for start, end in (('id="series-chart"', 'id="resultados"'), ('id="evolution-chart"', 'id="pollster"'),
                        ('id="pollster-chart"', 'id="tabla"')):
         assert KEY_DATES_SENTENCE in page[page.index(start):page.index(end)]
+    # the two charts of the average take them off on a phone with a long window; the evolution always draws them
+    assert page.count(NARROW_KEY_DATES_SENTENCE) == 2
+    both = KEY_DATES_SENTENCE + ' ' + NARROW_KEY_DATES_SENTENCE
+    for start, end, said in (('id="series-chart"', 'id="resultados"', True),
+                             ('id="evolution-chart"', 'id="pollster"', False),
+                             ('id="pollster-chart"', 'id="tabla"', True)):
+        assert (both in page[page.index(start):page.index(end)]) is said
     assert_public_wording(html(body), '/es')
 
 
@@ -1138,7 +1147,7 @@ def test_past_election_passes_its_key_dates(events_site):
     data = initial(body)
     assert [(entry['kind'], entry['date']) for entry in call_and_campaign(data['key_dates'])] == [
         ('call', '2023-05-29'), ('campaign', '2023-07-07')]
-    assert ' '.join(html(body).split()).count(KEY_DATES_SENTENCE) == 1
+    assert ' '.join(html(body).split()).count(KEY_DATES_SENTENCE + ' ' + NARROW_KEY_DATES_SENTENCE) == 1
 
 
 def test_past_election_without_dates_has_no_key_dates(events_site, monkeypatch):
@@ -7940,7 +7949,7 @@ def test_sondeo_page_renders_the_card_the_detail_and_the_sheet(api, fresh_app):
     # the key dates of the election of the run, the marks of the chart of the house, and the sentence that reads them
     assert call_and_campaign(data['key_dates']) == CALL_29N
     house = ' '.join(page[page.index('id="poll-house-chart"'):page.index('id="closing"')].split())
-    assert KEY_DATES_SENTENCE in house
+    assert KEY_DATES_SENTENCE + ' ' + NARROW_KEY_DATES_SENTENCE in house
     assert data['previous'] == {'values': {'PP': 32.1}, 'seats': {'PP': [146, 148]}}
     assert [p['date'] for p in data['polls']['polls']] == ['2026-10-05', '2026-09-24', '2026-10-03', '2026-09-28']  # only the house's polls, in the order of the part
     assert data['poll']['PP'] == 33.5 and data['seats'] == {'PP': [150, 152]}

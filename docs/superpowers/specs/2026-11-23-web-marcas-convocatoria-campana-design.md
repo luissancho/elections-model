@@ -131,9 +131,24 @@ Lo que quedó distinto de lo escrito arriba, y por qué.
   el móvil (390 px) con todo el ciclo, que es la vista con la que abre la página, las líneas de la convocatoria y
   de la campaña quedan a 9 px y las dos etiquetas se escribían una encima de la otra; en la evolución, la
   etiqueta caía sobre las líneas de PP y PSOE. Queda así:
-  - En los gráficos del promedio, las fechas clave escriben su etiqueta por turnos en los dos extremos de su
-    línea (`KEY_MARK_ENDS`): la convocatoria arriba, la campaña abajo, una tercera fecha arriba. Las entradas de
-    partidos siguen arriba.
+  - En los gráficos del promedio, las etiquetas van arriba y a la izquierda de su línea, como «Entra SALF»
+    (Luis, 2026-11-24: la primera versión ponía «Campaña» abajo y caía sobre los puntos de los partidos
+    pequeños).
+  - En un gráfico estrecho (un contenedor de menos de 600 px: el móvil) las fechas clave sólo se dibujan
+    mientras la ventana en pantalla no pase de la de «6 meses» (Luis, 2026-11-24: con más ciclo a la vista las
+    dos líneas casi se tocan y no dicen nada; primero pidió quitarlas a más de 3 meses y, vistas, las probó
+    también con 6). Van en su propia serie de marcas (`key-dates`) y el gráfico sigue su ventana
+    (`followKeyDates`): las pone y las quita tanto con el control como al arrastrar el deslizador. El tope
+    (`NARROW_KEY_WINDOW`) es la ventana de «6 meses» del propio gráfico (`keyDatesSpan`), que la proyección o el
+    resultado cierran unos días después del último sondeo, no 180 días justos; un ciclo más corto que eso las
+    dibuja siempre. Con 6 meses las dos líneas quedan a unos 45 px (a más de 100 con 3 meses), así que sus
+    etiquetas van a la izquierda también en el móvil. Las entradas de partidos («Entra SALF») se dibujan con
+    todas las ventanas, la imagen descargable se dibuja siempre como en escritorio, con sus fechas clave, y la
+    evolución, que nunca llega a 6 meses, no cambia. El «Cómo se lee» de los tres gráficos del promedio lo
+    dice: «En el móvil sólo se dibujan con la ventana de 6 meses o menos».
+  - Queda un límite conocido: una tercera fecha clave a pocos días de otra (un debate en plena campaña) escribe
+    su etiqueta sobre la de la vecina, en escritorio con todo el ciclo y en el móvil con 3 o 6 meses. Hoy ningún
+    gráfico publicado tiene una tercera fecha.
   - En la evolución, las etiquetas van en horizontal por encima del gráfico, donde no pasa ninguna línea de
     partido, cada una hacia dentro: en la primera mitad de los días el texto empieza en su línea y en la segunda
     acaba en ella.
