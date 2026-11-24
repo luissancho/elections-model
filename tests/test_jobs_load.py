@@ -6,7 +6,7 @@ import pytest
 
 from mtpy.lib.load import NO_EVENTS
 from tests.test_load_unit import FakeCatalogues, FakeComputer, FakeLoader
-from tests.test_pipelines_load import FakeParamsLoader
+from tests.test_pipelines_load import FakeParamsLoader, FakeSnapshotter
 
 module = importlib.import_module('mtpy.jobs.Load')
 Load = module.Load
@@ -109,7 +109,7 @@ def test_load_isolates_a_failing_scope_and_reports_the_exception(fresh_app, scop
 
 
 def test_load_unknown_action(fresh_app, scopes, events):
-    with pytest.raises(ValueError, match=r'load: unknown what "x" \(expected one of polls, params\)'):
+    with pytest.raises(ValueError, match=r'load: unknown what "x" \(expected one of polls, params, majority\)'):
         run(FakeLoader(), what=['x'], scopes=['es'])
 
 
@@ -174,3 +174,9 @@ def test_load_alert_puts_the_failures_first(fresh_app, scopes, events):
         Load().run(what='params', scopes='all', params_loader=FakeParamsLoader(fail={'es-md': KeyError('boom')}))
     lines = sent[-1].splitlines()
     assert lines[0].endswith('with 1 failure') and lines[1].startswith('es-md: params failed') and lines[2].startswith('es: params loaded')
+
+
+def test_load_majority_passes_the_run_and_the_overwrite(fresh_app, scopes, events):
+    fake = FakeSnapshotter()
+    out = Load().run(what='majority', scopes=['es'], run_id='20261124-102045', overwrite=True, snapshotter=fake)
+    assert out['es']['status'] == 'saved' and fake.calls == [('es', '20261124-102045', True, True)]

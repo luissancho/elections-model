@@ -1,7 +1,9 @@
-"""Tests de los pipelines `load.Polls` y `load.Params` ejecutados sueltos, sin base."""
+"""Tests de los pipelines `load.Polls`, `load.Params` y `load.Majority` ejecutados sueltos, sin base."""
 import pytest
 
 from mtpy.lib.load import NO_EVENTS
+from mtpy.lib.studies.cera.snapshot import SnapshotRefused
+from mtpy.pipelines.load.Majority import Majority
 from mtpy.pipelines.load.Params import Params
 from mtpy.pipelines.load.Polls import MAX_CHANGES, MAX_POLLS, Polls, change_text, changed_line, poll_line, removed_line, replaced_line
 from tests.test_load_unit import (
@@ -26,6 +28,18 @@ class FakeParamsLoader:
         if report is not None:
             report('{} 2023-07-23: bmaps.vs null -> {{}}'.format(scope), 1)
         return dict(PARAMS_RESULT, status='loaded' if save else 'checked')
+
+
+class FakeSnapshotter:
+    def __init__(self, refuse=None):
+        self.calls, self.refuse = [], refuse
+
+    def __call__(self, scope, run_id=None, save=True, overwrite=False, **kwargs):
+        self.calls.append((scope, run_id, save, overwrite))
+        if self.refuse:
+            raise SnapshotRefused(self.refuse)
+        return {'status': 'saved' if save else 'checked', 'action': 'majority', 'run_id': run_id or 'r', 'n_sim': 10000,
+                'base': {'with_majority': 8734, 'right': 190, 'left': 129}, 'seconds': {'total': 95.2}}
 
 
 @pytest.fixture
@@ -291,3 +305,39 @@ def test_params_scope_without_elections_is_skipped_with_all_and_fails_when_named
 def test_params_isolates_an_exception(fresh_app):
     p = params('es', FakeParamsLoader(fail={'es': KeyError('boom')}))
     assert p.result['status'] == 'failed' and p.line == "es: params failed (KeyError: 'boom')"
+
+
+def majority(scope, snapshotter, action='update', position=(1, 1), **kwargs):
+    p = Majority()
+    p.run(action, chunk=scope, position=position, snapshotter=snapshotter, **kwargs)
+    return p
+
+
+def test_majority_takes_the_snapshot_and_builds_its_line(fresh_app, capsys):
+    fake = FakeSnapshotter()
+    p = majority('es', fake, run_id='20261124-102045')
+    assert fake.calls == [('es', '20261124-102045', True, False)]
+    assert p.line == 'es: majority saved (run 20261124-102045, right 190 seats, majority in 8734 of 10000) in 95 s'
+    assert 'load majority: 1 ámbito' in capsys.readouterr().out
+
+
+def test_majority_dry_run_and_overwrite_reach_the_snapshot(fresh_app, capsys):
+    fake = FakeSnapshotter()
+    p = majority('es', fake, action='rebulk', dry_run=True)
+    assert fake.calls == [('es', None, False, True)] and p.line.endswith('of 10000, dry run) in 95 s')
+    assert 'load majority: 1 ámbito · overwrite · dry run' in capsys.readouterr().out
+
+
+def test_majority_turns_a_refusal_into_a_line(fresh_app):
+    p = majority('es', FakeSnapshotter(refuse='1 of 10000 simulations differ from the published run'))
+    assert p.result['status'] == 'refused'
+    assert p.line == 'es: majority refused (1 of 10000 simulations differ from the published run)'
+
+
+def test_majority_isolates_an_exception(fresh_app):
+    class Exploding(FakeSnapshotter):
+        def __call__(self, *args, **kwargs):
+            raise KeyError('boom')
+
+    p = majority('es', Exploding())
+    assert p.result['status'] == 'failed' and p.line == "es: majority failed (KeyError: 'boom')"

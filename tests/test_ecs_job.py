@@ -328,3 +328,11 @@ def test_task_definition_and_network_come_from_the_primary_deployment(env_file):
         ecs_job.live_task_definition(description, 'c', 's')
     with pytest.raises(ecs_job.LaunchError, match='has no deployments'):
         ecs_job.primary_deployment({'deployments': []}, 'c', 's')
+
+
+def test_run_job_value_refuses_load_majority():
+    """`load majority` escribe `data/cera/majority.json` del repositorio: sólo en el portátil."""
+    for job, params in (('load', '{"what":"majority"}'), ('load', '{"what":["polls","majority"]}'),
+                        ('pipeline', '{"select":"load.majority","chunks":"es"}')):
+        with pytest.raises(ecs_job.UsageError, match='laptop'):
+            ecs_job.run_job_value(job, params)

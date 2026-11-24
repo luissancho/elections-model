@@ -27,6 +27,12 @@ class Load(SequenceJob):
     nothing is written and every key that would change is reported at level 1. ``event_date``, ``overwrite``,
     ``force`` and ``years`` do not apply to it.
 
+    The action ``majority`` takes the frozen snapshot of the published run of the scope for the study of the CERA
+    vote and writes ``data/cera/majority.json`` (`mtpy.lib.studies.cera.snapshot.take_snapshot`): it rebuilds the run
+    (``run_id``, the latest by default), refuses unless the rebuilt run equals the published one, and refuses to
+    replace an existing file unless ``overwrite``. With ``dry_run`` it does all the checks and writes nothing. It
+    writes a file of the repository, so it runs on the laptop only (the ECS launcher refuses it).
+
     The console output has the four levels of ``publish``: 0, the header and the final summary; 1, also
     ``[i/n] scope: empezando``, the names block, the warnings and the result line of each scope; 2, also one line
     per phase with its seconds and the skipped names; 3, also the own output of the loader and the ``Computer``
@@ -62,29 +68,33 @@ class Load(SequenceJob):
         python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
         python job.py load '{"what":"params","scopes":"all"}'
         python job.py load '{"what":"params","scopes":"all","dry_run":true}'
+        python job.py load '{"what":"majority","run_id":"20261124-102045","dry_run":true}'
+        python job.py load '{"what":"majority","run_id":"20261124-102045"}'
+        python job.py load '{"what":"majority","run_id":"20261124-102045","overwrite":true}'
 
     In Docker (JSON without spaces)::
 
         RUN_JOB='load {"scopes":["es"],"overwrite":true}'
     """
 
-    sequence = {'load': ['polls', 'params']}
+    sequence = {'load': ['polls', 'params', 'majority']}
     default_action = 'update'
     stop_on_error = False
     chunk_noun = 'scopes'
-    WHAT = ('polls', 'params')
+    WHAT = ('polls', 'params', 'majority')
 
     def run(self, what=('polls',), scopes=('es',), event_date=None, overwrite=False, force=False, years=None,
             dry_run=False, verbose=1, loader=None, computer=None, catalogues=None, params_loader=None,
-            stop_on_error=None, **kwargs):
+            run_id=None, snapshotter=None, stop_on_error=None, **kwargs):
         """
         Run the requested loads.
 
         Parameters
         ----------
         what : str or list of str, default ('polls',)
-            Actions to run, in order: ``polls`` (the Wikipedia polls of the next election) and ``params`` (the
-            ``parties`` and ``bmaps`` of every election of the scope in ``data/params.json``, `load.load_params`).
+            Actions to run, in order: ``polls`` (the Wikipedia polls of the next election), ``params`` (the
+            ``parties`` and ``bmaps`` of every election of the scope in ``data/params.json``, `load.load_params`)
+            and ``majority`` (the snapshot ``data/cera/majority.json`` of the published run, laptop only).
         scopes : str or list of str, default ('es',)
             Scopes to load, or ``'all'`` (see ``publish.resolve_scopes``).
         event_date : str, optional
@@ -104,6 +114,10 @@ class Load(SequenceJob):
             Factories and helper passed to `load.load_polls`; the real ones by default (for tests).
         params_loader : callable, optional
             Replacement of `load.load_params` (for tests).
+        run_id : str, optional
+            Published run to freeze; the latest one by default. Only ``majority``.
+        snapshotter : callable, optional
+            Replacement of `take_snapshot` (for tests). Only ``majority``.
         stop_on_error : bool, optional
             Stop at the first failed scope instead of going on with the others; ``False`` by default.
         **kwargs
@@ -142,7 +156,7 @@ class Load(SequenceJob):
         super().run(select=['load.' + item for item in whats], action='rebulk' if overwrite else 'update',
                     chunks=targets, stop_on_error=stop_on_error, event_date=event_date, force=force, years=years,
                     dry_run=dry_run, verbose=verbose, loader=loader, computer=computer, catalogues=catalogues,
-                    params_loader=params_loader, skip_missing=scopes == 'all')
+                    params_loader=params_loader, run_id=run_id, snapshotter=snapshotter, skip_missing=scopes == 'all')
 
         results = {}
         for (key, scope), result in self.results.items():
