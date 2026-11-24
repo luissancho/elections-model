@@ -8,9 +8,8 @@
 // logic of the card lives in `poll-card.js`.
 import {Catalog} from '../catalog.js';
 import {renderBars} from '../charts/bars.js';
-import {mountChart} from '../charts/base.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
-import {chartZoom, seriesImageOption, seriesOption, setWindow} from '../charts/series.js';
+import {chartZoom, renderSeries, seriesImageOption, setWindow} from '../charts/series.js';
 import {wireCardImages} from '../card-image.js';
 import {fmtPct} from '../format.js';
 import {changeLabel, highlightSeries, pollSeats, seatChanges, voteRows} from '../poll-card.js';
@@ -120,6 +119,7 @@ function wireHouse(initial, catalog) {
       legend: 'hidden',
       layers: state.layers,
       breakdown: current.breakdown || null,
+      marks: current.marks || [],
     };
   }
 
@@ -133,15 +133,13 @@ function wireHouse(initial, catalog) {
   /** `option` with the rings over this poll added after its series. */
   const withRing = (option) => ({...option, series: [...option.series, ...ring()]});
 
-  /** Option of the chart on screen: `seriesOption` of the state with the rings. */
-  const optionWithRing = () => withRing(seriesOption(dataOf()));
-
   /** Option of the image of the chart: `seriesImageOption` of the state at the zoom on screen, with the rings. */
   const imageWithRing = () => withRing(seriesImageOption(dataOf(), chartZoom(chart)));
 
-  /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */
+  /** Draw the chart (`renderSeries` of the state, with the rings), fill its pill legend and, the first time,
+   * listen to the legend selection. */
   function draw() {
-    const drawn = mountChart(el, optionWithRing());
+    const drawn = renderSeries(el, dataOf(), withRing);
     if (!chart) {
       chart = drawn;
       chart.on('legendselectchanged', (event) => {

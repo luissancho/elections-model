@@ -6,7 +6,7 @@ resuelve en `mtpy.run()` (`app.data`, `app.datapath`); se puede cambiar con la v
 
 | Fichero | Contenido | Origen y licencia |
 |---|---|---|
-| `params.json` | Por ámbito y evento: partidos con resultado y en encuestas, mapas de bloques (`max`, `min`, `main`, `blocks`, `vs`) y `smap` (herencia de votos entre elecciones; `regions` son códigos de provincia `region_id`) | Curación propia |
+| `params.json` | Por ámbito y evento: partidos con resultado y en encuestas, mapas de bloques (`max`, `min`, `main`, `blocks`, `vs`) y `smap` (herencia de votos entre elecciones; `regions` son códigos de provincia `region_id`) y `dates` (fechas clave de la elección, escritas a mano, que la web marca en las series temporales: `call`, el día de la convocatoria, el anterior a la publicación del decreto; `campaign`, el primer día de la campaña; `key`, otras fechas con su etiqueta; una elección sin convocar no lleva ninguna) | Curación propia |
 | `es-provinces.csv` | Provincias con su código oficial (`code` = `region_id` = código INE), comunidad y población | Elaboración propia a partir del INE |
 | `es-regions.csv`, `es-regions-ages.csv` | Comunidades autónomas y población por edad | Elaboración propia a partir del INE |
 | `es-scopes.csv` | Catálogo de ámbitos (`scode` ISO 3166-2 en minúsculas; `es` es el nacional): comunidad, código INE, ámbito padre, gentilicio inglés de Wikipedia, umbral legal, peso en el rating y escaños que elige la próxima elección | Curación propia (ver "Ámbitos y circunscripciones") |

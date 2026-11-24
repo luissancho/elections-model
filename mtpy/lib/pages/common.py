@@ -14,7 +14,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
-from ..webapi import check_mode, check_run, check_scope, scope_codes, settings, site
+from ..webapi import check_mode, check_run, check_scope, event_params, scope_codes, settings, site
 from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, gradient,
                       fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around,
                       shade_scale, snippet)
@@ -137,6 +137,9 @@ OTHERS_COLOR = '#9e9e9e'
 REST_BLOCK = 'Otros'
 # The national scope: its run is the common part of the pages of a scope without a published forecast
 NATIONAL_SCOPE = 'es'
+# Label on the charts of the key dates every election has (``dates`` of its ``data/params.json`` entry): its call
+# (the day before the decree is published) and the first day of its campaign; any other key date brings its own
+KEY_DATE_LABELS = {'call': 'Convocatoria', 'campaign': 'Campaña'}
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
 DARK_INK = '#111'
 LIGHT_INK = '#fff'
@@ -581,6 +584,72 @@ def days_text(days: Optional[int]) -> Optional[str]:
         return 'Jornada electoral'
 
     return 'Celebradas hace {} día{}'.format(-days, '' if days == -1 else 's')
+
+
+def _iso_day(value) -> Optional[str]:
+    """The value when it is an ISO day (``YYYY-MM-DD``), else ``None``."""
+    if not isinstance(value, str) or len(value) != 10:
+        return None
+
+    try:
+        return value if date.fromisoformat(value).isoformat() == value else None
+    except ValueError:
+        return None
+
+
+def key_dates(params: dict) -> list:
+    """
+    Key dates of an election as the marks of the time charts.
+
+    Parameters
+    ----------
+    params : dict
+        Entry of the election in ``data/params.json`` (``webapi.event_params``). Its ``dates`` may hold ``call``
+        (the day of the call), ``campaign`` (the first day of the campaign) and ``key`` (``{date: label}``, any
+        other date worth marking), all of them optional.
+
+    Returns
+    -------
+    list of dict
+        ``{'date', 'label', 'kind'}`` per date, ascending by date and, on the same day, the call, the campaign
+        and the key dates: ``kind`` is ``'call'``, ``'campaign'`` or ``'key'`` and ``label`` what the chart
+        writes (``KEY_DATE_LABELS``, or the label of the key date). Empty without ``dates``. A value that is not
+        an ISO day, a key date without a label or a ``dates`` or ``key`` that is not a mapping is left out: a
+        typo in the file must not break the page.
+    """
+    dates = params.get('dates') if isinstance(params, dict) else None
+
+    if not isinstance(dates, dict):
+        return []
+
+    marks = [{'date': dates.get(kind), 'label': label, 'kind': kind} for kind, label in KEY_DATE_LABELS.items()]
+    key = dates.get('key')
+    marks += [{'date': day, 'label': label, 'kind': 'key'}
+              for day, label in (key.items() if isinstance(key, dict) else [])]
+    marks = [mark for mark in marks
+             if _iso_day(mark['date']) is not None and isinstance(mark['label'], str) and mark['label']]
+
+    # the sort is stable: on the same day, the order above
+    return sorted(marks, key=lambda mark: mark['date'])
+
+
+def run_key_dates(scope: str, meta: dict) -> list:
+    """
+    Key dates of the election a run forecasts.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    meta : dict
+        Meta part of the run (``event_date``, an ISO date, with or without the time).
+
+    Returns
+    -------
+    list of dict
+        ``key_dates`` of the entry of the election in ``data/params.json``; empty without the date or the entry.
+    """
+    return key_dates(event_params(scope, str(meta.get('event_date') or '')[:10]))
 
 
 def event_title(scope: str, scopes: list) -> str:

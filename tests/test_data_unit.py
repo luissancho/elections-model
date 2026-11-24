@@ -373,6 +373,25 @@ def test_format_params_reproduces_the_file_style():
     assert format_params(SAMPLE) == EXPECTED
 
 
+def test_format_params_writes_the_key_dates_one_per_line():
+    """Las fechas clave de una elección (`dates`) salen con una clave por línea, y las de `key`, una fecha por línea."""
+    dates = {'call': '2004-01-19', 'campaign': '2004-02-27', 'key': {'2004-03-11': '11-M'}}
+    assert format_params({'es': {'2004-03-14': {'dates': dates}}}) == """{
+    "es": {
+        "2004-03-14": {
+            "dates": {
+                "call": "2004-01-19",
+                "campaign": "2004-02-27",
+                "key": {
+                    "2004-03-11": "11-M"
+                }
+            }
+        }
+    }
+}
+"""
+
+
 def test_format_params_wraps_long_lists_at_100_columns():
     names = ['PARTIDO{:02d}'.format(i) for i in range(20)]
     text = format_params({'es': {'2023-07-23': {'parties': {'event': names, 'polls': []}}}})
