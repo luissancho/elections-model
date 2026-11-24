@@ -1072,14 +1072,8 @@ class Simulator(Core):
             return
 
         if self.central_table is None:
-            random = self.params['random']
-            self.params['random'] = False
-            try:
-                frame = self.build_frame()
-                umat = self.build_umat(frame)
-                result = self.simulate(frame, umat)
-            finally:
-                self.params['random'] = random
+            frame, umat = self._central_pass()
+            result = self.simulate(frame, umat)
 
             self.central_table = pd.DataFrame(
                 np.asarray(result, dtype=float).round(),
@@ -1088,6 +1082,45 @@ class Simulator(Core):
             ).astype(int)
 
         return self.central_table.copy()
+
+    def _central_pass(self) -> tuple:
+        """
+        Deterministic pass behind the central allocation: `build_frame` -> `build_umat` with `random` off
+        (restored afterwards). The random generators are not touched.
+
+        Returns
+        -------
+        tuple
+            ``(frame, umat)`` as returned by `build_frame` and `build_umat`.
+        """
+        random = self.params['random']
+        self.params['random'] = False
+        try:
+            frame = self.build_frame()
+            umat = self.build_umat(frame)
+        finally:
+            self.params['random'] = random
+
+        return frame, umat
+
+    def central_shares(self) -> Optional[pd.DataFrame]:
+        """
+        Vote shares behind the central allocation (see `central_result`): the `vpred_pct` of its deterministic
+        pass, over valid votes and summing 100 with the residual `'-'`. They are not cached: the pass runs
+        on each call.
+
+        Returns
+        -------
+        pd.DataFrame or None
+            One row per region of `params['regions']` (the total of the scope included), one column per
+            category (`categories()`: the parties and `'-'`), floats. `None` where `central_result` is `None`.
+        """
+        if not self.params['split'] or self.forecast is None:
+            return
+
+        _, umat = self._central_pass()
+
+        return umat['vpred_pct'].loc[self.params['regions'], self.categories()].astype(float)
 
     def totals(
         self,
