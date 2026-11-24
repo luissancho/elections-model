@@ -640,8 +640,8 @@ def _outcome_of(params: dict, inputs: dict, checks: dict, snapshot: dict | None)
     Returns
     -------
     dict or None
-        `check.majority_outcome` with the snapshot's blocks and majority; `None` without the check of the election
-        or without a snapshot.
+        `check.majority_outcome` with the snapshot's blocks and majority and the aliases of `majority.aliases` (none
+        when `params` lacks the key); `None` without the check of the election or without a snapshot.
     """
     date = params['election']['date']
     if snapshot is None or date not in checks:
@@ -649,7 +649,7 @@ def _outcome_of(params: dict, inputs: dict, checks: dict, snapshot: dict | None)
 
     return majority_outcome(
         inputs['results'][date], inputs['cera'][date], snapshot['blocks'], snapshot['majority'],
-        aliases=params['majority']['aliases']
+        aliases=params.get('majority', {}).get('aliases', {})
     )
 
 
