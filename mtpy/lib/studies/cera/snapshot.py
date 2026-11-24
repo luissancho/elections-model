@@ -48,7 +48,9 @@ def draws_of(sim) -> Draws:
 
     Each province gets `round(vpred_pct × valid / 100)` with the valid votes of the previous election
     (`prev_totals['votes']`), as `Simulator.simulate` does (a party without a share, NaN, gets no votes); the central
-    allocation the same with `central_shares()`.
+    allocation the same with `central_shares()`. The votes are exact, not an approximation: `build_umat` hands
+    `simulate` shares already rounded to 2 decimals, and those are the ones `units` keeps (the `round(2)` of `run`
+    changes nothing) and `central_shares()` returns.
 
     Parameters
     ----------

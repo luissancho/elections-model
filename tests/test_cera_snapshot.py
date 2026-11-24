@@ -3,10 +3,12 @@ a simulación y se miden los escenarios de voto exterior sobre sus sorteos (`cer
 import dataclasses
 import json
 
+import numpy as np
 import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
+from mtpy.lib.simulator import Simulator
 from mtpy.lib.studies.cera import snapshot
 from mtpy.lib.studies.cera.data import MAJORITY, check_majority
 from mtpy.lib.studies.cera.snapshot import SnapshotRefused, take_snapshot
@@ -41,6 +43,35 @@ def published(folder, sim, **meta):
 def bare(study):
     """El estudio sin foto, sin tocar la fixture de la sesión."""
     return dataclasses.replace(study, majority=None)
+
+
+def test_draws_of_gives_the_very_votes_the_simulator_allocated(monkeypatch):
+    """Los votos de `draws_of` son exactamente los que el simulador repartió, en cada provincia de cada simulación y
+    en el reparto central: `build_umat` ya entrega a `simulate` las cuotas redondeadas a 2 decimales que guarda
+    `units`. Si alguien cambia ese redondeo, esta prueba se pone roja."""
+    calls = []
+    real = Simulator.alloc_seats
+
+    def spy(d_votes, n_seats, valid_votes=None, **kwargs):
+        calls.append((list(d_votes.values()), valid_votes))
+        return real(d_votes, n_seats, valid_votes=valid_votes, **kwargs)
+
+    monkeypatch.setattr(Simulator, 'alloc_seats', staticmethod(spy))
+    sim = fakes.synthetic_simulator()
+    sim.run(reset=False, n_sim=200)
+    run_calls = list(calls)
+    calls.clear()
+    sim.central_result()
+    central_calls = list(calls)
+    calls.clear()
+    draws = snapshot.draws_of(sim)
+    provinces = [r for r, region in enumerate(draws.regions) if region != draws.default_region]
+
+    allocated = np.array([votes for votes, _ in run_calls]).reshape(200, len(provinces), len(draws.names))
+    assert np.array_equal(draws.votes[:, provinces, :], allocated)
+    assert np.array_equal(np.array([votes for votes, _ in central_calls]), draws.central[provinces])
+    bases = np.array([base for _, base in run_calls + central_calls]).reshape(201, len(provinces))
+    assert (bases == draws.base[provinces]).all()
 
 
 def snap(tmp_path, sim, study, scope='es', **kwargs):
@@ -168,7 +199,8 @@ def test_take_snapshot_takes_the_latest_run_and_refuses_without_one(tmp_path, ce
 
 
 def test_rebuild_run_follows_the_recipe_of_the_publication_with_the_meta_of_the_run(tmp_path):
-    """El run se reconstruye con los parámetros de su `meta`, el ancla en su `as_of`, y se corre sólo el `forecast`."""
+    """El run se reconstruye con los parámetros de su `meta`, el ancla en su `as_of`, y sólo se corre el
+    `forecast`."""
     meta = published(tmp_path, consistent()).read_json(bundle.path_part('es', RUN, 'meta'))['data']
     factory = fakes.FakeSimulator()
     sim = snapshot.rebuild_run(meta, simulator=factory)
