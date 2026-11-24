@@ -9,6 +9,7 @@ import json
 import re
 
 from dataclasses import dataclass
+from typing import Optional
 
 import pandas as pd
 
@@ -16,6 +17,10 @@ from unidecode import unidecode
 
 from ....core.io import FileSystem
 
+MAJORITY = 'cera/majority.json'
+SNAPSHOT_KEYS = ('run', 'majority', 'blocks', 'lineage', 'base', 'expected', 'new_electors', 'grid', 'placement')
+RUN_KEYS = ('scope', 'event_date', 'run_id', 'as_of', 'n_sim', 'seed', 'commit', 'taken_on')
+COUNT_KEYS = ('lost', 'gained', 'moved')
 MONTHLY_COLUMNS = ['date', 'region_id', 'country_code', 'country', 'electors']
 CENSUS_COLUMNS = ['region_id', 'country_code', 'country', 'electors']
 SCRUTINY_TOTALS = ['electors', 'voters', 'invalid', 'blank']
@@ -621,3 +626,143 @@ def load_params(data: FileSystem) -> dict:
         The parameters as written in the file.
     """
     return json.loads(data.read('cera/params.json'))
+
+
+def _count_problems(path: str, counts: dict, n_sim: int) -> list:
+    """
+    Check the counts of one measure of the snapshot.
+
+    Parameters
+    ----------
+    path : str
+        Where the measure is, to name it in the problems.
+    counts : dict
+        `lost`, `gained`, `moved`, and the distributions `right` and `left`.
+    n_sim : int
+        Simulations of the run.
+
+    Returns
+    -------
+    list
+        The texts of what is wrong, empty if nothing is.
+    """
+    problems = []
+    for key in COUNT_KEYS:
+        value = counts.get(key)
+        if not isinstance(value, int) or not 0 <= value <= n_sim:
+            problems.append(f'{path}.{key}: {value!r} is not a count between 0 and {n_sim}')
+    for key in ('right', 'left'):
+        values = counts.get(key)
+        if not isinstance(values, dict) or sum(values.values()) != n_sim:
+            problems.append(f'{path}.{key}: the distribution does not add up to {n_sim}')
+    return problems
+
+
+def _grid_problems(path: str, grid: dict, columns: str, n_sim: int) -> list:
+    """
+    Check one table of measures of the snapshot (`new_electors`, `grid` or `placement`).
+
+    Parameters
+    ----------
+    path : str
+        The key of the table.
+    grid : dict
+        The table: its axes and `cells`.
+    columns : str
+        The key of the axis of the columns (`left_fracs` or `fracs`); the rows are `participations`.
+    n_sim : int
+        Simulations of the run.
+
+    Returns
+    -------
+    list
+        The texts of what is wrong, empty if nothing is.
+    """
+    cells = grid.get('cells')
+    if not isinstance(cells, list) or len(cells) != len(grid.get('participations', [])) or not all(
+            isinstance(row, list) and len(row) == len(grid.get(columns, [])) for row in cells):
+        return [f'{path}.cells: the size is not that of participations by {columns}']
+    return [problem for i, row in enumerate(cells) for j, cell in enumerate(row)
+            for problem in _count_problems(f'{path}.cells[{i}][{j}]', cell, n_sim)]
+
+
+def check_majority(snapshot: dict, params: Optional[dict] = None) -> list:
+    """
+    Check a snapshot of the study on the forecast (`cera/majority.json`).
+
+    Parameters
+    ----------
+    snapshot : dict
+        The snapshot.
+    params : dict, optional
+        The parameters of the study: if given, the snapshot must be of its election (`election['scope']` and
+        `election['date']`).
+
+    Returns
+    -------
+    list
+        The texts of what is wrong (each names the key it is about), empty if the snapshot is valid.
+    """
+    problems = [f'{key}: missing' for key in SNAPSHOT_KEYS if key not in snapshot]
+    run = snapshot.get('run', {})
+    problems += [f'run.{key}: missing' for key in RUN_KEYS if key not in run]
+    if problems:
+        return problems
+
+    if params is not None:
+        for key, own in (('scope', 'scope'), ('event_date', 'date')):
+            if run[key] != params['election'][own]:
+                problems.append(f"run.{key}: {run[key]!r} is not the study's {params['election'][own]!r}")
+    if not {'Derecha', 'Izquierda'} <= set(snapshot['blocks']):
+        problems.append('blocks: without Derecha and Izquierda')
+
+    n_sim = run['n_sim']
+    with_majority = snapshot['base'].get('with_majority')
+    if not isinstance(with_majority, int) or not 0 <= with_majority <= n_sim:
+        problems.append(f'base.with_majority: not a count between 0 and {n_sim}')
+
+    provinces = []
+    for name, scenario in snapshot['expected'].items():
+        problems += _count_problems(f'expected.{name}.counts', scenario['counts'], n_sim)
+        provinces.append([row['region_id'] for row in scenario['provinces']])
+    if len(provinces) != 2 or not provinces[0] or provinces[0] != provinces[1]:
+        problems.append('expected.provinces: the two censuses do not have the same, non-empty, list of provinces')
+
+    for key, columns in (('new_electors', 'left_fracs'), ('grid', 'left_fracs'), ('placement', 'fracs')):
+        problems += _grid_problems(key, snapshot[key], columns, n_sim)
+
+    return problems
+
+
+def read_majority(data: FileSystem, params: dict) -> Optional[dict]:
+    """
+    Read the snapshot of the study on the forecast (`cera/majority.json`).
+
+    Parameters
+    ----------
+    data : FileSystem
+        The file system rooted at `data/`.
+    params : dict
+        The parameters of the study, to check the snapshot is of its election.
+
+    Returns
+    -------
+    dict or None
+        The snapshot, `None` if the file does not exist.
+
+    Raises
+    ------
+    ValueError
+        If the file is not a valid snapshot of the study's election (the message names what is wrong).
+    """
+    if not data.exists(MAJORITY):
+        return None
+    try:
+        snapshot = json.loads(data.read_bytes(MAJORITY))
+        problems = check_majority(snapshot, params)
+    except (ValueError, AttributeError, KeyError, TypeError) as error:
+        problems = [f'cannot be read ({error!r})']
+    if problems:
+        raise ValueError(f'{MAJORITY}: ' + '; '.join(problems))
+
+    return snapshot

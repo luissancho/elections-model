@@ -39,6 +39,7 @@ from .data import (
     read_candidatures_map,
     read_countries,
     read_election_census,
+    read_majority,
     read_monthly,
     read_provinces,
     read_results,
@@ -190,6 +191,9 @@ class CeraStudy:
     verdict_input : dict or None
         `{'net_psoe', 'net_left'}` of the check of the study's election (`params['election']['date']`), the
         arguments of `check.verdict`; `None` while that election has no check.
+    majority : dict or None
+        The snapshot of the study on the model's forecast (`cera/majority.json`, `data.read_majority`); `None` if
+        the file does not exist or the study was computed with `majority=False`.
     """
     params: dict
     countries: pd.DataFrame
@@ -231,6 +235,7 @@ class CeraStudy:
     report: dict
     checks: dict
     verdict_input: dict | None
+    majority: dict | None = None
 
 
 def _read_all_results(data: FileSystem) -> dict[str, Results]:
@@ -613,7 +618,7 @@ def _checks_block(params: dict, inputs: dict) -> dict:
     return {'checks': checks, 'verdict_input': verdict_input}
 
 
-def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
+def compute_cera(data: FileSystem, params: dict | None = None, majority: bool = True) -> CeraStudy:
     """
     Compute the whole CERA study from its inputs in `data/`.
 
@@ -623,6 +628,9 @@ def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
         The file system rooted at `data/`.
     params : dict, optional
         The parameters of the study; `cera/params.json` (`data.load_params`) if `None`.
+    majority : bool, default True
+        Whether to read the snapshot on the forecast (`cera/majority.json`). With `False` the file is not opened at
+        all, even if it is unreadable or invalid, and `CeraStudy.majority` is `None`.
 
     Returns
     -------
@@ -633,7 +641,7 @@ def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
     ------
     ValueError
         If D'Hondt does not reproduce the official seats of the baseline election or of an election with a CERA
-        scrutiny.
+        scrutiny, or if the snapshot exists and is not valid for the study's election (`data.read_majority`).
     """
     params = load_params(data) if params is None else params
     inputs = _read_inputs(data, params)
@@ -643,4 +651,6 @@ def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
     seats = _seats_block(params, inputs, census, dhondt['last'])
     checks = _checks_block(params, inputs)
 
-    return CeraStudy(params=params, **inputs, **dhondt, **census, **behaviour, **seats, **checks)
+    snapshot = read_majority(data, params) if majority else None
+
+    return CeraStudy(params=params, **inputs, **dhondt, **census, **behaviour, **seats, **checks, majority=snapshot)

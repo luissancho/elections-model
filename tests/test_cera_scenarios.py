@@ -1,9 +1,13 @@
 """Los votos de cada escenario del estudio CERA y la foto que los mide sobre los sorteos del modelo."""
+import copy
 import json
+import os
 
 import pytest
 
+from mtpy.core.io import FileSystem
 from mtpy.lib import publish
+from mtpy.lib.studies.cera.data import MAJORITY, check_majority, read_majority
 from mtpy.lib.studies.cera.scenarios import (
     build_snapshot,
     exterior_change,
@@ -14,6 +18,7 @@ from mtpy.lib.studies.cera.scenarios import (
 )
 from mtpy.lib.studies.cera.study import GRID_PARTICIPATIONS, PLACEMENT_CANDIDATURE
 from tests.cera_doubles import META, double_draws
+from tests.conftest import ROOT
 
 
 def test_the_votes_of_each_scenario_add_up_to_what_the_spec_says(cera_study):
@@ -52,3 +57,39 @@ def test_build_snapshot_has_every_scenario_on_its_axes(cera_study):
     cell = snapshot['grid']['cells'][0][0]
     assert set(cell) == {'votes', 'lost', 'gained', 'moved', 'right', 'left', 'central'}
     assert sum(cell['right'].values()) == 20 and json.loads(json.dumps(snapshot)) == snapshot
+
+
+@pytest.fixture(scope='module')
+def good(cera_study):
+    """Una foto válida: la de los sorteos sintéticos con el commit y el día que pone quien la toma."""
+    snapshot = build_snapshot(double_draws(cera_study), cera_study, META)
+    snapshot['run'].update(commit='abc1234', taken_on='2026-11-25')
+    return snapshot
+
+
+def test_read_majority_is_none_without_the_file_and_gives_back_a_valid_one(tmp_path, cera_study, good):
+    """Sin fichero no hay foto; con una válida se lee tal cual."""
+    fs = FileSystem(str(tmp_path))
+    assert read_majority(fs, cera_study.params) is None and check_majority(good, cera_study.params) == []
+    fs.write_bytes(json.dumps(good).encode(), MAJORITY)
+    assert read_majority(fs, cera_study.params) == good
+
+
+def test_read_majority_refuses_a_snapshot_that_is_not_this_study_s(tmp_path, cera_study, good):
+    """Una foto de otra elección, con tablas mal medidas o sin una clave se rechaza nombrando lo que falla."""
+    fs = FileSystem(str(tmp_path))
+    for change, word in ((lambda s: s['run'].update(event_date='2030-01-01'), 'event_date'),
+                         (lambda s: s['grid']['cells'].pop(), 'grid'),
+                         (lambda s: s['expected']['convocatoria']['counts'].update(lost=21), 'lost'),
+                         (lambda s: s['expected']['sin_litigio']['provinces'].pop(), 'provinces'),
+                         (lambda s: s.pop('base'), 'base')):
+        bad = copy.deepcopy(good)
+        change(bad)
+        fs.write_bytes(json.dumps(bad).encode(), MAJORITY)
+        with pytest.raises(ValueError, match=word):
+            read_majority(fs, cera_study.params)
+
+
+def test_compute_cera_carries_the_snapshot_of_the_repository(cera_study):
+    """El estudio trae la foto del repositorio (ninguna, hasta que se tome)."""
+    assert cera_study.majority == read_majority(FileSystem(os.path.join(ROOT, 'data')), cera_study.params)
