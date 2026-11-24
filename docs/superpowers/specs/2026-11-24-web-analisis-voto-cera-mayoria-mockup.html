@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maqueta v4 · /analisis/voto-cera · pregunta 3 con el modelo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+html, body { margin: 0; }
+body { background: #d9dce3; font-family: 'DM Sans', system-ui, sans-serif; }
+#bar { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 8px 16px; background: #1a1c22; color: #fff; font-size: 13px; }
+#bar strong { font-family: Outfit, sans-serif; font-weight: 800; font-size: 15px; }
+#bar .lbl { color: #9298ac; font-size: 12px; margin-right: -10px; }
+#bar .grp { display: flex; gap: 2px; background: rgba(255,255,255,.12); padding: 3px; border-radius: 999px; }
+#bar button { font: 600 12px 'DM Sans', sans-serif; padding: 5px 12px; border-radius: 999px; border: 0; background: transparent; color: #cfd3dc; cursor: pointer; }
+#bar button.on { background: #fff; color: #1a1c22; }
+.q { max-width: 1100px; margin: 14px auto 0; padding: 0 16px; font-size: 13.5px; line-height: 1.5; color: #3a3f4f; }
+.q b { color: #1a1c22; }
+#stage { padding: 12px 0 60px; }
+
+.page {
+  --bg: #f4f5f8; --card: #fff; --soft: #eceef2; --soft2: #e3e6ec;
+  --line: rgba(0,0,0,.08); --line2: rgba(0,0,0,.15);
+  --ink: #1a1c22; --text2: #5a5f72; --text3: #9298ac;
+  --brand: #1d4f86; --brand-soft: #e7eef8; --hover: #eff4ff;
+  --green: #2e9e5b; --green-soft: #ecfdf3; --red: #ce3b3b; --red-soft: #fef2f2; --amber: #e8912b; --amber-soft: #fff7ed;
+  --left: #d1495b; --right: #2f6fb3; --other: #c5c9d3;
+  --r: 18px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+  --pad: 32px;
+  position: relative; background: var(--bg); color: var(--ink); max-width: 1180px; margin: 0 auto;
+  font: 15px/1.5 'DM Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+}
+.page * { box-sizing: border-box; }
+.page h1, .page h2, .page h3, .page h4 { font-family: Outfit, sans-serif; margin: 0; line-height: 1.15; }
+.main { padding: 24px var(--pad) 48px; }
+.stack > * + * { margin-top: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px 18px; min-width: 0; }
+.card-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; }
+.lead { margin: 0 0 12px; font-size: 13.5px; color: var(--text2); max-width: 100ch; }
+.how { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.how::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--brand-soft); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--text2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill.warn { background: var(--amber-soft); color: #c2410c; }
+.pill.brand { background: var(--brand-soft); color: var(--brand); }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--soft); }
+.seg span { padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--text2); cursor: pointer; white-space: nowrap; }
+.seg span.on { background: var(--ink); color: #fff; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--bg); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 16px; }
+.kpi { padding: 12px 16px; border-right: 1px solid var(--line); }
+.kpi:last-child { border-right: 0; }
+.kpi .l { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.kpi .v { font: 800 28px/1.1 Outfit, sans-serif; margin: 4px 0 2px; letter-spacing: -.01em; }
+.kpi .s { font-size: 12.5px; color: var(--text2); }
+.tw { overflow-x: auto; }
+.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t th { padding: 6px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); text-align: right; white-space: nowrap; border-bottom: 1.5px solid var(--line2); }
+.t td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.t th:first-child, .t td:first-child { text-align: left; }
+.t .b { font-weight: 700; }
+.t td.g0 { background: #f4f5f8; color: var(--text2); }
+.t td.g1 { background: #ecfdf3; } .t td.g2 { background: #bbf7d0; } .t td.g3 { background: #4ade80; } .t td.g4 { background: #15803d; color: #fff; font-weight: 700; }
+.dlt { font-weight: 700; white-space: nowrap; }
+.dlt.up { color: #2ca02c; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid2 + .grid2 { margin-top: 20px; }
+.qcard { position: relative; border-left: 8px solid var(--qc); padding-left: 22px; }
+.qcard .qh { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.qcard .qn { width: 36px; height: 36px; border-radius: 999px; background: var(--qc); color: #fff; display: grid; place-items: center; font: 800 18px Outfit, sans-serif; flex: none; }
+.qcard .qt { font: 800 22px/1.15 Outfit, sans-serif; letter-spacing: -.01em; flex: 1; }
+.qcard .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px Outfit, sans-serif; }
+.qcard .verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.qcard .band { padding: 10px 12px; border-radius: 10px; background: #f3f1ec; border: 1px solid #e2ded5; font-size: 13.5px; margin: 0 0 14px; }
+.qcard .sum { margin-top: 16px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--qc) 9%, #fff); font-size: 14px; font-weight: 500; }
+.qcard .sum b { font-weight: 800; }
+.q3 { --qc: #ce3b3b; }
+.ctitle { font: 600 13px/1.3 Outfit, sans-serif; margin: 0 0 2px; }
+.csub { font-size: 11.5px; color: var(--text2); margin: 0 0 8px; }
+.tnote { font-size: 12px; color: var(--text2); margin: 8px 0 0; }
+.note { padding: 10px 12px; border-radius: 10px; background: var(--amber-soft); font-size: 13px; margin: 12px 0 0; }
+.note.ok { background: var(--green-soft); }
+.aside { padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-size: 13px; color: var(--text2); align-self: start; }
+.aside b { color: var(--ink); }
+.aside p { margin: 0 0 8px; } .aside p:last-child { margin: 0; }
+h3.sec { margin: 22px 0 4px; font-size: 16px; }
+
+/* Embudo */
+.funnel { margin-top: 14px; }
+.frow { display: grid; grid-template-columns: 200px 1fr 68px; gap: 10px; align-items: center; font-size: 13px; padding: 5px 0; }
+.frow .fl { font-weight: 600; }
+.frow .fb { height: 16px; border-radius: 4px; background: var(--soft); position: relative; overflow: hidden; }
+.frow .fb i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--ink); min-width: 3px; }
+.frow .fb i.all { background: var(--soft2); }
+.frow .fv { text-align: right; white-space: nowrap; }
+.frow .fv b { font: 800 15px Outfit, sans-serif; }
+.funnel .fs { margin: -5px 0 4px 210px; font-size: 12px; color: var(--text2); }
+
+/* Barras por provincia */
+.pbars .prow { display: grid; grid-template-columns: 110px 1fr 56px; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+.pbars .pb { display: flex; height: 14px; border-radius: 3px; overflow: hidden; }
+.pbars .pb i { display: block; height: 100%; }
+.pbars .pb .l { background: var(--left); } .pbars .pb .r { background: var(--right); } .pbars .pb .o { background: var(--other); }
+.pbars .pn { text-align: right; font-weight: 700; white-space: nowrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: var(--text2); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.three a { display: block; border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line2); border-top: 5px solid var(--qc); background: var(--bg); max-width: 360px; }
+.three .k { font: 800 12px Outfit, sans-serif; letter-spacing: .04em; color: var(--qc); }
+.three .tt { font: 700 15px/1.25 Outfit, sans-serif; margin: 4px 0 6px; }
+.three .vv { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 13px Outfit, sans-serif; margin-bottom: 6px; }
+.three p { margin: 0; font-size: 13px; color: var(--text2); }
+.cap { font: 700 11px Outfit, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin: 0 0 6px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>Maqueta v4 · pregunta 3 con el modelo</strong>
+  <span class="lbl">Estado</span>
+  <div class="grp" id="g-state">
+    <button class="on" data-v="pre">Antes del 29-N</button>
+    <button data-v="post">Tras el escrutinio</button>
+  </div>
+</div>
+<p class="q">
+  <b>Cambios sobre la v2.</b> Titular nuevo («¿Puede el voto CERA arrebatar…?»). Las casillas dicen la probabilidad de
+  mayoría que le queda a la derecha (opción A). La primera tabla recupera el <b>censo CERA</b>. Las barras van en
+  <b>porcentaje</b> de las simulaciones. Vuelve la tabla de escenarios con <b>dos dimensiones, participación y sesgo</b>,
+  aplicadas sólo a los electores nuevos, como hoy; la rejilla de al lado mueve todo el censo exterior. Siguen fuera la tabla de
+  escaños 2023 → 29-N, el gráfico de brechas de 2023, el radar y la colocación «sabiendo el resultado».
+</p>
+
+<div id="stage">
+<div class="page">
+  <main class="main stack">
+
+    <div>
+      <p class="cap">En «Tres preguntas, tres respuestas»</p>
+      <div class="three q3">
+        <a>
+          <div class="k">PREGUNTA 3</div>
+          <div class="tt">¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el 29-N?</div>
+          <span class="vv">NO</span>
+          <p>Con el voto que se espera, la mayoría cambia de manos en el 0,07 % de las simulaciones del modelo.</p>
+        </a>
+      </div>
+    </div>
+
+    <section class="card qcard q3" id="p3">
+      <div class="qh">
+        <div class="qn">3</div>
+        <h2 class="qt">¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el 29-N?</h2>
+        <span class="verdict">NO <i></i></span>
+      </div>
+
+      <div class="band" data-post hidden>
+        <b>Qué pasó el 29-N.</b> La derecha obtuvo <b>···</b> escaños. El voto CERA, contado el 4 de diciembre, movió <b>···</b>
+        escaños (<b>···</b>) y <b>no cambió</b> la mayoría. &nbsp;<span class="pill warn">cifras de ejemplo</span><br>
+        <span style="color:#5a5f72">Lo que sigue es la foto del 23 de noviembre, tal como se publicó antes de votar: no se ha recalculado.</span>
+      </div>
+
+      <div class="card-h">
+        <p class="lead" style="margin:0">
+          El modelo simula 10.000 veces las elecciones del 29-N con los sondeos publicados hasta el 23 de noviembre. A cada
+          simulación se le suma el voto exterior de cada escenario, se repite el reparto provincia a provincia y se cuenta en
+          cuántas la derecha (PP, VOX y SALF) llega a 176 escaños.
+        </p>
+        <span class="pill brand">Foto fija · datos hasta el 23 de noviembre</span>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="l">Mayoría absoluta de la derecha, hoy</div><div class="v">87,3 %</div><div class="s">8.734 de 10.000 simulaciones</div></div>
+        <div class="kpi"><div class="l">Con el voto CERA que se espera</div><div class="v" id="k-exp">87,3 %</div><div class="s" id="k-exp-s">8.731 de 10.000: la pierde en 5 y la gana en 2</div></div>
+        <div class="kpi"><div class="l">En el extremo de la rejilla</div><div class="v">61,0 %</div><div class="s">70 % de participación y 80 % del voto a la izquierda</div></div>
+      </div>
+
+      <div class="card-h" style="margin-bottom:6px">
+        <h3 style="font-size:16px">Con el voto que se espera</h3>
+        <span class="seg" id="scenario"><span class="on" data-v="conv">Censo de la convocatoria</span><span data-v="lit">Sin las inscripciones en litigio</span></span>
+      </div>
+      <div class="grid2">
+        <div>
+          <div class="tw"><table class="t">
+            <thead><tr><th></th><th>2023</th><th>29-N (proyección)</th><th>Cambio</th></tr></thead>
+            <tbody>
+              <tr><td class="b">Censo CERA</td><td>2.327.388</td><td id="t-census">2.769.645</td><td class="dlt up" id="t-census-d">+442.257</td></tr>
+              <tr><td class="b">Votantes CERA</td><td>208.431</td><td id="t-voters">239.221</td><td class="dlt up" id="t-voters-d">+30.790</td></tr>
+              <tr><td class="b">Votos a candidaturas</td><td>203.152</td><td id="t-votes">233.634</td><td class="dlt up" id="t-votes-d">+30.482</td></tr>
+            </tbody></table></div>
+          <div class="funnel">
+            <p class="ctitle">Qué hacen esos <span id="f-votes">30.482</span> votos nuevos en las simulaciones</p>
+            <div class="frow"><span class="fl">Simulaciones</span><span class="fb"><i class="all" style="width:100%"></i></span><span class="fv"><b>100 %</b></span></div>
+            <div class="frow"><span class="fl">Mueven algún escaño</span><span class="fb"><i id="f-any-b" style="width:8.97%"></i></span><span class="fv"><b id="f-any">8,97 %</b></span></div>
+            <div class="frow"><span class="fl">Cambian el total de la derecha</span><span class="fb"><i id="f-right-b" style="width:5.71%"></i></span><span class="fv"><b id="f-right">5,71 %</b></span></div>
+            <div class="fs" id="f-right-s">3,75 % a la baja y 1,96 % al alza</div>
+            <div class="frow"><span class="fl">Cambian la mayoría absoluta</span><span class="fb"><i id="f-maj-b" style="width:0.07%"></i></span><span class="fv"><b id="f-maj">0,07 %</b></span></div>
+            <div class="fs" id="f-maj-s">la pierde en 5 simulaciones de 10.000 y la gana en 2</div>
+          </div>
+          <p class="note ok" id="lit-note">
+            <b>Sin las 163.020 inscripciones en litigio</b> (repartidas por provincia como el crecimiento latinoamericano desde la
+            ley): 22.412 votos nuevos, y la mayoría cambia en 6 simulaciones de 10.000 (la pierde en 4 y la gana en 2). El litigio
+            importa para los derechos de esas personas, no para la mayoría.
+          </p>
+        </div>
+        <div>
+          <p class="ctitle">Dónde mueve escaños el voto CERA que se espera</p>
+          <p class="csub">Porcentaje de las simulaciones en las que cambia algún escaño de la provincia. Las diez primeras; ocurre alguna vez en 50 de las 52.</p>
+          <div class="pbars" id="pbars"></div>
+          <div class="legend">
+            <span><i style="background:var(--left)"></i>la derecha pierde un escaño</span>
+            <span><i style="background:var(--right)"></i>la derecha gana un escaño</span>
+            <span><i style="background:var(--other)"></i>el escaño cambia entre otros partidos</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sec">¿Qué haría falta para que importara?</h3>
+      <p class="lead">Tres palancas: que voten muchos más, que voten mucho más a la izquierda y que los electores nuevos estén colocados donde más rinden.</p>
+      <div class="grid2">
+        <div class="tw">
+          <p class="ctitle">Las dos dimensiones a la vez: sólo los electores nuevos</p>
+          <p class="csub">Participación × sesgo de los 442.257 electores que el censo ha ganado desde 2023 → probabilidad de mayoría absoluta de la derecha (hoy, 87,3 %)</p>
+          <table class="t" id="two"></table>
+          <p class="tnote">Participación observada: 5 % el origen latinoamericano y 10 % el resto (30.482 votos nuevos; 60.964 con el doble y 91.446 con el triple). Sesgo: la parte del voto a izquierda o derecha que va a la izquierda; «como en 2023» es el reparto del voto CERA de cada provincia. Der. e Izq.: cambio medio de sus escaños en las 10.000 simulaciones.</p>
+        </div>
+        <div class="tw">
+          <p class="ctitle">Todo el censo exterior: participación y voto a la izquierda</p>
+          <p class="csub">Probabilidad de mayoría absoluta de la derecha (hoy, 87,3 %) si los 2.769.645 electores del 29-N votaran así</p>
+          <table class="t" id="grid"></table>
+          <p class="tnote">En 2023 votó el 9 % del censo exterior y, de lo que fue a izquierda o derecha, la mitad fue a cada lado. Los demás partidos conservan su parte del voto CERA de 2023.</p>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="tw">
+          <p class="ctitle">Colocación dirigida, a ciegas</p>
+          <p class="csub">Probabilidad de mayoría absoluta de la derecha (hoy, 87,3 %) con los 181.032 electores de la ley colocados donde más rendían en 2023</p>
+          <table class="t" id="place"></table>
+        </div>
+        <div class="aside">
+          <p><b>Cómo se hace la cuenta.</b> Se toman los 181.032 electores que entraron con la ley desde Argentina, Cuba, México y Venezuela y se llevan, poco a poco, a la provincia donde al PSOE le costaba menos votos el siguiente escaño en 2023.</p>
+          <p><b>Por qué a ciegas.</b> Quien colocara electores sólo podía guiarse por los resultados de 2023: el censo se cerró el 1 de agosto. Con aquellos resultados el plan valía entre 5 y 24 escaños; aplicado a lo que el modelo espera del 29-N, la derecha pierde de media entre 0,3 y 4,0.</p>
+          <p>Es un límite, no una previsión: nadie puede dirigir cada inscripción ni cada voto.</p>
+        </div>
+      </div>
+
+      <div class="sum">
+        <b>Con el voto que se espera, la mayoría cambia de manos en el 0,07 % de las simulaciones.</b>
+        El voto CERA nuevo mueve algún escaño en el 9 %, pero casi nunca el que decide la mayoría: se la quita a la derecha en 5
+        simulaciones de 10.000 y se la da en 2. Con el triple de participación de los electores nuevos y el 90 % de su voto a la
+        izquierda, la probabilidad se queda en el 86,1 %. Para dejarla por debajo del 80 % haría falta, por ejemplo, que votara
+        la mitad de todo el censo exterior (en 2023 votó el 9 %) y que el 70 % de ese voto fuera a la izquierda (en 2023, la mitad).
+      </div>
+      <a class="how">Cómo leerlo</a>
+    </section>
+
+  </main>
+</div>
+</div>
+
+<script>
+const BASE = 8734;
+const GRID = {
+  cols: ['50 %', '60 %', '70 %', '80 %'], head: 'Participación \\ voto a la izq.',
+  rows: [
+    ['9 % (la de 2023)', [[42, 17], [99, 2], [179, 0], [260, 0]]],
+    ['20 %', [[77, 47], [217, 7], [429, 1], [647, 0]]],
+    ['30 %', [[100, 61], [335, 12], [663, 3], [987, 0]]],
+    ['50 %', [[146, 81], [582, 10], [1136, 0], [1739, 0]]],
+    ['70 %', [[195, 85], [843, 9], [1647, 0], [2635, 0]]]
+  ]
+};
+const PLACE = {
+  cols: ['50 %', '60 %', '70 %', '80 %', '100 %'], head: 'Participación \\ voto al PSOE',
+  rows: [
+    ['9 %', [[83, 0], [88, 0], [98, 0], [111, 0], [155, 0]]],
+    ['20 %', [[182, 0], [223, 0], [255, 0], [283, 0], [333, 0]]],
+    ['50 %', [[527, 0], [549, 0], [610, 0], [666, 0], [694, 0]]],
+    ['100 %', [[694, 0], [737, 0], [777, 0], [950, 0], [1223, 0]]]
+  ]
+};
+// Participación, sesgo, [mayorías perdidas, ganadas], cambio medio de los escaños de la derecha y de la izquierda
+const TWO = [
+  ['Observada', 'como en 2023', [5, 2], '−0,02', '+0,03', 'lo esperado'],
+  ['Observada', '70 %', [20, 0], '−0,11', '+0,12'],
+  ['Observada', '90 %', [42, 0], '−0,20', '+0,21'],
+  ['El doble', 'como en 2023', [9, 4], '−0,03', '+0,06'],
+  ['El doble', '70 %', [43, 0], '−0,21', '+0,24'],
+  ['El doble', '90 %', [82, 0], '−0,40', '+0,43'],
+  ['El triple', 'como en 2023', [17, 6], '−0,05', '+0,10'],
+  ['El triple', '70 %', [63, 0], '−0,31', '+0,36'],
+  ['El triple', '90 %', [126, 0], '−0,59', '+0,64']
+];
+const SCEN = {
+  conv: {census: '2.769.645', censusD: '+442.257', voters: '239.221', votersD: '+30.790', votes: '233.634', votesD: '+30.482',
+         n: '30.482', any: 897, right: 571, rightS: '3,75 % a la baja y 1,96 % al alza', maj: 7,
+         majS: 'la pierde en 5 simulaciones de 10.000 y la gana en 2', exp: '87,3 %',
+         expS: '8.731 de 10.000: la pierde en 5 y la gana en 2',
+         prov: [['Madrid', 172, 59, 39], ['Barcelona', 100, 27, 20], ['S. C. Tenerife', 65, 22, 15], ['Almería', 37, 36, 0],
+                ['Alicante', 36, 25, 0], ['Baleares', 34, 23, 0], ['Orense', 30, 0, 26], ['Granada', 29, 9, 10],
+                ['Valencia', 28, 18, 0], ['Lugo', 26, 0, 17]]},
+  lit: {census: '2.606.625', censusD: '+279.237', voters: '231.070', votersD: '+22.639', votes: '225.564', votesD: '+22.412',
+        n: '22.412', any: 676, right: 423, rightS: '2,88 % a la baja y 1,35 % al alza', maj: 6,
+        majS: 'la pierde en 4 simulaciones de 10.000 y la gana en 2', exp: '87,3 %',
+        expS: '8.732 de 10.000: la pierde en 4 y la gana en 2',
+        prov: [['Madrid', 131, 41, 31], ['Barcelona', 84, 23, 18], ['S. C. Tenerife', 51, 17, 11], ['Alicante', 31, 21, 0],
+               ['Baleares', 26, 19, 0], ['Valencia', 25, 15, 0], ['Almería', 23, 22, 0], ['Granada', 20, 7, 5],
+               ['Gerona', 20, 5, 4], ['Tarragona', 18, 5, 3]]}
+};
+const fmt = (x, d = 1) => x.toFixed(d).replace('.', ',');
+const pct = (n, d = 1) => fmt(Math.round(n * Math.pow(10, d) / 100) / Math.pow(10, d), d) + ' %';
+
+function shade(drop) { return drop < 0.5 ? 'g0' : drop < 3 ? 'g1' : drop < 8 ? 'g2' : drop < 15 ? 'g3' : 'g4'; }
+
+function cellOf([lost, gained]) {
+  const after = Math.round((BASE - lost + gained) / 10) / 10;
+  const tip = 'Le quita la mayoría en ' + lost.toLocaleString('es-ES') + ' simulaciones de 10.000' + (gained ? ' y se la da en ' + gained : '');
+  return '<td class="' + shade(BASE / 100 - after) + '" title="' + tip + '">' + fmt(after) + ' %</td>';
+}
+
+function table(el, spec) {
+  let html = '<thead><tr><th>' + spec.head + '</th>' + spec.cols.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>';
+  for (const [label, cells] of spec.rows) html += '<tr><td class="b">' + label + '</td>' + cells.map(cellOf).join('') + '</tr>';
+  el.innerHTML = html + '</tbody>';
+}
+
+function two(el) {
+  let html = '<thead><tr><th>Participación</th><th>Sesgo</th><th>Mayoría</th><th>Der.</th><th>Izq.</th></tr></thead><tbody>';
+  for (const [part, bias, cell, right, left, tag] of TWO)
+    html += '<tr><td class="b">' + part + (tag ? ' <span class="pill">' + tag + '</span>' : '') + '</td><td>' + bias + '</td>' +
+            cellOf(cell) + '<td>' + right + '</td><td>' + left + '</td></tr>';
+  el.innerHTML = html + '</tbody>';
+}
+
+function scenario(key) {
+  const s = SCEN[key], set = (id, v) => document.getElementById(id).textContent = v;
+  set('t-census', s.census); set('t-census-d', s.censusD);
+  set('t-voters', s.voters); set('t-voters-d', s.votersD); set('t-votes', s.votes); set('t-votes-d', s.votesD);
+  set('f-votes', s.n); set('f-any', pct(s.any, 2)); set('f-right', pct(s.right, 2));
+  set('f-right-s', s.rightS); set('f-maj', pct(s.maj, 2)); set('f-maj-s', s.majS); set('k-exp', s.exp); set('k-exp-s', s.expS);
+  document.getElementById('f-any-b').style.width = (s.any / 100) + '%';
+  document.getElementById('f-right-b').style.width = (s.right / 100) + '%';
+  document.getElementById('f-maj-b').style.width = (s.maj / 100) + '%';
+  document.getElementById('lit-note').hidden = key === 'lit';
+  const top = s.prov[0][1];
+  document.getElementById('pbars').innerHTML = s.prov.map(([name, n, lose, gain]) =>
+    '<div class="prow"><span>' + name + '</span><span class="pb" style="width:' + (100 * n / top) + '%">' +
+    '<i class="l" style="width:' + (100 * lose / n) + '%" title="La derecha pierde un escaño en el ' + pct(lose, 2) + '"></i>' +
+    '<i class="r" style="width:' + (100 * gain / n) + '%" title="La derecha gana un escaño en el ' + pct(gain, 2) + '"></i>' +
+    '<i class="o" style="width:' + (100 * (n - lose - gain) / n) + '%"></i></span><span class="pn">' + pct(n, 2) + '</span></div>').join('');
+}
+
+function group(id, fn) {
+  const box = document.getElementById(id);
+  box.querySelectorAll('[data-v]').forEach(btn => btn.addEventListener('click', () => {
+    box.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b === btn));
+    fn(btn.dataset.v);
+  }));
+}
+group('g-state', v => document.querySelectorAll('[data-post]').forEach(el => el.hidden = v !== 'post'));
+group('scenario', scenario);
+table(document.getElementById('grid'), GRID);
+table(document.getElementById('place'), PLACE);
+two(document.getElementById('two'));
+scenario('conv');
+// Estados por ancla, para capturas: #state=post&scenario=lit
+for (const [key, value] of new URLSearchParams(location.hash.slice(1))) {
+  const box = {state: 'g-state', scenario: 'scenario'}[key];
+  const btn = box && document.querySelector('#' + box + ' [data-v="' + value + '"]');
+  if (btn) btn.click();
+}
+</script>
+</body>
+</html>
