@@ -3,8 +3,8 @@
 Proyecto mediano. Luis lo pidió el 2026-11-24, primer día de la veda («Quiero actualizar el análisis del Voto CERA,
 partiendo de las predicciones del modelo para el 29-N, en lugar de los resultados de 2023») y decidió el resto en la
 conversación y sobre una maqueta. Lo que es suyo está en «Decisiones de Luis»; lo que no, en «Decisiones mías, por
-revisar». Maqueta (séptima versión: el concepto que Luis aceptó sobre la sexta, escaños y probabilidad a la vez,
-con el rango al 95 %; cifras reales de la prueba):
+revisar». Maqueta (octava versión: escaños y probabilidad a la vez, con los cambios de Luis sobre la séptima;
+sólo de escritorio; cifras reales de la prueba):
 `docs/superpowers/specs/2026-11-24-web-analisis-voto-cera-mayoria-mockup.html`. Diseño original del estudio:
 `docs/superpowers/specs/2026-10-19-web-analisis-voto-cera-design.md`.
 
@@ -97,6 +97,17 @@ la mayoría en las 10.000 simulaciones.
     el reparto central y 6 desde el percentil 25. La propuesta es mía; Luis la aceptó con la sexta maqueta.
 20. «Sí, me encaja, rehaz el diseño con la v6»: aceptó el gráfico que une las dos lecturas y que el titular de cada
     escenario sean los escaños desde el reparto central, con el rango de las simulaciones al lado.
+21. Sobre la séptima maqueta: en «¿Qué haría falta?» quedan sólo dos gráficos, el de las barras rojas y la rejilla,
+    uno al lado del otro. La tabla de las dos dimensiones sale de la tarjeta (revierte la 10 y la 15).
+22. En el gráfico de las barras rojas, títulos cortos: «30 % voto + 70 % izq.» mejor que «Todo el censo exterior».
+23. Ese gráfico lleva un eje con una marca cada 2 escaños hasta 16, y sus dos líneas verticales se llaman «si la
+    derecha suma 181» y «si la derecha suma 190».
+24. El aviso del litigio ocupa todo el ancho de la tarjeta y se limita a decir que el censo incluye las 163.020
+    inscripciones en litigio, «y es que hemos querido tener en cuenta todos los escenarios, incluidos los más
+    extremos». Ya no da las cifras del censo sin litigio (matiza la 14).
+25. La primera tabla sólo lleva el censo total y los votantes; fuera los votos a candidaturas (matiza la 8).
+26. Las barras del embudo no le acaban de gustar: «Busquemos otra manera de mostrar los porcentajes de simulaciones
+    que cambian escaños». Sin decidir (ver «Abierto»).
 
 ## Objetivos
 
@@ -199,11 +210,13 @@ Todos reutilizan las funciones y los parámetros del estudio (`seats.py`, `stres
    `extra` del modelo de incremento (`new_electors` + `increment_votes`: los electores nuevos desde 2023, con la
    participación por origen de `params.participation` y el reparto del escrutinio CERA de 2023 de cada provincia).
    Además del total, se guarda por provincia: en cuántas simulaciones cambia su reparto, en cuántas la derecha
-   pierde escaño allí y en cuántas lo gana. La página sólo enseña el censo de la convocatoria; del otro usa los
-   totales para el aviso del litigio.
+   pierde escaño allí y en cuántas lo gana. La página sólo enseña el censo de la convocatoria; el otro queda en la
+   foto y en los CSV.
 2. **Dos dimensiones, sólo los electores nuevos** (`new_electors`): participación × 1, × 2 y × 3 (las dos tasas
    por origen) cruzada con sesgo empírico, 70 % y 90 % (`_biased_split`: la parte del voto a izquierda o derecha que
    va a la izquierda). Nueve filas, censo de la convocatoria. La fila (× 1, empírico) es el voto que se espera.
+   La tarjeta sólo enseña la del máximo (× 3 y 90 %), en el gráfico de escenarios; las nueve quedan en la foto y
+   en los CSV.
 3. **Todo el censo exterior** (`grid`): `GRID_PARTICIPATIONS` × `GRID_LEFT_FRACS`, los ejes de hoy. `Δ` quita el
    voto CERA de 2023 de cada candidatura y pone el del escenario: censo de la provincia × participación × 0,99 ×
    `_biased_split(cera_2023, f)`. Es la definición de `stress.exterior_grid`, sobre las simulaciones.
@@ -291,53 +304,60 @@ Como la maqueta, de arriba abajo:
     la conserva en el 87,3 % de las simulaciones;
   - con el voto CERA que se espera: 0 escaños, sigue en 190; mayoría en el 87,3 % (3 simulaciones menos de 10.000);
   - en el extremo de la rejilla: −10 escaños, se queda en 180; mayoría en el 61,0 %.
-- **«Con el voto que se espera»**, sólo con el censo de la convocatoria (sin selector):
-  - una entradilla con las dos lecturas: sobre el reparto central, los 30.482 votos nuevos no mueven ningún
+- **«Con el voto que se espera»**, sólo con el censo de la convocatoria (sin selector), en dos columnas:
+  - una entradilla con las dos lecturas: sobre el reparto central, los 30.790 votantes nuevos no mueven ningún
     escaño; en las simulaciones sí mueven alguno, pero casi nunca el que decide la mayoría;
-  - tabla 2023 → 29-N con tres filas: censo CERA, votantes CERA y votos a candidaturas;
-  - embudo de tres barras, en porcentaje de las simulaciones: mueven algún escaño (8,97 %), cambian el total de la
-    derecha (5,71 %; 3,75 % a la baja y 1,96 % al alza), cambian la mayoría (0,07 %; aquí sí en simulaciones: la
-    derecha la pierde en 5 y la consigue en 2);
+  - a la izquierda, la tabla 2023 → 29-N con dos filas: censo CERA y votantes CERA;
+  - debajo, **las simulaciones que cambian escaños**: mueven algún escaño el 8,97 %, cambian el total de la
+    derecha el 5,71 % (3,75 % a la baja y 1,96 % al alza) y cambian la mayoría el 0,07 % (aquí sí en simulaciones:
+    la derecha la pierde en 5 y la consigue en 2). **Cómo se enseñan está por decidir** (ver «Abierto»);
   - una línea que explica ese «la consigue en 2»: el voto exterior que se espera se reparte como el de 2023 en cada
     provincia y en algunas (Orense, Lugo) suma más a la derecha, así que en 2 simulaciones en las que la derecha se
     quedaba en 175 escaños le da el 176;
-  - aviso del litigio: sin las 163.020 inscripciones serían 22.412 votos nuevos y la mayoría cambiaría en el
-    0,06 % de las simulaciones (4 y 2);
-  - barras «Dónde mueve escaños»: las diez provincias donde más veces cambia un escaño, en porcentaje de las
-    simulaciones, partidas en «la derecha pierde», «la derecha gana» y «cambia entre otros partidos».
-- **«¿Qué haría falta para que importara?»**:
-  - **el gráfico «Lo que le quita cada escenario y lo que haría falta»**, que une las dos lecturas. Una fila por
-    escenario: una barra con los escaños que la derecha pierde desde el reparto central, una línea fina con lo que
-    pierde en el 95 % de las simulaciones y, a la derecha, los escaños y la probabilidad de mayoría. Dos líneas
-    verticales marcan lo que haría falta: 15 escaños desde el reparto central (190) y 6 si la derecha parte de
-    181, su percentil 25 en las simulaciones. Siete filas: el voto que se espera; los electores nuevos al máximo
-    (el triple de participación y el 90 % a la izquierda); la colocación a ciegas al máximo (votan todos, y todos
-    al PSOE); y cuatro casillas de todo el censo exterior (30 % de participación y 70 % a la izquierda, 50 % y
-    70 %, 50 % y 80 %, y el extremo, 70 % y 80 %). Sus cifras están en «Cifras de la prueba»;
-  - una nota bajo el gráfico: con el reparto central hacen falta 15; en algo más de una de cada cuatro
-    simulaciones (27,7 %) la derecha parte de 181 o menos y bastan 6; en el 12,7 % no tiene mayoría ni antes de
-    contar el voto exterior;
-  - tabla de las dos dimensiones, sólo los electores nuevos: participación, sesgo, escaños desde el reparto central
-    y probabilidad de mayoría;
-  - rejilla de todo el censo exterior, participación × voto a la izquierda, con dos cifras por casilla: arriba los
-    escaños que pierde la derecha desde el reparto central y debajo la probabilidad de que conserve la mayoría;
-  - un comentario sobre la colocación, sin tabla: por qué es a ciegas (quien colocara electores sólo podía guiarse
-    por 2023) y entre qué cifras quedaría, las de los extremos de la rejilla de colocación: de 1 a 5 escaños menos
-    en el reparto central, y la mayoría entre el 86,5 % (con la participación de 2023 y la mitad del voto al PSOE)
-    y el 75,1 % (si votaran todos, y todos al PSOE). Es un límite, no una previsión.
+  - a la derecha, las barras «Dónde mueve escaños»: las diez provincias donde más veces cambia un escaño, en
+    porcentaje de las simulaciones, partidas en «la derecha pierde», «la derecha gana» y «cambia entre otros
+    partidos»;
+  - al final del bloque y a todo el ancho de la tarjeta, el aviso del litigio, que sólo dice: «El censo incluye las
+    163.020 inscripciones en litigio. Hemos querido tener en cuenta todos los escenarios, incluidos los más
+    extremos».
+- **«¿Qué haría falta para que importara?»**, con dos gráficos, uno al lado del otro:
+  - a la izquierda, **el gráfico «Lo que le quita cada escenario y lo que haría falta»**, que une las dos
+    lecturas. Una fila por escenario: una barra con los escaños que la derecha pierde desde el reparto central, una
+    línea fina con lo que pierde en el 95 % de las simulaciones y, a la derecha, los escaños y la probabilidad de
+    mayoría. El eje va de 0 a 16 escaños, con una marca cada 2. Dos líneas verticales marcan lo que haría falta:
+    «si la derecha suma 181» (6 escaños; 181 es su percentil 25 en las simulaciones) y «si la derecha suma 190»
+    (15; su reparto central). Siete filas con títulos cortos, en dos grupos. «Electores nuevos desde 2023»: «Voto
+    que se espera», «Triple voto + 90 % izq.» y «Colocación a ciegas» (con «100 % voto + 100 % PSOE» debajo).
+    «Todo el censo exterior»: «30 % voto + 70 % izq.», «50 % voto + 70 % izq.», «50 % voto + 80 % izq.» y «70 %
+    voto + 80 % izq.». Sus cifras están en «Cifras de la prueba»;
+  - dos notas bajo ese gráfico. Qué marcan las líneas: 15 escaños si la derecha suma 190 y 6 si suma 181; con 181
+    o menos empieza en algo más de una de cada cuatro simulaciones (27,7 %), y en el 12,7 % no tiene mayoría ni
+    antes de contar el voto exterior. Y qué quieren decir «voto» (la participación; la que se espera de los
+    electores nuevos es el 5 % del origen latinoamericano y el 10 % del resto) e «izq.» (la parte del voto a
+    izquierda o derecha que va a la izquierda);
+  - a la derecha, la rejilla de todo el censo exterior, participación × voto a la izquierda, con dos cifras por
+    casilla: arriba los escaños que pierde la derecha desde el reparto central y debajo la probabilidad de que
+    conserve la mayoría;
+  - debajo de los dos, un comentario sobre la colocación, sin tabla: por qué es a ciegas (quien colocara electores
+    sólo podía guiarse por 2023) y entre qué cifras quedaría, las de los extremos de la rejilla de colocación: de
+    1 a 5 escaños menos en el reparto central, y la mayoría entre el 86,5 % (con la participación de 2023 y la
+    mitad del voto al PSOE) y el 75,1 % (si votaran todos, y todos al PSOE). Es un límite, no una previsión.
 - **Resumen**, que empieza por los escaños («Con el voto que se espera, ni un escaño: la derecha sigue en 190») y
   explica por qué la probabilidad baja aunque ningún escenario llegue a los 15 del reparto central: baja en las
   simulaciones en las que la derecha ya parte con poco margen.
 - **«Cómo leerlo»**.
 
 Las casillas se sombrean por lo que baja la probabilidad respecto a la de hoy. Las probabilidades de las casillas
-van con un decimal; el embudo y las barras, con dos (ver «Decisiones mías»). En las tablas y en las cifras de
-cabecera los escaños son el cambio de la derecha, con signo («−3»); el gráfico dibuja escaños que pierde. Su línea
-fina se corta en cero si en una punta del rango la derecha gana escaños; no pasa en ninguna de las siete filas.
+van con un decimal; las cifras de las simulaciones que cambian y las barras de provincias, con dos (ver
+«Decisiones mías»). En la rejilla y en las cifras de cabecera los escaños son el cambio de la derecha, con signo
+(«−3»); el gráfico dibuja escaños que pierde. Su línea fina se corta en cero si en una punta del rango la derecha
+gana escaños; no pasa en ninguna de las siete filas.
 
 De la tarjeta salen la tabla de escaños 2023 → 29-N, el selector de censo, el gráfico de brechas, el radar y la
 rejilla de colocación «óptima» con escaños. Sus datos siguen en el bundle y en los CSV de «Datos y método». Los
 escaños que la tarjeta enseña ahora son otros: los del reparto central del modelo para el 29-N, no los de 2023.
+Tampoco enseña la tabla de las dos dimensiones, los votos a candidaturas ni las cifras del censo sin litigio:
+quedan en la foto y en los CSV de la parte nueva.
 
 ### D7. Después del 29-N
 
@@ -363,7 +383,27 @@ simulaciones) y por qué pueden no coincidir; por qué hay dos referencias de lo
 las candidaturas de 2023 a los partidos del 29-N; qué mueve cada tabla (sólo los electores nuevos, todo
 el censo exterior, la bolsa colocada); por qué la colocación es a ciegas y es un límite; y por qué es una foto
 fija. Todas las cifras de los textos salen de la parte. No se dice que las simulaciones están en votos de 2023: la
-base de cada provincia va escalada por el censo. Los textos son provisionales hasta que Luis los revise.
+base de cada provincia va escalada por el censo. La tarjeta habla de los 30.790 votantes nuevos, la cifra de su
+tabla; «Cómo leerlo» dice que 30.482 de ellos son votos a candidaturas, que es lo que se suma en el reparto. Los
+textos son provisionales hasta que Luis los revise.
+
+## Abierto: cómo enseñar las simulaciones que cambian escaños
+
+A Luis no le gustan las tres barras de la séptima maqueta («Busquemos otra manera»): sobre un total del 100 %, el
+8,97 %, el 5,71 % y el 0,07 % dejan las barras casi vacías. La octava maqueta trae tres maneras con las mismas
+cifras, que se cambian con el control «Simulaciones que cambian»:
+
+- **A. 10.000 puntos.** Un cuadrado de 100 × 100 puntos, uno por simulación, coloreados por lo que pasa en ella:
+  no cambia ningún escaño (91,03 %), se mueve alguno y la derecha se queda igual (3,26 %), la derecha pierde
+  alguno (3,70 %), gana alguno (1,94 %) y cambia la mayoría (0,07 %, 7 puntos). Usa los colores del gráfico de
+  provincias y lleva la leyenda al lado. Es la más literal y la que más cuesta dibujar (lienzo, imagen
+  descargable, móvil); los 7 puntos son muy pequeños.
+- **B. Tres cifras.** Tres casillas en fila con el porcentaje en grande y su explicación debajo. La más sobria y
+  la que menos ocupa; repite el aspecto de las tres cifras de cabecera.
+- **C. Cuadrados anidados.** Un cuadrado para las 10.000 simulaciones y dentro, a escala de área, los de las que
+  mueven algún escaño, cambian el total de la derecha y cambian la mayoría.
+
+Recomiendo la A y, si pesa demasiado, la B. Decide Luis; D6 se cierra con su respuesta.
 
 ## Cifras de la prueba (run 20261124-102045), para contrastar la construcción
 
@@ -467,9 +507,10 @@ Si el run publicado al hacer la foto es otro, las cifras serán las suyas; estas
    como hace hoy sobre 2023.
 4. **Cómo se cuenta que la derecha también puede ganar la mayoría**: «la pierde en 5 y la consigue en 2», la línea
    que lo explica y «3 menos» en la cifra de cabecera.
-5. **Nueve filas en la tabla de dos dimensiones** (los tres niveles de cada una). Los votos nuevos van en la nota.
-6. **Dos decimales en el embudo y en las barras**, uno en las casillas. Con uno, casi todas las provincias
-   empataban en 0,3 % y las partes del embudo no sumaban el total.
+5. **Las nueve filas de los electores nuevos siguen en la foto y en los CSV**, aunque la tarjeta ya sólo enseña la
+   del máximo, en el gráfico. Lo mismo el censo sin litigio.
+6. **Dos decimales en las cifras de las simulaciones que cambian y en las barras de provincias**, uno en las
+   casillas. Con uno, casi todas las provincias empataban en 0,3 % y las partes no sumaban el total.
 7. **Gráfico nuevo de provincias** en el sitio del de brechas de 2023.
 8. **La tabla de censo, votantes y votos sale de la foto**, no de `prediction`.
 9. **Qué guarda la foto** (D3). Guarda más de lo que la tarjeta enseña, porque después del 29-N no se podrá
@@ -488,34 +529,40 @@ Si el run publicado al hacer la foto es otro, las cifras serán las suyas; estas
 18. **El rango es el del 95 %**, como el «Rango 95%» del resto de la web. La sexta maqueta, la que Luis aceptó, lo
     traía al 90 %: con el 95 % las líneas del gráfico salen algo más largas y la del extremo de la rejilla llega a
     los 15 escaños.
-19. **Las siete filas del gráfico y su orden**: el voto que se espera, el máximo de cada una de las otras dos vías
-    (electores nuevos, colocación) y cuatro casillas de la rejilla, de menos a más.
-20. **Las dos referencias de lo que haría falta**: 15 desde el reparto central y 6 «si parte de 181», el percentil
-    25 de los escaños de la derecha. Y cómo lo dice la nota: «en algo más de una de cada cuatro simulaciones
-    (27,7 %)», porque con 181 o menos hay más del 25 %.
+19. **Las siete filas del gráfico, su orden y sus dos grupos**: el voto que se espera, el máximo de cada una de las
+    otras dos vías (electores nuevos, colocación) y cuatro casillas de la rejilla, de menos a más. Los títulos de
+    las cuatro casillas son de Luis; los de las otras tres filas y los nombres de los grupos, míos, para que el
+    título corto no pierda de qué electores habla.
+20. **La segunda referencia es el percentil 25** de los escaños de la derecha (181, 6 escaños); los nombres de las
+    dos líneas son de Luis. Y cómo lo dice la nota: «en algo más de una de cada cuatro simulaciones (27,7 %)»,
+    porque con 181 o menos hay más del 25 %.
 21. **Las tres cifras de cabecera** llevan los escaños en grande y la probabilidad debajo.
 22. **Signos**: las tablas y las cifras dan el cambio de la derecha («−3»); el gráfico, escaños que pierde. La
     línea del rango se corta en cero.
-23. **La rejilla y la tabla de dos dimensiones no llevan rango**, sólo escaños y probabilidad: el rango va en el
-    gráfico y en los CSV.
+23. **La rejilla no lleva rango**, sólo escaños y probabilidad: el rango va en el gráfico y en los CSV.
 24. **La foto guarda el cambio del reparto central de la izquierda** además del de la derecha, aunque la tarjeta
     sólo enseña el de la derecha.
 25. **El cambio de concepto es posterior a la revisión del constructor.** Lo he contrastado yo con el código
     (`central_result`, `export_scenario`, los cuantiles de los rangos) y con la prueba; no ha pasado por un
     revisor.
+26. **Los textos hablan de «30.790 votantes nuevos»**, no de «30.482 votos nuevos», para que cuadren con la tabla,
+    que ya no lleva los votos a candidaturas.
+27. **El aviso del litigio va al final del bloque «Con el voto que se espera»**, bajo sus dos columnas, y su
+    redacción exacta a partir de la frase de Luis.
 
 ## Lo que queda a quien lo construya
 
 - Nombres de módulos, funciones, claves del fichero y de la parte, y de los CSV.
 - Cómo se reutiliza el camino de `publish_forecast` (sacar de él la construcción del simulador o pasarle una
   fábrica que guarde el simulador) y cómo se vectoriza el reparto, siempre que pase la comprobación de D1.
-- Si las barras y el embudo se pintan en la plantilla o con la librería de gráficos; la imagen descargable de la
-  tarjeta tiene que seguir saliendo.
+- Si las barras de provincias y las simulaciones que cambian se pintan en la plantilla o con la librería de
+  gráficos; la imagen descargable de la tarjeta tiene que seguir saliendo.
 - Qué se retira de `pages/cera.py`, de la isla de datos y de `analisis-cera.js` al dejar de pintarse el gráfico de
   brechas y el radar, sin romper lo que otras tarjetas leen.
 - La escala de sombreado de las casillas.
 - Cómo se dibuja el gráfico de los escenarios (plantilla y CSS, como en la maqueta, o la librería de gráficos) y
-  cómo se lee a 390 px, donde las etiquetas de las filas no caben a la izquierda de las barras.
+  cómo se lee a 390 px, donde las etiquetas de las filas no caben a la izquierda de las barras. La maqueta sólo
+  está hecha para escritorio: en el móvil las columnas se apilan, como en el resto de la página.
 - De dónde toma el módulo puro el voto central: tiene que ser el del mismo `build_umat` sin sorteo que usa
   `central_result()`, sin tocar los generadores ni cambiar lo que `run` da.
 - Qué se hace si un cuantil del rango no sale entero. En la prueba salen enteros todos.
@@ -543,7 +590,9 @@ Si el run publicado al hacer la foto es otro, las cifras serán las suyas; estas
 - Página, con la parte de ejemplo: los dos estados (antes y después de la comprobación), el titular nuevo en los
   tres sitios, las siete filas del gráfico con sus dos referencias, las casillas con sus dos cifras, y
   `assert_public_wording`.
-- En el navegador, a 1280 y a 390 px: tablas, barras y gráfico de escenarios sin cortar, imagen descargable.
+- En el navegador, a 1280 y a 390 px: tablas, barras y gráfico de escenarios sin cortar (con su eje y sus dos
+  líneas), los dos gráficos de «¿Qué haría falta?» uno al lado del otro a 1280 y apilados a 390, el aviso del
+  litigio a todo el ancho, imagen descargable.
 
 ## Orden de construcción
 

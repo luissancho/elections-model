@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maqueta v7 · /analisis/voto-cera · pregunta 3 con el modelo</title>
+<title>Maqueta v8 · /analisis/voto-cera · pregunta 3 con el modelo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
@@ -112,10 +112,11 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
 .three p { margin: 0; font-size: 13px; color: var(--text2); }
 .cap { font: 700 11px Outfit, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin: 0 0 6px; }
 .ruler { margin: 10px 0 6px; }
-.rrow { display: grid; grid-template-columns: 330px 1fr 150px; gap: 12px; align-items: center; font-size: 12.5px; padding: 5px 0; }
+.rrow { display: grid; grid-template-columns: 148px 1fr 92px; gap: 10px; align-items: center; font-size: 12.5px; padding: 5px 0; }
+.rgroup { font: 700 10.5px Outfit, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin: 8px 0 1px; }
 .rrow .rl { line-height: 1.3; }
 .rrow .rl small { display: block; color: var(--text2); font-size: 11.5px; }
-.rtrack { position: relative; height: 16px; background: var(--soft); border-radius: 4px; }
+.rtrack { position: relative; height: 16px; background: var(--soft); border-radius: 4px; background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(12.5% - 1px), rgba(0,0,0,.1) calc(12.5% - 1px), rgba(0,0,0,.1) 12.5%); }
 .rtrack .bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--left); border-radius: 4px; min-width: 3px; }
 .rtrack .wh { position: absolute; top: 7px; height: 2px; background: var(--ink); }
 .rtrack .wh::before, .rtrack .wh::after { content: ""; position: absolute; top: -3px; width: 2px; height: 8px; background: var(--ink); }
@@ -128,7 +129,28 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
 .rhead .rtrack { background: none; height: 34px; }
 .rhead .tick { position: absolute; bottom: 0; transform: translateX(-50%); font-size: 11.5px; font-weight: 600; text-align: center; line-height: 1.2; white-space: nowrap; }
 .rhead .tick.q { color: #b45309; }
-.rhead .rv { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.rhead .rv { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); white-space: normal; line-height: 1.25; align-self: end; }
+.rhead .tick.end { transform: translateX(-100%); text-align: right; padding-right: 5px; }
+.raxis { padding: 0; }
+.raxis .rtrack { background: none; height: 15px; }
+.raxis .rtrack span { position: absolute; top: 1px; transform: translateX(-50%); font-size: 10.5px; color: var(--text2); }
+.raxis .rt { text-align: center; font-size: 11px; color: var(--text2); }
+.sims { margin-top: 16px; }
+.sims canvas { display: block; width: 100%; height: auto; }
+.nest.dotted { grid-template-columns: 270px 1fr; align-items: start; }
+.slegend { display: grid; gap: 3px; font-size: 12.5px; margin-top: 10px; }
+.slegend div { display: grid; grid-template-columns: 10px 54px 1fr; gap: 8px; align-items: baseline; }
+.slegend i { width: 10px; height: 10px; border-radius: 2px; align-self: center; }
+.slegend b { font: 800 13.5px Outfit, sans-serif; text-align: right; white-space: nowrap; }
+.slegend span { color: var(--text2); }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; }
+.step { padding: 10px 12px; border-right: 1px solid var(--line); }
+.step:last-child { border-right: 0; }
+.step b { display: block; font: 800 24px/1.1 Outfit, sans-serif; letter-spacing: -.01em; }
+.step span { display: block; font-size: 12.5px; font-weight: 600; margin-top: 3px; line-height: 1.3; }
+.step small { display: block; font-size: 11.5px; color: var(--text2); margin-top: 3px; line-height: 1.35; }
+.nest { display: grid; grid-template-columns: 240px 1fr; gap: 16px; align-items: end; }
+.nest .slegend { margin: 0; }
 .t td .cs { display: block; font: 800 15px/1.2 Outfit, sans-serif; }
 .t td .cp { display: block; font-size: 11.5px; opacity: .85; }
 [hidden] { display: none !important; }
@@ -136,19 +158,25 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
 </head>
 <body>
 <div id="bar">
-  <strong>Maqueta v7 · pregunta 3 con el modelo</strong>
+  <strong>Maqueta v8 · pregunta 3 con el modelo</strong>
   <span class="lbl">Estado</span>
   <div class="grp" id="g-state">
     <button class="on" data-v="pre">Antes del 29-N</button>
     <button data-v="post">Tras el escrutinio</button>
   </div>
+  <span class="lbl">Simulaciones que cambian</span>
+  <div class="grp" id="g-sims">
+    <button class="on" data-v="a">A · 10.000 puntos</button>
+    <button data-v="b">B · Tres cifras</button>
+    <button data-v="c">C · Cuadrados</button>
+  </div>
 </div>
 <p class="q">
-  <b>v7: la v6 que aceptaste, con un cambio.</b> La línea fina del gráfico es ahora el rango del 95 % de las
-  simulaciones, el mismo «Rango 95%» del resto de la web (en la v6 era el 90 %): las líneas salen algo más largas y la
-  del extremo de la rejilla llega a los 15 escaños. Lo demás es igual: cada escenario dice cuántos escaños le quita a
-  la derecha partiendo del reparto central del modelo (190) y con qué probabilidad conserva la mayoría en las 10.000
-  simulaciones.
+  <b>v8: tus cambios sobre la v7.</b> En «¿Qué haría falta?» quedan dos gráficos, uno al lado del otro, sin la tabla
+  de las dos dimensiones. Las barras rojas llevan títulos cortos, un eje con una marca cada 2 escaños y las líneas «si
+  la derecha suma 181» y «si la derecha suma 190». El aviso del litigio ocupa todo el ancho y sólo dice lo que pediste.
+  La primera tabla se queda en censo y votantes. <b>Por decidir:</b> cómo enseñar las simulaciones que cambian escaños;
+  hay tres maneras, se cambian con el control «Simulaciones que cambian» de la barra de arriba.
 </p>
 
 <div id="stage">
@@ -199,7 +227,7 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
         <h3 style="font-size:16px">Con el voto que se espera</h3>
         <span class="pill">Censo de la convocatoria</span>
       </div>
-      <p class="lead">Sobre el reparto central del modelo, los 30.482 votos nuevos no mueven ningún escaño: la derecha sigue en 190.
+      <p class="lead">Sobre el reparto central del modelo, los 30.790 votantes nuevos no mueven ningún escaño: la derecha sigue en 190.
         En las 10.000 simulaciones sí mueven alguno, pero casi nunca el que decide la mayoría.</p>
       <div class="grid2">
         <div>
@@ -208,25 +236,50 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
             <tbody>
               <tr><td class="b">Censo CERA</td><td>2.327.388</td><td id="t-census">2.769.645</td><td class="dlt up" id="t-census-d">+442.257</td></tr>
               <tr><td class="b">Votantes CERA</td><td>208.431</td><td id="t-voters">239.221</td><td class="dlt up" id="t-voters-d">+30.790</td></tr>
-              <tr><td class="b">Votos a candidaturas</td><td>203.152</td><td id="t-votes">233.634</td><td class="dlt up" id="t-votes-d">+30.482</td></tr>
             </tbody></table></div>
-          <div class="funnel">
-            <p class="ctitle">Qué hacen esos <span id="f-votes">30.482</span> votos nuevos en las simulaciones</p>
+          <div class="sims" data-sims="a">
+            <p class="ctitle">Qué hacen esos 30.790 votantes nuevos en las simulaciones</p>
+            <p class="csub">Cada punto es una de las 10.000 simulaciones del modelo</p>
+            <div class="nest dotted">
+              <canvas id="dots"></canvas>
+              <div class="slegend">
+                <div><i style="background:#e1e4ea"></i><b>91,03 %</b><span>no cambia ningún escaño</span></div>
+                <div><i style="background:#8d93a5"></i><b>3,26 %</b><span>se mueve alguno, pero la derecha se queda igual</span></div>
+                <div><i style="background:var(--left)"></i><b>3,70 %</b><span>la derecha pierde alguno</span></div>
+                <div><i style="background:var(--right)"></i><b>1,94 %</b><span>la derecha gana alguno</span></div>
+                <div><i style="background:#1a1c22"></i><b>0,07 %</b><span>cambia la mayoría absoluta: son los 7 puntos negros de arriba a la izquierda (la derecha la pierde en 5 y la consigue en 2)</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="sims" data-sims="b" hidden>
+            <p class="ctitle">Qué hacen esos 30.790 votantes nuevos en las simulaciones</p>
             <p class="csub">Porcentaje de las 10.000 simulaciones del modelo</p>
-            <div class="frow"><span class="fl">Mueven algún escaño</span><span class="fb"><i id="f-any-b" style="width:8.97%"></i></span><span class="fv"><b id="f-any">8,97 %</b></span></div>
-            <div class="frow"><span class="fl">Cambian el total de la derecha</span><span class="fb"><i id="f-right-b" style="width:5.71%"></i></span><span class="fv"><b id="f-right">5,71 %</b></span></div>
-            <div class="fs" id="f-right-s">3,75 % a la baja y 1,96 % al alza</div>
-            <div class="frow"><span class="fl">Cambian la mayoría absoluta</span><span class="fb"><i id="f-maj-b" style="width:0.07%"></i></span><span class="fv"><b id="f-maj">0,07 %</b></span></div>
-            <div class="fs" id="f-maj-s">la derecha la pierde en 5 simulaciones de 10.000 y la consigue en 2</div>
+            <div class="steps">
+              <div class="step"><b>8,97 %</b><span>mueven algún escaño</span></div>
+              <div class="step"><b>5,71 %</b><span>cambian el total de la derecha</span><small>3,75 % a la baja y 1,96 % al alza</small></div>
+              <div class="step"><b>0,07 %</b><span>cambian la mayoría absoluta</span><small>la derecha la pierde en 5 simulaciones de 10.000 y la consigue en 2</small></div>
+            </div>
+          </div>
+          <div class="sims" data-sims="c" hidden>
+            <p class="ctitle">Qué hacen esos 30.790 votantes nuevos en las simulaciones</p>
+            <p class="csub">El cuadrado grande son las 10.000 simulaciones del modelo; cada cuadrado, la parte que le toca</p>
+            <div class="nest">
+              <svg viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="Cuadrados anidados">
+                <rect width="240" height="240" rx="4" fill="#e1e4ea"/>
+                <rect x="0" y="168.1" width="71.9" height="71.9" fill="#8d93a5"/>
+                <rect x="0" y="182.6" width="57.4" height="57.4" fill="#1a1c22"/>
+                <rect x="0" y="233.6" width="6.4" height="6.4" fill="#ce3b3b"/>
+              </svg>
+              <div class="slegend">
+                <div><i style="background:#e1e4ea"></i><b>91,03 %</b><span>no cambia ningún escaño</span></div>
+                <div><i style="background:#8d93a5"></i><b>8,97 %</b><span>mueven algún escaño</span></div>
+                <div><i style="background:#1a1c22"></i><b>5,71 %</b><span>cambian el total de la derecha (3,75 % a la baja y 1,96 % al alza)</span></div>
+                <div><i style="background:#ce3b3b"></i><b>0,07 %</b><span>cambian la mayoría absoluta: la derecha la pierde en 5 simulaciones y la consigue en 2</span></div>
+              </div>
+            </div>
           </div>
           <p class="tnote">El voto exterior que se espera no va sólo a la izquierda: en provincias como Orense o Lugo suma más
             a la derecha. Por eso en 2 simulaciones en las que la derecha se quedaba en 175 escaños le da el 176.</p>
-          <p class="note ok" id="lit-note">
-            <b>Sin las 163.020 inscripciones en litigio</b> (repartidas por provincia como el crecimiento
-            latinoamericano desde la ley) serían 22.412 votos nuevos en lugar de 30.482, y la mayoría cambiaría en el
-            0,06 % de las simulaciones (la derecha la pierde en 4 y la consigue en 2). El litigio importa para los derechos
-            de esas personas, no para la mayoría.
-          </p>
         </div>
         <div>
           <p class="ctitle">Dónde mueve escaños el voto CERA que se espera</p>
@@ -240,18 +293,20 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
         </div>
       </div>
 
+      <p class="note ok" style="margin-top:16px">
+        <b>El censo incluye las 163.020 inscripciones en litigio.</b> Hemos querido tener en cuenta todos los escenarios,
+        incluidos los más extremos.
+      </p>
+
       <h3 class="sec">¿Qué haría falta para que importara?</h3>
       <p class="lead">Tres palancas: que voten muchos más, que voten mucho más a la izquierda y que los electores nuevos estén colocados donde más rinden.</p>
-      <p class="ctitle">Lo que le quita cada escenario y lo que haría falta</p>
-      <p class="csub">Barra: escaños que pierde la derecha partiendo del reparto central (190). Línea fina: lo que pierde en el 95 % de las simulaciones. A la derecha, la probabilidad de que conserve la mayoría.</p>
-      <div class="ruler" id="ruler"></div>
-      <p class="tnote" style="margin-bottom:22px">Con el reparto central la derecha pierde la mayoría si le quitan 15 escaños. No siempre parte de ahí: en algo más de una de cada cuatro simulaciones (27,7 %) empieza con 181 o menos, y entonces bastan 6. En el 12,7 % no la tiene ni antes de contar el voto exterior.</p>
       <div class="grid2">
-        <div class="tw">
-          <p class="ctitle">Las dos dimensiones a la vez: sólo los electores nuevos</p>
-          <p class="csub">Participación × sesgo de los 442.257 electores que el censo ha ganado desde 2023 → escaños que le quita a la derecha desde el reparto central y probabilidad de que conserve la mayoría (hoy, 87,3 %)</p>
-          <table class="t" id="two"></table>
-          <p class="tnote">Participación observada: 5 % el origen latinoamericano y 10 % el resto (30.482 votos nuevos; 60.964 con el doble y 91.446 con el triple). Sesgo: la parte del voto a izquierda o derecha que va a la izquierda; «como en 2023» es el reparto del voto CERA de cada provincia.</p>
+        <div>
+          <p class="ctitle">Lo que le quita cada escenario y lo que haría falta</p>
+          <p class="csub">Barra: escaños que pierde la derecha desde el reparto central del modelo (190). Línea fina: lo que pierde en el 95 % de las simulaciones. A la derecha, la probabilidad de que conserve la mayoría (hoy, 87,3 %).</p>
+          <div class="ruler" id="ruler"></div>
+          <p class="tnote">Las líneas discontinuas marcan los escaños que la derecha tendría que perder para quedarse sin mayoría: 15 si suma 190, su reparto central, y 6 si suma 181. Con 181 o menos empieza en algo más de una de cada cuatro simulaciones (27,7 %); en el 12,7 % no tiene mayoría ni antes de contar el voto exterior.</p>
+          <p class="tnote">«Voto» es la participación e «izq.», la parte del voto a izquierda o derecha que va a la izquierda. De los electores nuevos se espera que vote el 5 % de los de origen latinoamericano y el 10 % del resto.</p>
         </div>
         <div class="tw">
           <p class="ctitle">Todo el censo exterior: participación y voto a la izquierda</p>
@@ -296,53 +351,26 @@ const GRID = {
     ['70 %', [[195, 85, -2], [843, 9, -3], [1647, 0, -9], [2635, 0, -10]]]
   ]
 };
-// Escenario, detalle, escaños desde el reparto central, rango en el 95 % de las simulaciones, probabilidad de mayoría
+// Grupo y sus filas: título, detalle, escaños desde el reparto central, rango en el 95 % de las simulaciones, mayoría
 const RULER = [
-  ['Voto que se espera', 'electores nuevos, como votan hoy', 0, [0, 1], '87,3 %'],
-  ['Electores nuevos, al máximo', 'el triple de participación y 90 % a la izquierda', 1, [0, 2], '86,1 %'],
-  ['Colocación a ciegas, al máximo', 'votan todos los colocados, y todos al PSOE', 5, [0, 8], '75,1 %'],
-  ['Todo el censo exterior', '30 % de participación y 70 % a la izquierda', 3, [0, 7], '80,7 %'],
-  ['Todo el censo exterior', '50 % de participación y 70 % a la izquierda', 3, [1, 9], '76,0 %'],
-  ['Todo el censo exterior', '50 % de participación y 80 % a la izquierda', 8, [3, 12], '70,0 %'],
-  ['Todo el censo exterior, el extremo', '70 % de participación y 80 % a la izquierda', 10, [5, 15], '61,0 %']
+  ['Electores nuevos desde 2023', [
+    ['Voto que se espera', '', 0, [0, 1], '87,3 %'],
+    ['Triple voto + 90 % izq.', '', 1, [0, 2], '86,1 %'],
+    ['Colocación a ciegas', '100 % voto + 100 % PSOE', 5, [0, 8], '75,1 %']
+  ]],
+  ['Todo el censo exterior', [
+    ['30 % voto + 70 % izq.', '', 3, [0, 7], '80,7 %'],
+    ['50 % voto + 70 % izq.', '', 3, [1, 9], '76,0 %'],
+    ['50 % voto + 80 % izq.', '', 8, [3, 12], '70,0 %'],
+    ['70 % voto + 80 % izq.', '', 10, [5, 15], '61,0 %']
+  ]]
 ];
-const PLACE = {
-  cols: ['50 %', '60 %', '70 %', '80 %', '100 %'], head: 'Participación \\ voto al PSOE',
-  rows: [
-    ['9 %', [[83, 0], [88, 0], [98, 0], [111, 0], [155, 0]]],
-    ['20 %', [[182, 0], [223, 0], [255, 0], [283, 0], [333, 0]]],
-    ['50 %', [[527, 0], [549, 0], [610, 0], [666, 0], [694, 0]]],
-    ['100 %', [[694, 0], [737, 0], [777, 0], [950, 0], [1223, 0]]]
-  ]
-};
-// Participación, sesgo, [mayorías perdidas, ganadas], cambio medio de los escaños de la derecha y de la izquierda
-const TWO = [
-  ['Observada', 'como en 2023', [5, 2], 0, 'lo esperado'],
-  ['Observada', '70 %', [20, 0], 0],
-  ['Observada', '90 %', [42, 0], 0],
-  ['El doble', 'como en 2023', [9, 4], 0],
-  ['El doble', '70 %', [43, 0], 0],
-  ['El doble', '90 %', [82, 0], 0],
-  ['El triple', 'como en 2023', [17, 6], 0],
-  ['El triple', '70 %', [63, 0], 0],
-  ['El triple', '90 %', [126, 0], -1]
-];
-const SCEN = {
-  conv: {census: '2.769.645', censusD: '+442.257', voters: '239.221', votersD: '+30.790', votes: '233.634', votesD: '+30.482',
-         n: '30.482', any: 897, right: 571, rightS: '3,75 % a la baja y 1,96 % al alza', maj: 7,
-         majS: 'la derecha la pierde en 5 simulaciones de 10.000 y la consigue en 2', exp: '87,3 %',
-         expS: '8.731 de 10.000 simulaciones, 3 menos',
-         prov: [['Madrid', 172, 59, 39], ['Barcelona', 100, 27, 20], ['S. C. Tenerife', 65, 22, 15], ['Almería', 37, 36, 0],
-                ['Alicante', 36, 25, 0], ['Baleares', 34, 23, 0], ['Orense', 30, 0, 26], ['Granada', 29, 9, 10],
-                ['Valencia', 28, 18, 0], ['Lugo', 26, 0, 17]]},
-  lit: {census: '2.606.625', censusD: '+279.237', voters: '231.070', votersD: '+22.639', votes: '225.564', votesD: '+22.412',
-        n: '22.412', any: 676, right: 423, rightS: '2,88 % a la baja y 1,35 % al alza', maj: 6,
-        majS: 'la pierde en 4 simulaciones de 10.000 y la gana en 2', exp: '87,3 %',
-        expS: '8.732 de 10.000: la pierde en 4 y la gana en 2',
-        prov: [['Madrid', 131, 41, 31], ['Barcelona', 84, 23, 18], ['S. C. Tenerife', 51, 17, 11], ['Alicante', 31, 21, 0],
-               ['Baleares', 26, 19, 0], ['Valencia', 25, 15, 0], ['Almería', 23, 22, 0], ['Granada', 20, 7, 5],
-               ['Gerona', 20, 5, 4], ['Tarragona', 18, 5, 3]]}
-};
+// Provincia: simulaciones de 10.000 en las que cambia algún escaño, la derecha pierde uno y gana uno
+const PROV = [['Madrid', 172, 59, 39], ['Barcelona', 100, 27, 20], ['S. C. Tenerife', 65, 22, 15], ['Almería', 37, 36, 0],
+              ['Alicante', 36, 25, 0], ['Baleares', 34, 23, 0], ['Orense', 30, 0, 26], ['Granada', 29, 9, 10],
+              ['Valencia', 28, 18, 0], ['Lugo', 26, 0, 17]];
+// Simulaciones de 10.000: cambia algún escaño, la derecha baja, sube, pierde la mayoría, la consigue
+const SIMS = {moved: 897, down: 375, up: 196, lost: 5, gained: 2};
 const fmt = (x, d = 1) => x.toFixed(d).replace('.', ',');
 const pct = (n, d = 1) => fmt(Math.round(n * Math.pow(10, d) / 100) / Math.pow(10, d), d) + ' %';
 
@@ -353,22 +381,29 @@ function seatsOf(n) { return n === 0 ? '0' : String(n).replace('-', '−'); }
 function cellOf([lost, gained, seats]) {
   const after = Math.round((BASE - lost + gained) / 10) / 10;
   const tip = 'Le quita la mayoría en ' + lost.toLocaleString('es-ES') + ' simulaciones de 10.000' + (gained ? ' y se la da en ' + gained : '');
-  const body = seats === undefined ? fmt(after) + ' %' : '<span class="cs">' + seatsOf(seats) + '</span><span class="cp">' + fmt(after) + ' %</span>';
-  return '<td class="' + shade(BASE / 100 - after) + '" title="' + tip + '">' + body + '</td>';
+  return '<td class="' + shade(BASE / 100 - after) + '" title="' + tip + '"><span class="cs">' + seatsOf(seats) +
+         '</span><span class="cp">' + fmt(after) + ' %</span></td>';
 }
 
 function ruler(el) {
   const max = 16, at = n => (100 * n / max) + '%';
   const lines = '<i class="ln q" style="left:' + at(6) + '"></i><i class="ln" style="left:' + at(15) + '"></i>';
   let html = '<div class="rrow rhead"><span></span><span class="rtrack">' +
-    '<span class="tick q" style="left:' + at(6) + '">6 escaños<br>si parte de 181</span>' +
-    '<span class="tick" style="left:' + at(15) + '">15 escaños<br>desde 190</span></span>' +
+    '<span class="tick q" style="left:' + at(6) + '">si la derecha<br>suma 181</span>' +
+    '<span class="tick end" style="left:' + at(15) + '">si la derecha<br>suma 190</span></span>' +
     '<span class="rv">Escaños · mayoría</span></div>';
-  for (const [name, detail, seats, [lo, hi], prob] of RULER)
-    html += '<div class="rrow"><span class="rl"><b>' + name + '</b><small>' + detail + '</small></span><span class="rtrack">' +
-      '<i class="bar" style="width:' + at(seats) + '"></i>' +
-      (hi > lo ? '<i class="wh" style="left:' + at(lo) + ';width:' + at(hi - lo) + '"></i>' : '') + lines + '</span>' +
-      '<span class="rv"><b>' + seatsOf(-seats) + '</b><span>' + prob + '</span></span></div>';
+  for (const [group, rows] of RULER) {
+    html += '<div class="rgroup">' + group + '</div>';
+    for (const [name, detail, seats, [lo, hi], prob] of rows)
+      html += '<div class="rrow"><span class="rl"><b>' + name + '</b>' + (detail ? '<small>' + detail + '</small>' : '') +
+        '</span><span class="rtrack"><i class="bar" style="width:' + at(seats) + '"></i>' +
+        (hi > lo ? '<i class="wh" style="left:' + at(lo) + ';width:' + at(hi - lo) + '"></i>' : '') + lines + '</span>' +
+        '<span class="rv"><b>' + seatsOf(-seats) + '</b><span>' + prob + '</span></span></div>';
+  }
+  let ticks = '';
+  for (let n = 0; n <= max; n += 2) ticks += '<span style="left:' + at(n) + '">' + n + '</span>';
+  html += '<div class="rrow raxis"><span></span><span class="rtrack">' + ticks + '</span><span></span></div>' +
+          '<div class="rrow raxis"><span></span><span class="rt">Escaños que pierde la derecha</span><span></span></div>';
   el.innerHTML = html;
 }
 
@@ -378,30 +413,29 @@ function table(el, spec) {
   el.innerHTML = html + '</tbody>';
 }
 
-function two(el) {
-  let html = '<thead><tr><th>Participación</th><th>Sesgo</th><th>Escaños</th><th>Prob. de mayoría</th></tr></thead><tbody>';
-  for (const [part, bias, cell, seats, tag] of TWO)
-    html += '<tr><td class="b">' + part + (tag ? ' <span class="pill">' + tag + '</span>' : '') + '</td><td>' + bias + '</td>' +
-            '<td class="b">' + seatsOf(seats) + '</td>' + cellOf(cell) + '</tr>';
-  el.innerHTML = html + '</tbody>';
-}
-
-function scenario(key) {
-  const s = SCEN[key], set = (id, v) => document.getElementById(id).textContent = v;
-  set('t-census', s.census); set('t-census-d', s.censusD);
-  set('t-voters', s.voters); set('t-voters-d', s.votersD); set('t-votes', s.votes); set('t-votes-d', s.votesD);
-  set('f-votes', s.n); set('f-any', pct(s.any, 2)); set('f-right', pct(s.right, 2));
-  set('f-right-s', s.rightS); set('f-maj', pct(s.maj, 2)); set('f-maj-s', s.majS);
-  document.getElementById('f-any-b').style.width = (s.any / 100) + '%';
-  document.getElementById('f-right-b').style.width = (s.right / 100) + '%';
-  document.getElementById('f-maj-b').style.width = (s.maj / 100) + '%';
-  document.getElementById('lit-note').hidden = key === 'lit';
-  const top = s.prov[0][1];
-  document.getElementById('pbars').innerHTML = s.prov.map(([name, n, lose, gain]) =>
+function provinces(el) {
+  const top = PROV[0][1];
+  el.innerHTML = PROV.map(([name, n, lose, gain]) =>
     '<div class="prow"><span>' + name + '</span><span class="pb" style="width:' + (100 * n / top) + '%">' +
     '<i class="l" style="width:' + (100 * lose / n) + '%" title="La derecha pierde un escaño en el ' + pct(lose, 2) + '"></i>' +
     '<i class="r" style="width:' + (100 * gain / n) + '%" title="La derecha gana un escaño en el ' + pct(gain, 2) + '"></i>' +
     '<i class="o" style="width:' + (100 * (n - lose - gain) / n) + '%"></i></span><span class="pn">' + pct(n, 2) + '</span></div>').join('');
+}
+
+// Un punto por simulación: primero las que cambian la mayoría, luego las que mueven escaños y al final el resto
+function dots(canvas) {
+  const cols = 100, rows = 100, cell = 6, s = SIMS;
+  canvas.width = cols * cell;
+  canvas.height = rows * cell;
+  const ctx = canvas.getContext('2d');
+  const kinds = [[s.lost + s.gained, '#1a1c22'], [s.down - s.lost, '#d1495b'], [s.up - s.gained, '#2f6fb3'],
+                 [s.moved - s.down - s.up, '#8d93a5'], [10000 - s.moved, '#e1e4ea']];
+  let i = 0;
+  for (const [n, color] of kinds)
+    for (let k = 0; k < n; k++, i++) {
+      ctx.fillStyle = color;
+      ctx.fillRect((i % cols) * cell, Math.floor(i / cols) * cell, cell - 2, cell - 2);
+    }
 }
 
 function group(id, fn) {
@@ -412,13 +446,14 @@ function group(id, fn) {
   }));
 }
 group('g-state', v => document.querySelectorAll('[data-post]').forEach(el => el.hidden = v !== 'post'));
+group('g-sims', v => document.querySelectorAll('[data-sims]').forEach(el => el.hidden = el.dataset.sims !== v));
 table(document.getElementById('grid'), GRID);
-two(document.getElementById('two'));
 ruler(document.getElementById('ruler'));
-scenario('conv');
-// Estados por ancla, para capturas: #state=post&scenario=lit
+provinces(document.getElementById('pbars'));
+dots(document.getElementById('dots'));
+// Estados por ancla, para capturas: #state=post&sims=b
 for (const [key, value] of new URLSearchParams(location.hash.slice(1))) {
-  const box = {state: 'g-state', scenario: 'scenario'}[key];
+  const box = {state: 'g-state', sims: 'g-sims'}[key];
   const btn = box && document.querySelector('#' + box + ' [data-v="' + value + '"]');
   if (btn) btn.click();
 }
