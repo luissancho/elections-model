@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maqueta v5 · /analisis/voto-cera · pregunta 3 con el modelo</title>
+<title>Maqueta v7 · /analisis/voto-cera · pregunta 3 con el modelo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
@@ -111,12 +111,32 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
 .three .vv { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 13px Outfit, sans-serif; margin-bottom: 6px; }
 .three p { margin: 0; font-size: 13px; color: var(--text2); }
 .cap { font: 700 11px Outfit, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin: 0 0 6px; }
+.ruler { margin: 10px 0 6px; }
+.rrow { display: grid; grid-template-columns: 330px 1fr 150px; gap: 12px; align-items: center; font-size: 12.5px; padding: 5px 0; }
+.rrow .rl { line-height: 1.3; }
+.rrow .rl small { display: block; color: var(--text2); font-size: 11.5px; }
+.rtrack { position: relative; height: 16px; background: var(--soft); border-radius: 4px; }
+.rtrack .bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--left); border-radius: 4px; min-width: 3px; }
+.rtrack .wh { position: absolute; top: 7px; height: 2px; background: var(--ink); }
+.rtrack .wh::before, .rtrack .wh::after { content: ""; position: absolute; top: -3px; width: 2px; height: 8px; background: var(--ink); }
+.rtrack .wh::before { left: 0; } .rtrack .wh::after { right: 0; }
+.rtrack .ln { position: absolute; top: -6px; bottom: -6px; border-left: 2px dashed var(--ink); }
+.rtrack .ln.q { border-left-color: var(--amber); }
+.rrow .rv { text-align: right; white-space: nowrap; }
+.rrow .rv b { font: 800 15px Outfit, sans-serif; }
+.rrow .rv span { color: var(--text2); font-size: 12px; margin-left: 6px; }
+.rhead .rtrack { background: none; height: 34px; }
+.rhead .tick { position: absolute; bottom: 0; transform: translateX(-50%); font-size: 11.5px; font-weight: 600; text-align: center; line-height: 1.2; white-space: nowrap; }
+.rhead .tick.q { color: #b45309; }
+.rhead .rv { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.t td .cs { display: block; font: 800 15px/1.2 Outfit, sans-serif; }
+.t td .cp { display: block; font-size: 11.5px; opacity: .85; }
 [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <div id="bar">
-  <strong>Maqueta v5 · pregunta 3 con el modelo</strong>
+  <strong>Maqueta v7 · pregunta 3 con el modelo</strong>
   <span class="lbl">Estado</span>
   <div class="grp" id="g-state">
     <button class="on" data-v="pre">Antes del 29-N</button>
@@ -124,10 +144,11 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
   </div>
 </div>
 <p class="q">
-  <b>Cambios de la v5.</b> Sin la barra «Simulaciones» (siempre 100 %). Sin selector de censo: sólo el de la
-  convocatoria, con el aviso de las inscripciones en litigio. La tabla de dos dimensiones, sólo con la probabilidad de
-  mayoría. La colocación deja de ser una tabla y queda como comentario. Y «la gana en 2» pasa a explicarse: el voto exterior
-  que se espera no va sólo a la izquierda.
+  <b>v7: la v6 que aceptaste, con un cambio.</b> La línea fina del gráfico es ahora el rango del 95 % de las
+  simulaciones, el mismo «Rango 95%» del resto de la web (en la v6 era el 90 %): las líneas salen algo más largas y la
+  del extremo de la rejilla llega a los 15 escaños. Lo demás es igual: cada escenario dice cuántos escaños le quita a
+  la derecha partiendo del reparto central del modelo (190) y con qué probabilidad conserva la mayoría en las 10.000
+  simulaciones.
 </p>
 
 <div id="stage">
@@ -141,7 +162,7 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
           <div class="k">PREGUNTA 3</div>
           <div class="tt">¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el 29-N?</div>
           <span class="vv">NO</span>
-          <p>Con el voto que se espera, la mayoría cambia de manos en el 0,07 % de las simulaciones del modelo.</p>
+          <p>Con el voto que se espera no cambia ningún escaño del reparto central del modelo, y la mayoría cambia de manos en el 0,07 % de sus simulaciones.</p>
         </a>
       </div>
     </div>
@@ -169,15 +190,17 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
       </div>
 
       <div class="kpis">
-        <div class="kpi"><div class="l">Mayoría absoluta de la derecha, hoy</div><div class="v">87,3 %</div><div class="s">8.734 de 10.000 simulaciones</div></div>
-        <div class="kpi"><div class="l">Con el voto CERA que se espera</div><div class="v" id="k-exp">87,3 %</div><div class="s" id="k-exp-s">8.731 de 10.000 simulaciones, 3 menos</div></div>
-        <div class="kpi"><div class="l">En el extremo de la rejilla</div><div class="v">61,0 %</div><div class="s">70 % de participación y 80 % del voto a la izquierda</div></div>
+        <div class="kpi"><div class="l">La derecha en el reparto central del modelo</div><div class="v">190 escaños</div><div class="s">tendría que perder 15 para quedarse sin mayoría; la conserva en el 87,3 % de las simulaciones</div></div>
+        <div class="kpi"><div class="l">Con el voto CERA que se espera</div><div class="v">0 escaños</div><div class="s">sigue en 190; mayoría en el 87,3 % (3 simulaciones menos de 10.000)</div></div>
+        <div class="kpi"><div class="l">En el extremo de la rejilla</div><div class="v">−10 escaños</div><div class="s">se queda en 180; mayoría en el 61,0 % (70 % de participación y 80 % del voto a la izquierda)</div></div>
       </div>
 
       <div class="card-h" style="margin-bottom:6px">
         <h3 style="font-size:16px">Con el voto que se espera</h3>
         <span class="pill">Censo de la convocatoria</span>
       </div>
+      <p class="lead">Sobre el reparto central del modelo, los 30.482 votos nuevos no mueven ningún escaño: la derecha sigue en 190.
+        En las 10.000 simulaciones sí mueven alguno, pero casi nunca el que decide la mayoría.</p>
       <div class="grid2">
         <div>
           <div class="tw"><table class="t">
@@ -219,16 +242,20 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
 
       <h3 class="sec">¿Qué haría falta para que importara?</h3>
       <p class="lead">Tres palancas: que voten muchos más, que voten mucho más a la izquierda y que los electores nuevos estén colocados donde más rinden.</p>
+      <p class="ctitle">Lo que le quita cada escenario y lo que haría falta</p>
+      <p class="csub">Barra: escaños que pierde la derecha partiendo del reparto central (190). Línea fina: lo que pierde en el 95 % de las simulaciones. A la derecha, la probabilidad de que conserve la mayoría.</p>
+      <div class="ruler" id="ruler"></div>
+      <p class="tnote" style="margin-bottom:22px">Con el reparto central la derecha pierde la mayoría si le quitan 15 escaños. No siempre parte de ahí: en algo más de una de cada cuatro simulaciones (27,7 %) empieza con 181 o menos, y entonces bastan 6. En el 12,7 % no la tiene ni antes de contar el voto exterior.</p>
       <div class="grid2">
         <div class="tw">
           <p class="ctitle">Las dos dimensiones a la vez: sólo los electores nuevos</p>
-          <p class="csub">Participación × sesgo de los 442.257 electores que el censo ha ganado desde 2023 → probabilidad de mayoría absoluta de la derecha (hoy, 87,3 %)</p>
+          <p class="csub">Participación × sesgo de los 442.257 electores que el censo ha ganado desde 2023 → escaños que le quita a la derecha desde el reparto central y probabilidad de que conserve la mayoría (hoy, 87,3 %)</p>
           <table class="t" id="two"></table>
           <p class="tnote">Participación observada: 5 % el origen latinoamericano y 10 % el resto (30.482 votos nuevos; 60.964 con el doble y 91.446 con el triple). Sesgo: la parte del voto a izquierda o derecha que va a la izquierda; «como en 2023» es el reparto del voto CERA de cada provincia.</p>
         </div>
         <div class="tw">
           <p class="ctitle">Todo el censo exterior: participación y voto a la izquierda</p>
-          <p class="csub">Probabilidad de mayoría absoluta de la derecha (hoy, 87,3 %) si los 2.769.645 electores del 29-N votaran así</p>
+          <p class="csub">Si los 2.769.645 electores del 29-N votaran así: escaños que pierde la derecha desde el reparto central (190) y, debajo, la probabilidad de que conserve la mayoría (hoy, 87,3 %)</p>
           <table class="t" id="grid"></table>
           <p class="tnote">En 2023 votó el 9 % del censo exterior y, de lo que fue a izquierda o derecha, la mitad fue a cada lado. Los demás partidos conservan su parte del voto CERA de 2023.</p>
         </div>
@@ -237,17 +264,18 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
         <p><b>¿Y colocando a los electores donde más rinden?</b> Es la vía más difícil. Quien lo intentara sólo podía guiarse
         por los resultados de 2023: el censo se cerró el 1 de agosto. Si los 181.032 electores que entraron con la ley desde
         Argentina, México, Cuba y Venezuela se hubieran inscrito en las provincias donde al PSOE le costaba menos votos el
-        siguiente escaño en 2023, la mayoría de la derecha quedaría entre el 86,5 % (con la participación de 2023 y la mitad
-        de su voto al PSOE) y el 75,1 % (si votaran todos, y todos al PSOE). Es un límite, no una previsión: nadie puede
+        siguiente escaño en 2023, le quitarían a la derecha entre 1 y 5 escaños del reparto central, y su mayoría quedaría
+        entre el 86,5 % (con la participación de 2023 y la mitad de su voto al PSOE) y el 75,1 % (si votaran todos, y todos
+        al PSOE). Es un límite, no una previsión: nadie puede
         dirigir cada inscripción ni cada voto.</p>
       </div>
 
       <div class="sum">
-        <b>Con el voto que se espera, la mayoría cambia de manos en el 0,07 % de las simulaciones.</b>
-        El voto CERA nuevo mueve algún escaño en el 9 %, pero casi nunca el que decide la mayoría: se la quita a la derecha en 5
-        simulaciones de 10.000 y se la da en 2. Con el triple de participación de los electores nuevos y el 90 % de su voto a la
-        izquierda, la probabilidad se queda en el 86,1 %. Para dejarla por debajo del 80 % haría falta, por ejemplo, que votara
-        la mitad de todo el censo exterior (en 2023 votó el 9 %) y que el 70 % de ese voto fuera a la izquierda (en 2023, la mitad).
+        <b>Con el voto que se espera, ni un escaño: la derecha sigue en 190.</b>
+        En las simulaciones, la mayoría cambia de manos en el 0,07 %. Con el triple de participación de los electores nuevos y
+        el 90 % de su voto a la izquierda, un escaño. A la derecha habría que quitarle 15 para dejarla sin mayoría desde el
+        reparto central, y ni el extremo de la rejilla llega (10): por eso la probabilidad sólo baja en las simulaciones en
+        las que la derecha ya parte con poco margen.
       </div>
       <a class="how">Cómo leerlo</a>
     </section>
@@ -261,13 +289,23 @@ const BASE = 8734;
 const GRID = {
   cols: ['50 %', '60 %', '70 %', '80 %'], head: 'Participación \\ voto a la izq.',
   rows: [
-    ['9 % (la de 2023)', [[42, 17], [99, 2], [179, 0], [260, 0]]],
-    ['20 %', [[77, 47], [217, 7], [429, 1], [647, 0]]],
-    ['30 %', [[100, 61], [335, 12], [663, 3], [987, 0]]],
-    ['50 %', [[146, 81], [582, 10], [1136, 0], [1739, 0]]],
-    ['70 %', [[195, 85], [843, 9], [1647, 0], [2635, 0]]]
+    ['9 % (la de 2023)', [[42, 17, 0], [99, 2, 0], [179, 0, 0], [260, 0, -2]]],
+    ['20 %', [[77, 47, 0], [217, 7, -1], [429, 1, -2], [647, 0, -3]]],
+    ['30 %', [[100, 61, -1], [335, 12, -2], [663, 3, -3], [987, 0, -4]]],
+    ['50 %', [[146, 81, -1], [582, 10, -3], [1136, 0, -3], [1739, 0, -8]]],
+    ['70 %', [[195, 85, -2], [843, 9, -3], [1647, 0, -9], [2635, 0, -10]]]
   ]
 };
+// Escenario, detalle, escaños desde el reparto central, rango en el 95 % de las simulaciones, probabilidad de mayoría
+const RULER = [
+  ['Voto que se espera', 'electores nuevos, como votan hoy', 0, [0, 1], '87,3 %'],
+  ['Electores nuevos, al máximo', 'el triple de participación y 90 % a la izquierda', 1, [0, 2], '86,1 %'],
+  ['Colocación a ciegas, al máximo', 'votan todos los colocados, y todos al PSOE', 5, [0, 8], '75,1 %'],
+  ['Todo el censo exterior', '30 % de participación y 70 % a la izquierda', 3, [0, 7], '80,7 %'],
+  ['Todo el censo exterior', '50 % de participación y 70 % a la izquierda', 3, [1, 9], '76,0 %'],
+  ['Todo el censo exterior', '50 % de participación y 80 % a la izquierda', 8, [3, 12], '70,0 %'],
+  ['Todo el censo exterior, el extremo', '70 % de participación y 80 % a la izquierda', 10, [5, 15], '61,0 %']
+];
 const PLACE = {
   cols: ['50 %', '60 %', '70 %', '80 %', '100 %'], head: 'Participación \\ voto al PSOE',
   rows: [
@@ -279,15 +317,15 @@ const PLACE = {
 };
 // Participación, sesgo, [mayorías perdidas, ganadas], cambio medio de los escaños de la derecha y de la izquierda
 const TWO = [
-  ['Observada', 'como en 2023', [5, 2], '−0,02', '+0,03', 'lo esperado'],
-  ['Observada', '70 %', [20, 0], '−0,11', '+0,12'],
-  ['Observada', '90 %', [42, 0], '−0,20', '+0,21'],
-  ['El doble', 'como en 2023', [9, 4], '−0,03', '+0,06'],
-  ['El doble', '70 %', [43, 0], '−0,21', '+0,24'],
-  ['El doble', '90 %', [82, 0], '−0,40', '+0,43'],
-  ['El triple', 'como en 2023', [17, 6], '−0,05', '+0,10'],
-  ['El triple', '70 %', [63, 0], '−0,31', '+0,36'],
-  ['El triple', '90 %', [126, 0], '−0,59', '+0,64']
+  ['Observada', 'como en 2023', [5, 2], 0, 'lo esperado'],
+  ['Observada', '70 %', [20, 0], 0],
+  ['Observada', '90 %', [42, 0], 0],
+  ['El doble', 'como en 2023', [9, 4], 0],
+  ['El doble', '70 %', [43, 0], 0],
+  ['El doble', '90 %', [82, 0], 0],
+  ['El triple', 'como en 2023', [17, 6], 0],
+  ['El triple', '70 %', [63, 0], 0],
+  ['El triple', '90 %', [126, 0], -1]
 ];
 const SCEN = {
   conv: {census: '2.769.645', censusD: '+442.257', voters: '239.221', votersD: '+30.790', votes: '233.634', votesD: '+30.482',
@@ -310,10 +348,28 @@ const pct = (n, d = 1) => fmt(Math.round(n * Math.pow(10, d) / 100) / Math.pow(1
 
 function shade(drop) { return drop < 0.5 ? 'g0' : drop < 3 ? 'g1' : drop < 8 ? 'g2' : drop < 15 ? 'g3' : 'g4'; }
 
-function cellOf([lost, gained]) {
+function seatsOf(n) { return n === 0 ? '0' : String(n).replace('-', '−'); }
+
+function cellOf([lost, gained, seats]) {
   const after = Math.round((BASE - lost + gained) / 10) / 10;
   const tip = 'Le quita la mayoría en ' + lost.toLocaleString('es-ES') + ' simulaciones de 10.000' + (gained ? ' y se la da en ' + gained : '');
-  return '<td class="' + shade(BASE / 100 - after) + '" title="' + tip + '">' + fmt(after) + ' %</td>';
+  const body = seats === undefined ? fmt(after) + ' %' : '<span class="cs">' + seatsOf(seats) + '</span><span class="cp">' + fmt(after) + ' %</span>';
+  return '<td class="' + shade(BASE / 100 - after) + '" title="' + tip + '">' + body + '</td>';
+}
+
+function ruler(el) {
+  const max = 16, at = n => (100 * n / max) + '%';
+  const lines = '<i class="ln q" style="left:' + at(6) + '"></i><i class="ln" style="left:' + at(15) + '"></i>';
+  let html = '<div class="rrow rhead"><span></span><span class="rtrack">' +
+    '<span class="tick q" style="left:' + at(6) + '">6 escaños<br>si parte de 181</span>' +
+    '<span class="tick" style="left:' + at(15) + '">15 escaños<br>desde 190</span></span>' +
+    '<span class="rv">Escaños · mayoría</span></div>';
+  for (const [name, detail, seats, [lo, hi], prob] of RULER)
+    html += '<div class="rrow"><span class="rl"><b>' + name + '</b><small>' + detail + '</small></span><span class="rtrack">' +
+      '<i class="bar" style="width:' + at(seats) + '"></i>' +
+      (hi > lo ? '<i class="wh" style="left:' + at(lo) + ';width:' + at(hi - lo) + '"></i>' : '') + lines + '</span>' +
+      '<span class="rv"><b>' + seatsOf(-seats) + '</b><span>' + prob + '</span></span></div>';
+  el.innerHTML = html;
 }
 
 function table(el, spec) {
@@ -323,10 +379,10 @@ function table(el, spec) {
 }
 
 function two(el) {
-  let html = '<thead><tr><th>Participación</th><th>Sesgo</th><th>Prob. de mayoría</th></tr></thead><tbody>';
-  for (const [part, bias, cell, , , tag] of TWO)
+  let html = '<thead><tr><th>Participación</th><th>Sesgo</th><th>Escaños</th><th>Prob. de mayoría</th></tr></thead><tbody>';
+  for (const [part, bias, cell, seats, tag] of TWO)
     html += '<tr><td class="b">' + part + (tag ? ' <span class="pill">' + tag + '</span>' : '') + '</td><td>' + bias + '</td>' +
-            cellOf(cell) + '</tr>';
+            '<td class="b">' + seatsOf(seats) + '</td>' + cellOf(cell) + '</tr>';
   el.innerHTML = html + '</tbody>';
 }
 
@@ -335,7 +391,7 @@ function scenario(key) {
   set('t-census', s.census); set('t-census-d', s.censusD);
   set('t-voters', s.voters); set('t-voters-d', s.votersD); set('t-votes', s.votes); set('t-votes-d', s.votesD);
   set('f-votes', s.n); set('f-any', pct(s.any, 2)); set('f-right', pct(s.right, 2));
-  set('f-right-s', s.rightS); set('f-maj', pct(s.maj, 2)); set('f-maj-s', s.majS); set('k-exp', s.exp); set('k-exp-s', s.expS);
+  set('f-right-s', s.rightS); set('f-maj', pct(s.maj, 2)); set('f-maj-s', s.majS);
   document.getElementById('f-any-b').style.width = (s.any / 100) + '%';
   document.getElementById('f-right-b').style.width = (s.right / 100) + '%';
   document.getElementById('f-maj-b').style.width = (s.maj / 100) + '%';
@@ -358,6 +414,7 @@ function group(id, fn) {
 group('g-state', v => document.querySelectorAll('[data-post]').forEach(el => el.hidden = v !== 'post'));
 table(document.getElementById('grid'), GRID);
 two(document.getElementById('two'));
+ruler(document.getElementById('ruler'));
 scenario('conv');
 // Estados por ancla, para capturas: #state=post&scenario=lit
 for (const [key, value] of new URLSearchParams(location.hash.slice(1))) {
