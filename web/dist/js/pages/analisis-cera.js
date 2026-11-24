@@ -1,16 +1,14 @@
-// The page of the CERA study (`/analisis/voto-cera`): the charts of its three questions, drawn from the data
-// embedded by the server (`initial`, `_island` of `pages/analisis.py`), the «Ver más» buttons of its tables and the
-// scenario selector of question 3, which swaps the table of the prediction and redraws the gap chart; and the
-// buttons that download each card as an image.
+// The page of the CERA study (`/analisis/voto-cera`): the charts of its first two questions, drawn from the data
+// embedded by the server (`initial`, `_island` of `pages/analisis.py`; the card of question 3 is HTML and CSS), the
+// «Ver más» buttons of its tables and the buttons that download each card as an image.
 import {fmtDate, fmtInt, fmtNum, fmtPct} from '../format.js';
 import {THEME} from '../charts/base.js';
 import {renderCensus} from '../charts/census.js';
 import {renderGrouped} from '../charts/grouped.js';
-import {renderRadar} from '../charts/radar.js';
 import {renderScatter} from '../charts/scatter.js';
 import {renderSlope} from '../charts/slope.js';
 import {wireCardImages} from '../card-image.js';
-import {markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls, wireMore} from './common.js';
+import {mountWhenReady, readInitial, showError, tryDraw, wireControls, wireMore} from './common.js';
 
 // The palette of the study's charts (the approved mockup): the accent for what is, red for what is feared.
 const RED = '#ce3b3b';
@@ -31,8 +29,6 @@ const ORIGIN_NAMES = {latam: 'Latinoamérica', europe: 'Europa', usa_canada: 'EE
 const LATAM = 'Latinoamérica';
 const COMMUNITY_NAMES = {cyl: 'Castilla y León', aragon: 'Aragón', extremadura: 'Extremadura', andalucia: 'Andalucía'};
 
-// The axes of the radar of question 3, in the order of `initial.radar.today`.
-const RADAR_AXES = ['Participación CERA', 'Colocación dirigida\nen provincias\nsensibles', 'Voto a la\nizquierda'];
 // How many provinces of the ecological cloud are named at each end of each axis.
 const NAMED_AT_EACH_END = 2;
 
@@ -237,55 +233,7 @@ function drawSensitive(sensitive) {
   ], {stacked: true, max: 100, formatter: (v) => fmtPct(v, 1), axisFormatter: pct}), 'the sensitive provinces');
 }
 
-/**
- * Question 3: the gap to the last seat of the closest provinces against the net effect of the CERA in one
- * scenario, the net in the accent when it favours the runner-up and in red otherwise. Each row is labelled with
- * the siglas of the winner and the runner-up that the island carries: «Girona (JxCat/PP)».
- */
-function drawGap(rows) {
-  const el = container('gap-chart', rows && rows.length);
-  if (!el) {
-    return;
-  }
-  const label = (row) => (row.winner && row.runner_up ? `${row.name} (${row.winner}/${row.runner_up})` : row.name);
-  const number = (v) => fmtNum(v, Number.isInteger(v) ? 0 : 1);
-  tryDraw(() => renderGrouped(el, rows.map(label), [
-    {name: 'Brecha del último escaño', color: GREY, data: rows.map((row) => row.gap), formatter: fmtInt},
-    {name: 'Efecto neto del CERA', color: THEME.accentColor, formatter: number,
-      data: rows.map((row) => ({value: row.net, color: row.net > 0 ? THEME.accentColor : RED}))},
-  ], {horizontal: true, legend: 'bottom', formatter: number, axisFormatter: thousands}), 'the gap to the last seat');
-}
-
-/** Question 3: today's levers against «everything at the maximum». */
-function drawRadar(radar) {
-  const today = (radar && radar.today) || [];
-  const el = container('radar-chart', today.length === RADAR_AXES.length);
-  if (el) {
-    const max = radar.max || RADAR_AXES.map(() => 100);
-    const indicators = RADAR_AXES.map((name, i) => ({name, max: max[i]}));
-    tryDraw(() => renderRadar(el, indicators, [
-      {name: 'Realidad hoy', value: today, color: THEME.accentColor, filled: true},
-      {name: 'Todo al máximo', value: max, color: RED, filled: false},
-    ]), 'the radar of the levers');
-  }
-}
-
-/** The scenario checked in the selector of question 3 (`null` without one). */
-function checkedScenario() {
-  const input = document.querySelector('#scenario input[name=scenario]:checked');
-  return input ? input.value : null;
-}
-
-/** Show the table of the prediction of `scenario` only, mark the segments and redraw the gap chart. */
-function showScenario(data, scenario) {
-  for (const table of document.querySelectorAll('#prediction-table table[data-scenario]')) {
-    table.hidden = table.dataset.scenario !== scenario;
-  }
-  markSegments();
-  drawGap((data.gap || {})[scenario] || []);
-}
-
-/** Draw the charts whose container is present and wire the scenario selector. */
+/** Draw the charts whose container is present. */
 function paint() {
   if (!document.getElementById('initial-data')) {
     return;
@@ -298,27 +246,10 @@ function paint() {
   drawSlope(data.slope || []);
   drawCannibal(data.cannibal || []);
   drawSensitive(data.sensitive);
-  drawRadar(data.radar);
-
-  // the browser may restore a radio other than the first one; without a selector, the first scenario
-  const selector = document.getElementById('scenario');
-  const scenario = checkedScenario() || Object.keys(data.gap || {})[0];
-  if (scenario) {
-    showScenario(data, scenario);
-  }
-  if (selector) {
-    selector.addEventListener('change', () => {
-      const value = checkedScenario();
-      if (value) {
-        showScenario(data, value);
-      }
-    });
-  }
 }
 
 wireControls();
 wireMore('provinces-more', 'provinces-table');
 wireMore('check-more', 'check-rows');
-markSegments();
 mountWhenReady(paint);
 wireCardImages(document, showError);

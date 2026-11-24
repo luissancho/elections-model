@@ -9,7 +9,7 @@ from typing import Optional
 
 import numpy as np
 
-from .filters import fmt_num, fmt_pct
+from .filters import fmt_num
 
 # Question 1: the countries of its table (the most additions after the law), the provinces shown before «Ver las
 # 52 provincias», the countries its summary quotes (by their INE name) and the p-value below which it says «< »
@@ -25,20 +25,15 @@ PACE_FAST = 2
 PACE_SLOW = 1
 # Words that stay in lower case in the country names of the INE (``ESTADOS UNIDOS DE AMÉRICA``)
 NAME_PARTICLES = ('de', 'del', 'la', 'las', 'los', 'y', 'e')
-# Questions 2 and 3: the two blocks the texts compare, Madrid in the rows of ``prediction.last_seat`` (its INE code),
-# the distance from 2 of the ratio of the participations (rest / Latin American) still called «la mitad», the share
-# of the new vote that goes to the left with a uniform split (the observed column of the sensitivity grids) and
-# the two census scenarios of the prediction with the labels of the selector
-LEFT, RIGHT = 'Izquierda', 'Derecha'
+# Questions 2 and 3: the block whose majority the card of question 3 measures, Madrid in the rows of
+# ``prediction.last_seat`` (its INE code), the distance from 2 of the ratio of the participations (rest / Latin
+# American) still called «la mitad» and the two census scenarios of the prediction with their labels (the first is
+# the census of the convocation, the one the card shows)
+RIGHT = 'Derecha'
 MADRID = 28
 HALF_TOLERANCE = 0.25
-UNIFORM_SPLIT = 0.5
 SCENARIO_LABELS = {'convocatoria': 'Censo de la convocatoria', 'sin_litigio': 'Sin las inscripciones en litigio'}
 SCENARIOS = tuple(SCENARIO_LABELS)
-# Rows of the table of each scenario of question 3 (label, key of the 2023 value, key of the projection)
-PREDICTION_ROWS = (('Votantes CERA', 'voters_2023', 'voters_projected'),
-                   ('Votos a candidaturas', 'votes_2023', 'votes_projected'))
-BLOCK_LABELS = {LEFT: 'Escaños izquierda (PSOE + SUMAR)', RIGHT: 'Escaños derecha (PP + VOX)'}
 # Question 3, card of the majority: the ruler (what the right loses, its largest axis, the step of its ticks), its
 # scenarios by group (source in the part, participation, share to the left, name and detail; the name is the
 # cell's when there is none) and the number of provinces listed
@@ -447,28 +442,6 @@ def _every(rows: list, test, *keys) -> bool:
     return bool(values) and all(None not in value and test(*value) for value in values)
 
 
-def _pct_label(x: Optional[float]) -> Optional[str]:
-    """
-    A rate of 0 to 1 as the headers of the grids write it: ``0.09`` → ``'9%'``, ``0.095`` → ``'9,5%'``.
-
-    Parameters
-    ----------
-    x : float or None
-        The rate.
-
-    Returns
-    -------
-    str or None
-        The percentage, without decimals when it is whole, or ``None`` without a rate.
-    """
-    if x is None:
-        return None
-
-    pct = 100 * x
-
-    return fmt_pct(pct, 0 if abs(pct - round(pct)) < 1e-9 else 1)
-
-
 def _times(x: Optional[float]) -> Optional[str]:
     """
     A factor as the scenarios table writes it: ``2.0`` → ``'×2'``, ``1.5`` → ``'×1,5'``, ``1.187`` →
@@ -661,7 +634,8 @@ def _question_2(parts: dict, figures: dict) -> dict:
 
 def _table_row(label: str, before, after, change=None) -> dict:
     """
-    A row of the table of a scenario: 2023, the projection and the change (``after − before`` by default).
+    A row of the table of the card of question 3: 2023, the projection and the change (``after − before`` by
+    default).
 
     Parameters
     ----------
@@ -681,229 +655,6 @@ def _table_row(label: str, before, after, change=None) -> dict:
         change = after - before
 
     return {'label': label, 'before': before, 'after': after, 'change': change}
-
-
-def _scenario_table(scenario: dict) -> list:
-    """
-    The rows of the table of a scenario of the prediction: the census, the voters, the votes to candidatures and
-    the seats of the left, of the right and of the other blocks (only when the part has other blocks).
-
-    Parameters
-    ----------
-    scenario : dict
-        A scenario of ``prediction.scenarios``.
-
-    Returns
-    -------
-    list of dict
-        ``_table_row`` per row.
-    """
-    census, new = scenario.get('census'), scenario.get('new_electors')
-    rows = [_table_row('Censo CERA', census - new if census is not None and new is not None else None, census, new)]
-    rows += [_table_row(label, scenario.get(before), scenario.get(after)) for label, before, after in PREDICTION_ROWS]
-    blocks = {row.get('block'): row for row in scenario.get('by_block') or []}
-
-    for block, label in BLOCK_LABELS.items():
-        row = blocks.get(block) or {}
-        rows.append(_table_row(label, row.get('before'), row.get('after'), row.get('change')))
-
-    others = [row for block, row in blocks.items() if block not in BLOCK_LABELS]
-
-    if others:
-        rows.append(_table_row('Otros', *(sum(row.get(key) or 0 for row in others)
-                                          for key in ('before', 'after', 'change'))))
-
-    return rows
-
-
-def _grid(grid: Optional[dict], rows_key: str, cols_key: str, uniform: bool = False) -> Optional[dict]:
-    """
-    A sensitivity grid as its table renders it.
-
-    Parameters
-    ----------
-    grid : dict or None
-        Grid with the participations under ``rows_key``, the shares of the vote under ``cols_key`` and
-        ``values``.
-    rows_key, cols_key : str
-        Keys of the rows and of the columns.
-    uniform : bool, optional
-        Whether to mark the observed cell of the uniform split (the smallest participation at ``UNIFORM_SPLIT``).
-
-    Returns
-    -------
-    dict or None
-        ``None`` without rows or columns, else ``cols`` (the headers, ``_pct_label``), ``rows`` (``{'label',
-        'observed', 'cells'}`` with ``cells`` ``{'value', 'mark'}``; ``observed`` is the smallest participation),
-        ``lo`` (0) and ``hi`` (the largest value, at least 0) for ``shade_scale`` and ``max`` (``{'value',
-        'participation', 'frac'}`` of the largest cell, or ``None`` without values).
-    """
-    rows, cols, values = _get(grid, rows_key) or [], _get(grid, cols_key) or [], _get(grid, 'values') or []
-
-    if not rows or not cols:
-        return None
-
-    observed = rows.index(min(rows))
-    table, top = [], None
-
-    for i, participation in enumerate(rows):
-        cells = []
-
-        for j, frac in enumerate(cols):
-            value = values[i][j] if i < len(values) and j < len(values[i] or []) else None
-            cells.append({'value': value, 'mark': uniform and i == observed and abs(frac - UNIFORM_SPLIT) < 1e-9})
-
-            if value is not None and (top is None or value > top['value']):
-                top = {'value': value, 'participation': _pct_label(participation), 'frac': _pct_label(frac)}
-
-        table.append({'label': _pct_label(participation), 'observed': i == observed, 'cells': cells})
-
-    return {'cols': [_pct_label(frac) for frac in cols], 'rows': table, 'lo': 0,
-            'hi': max(top['value'], 0) if top else 0, 'max': top}
-
-
-def _scenario_name(row: dict) -> str:
-    """
-    Name of a row of ``sensitivity.scenarios`` from what it changes: «Central», «Participación ×2», «Sesgo 90%»
-    or, with several changes, «Censo ×2, part. ×3, 90%».
-
-    Parameters
-    ----------
-    row : dict
-        ``{'census_x', 'part_x', 'bias'}``.
-
-    Returns
-    -------
-    str
-        The name.
-    """
-    pieces = []
-
-    if row.get('census_x') is not None:
-        pieces.append(('Censo ' + _times(row['census_x']), 'censo ' + _times(row['census_x'])))
-
-    if row.get('part_x') is not None and row['part_x'] != 1:
-        pieces.append(('Participación ' + _times(row['part_x']), 'part. ' + _times(row['part_x'])))
-
-    if isinstance(row.get('bias'), (int, float)):
-        pieces.append(('Sesgo ' + fmt_pct(100 * row['bias'], 0), fmt_pct(100 * row['bias'], 0)))
-
-    if not pieces:
-        return 'Central'
-
-    if len(pieces) == 1:
-        return pieces[0][0]
-
-    name = ', '.join(short for _, short in pieces)
-
-    return name[0].upper() + name[1:]
-
-
-def _scenario_rows(sensitivity: dict, figures: dict) -> dict:
-    """
-    The table of the three dimensions (``sensitivity.scenarios``).
-
-    Parameters
-    ----------
-    sensitivity : dict
-        Data of the ``sensitivity`` part.
-    figures : dict
-        ``_figures`` of the page (``census_total`` and ``electors_2023``, the factor of the real census).
-
-    Returns
-    -------
-    dict
-        ``rows`` (``{'name', 'census', 'participation', 'bias', 'd_left', 'd_right'}``, the texts of the cells:
-        «real (×1,19)» for the census of the election, «observada» for the observed participation, «empírico» or
-        «90% izq.» for the bias) and ``span`` (the largest change in absolute value, at least 1, for
-        ``shade_around``).
-    """
-    total, before = figures.get('census_total'), figures.get('electors_2023')
-    real = 'real ({})'.format(_times(total / before)) if total is not None and before else 'real'
-    rows, changes = [], []
-
-    for row in sensitivity.get('scenarios') or []:
-        bias = row.get('bias')
-        rows.append({
-            'name': _scenario_name(row),
-            'census': real if row.get('census_x') is None else _times(row['census_x']),
-            'participation': 'observada' if row.get('part_x') == 1 else _times(row.get('part_x')),
-            'bias': 'empírico' if bias == 'empirico' else fmt_pct(100 * bias, 0) + ' izq.'
-            if isinstance(bias, (int, float)) else bias,
-            'd_left': row.get('d_left'),
-            'd_right': row.get('d_right'),
-        })
-        changes += [abs(row[key]) for key in ('d_left', 'd_right') if row.get(key) is not None]
-
-    return {'rows': rows, 'span': max(changes + [1])}
-
-
-def _question_3(parts: dict, figures: dict, gap: list, last_seat_csv: Optional[str] = None) -> dict:
-    """
-    View model of the card of question 3 (``#p3``): the table of each census scenario, the facts of its notes,
-    of the gap chart, of the three grids and of its summary.
-
-    Parameters
-    ----------
-    parts : dict
-        The data of every part by name (``{}`` for a missing one).
-    figures : dict
-        ``_figures`` of the page (``litigation``, ``grid_observed``, ``census_total``, ``electors_2023``).
-    gap : list of dict
-        The rows of the gap chart of the ``convocatoria`` scenario (``initial.gap.convocatoria``).
-    last_seat_csv : str, optional
-        Link to the CSV of the last seat of every province.
-
-    Returns
-    -------
-    dict
-        - ``scenarios``: per scenario of ``SCENARIOS``, ``{'key', 'label', 'rows', 'changed', 'unchanged',
-          'votes'}``: ``rows`` from ``_scenario_table``, ``changed`` the names of the provinces whose seats
-          change, ``unchanged`` whether nothing changes (no province, no block) and ``votes`` the projected votes.
-        - ``votes_less``: the votes the scenario without the litigation has fewer.
-        - ``real_left``: the change of the left block's seats in the ``convocatoria`` scenario (the real split).
-        - ``seats_unchanged``: whether no candidature and no block changes seats in that scenario.
-        - ``gap``: ``{'shown', 'total', 'max_net', 'min_gap', 'flipped', 'csv'}``: the provinces of the chart and
-          of ``last_seat``, the largest net effect and the smallest gap among the shown ones, the provinces whose
-          seats flip and ``last_seat_csv``.
-        - ``grid`` and ``placement``: ``_grid`` of ``sensitivity.grid`` (with the uniform cell marked) and of
-          ``sensitivity.placement``; ``contrast`` and ``pool`` of the placement and ``placement_countries`` (the
-          countries of its pool, from ``params``, in the case of the prose).
-        - ``three``: ``_scenario_rows``; ``uniform``: ``UNIFORM_SPLIT`` as a percentage.
-    """
-    prediction, sensitivity = parts['prediction'], parts['sensitivity']
-    params = _get(parts['meta'], 'params') or {}
-    scenarios = []
-
-    for increment in _increment(prediction)['scenarios']:
-        scenario = _get(prediction, 'scenarios', increment['key']) or {}
-        scenarios.append(increment | {'rows': _scenario_table(scenario), 'votes': scenario.get('votes_projected')})
-
-    first, second = scenarios[0]['votes'], scenarios[1]['votes']
-    central = _get(prediction, 'scenarios', SCENARIOS[0]) or {}
-    left = next((row for row in central.get('by_block') or [] if row.get('block') == LEFT), {})
-    last_seat = prediction.get('last_seat') or []
-    nets = [row['net'] for row in gap if row.get('net') is not None]
-    gaps = [row['gap'] for row in gap if row.get('gap') is not None]
-    placement = sensitivity.get('placement') or {}
-
-    return {
-        'scenarios': scenarios,
-        'votes_less': first - second if first is not None and second is not None else None,
-        'real_left': left.get('change'),
-        'seats_unchanged': bool(central) and not any(row.get('change') for row in (central.get('by_sigla') or [])
-                                                     + (central.get('by_block') or [])),
-        'gap': {'shown': len(gap), 'total': len(last_seat), 'max_net': max(nets) if nets else None,
-                'min_gap': min(gaps) if gaps else None,
-                'flipped': [row.get('name') for row in last_seat if row.get('flipped')], 'csv': last_seat_csv},
-        'grid': _grid(sensitivity.get('grid'), 'participations', 'left_fracs', uniform=True),
-        'placement': _grid(placement, 'participations', 'fracs'),
-        'contrast': placement.get('contrast'),
-        'pool': placement.get('pool'),
-        'placement_countries': [_country_name(name) for name in params.get('placement_countries') or []],
-        'three': _scenario_rows(sensitivity, figures),
-        'uniform': _pct_label(UNIFORM_SPLIT),
-    }
 
 
 def _increment(prediction: dict) -> dict:

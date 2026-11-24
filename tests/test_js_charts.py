@@ -25,7 +25,6 @@ STACKED_JS = pathlib.Path(DIST, 'js', 'charts', 'stacked.js').as_uri()
 CENSUS_JS = pathlib.Path(DIST, 'js', 'charts', 'census.js').as_uri()
 SCATTER_JS = pathlib.Path(DIST, 'js', 'charts', 'scatter.js').as_uri()
 SLOPE_JS = pathlib.Path(DIST, 'js', 'charts', 'slope.js').as_uri()
-RADAR_JS = pathlib.Path(DIST, 'js', 'charts', 'radar.js').as_uri()
 GROUPED_JS = pathlib.Path(DIST, 'js', 'charts', 'grouped.js').as_uri()
 SERIES_WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'series-wire.js').as_uri()
 MATRIX_JS = pathlib.Path(DIST, 'js', 'charts', 'matrix.js').as_uri()
@@ -52,7 +51,7 @@ ROWS = [
 def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
-    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
+    dispersión, `sl` pendientes, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk`
     ranking, `ds` distancia), los del estudio del rebaño (`wk` semanas, `ch` azar), el del voto oculto (`er`
     errores), el de Andorra (`db` mancuernas) y `rows` definidos y devuelve su JSON (las funciones de la opción se
     pierden en la serialización, como en `JSON.stringify`)."""
@@ -64,14 +63,14 @@ def run_js(expr, rows=ROWS):
         'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); '
         'const sw = await import("{}"); const c = await import("{}"); '
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
-        'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
+        'const g = await import("{}"); const mx = await import("{}"); '
         'const rk = await import("{}"); const ds = await import("{}"); const wk = await import("{}"); '
         'const ch = await import("{}"); const er = await import("{}"); '
         'const db = await import("{}"); const bw = await import("{}"); '
         'const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
-             WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
+             WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, GROUPED_JS,
              MATRIX_JS, RANKING_JS, DISTANCE_JS, WEEKS_JS, CHANCE_JS, ERRORS_JS, DUMBBELL_JS, BULLSEYE_WIRE_JS,
              json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
@@ -904,22 +903,6 @@ def test_slope_option_one_line_per_row_with_zero_reference():
     assert low < -0.9 and marked[0]['markArea']['data'] == [[{'yAxis': low}, {'yAxis': 0}]]
     assert option['legend']['data'] == ['Aragón', 'Castilla y León', 'Andalucía']
     assert run_js('sl.slopeOption(rows)', rows=rows)['xAxis']['data'] == ['Comicio anterior', '2026']
-
-
-def test_radar_option_two_series():
-    indicators = [{'name': 'Participación CERA', 'max': 100}, {'name': 'Colocación dirigida', 'max': 100},
-                  {'name': 'Voto a la izquierda', 'max': 100}]
-    series = [{'name': 'Realidad hoy', 'value': [8.6, 0, 38.3], 'color': '#1d4f86', 'filled': True},
-              {'name': 'Todo al máximo', 'value': [100, 100, 100], 'color': '#ce3b3b', 'filled': False}]
-    option = run_js('ra.radarOption(%s, rows)' % json.dumps(indicators), rows=series)
-    assert option['radar']['indicator'] == indicators
-    [radar] = option['series']
-    assert radar['type'] == 'radar' and len(radar['data']) == 2
-    today, top = radar['data']
-    assert today['name'] == 'Realidad hoy' and today['value'] == [8.6, 0, 38.3] and top['value'] == [100, 100, 100]
-    assert today['lineStyle']['color'] == '#1d4f86' and today['label']['show'] is True and top['label']['show'] is False
-    assert today['areaStyle']['opacity'] > top['areaStyle']['opacity']
-    assert option['legend']['data'] == ['Realidad hoy', 'Todo al máximo'] and option['legend']['bottom'] == 0
 
 
 def test_grouped_option_one_bar_series_per_entry_over_the_categories():

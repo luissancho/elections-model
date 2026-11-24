@@ -27,37 +27,19 @@
 {% macro precedents(rows) -%}
 Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, el voto CERA {% if row.n_decided %}decidió {{ many(row.n_decided, 'escaño', 'escaños') }}{% if row.where %} ({{ decided(row.where) }}){% endif %}{% elif row.n_decided == 0 %}no decidió ningún escaño{% else %}se comprobó{% endif %}{% if row.net_left is not none %} y dejó a la izquierda un saldo de {{ seats(row.net_left) }}{% endif %}{{ '; ' if not loop.last else '.' }}{% endfor %}
 {%- endmacro %}
-{#- A cell of a sensitivity grid, green from `lo` to `hi` (`shade_scale`, no style without a value); `mark` adds the
-    asterisk of the observed cell with the uniform split. -#}
-{% macro grid_cell(x, lo, hi, mark=False) -%}
-{%- set bg = x|shade_scale(lo, hi) -%}
-<td class="cell-shade"{% if bg %} style="background-color: {{ bg }}"{% endif %}>{{ seats(x) }}{% if mark %}*{% endif %}</td>
-{%- endmacro %}
-{#- A sensitivity grid (`cera._grid`) as a table: participations in the rows, shares of the vote in the columns. -#}
-{% macro grid_table(id, grid, cols_label, caption) -%}
-<div class="table-wrap">
-              <table id="{{ id }}">
-                <caption class="sr-only">{{ caption }}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Participación \ {{ cols_label }}</th>
-                    {% for col in grid.cols %}<th scope="col">{{ col }}</th>{% endfor %}
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for row in grid.rows %}
-                  <tr>
-                    <td><b>{{ row.label }}{% if row.observed %} (observada){% endif %}</b></td>
-                    {%- for cell in row.cells %}{{ grid_cell(cell.value, grid.lo, grid.hi, cell.mark) }}{% endfor %}
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-{%- endmacro %}
-{#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
+{#- A per cent of the card of question 3, with the space before the sign of its mockup: «87,3 %». -#}
+{% macro pc(x, digits=1) -%}{{ x|num(digits) }} %{%- endmacro %}
+{#- A count that is usually whole (a percentile of seats): without decimals when whole, with one otherwise. -#}
+{% macro whole(x) -%}{{ x|num(0 if x is integer else 1) }}{%- endmacro %}
+{#- A count of seats in words, masculine: «ni un escaño», «un escaño», «dos escaños», «12 escaños». -#}
+{% macro seat_words(n) -%}{% if n == 0 %}ni un escaño{% else %}{{ masculine_words(n) }} {{ 'escaño' if n == 1 else 'escaños' }}{% endif %}{%- endmacro %}
+{#- A position on the ruler of question 3 (its axis runs from 0 to `top` seats), as a per cent of its width. -#}
+{% macro at(n, top) -%}{{ (100 * n / top)|round(3) }}%{%- endmacro %}
+{#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body; without
+    one, no paragraph). -#}
 {% macro answer(verdict, n) -%}
-<a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
+{%- set body = caller() -%}
+<a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div>{% if body|trim %}<p>{{ body }}</p>{% endif %}</a>
 {%- endmacro %}
 {% set v1, v2, v3 = verdicts %}
 {% set sensitive = figures.sensitive_all or {} %}
@@ -81,7 +63,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         <a href="#resumen">Resumen</a>
         <a href="#p1" class="q1">1 · ¿Se dispara el censo?</a>
         <a href="#p2" class="q2">2 · ¿Sesgo o colocación?</a>
-        <a href="#p3" class="q3">3 · ¿Mueven escaños?</a>
+        <a href="#p3" class="q3">3 · ¿Quitan la mayoría?</a>
         <a href="#debate">Lo que dice el debate</a>
         <a href="#comprobacion">Comprobación</a>
         <a href="#datos">Datos y método</a>
@@ -101,13 +83,11 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
             del censo.
           {%- endcall %}
           {% call answer(v3, 3) -%}
-            {% if not figures.changed -%}
-            Con el censo real, la participación real y el reparto real: cero escaños. Sólo apilando supuestos
-            extremos a la vez aparece un efecto.
-            {%- else -%}
-            Con el censo real, la participación real y el reparto real cambia el reparto en
-            {{ figures.n_changed|int }} {{ 'provincia' if figures.n_changed == 1 else 'provincias' }}; la tarjeta
-            dice cuáles y a favor de quién.
+            {% if q3 -%}
+            {%- set central = q3.expected.seats|abs -%}
+            Con el voto que se espera {% if central == 0 %}no cambia ningún escaño{% else %}{{ 'cambia' if central == 1 else 'cambian' }}
+            {{ many(central, 'escaño', 'escaños') }}{% endif %} del reparto central del modelo, y sólo en el
+            {{ pc(q3.changes.majority, 2) }} de sus simulaciones cambia el sentido de la mayoría.
             {%- endif %}
           {%- endcall %}
         </div>
@@ -231,7 +211,6 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
       {% set eco, sens, mad = q2.ecological, q2.sensitive, q2.madrid %}
       {% set cs = q2.communities %}
       {% set moved = cs|rejectattr('d_block', 'none')|list %}
-      {% set params = study_meta.get('params') or {} %}
       <section class="card qcard shot q2" id="p2">
         {{ shot('pregunta-2') }}
         <div class="qh"><div class="qn">2</div><h2 class="qt">{{ v2.question }}</h2><span class="verdict">{{ v2.label }}<i></i></span></div>
@@ -389,32 +368,62 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {% set c1, c2 = q3.scenarios %}
-      {% set litigation = params.get('litigation') or {} %}
-      {% set rates = params.get('participation') or {} %}
-      {% set split_year = (params.get('split_source') or '')[:4] or figures.baseline_year %}
+      {% set c1, c2 = increment.scenarios %}
       <section class="card qcard shot q3" id="p3">
         {{ shot('pregunta-3') }}
         <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
+        {% if not q3 %}
+        <p class="note">Esta pregunta se está actualizando con la predicción del modelo para el 29-N.</p>
+        {% else %}
+        {% set b, x, ext, ch, pr, pl, sm, out = q3.base, q3.expected, q3.extreme, q3.changes, q3.provinces, q3.placement, q3.summary, q3.outcome %}
+        {% set census_row, voters_row = q3.table %}
+        {% set blocks = majority.get('blocks') or {} %}
+        {% set ruler = q3.ruler %}
+        {% if out %}
+        <div class="band">
+          <b>Qué pasó el 29-N.</b> La derecha obtuvo {{ out.right|int }} escaños. El voto CERA{% if study_meta.checked_at %}, contado
+          el {{ study_meta.checked_at|date }},{% endif %} {% if out.moved %}movió {{ many(out.moved, 'escaño', 'escaños') }}
+          (derecha {{ seats(out.net.get('Derecha')) }}, izquierda {{ seats(out.net.get('Izquierda')) }}){% else %}no movió
+          ningún escaño{% endif %} y {{ 'cambió' if out.changed else 'no cambió' }} la mayoría.<br>
+          <span class="band-sub">Lo que sigue es la foto del {{ snapshot_day }}, tal como se publicó antes de votar: no se ha recalculado.</span>
+        </div>
+        {% endif %}
         <div class="card-h">
           <p class="lead">
-            A los resultados de {{ figures.baseline_year }} se suma sólo el voto que aporta el censo nuevo del 29-N, con
-            la participación observada por origen y el reparto del escrutinio CERA de {{ split_year }} de cada
-            provincia, y se recalcula D'Hondt provincia a provincia.
+            El modelo simula {{ q3.n_sim|int }} veces las elecciones del 29-N con los sondeos publicados hasta el
+            {{ snapshot_day }}. A cada simulación se le suma el voto exterior de cada escenario, se repite el reparto
+            provincia a provincia y se cuenta en cuántas la derecha ({{ names(blocks.get('Derecha') or []) }}) llega a
+            {{ q3.majority|int }} escaños.
           </p>
-          <fieldset class="seg" id="scenario">
-            <legend>Escenario</legend>
-            {% for s in q3.scenarios %}
-            <label><input type="radio" name="scenario" value="{{ s.key }}"{% if loop.first %} checked{% endif %}> {{ s.label }}</label>
-            {% endfor %}
-          </fieldset>
+          <span class="pill brand">Foto fija · datos hasta el {{ snapshot_day }}</span>
         </div>
+        {% set support_base %}tendría que perder {{ b.needed|int }} para quedarse sin mayoría; la conserva en el {{ pc(b.p) }} de las simulaciones{% endset %}
+        {% set support_expected %}{{ 'sigue en' if x.seats == 0 else 'se queda en' }} {{ x.right|int }}; mayoría en el {{ pc(x.p) }}{% if x.net %} ({{ many(x.net|abs, 'simulación', 'simulaciones') }} {{ 'menos' if x.net > 0 else 'más' }} de {{ q3.n_sim|int }}){% endif %}{% endset %}
+        {% set support_extreme %}se queda en {{ ext.right|int }}; mayoría en el {{ pc(ext.p) }} ({{ ext.participation|int }} % de participación y {{ ext.left_frac|int }} % del voto a la izquierda){% endset %}
+        {{ m.kpis([
+          {'label': 'La derecha en el reparto central del modelo', 'value': b.right|int, 'unit': 'escaños',
+           'support': support_base, 'ok': False, 'color': None},
+          {'label': 'Con el voto CERA que se espera', 'value': seats(x.seats),
+           'unit': 'escaño' if x.seats|abs == 1 else 'escaños', 'support': support_expected, 'ok': False, 'color': None},
+          {'label': 'En el extremo de la rejilla', 'value': seats(ext.seats),
+           'unit': 'escaño' if ext.seats|abs == 1 else 'escaños', 'support': support_extreme, 'ok': False, 'color': None},
+        ], id='majority-kpis') }}
+        <div class="card-h sub-h">
+          <h3>Con el voto que se espera</h3>
+          <span class="pill">{{ c1.label }}</span>
+        </div>
+        <p class="lead">
+          Sobre el reparto central del modelo, los {{ voters_row.change|int }} votantes nuevos
+          {% if x.seats == 0 %}no mueven ningún escaño: la derecha sigue en {{ x.right|int }}{% else %}le
+          {{ 'quitan' if x.seats < 0 else 'dan' }} {{ many(x.seats|abs, 'escaño', 'escaños') }} a la derecha: se queda en
+          {{ x.right|int }}{% endif %}. En las
+          {{ q3.n_sim|int }} simulaciones sí mueven alguno, pero casi nunca el que decide la mayoría.
+        </p>
         <div class="grid2">
           <div>
-            <div class="table-wrap" id="prediction-table">
-              {% for s in q3.scenarios %}
-              <table data-scenario="{{ s.key }}"{% if not loop.first %} hidden{% endif %}>
-                <caption class="sr-only">{{ s.label }}: el voto CERA y los escaños de {{ figures.baseline_year }} y su proyección al 29-N.</caption>
+            <div class="table-wrap">
+              <table id="majority-table">
+                <caption class="sr-only">El censo y los votantes CERA de {{ figures.baseline_year }} y su proyección al 29-N, con el censo de la convocatoria.</caption>
                 <thead>
                   <tr>
                     <th scope="col"><span class="sr-only">Magnitud</span></th>
@@ -424,192 +433,211 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
                   </tr>
                 </thead>
                 <tbody>
-                  {% for row in s.rows %}
+                  {% for row in q3.table %}
                   <tr>
-                    <td><b>{{ row.label }}</b></td><td>{{ row.before|int }}</td><td>{{ row.after|int }}</td><td>{{ m.badge(row.change) }}</td>
+                    <td><b>{{ row.label }}</b></td><td>{{ row.before|int }}</td><td>{{ row.after|int }}</td><td class="dlt {{ (row.change|badge).dir }}">{{ row.change|delta }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
               </table>
+            </div>
+            <div class="sims">
+              <p class="ctitle">Qué hacen esos {{ voters_row.change|int }} votantes nuevos en las simulaciones</p>
+              <p class="csub">Porcentaje de las {{ q3.n_sim|int }} simulaciones del modelo</p>
+              <div class="sim-steps">
+                <div class="sim-step"><i>En el</i><b>{{ pc(ch.moved, 2) }}</b><span>se mueve algún escaño</span></div>
+                <div class="sim-step"><i>En el</i><b>{{ pc(ch.total, 2) }}</b><span>cambia el total de escaños de la derecha</span><small>{{ pc(ch.down, 2) }} a la baja y {{ pc(ch.up, 2) }} al alza</small></div>
+                <div class="sim-step"><i>Sólo en el</i><b>{{ pc(ch.majority, 2) }}</b><span>cambia el sentido de la mayoría</span></div>
+              </div>
+            </div>
+            {% if ch.up > 0 %}
+            {% set gains = pr.rows|selectattr('lost', 'equalto', 0)|selectattr('gained', 'gt', 0)|map(attribute='name')|list %}
+            <p class="tnote">
+              El voto exterior que se espera no va sólo a la izquierda{% if gains %}: en provincias como
+              {{ gains[:2]|join(' o ') }} suma más a la derecha{% endif %}. Por eso la mayoría puede cambiar en los dos
+              sentidos.
+            </p>
+            {% endif %}
+          </div>
+          <div>
+            <p class="ctitle">Dónde mueve escaños el voto CERA que se espera</p>
+            <p class="csub">Porcentaje de las simulaciones en las que cambia algún escaño de la provincia. Las {{ words(pr.rows|length) }} primeras; ocurre alguna vez en {{ pr.ever }} de las {{ pr.total }}.</p>
+            <div class="pbars">
+              {% for row in pr.rows %}
+              <div class="prow"><span>{{ row.name }}</span><span class="pbar" style="width: {{ row.width }}%">
+                {%- if row.p -%}
+                <i class="lost" style="width: {{ (100 * row.lost / row.p)|round(1) }}%" title="La derecha pierde un escaño en el {{ pc(row.lost, 2) }}"></i>
+                <i class="gained" style="width: {{ (100 * row.gained / row.p)|round(1) }}%" title="La derecha gana un escaño en el {{ pc(row.gained, 2) }}"></i>
+                <i class="other" style="width: {{ (100 * row.other / row.p)|round(1) }}%"></i>
+                {%- endif -%}
+              </span><span class="pval">{{ pc(row.p, 2) }}</span></div>
               {% endfor %}
             </div>
-            {% if figures.litigation is not none %}
-            <p class="note{% if c2.unchanged %} ok{% endif %}">
-              <b>Sin las {{ figures.litigation|int }} inscripciones en litigio</b> (repartidas por provincia como el
-              crecimiento latinoamericano desde la ley)
-              {%- if q3.votes_less is not none %}: {{ q3.votes_less|int }} votos menos{% endif %}
-              {%- if c2.unchanged %} y, {% if c1.unchanged %}también, {% endif %}cero cambios. El litigio importa para
-              los derechos de esas personas, no para el reparto.
-              {%- elif c2.changed %}; el reparto cambia en {{ c2.changed|length }}
-              {{ 'provincia' if c2.changed|length == 1 else 'provincias' }} ({{ names(c2.changed) }}).
-              {%- else %}.{% endif %}
-            </p>
-            {% endif %}
-          </div>
-          <div>
-            <p class="ctitle">Brecha al último escaño ({{ figures.baseline_year }}) frente al efecto neto del CERA del 29-N</p>
-            <p class="csub">{% if q3.gap.shown %}Las {{ q3.gap.shown }} circunscripciones más ajustadas; el neto{% else %}El neto{% endif %} es lo que gana el aspirante menos lo que gana quien defiende el escaño</p>
-            <div class="chart" id="gap-chart" role="img" aria-label="Brecha al último escaño y efecto neto del CERA en las {{ q3.gap.shown }} provincias más ajustadas{% if q3.gap.min_gap is not none and q3.gap.max_net is not none %}: la brecha más pequeña es de {{ q3.gap.min_gap|int }} votos y el mayor efecto neto, de {{ q3.gap.max_net|num(1) }}{% endif %}"></div>
-            {% if q3.gap.csv and q3.gap.total > q3.gap.shown %}
-            <p class="mut"><a href="{{ q3.gap.csv }}">Ver las {{ q3.gap.total }} provincias (CSV)</a></p>
-            {% endif %}
+            <div class="pkey">
+              <span><i class="lost"></i>la derecha pierde un escaño</span>
+              <span><i class="gained"></i>la derecha gana un escaño</span>
+              <span><i class="other"></i>el escaño cambia entre otros partidos</span>
+            </div>
           </div>
         </div>
-        <h3>¿Qué haría falta para que importara?</h3>
-        <p class="lead">
-          {% if c1.unchanged -%}
-          Las tres palancas tendrían que dispararse a la vez y al máximo; basta relajar una para que el efecto se desplome.
-          {%- else -%}
-          Las tres palancas: la participación, el voto a la izquierda y la colocación dirigida.
-          {%- endif %}
+        {% if q3.litigation is not none %}
+        <p class="note ok">
+          <b>El censo incluye las {{ q3.litigation|int }} inscripciones en litigio.</b> Hemos querido tener en cuenta
+          todos los escenarios, incluidos los más extremos.
         </p>
-        <div class="grid2">
+        {% endif %}
+        <h3>¿Qué haría falta para que importara?</h3>
+        <p class="lead">Tres palancas: que voten muchos más, que voten mucho más a la izquierda y que los electores nuevos estén colocados donde más rinden.</p>
+        <div class="grid2 lead-left">
           <div>
-            <p class="ctitle">Realidad hoy frente a «todo al máximo»</p>
-            <p class="csub">Participación, voto a la izquierda y colocación dirigida</p>
-            <div class="chart" id="radar-chart" role="img" aria-label="Hoy: participación del {{ figures.participation_projected|pct(1) }}, voto a la izquierda del {{ figures.left_share|pct(1) }} y ninguna colocación dirigida, frente a todo al máximo en cada eje"></div>
-          </div>
-          <div>
-            <p class="ctitle">Cambio neto de escaños de la izquierda</p>
-            <p class="csub">Según participación CERA y porcentaje del voto exterior a la izquierda, censo del 29-N</p>
-            {% if q3.grid %}
-            {{ grid_table('grid-table', q3.grid, 'voto a la izq.', 'Cambio neto de escaños de la izquierda según la participación CERA (filas) y el porcentaje del voto exterior a la izquierda (columnas).') }}
+            <p class="ctitle">Lo que le quita cada escenario y lo que haría falta</p>
+            <p class="csub">Barra: escaños que pierde la derecha desde el reparto central del modelo ({{ b.right|int }}). Línea fina: lo que pierde en el 95 % de las simulaciones. A la derecha, la probabilidad de que conserve la mayoría (hoy, {{ pc(b.p) }}).</p>
+            {% set top = ruler.max %}
+            {% set lines %}{% for mark in ruler.marks %}<i class="rln{% if loop.first %} q{% endif %}" style="left: {{ at(mark.at, top) }}"></i>{% endfor %}{% endset %}
+            <div class="ruler" style="--step: {{ at(ruler.ticks[1] - ruler.ticks[0], top) if ruler.ticks|length > 1 else '100%' }}">
+              <div class="rrow rhead"><span></span><span class="rtrack">
+                {%- for mark in ruler.marks -%}
+                <span class="rtick{% if loop.first %} q{% endif %}{% if loop.last %} end{% endif %}" style="left: {{ at(mark.at, top) }}">si la derecha<br>suma {{ whole(mark.right) }}</span>
+                {%- endfor -%}
+              </span><span class="rv">Escaños · mayoría</span></div>
+              {% for group in ruler.groups %}
+              <div class="rgroup">{{ group.title }}</div>
+              {% for row in group.rows %}
+              <div class="rrow"><span class="rl"><b>{{ row.name }}</b>{% if row.detail %}<small>{{ row.detail }}</small>{% endif %}</span><span class="rtrack"><i class="rbar" style="width: {{ at([row.seats, top]|min, top) }}"></i>
+                {%- if row.hi > row.lo %}<i class="rwh" style="left: {{ at(row.lo, top) }}; width: {{ at([row.hi, top]|min - row.lo, top) }}"><i></i></i>{% endif %}{{ lines }}</span><span class="rv"><b>{{ seats(-row.seats) }}</b><span>{{ pc(row.p) }}</span></span></div>
+              {% endfor %}
+              {% endfor %}
+              <div class="rrow raxis"><span></span><span class="rtrack">{% for n in ruler.ticks %}<span style="left: {{ at(n, top) }}">{{ n }}</span>{% endfor %}</span><span></span></div>
+              <div class="rrow raxis"><span></span><span class="raxis-title">Escaños que pierde la derecha</span><span></span></div>
+            </div>
             <p class="tnote">
-              {% if figures.grid_observed is not none -%}
-              * Reparto uniforme forzado: la celda observada da {{ seats(figures.grid_observed) }}
-              {%- if q3.real_left is not none %}; con el reparto real por provincia, {{ seats(q3.real_left) }}{% endif %}.
-              {%- endif %}
-              {% if q3.grid.max %}
-              El máximo de la rejilla, {{ seats(q3.grid.max.value) }}, pide el {{ q3.grid.max.participation }} de
-              participación y el {{ q3.grid.max.frac }} del voto a la izquierda.
-              {%- endif %}
+              Las líneas discontinuas marcan los escaños que la derecha tendría que perder para quedarse sin mayoría:
+              {{ b.needed|int }} si suma {{ b.right|int }}, su reparto central, y {{ whole(b.needed_quartile) }} si suma
+              {{ whole(b.quartile) }}. Con {{ whole(b.quartile) }} o menos empieza en algo más de una de cada cuatro
+              simulaciones ({{ pc(b.p_quartile) }}); en el {{ pc(b.p_without) }} no tiene mayoría ni antes de contar el
+              voto exterior.
             </p>
-            {% endif %}
+            {% set first = (ruler.groups[0].rows[0] if ruler.groups and ruler.groups[0].rows else none) %}
+            <p class="tnote">
+              «Voto» es la participación e «izq.», la parte del voto a izquierda o derecha que va a la izquierda. La
+              primera fila aplica a los electores nuevos lo que hizo el censo exterior en 2023; el voto que se espera de
+              ellos es algo menor, un {{ pc(100 * voters_row.change / census_row.change, 0) }}{% if first and first.seats == 0 - x.seats %}, y
+              da el mismo resultado{% endif %}.
+            </p>
           </div>
-        </div>
-        <div class="grid2">
           <div>
-            <p class="ctitle">Las tres dimensiones a la vez</p>
-            <p class="csub">Censo × participación × sesgo → escaños izquierda / derecha</p>
+            <p class="ctitle">Todo el censo exterior: participación y voto a la izquierda</p>
+            <p class="csub">Si los {{ q3.grid.electors|int }} electores del 29-N votaran así: escaños que pierde la derecha desde el reparto central ({{ b.right|int }}) y, debajo, la probabilidad de que conserve la mayoría (hoy, {{ pc(b.p) }})</p>
             <div class="table-wrap">
-              <table id="scenarios-table">
-                <caption class="sr-only">Cambio de los escaños de la izquierda y de la derecha al multiplicar el censo, la participación o fijar el voto a la izquierda.</caption>
+              <table id="majority-grid">
+                <caption class="sr-only">Cambio de los escaños de la derecha desde el reparto central y probabilidad de que conserve la mayoría, según la participación de todo el censo exterior (filas) y la parte de su voto que va a la izquierda (columnas).</caption>
                 <thead>
                   <tr>
-                    <th scope="col">Escenario</th>
-                    <th scope="col">Censo</th>
-                    <th scope="col">Participación</th>
-                    <th scope="col">Sesgo</th>
-                    <th scope="col">Izq.</th>
-                    <th scope="col">Der.</th>
+                    <th scope="col"><span class="sr-only">Participación</span></th>
+                    {% for col in q3.grid.cols %}<th scope="col">{{ col }}</th>{% endfor %}
                   </tr>
                 </thead>
                 <tbody>
-                  {% for row in q3.three.rows %}
+                  {% for row in q3.grid.rows %}
                   <tr>
-                    <td><b>{{ row.name }}</b></td><td>{{ row.census }}</td><td>{{ row.participation }}</td><td>{{ row.bias }}</td>
-                    {%- for x in (row.d_left, row.d_right) %}<td class="cell-shade" style="background-color: {{ x|shade_around(0, q3.three.span, '#d62728', '#2ca02c') }}">{{ seats(x) }}</td>{% endfor %}
+                    <td><b>{{ row.label }}</b></td>
+                    {%- for cell in row.cells %}{% set bg = cell.drop|shade_scale(0, q3.grid.max_drop) %}<td class="cell-shade"{% if bg %} style="background-color: {{ bg }}"{% endif %}><span class="cell-seats">{{ seats(cell.seats) }}</span><span class="cell-p">{{ pc(cell.p) }}</span></td>{% endfor %}
                   </tr>
                   {% endfor %}
                 </tbody>
               </table>
             </div>
-          </div>
-          <div>
-            <p class="ctitle">El absurdo: colocación óptima</p>
-            <p class="csub">
-              Escaños que arrancaría el PSOE colocando una a una
-              {%- if q3.pool is not none %} las {{ q3.pool|int }} altas{% if q3.placement_countries %} de {{ names(q3.placement_countries) }}{% endif %} desde la ley{% else %} las altas desde la ley{% endif %}
-              donde el escaño sale más barato
-            </p>
-            {% if q3.placement %}
-            {{ grid_table('placement-table', q3.placement, 'voto al PSOE', 'Escaños que ganaría el PSOE con la colocación óptima según la participación (filas) y su porcentaje del voto (columnas).') }}
-            {% endif %}
+            {% if q3.grid.rows and q3.grid.cols %}
             <p class="tnote">
-              {% if q3.contrast is not none %}Sin colocación dirigida, con el reparto real: {{ seats(q3.contrast) }}.{% endif %}
-              Es un límite, no una previsión: nadie puede dirigir cada inscripción ni cada voto.
+              La primera casilla es lo que pasó en 2023: votó el {{ q3.grid.rows[0].label|replace(' voto', '') }} del
+              censo exterior y, de lo que fue a izquierda o derecha, {% if q3.grid.cols[0] == '50 % izq.' %}la mitad fue a
+              cada lado{% else %}el {{ q3.grid.cols[0]|replace(' izq.', '') }} fue a la izquierda{% endif %}. Los demás
+              partidos conservan su parte del voto CERA de 2023.
             </p>
+            {% endif %}
           </div>
+        </div>
+        <div class="aside">
+          <p>
+            <b>¿Y colocando a los electores donde más rinden?</b> Es la vía más difícil. Quien lo intentara sólo podía
+            guiarse por los resultados de 2023{% if census_closed_day %}: el censo se cerró el {{ census_closed_day }}{% endif %}.
+            Si los {{ pl.pool|int }} electores que entraron con la ley{% if pl.countries %} desde {{ names(pl.countries) }}{% endif %}
+            se hubieran inscrito en las provincias donde al PSOE le costaba menos votos el siguiente escaño en 2023, le
+            quitarían a la derecha {% if pl.seats[0] == pl.seats[1] %}{{ many(pl.seats[0], 'escaño', 'escaños') }}{% else %}entre
+            {{ pl.seats[0]|int }} y {{ many(pl.seats[1], 'escaño', 'escaños') }}{% endif %} del reparto central, y su mayoría
+            quedaría entre el {{ pc(pl.p[0]) }} (con la participación de 2023 y la mitad de su voto al PSOE) y el
+            {{ pc(pl.p[1]) }} (si votaran todos, y todos al PSOE). Es un límite, no una previsión: nadie puede dirigir cada
+            inscripción ni cada voto.
+          </p>
         </div>
         <div class="sum">
-          {% if c1.unchanged -%}
-          <b>Con datos reales, cero escaños.</b>
-          {%- if q3.seats_unchanged %} Ningún escaño cambia, ni por partido ni por bloque
-          {%- if q3.gap.total and not q3.gap.flipped %}, y el voto CERA adicional no cierra la brecha del último escaño en
-          ninguna de las {{ q3.gap.total }} provincias{% endif %}.{% endif %}
-          Arrancar un número significativo exigiría que participación, voto a la izquierda y colocación se dispararan a
-          la vez y al máximo.
-          {%- elif figures.changed -%}
-          <b>Con datos reales, cambia el reparto en {{ figures.n_changed }}
-          {{ 'provincia' if figures.n_changed == 1 else 'provincias' }}.</b>
-          {%- endif %}
-          {% if q3.real_left is not none and figures.grid_observed is not none %}
-          {% set ends = [q3.real_left, figures.grid_observed] %}
-          {% if ends|min == ends|max %}
-          El efecto realista es de {{ seats(ends|min) }} escaños.
-          {% else %}
-          El efecto realista se mueve entre {{ seats(ends|min) }} y {{ seats(ends|max) }} escaños.
-          {% endif %}
-          {% endif %}
+          <b>Con el voto que se espera, {% if x.seats == 0 %}ni un escaño: la derecha sigue en {{ x.right|int }}{% else %}{{ seats(x.seats) }}
+          {{ 'escaño' if x.seats|abs == 1 else 'escaños' }}: la derecha se queda en {{ x.right|int }}{% endif %}.</b>
+          En las simulaciones, sólo en el {{ pc(ch.majority, 2) }} cambia el sentido de la mayoría.
+          {%- if sm.middle is not none %} Si votara la mitad de los electores nuevos y el 80 % lo hiciera a la izquierda,
+          {{ seat_words(sm.middle) }}.{% endif %}
+          A la derecha habría que quitarle {{ sm.needed|int }} para dejarla sin mayoría desde el reparto central, y
+          {% if sm.extreme < sm.needed %}ni el extremo de la rejilla llega ({{ sm.extreme|int }}): por eso la probabilidad
+          sólo baja en las simulaciones en las que la derecha ya parte con poco margen{% else %}el extremo de la rejilla
+          llega ({{ sm.extreme|int }}){% endif %}.
         </div>
+        {% set renamed = namespace(rows=[]) %}
+        {% for sigla, party in (majority.get('lineage') or {})|dictsort %}{% if party != sigla and party != '-' %}{% set renamed.rows = renamed.rows + [sigla ~ ' → ' ~ party] %}{% endif %}{% endfor %}
+        {% set fed = (majority.get('lineage') or {}).values()|list %}
+        {% set unfed = ((blocks.get('Derecha') or []) + (blocks.get('Izquierda') or []))|reject('in', fed)|list %}
         {% call m.how() %}
         <p>
-          El modelo de incremento parte del escrutinio de {{ figures.baseline_year }}. A cada provincia le suma sólo
-          los electores nuevos del 29-N (el censo de la convocatoria menos el de {{ figures.baseline_year }}), cada uno
-          con la participación de su origen
-          {%- if figures.latam_rate is not none and figures.rest_rate is not none %} ({{ figures.latam_rate|pct(0) }}
-          el latinoamericano y {{ figures.rest_rate|pct(0) }} el resto{% if rates.get('derived_from') %}, medidas en
-          {{ rates.derived_from|length }} autonómicas con escrutinio por consulado{% endif %}){% endif %}
-          {%- if rates.get('valid') is not none %}, con el {{ (100 * rates.valid)|pct(0) }} de votos válidos{% endif %}, y
-          reparte esos votos como el voto CERA de {{ split_year }} de la provincia. Después recalcula D'Hondt provincia a
-          provincia. La tabla separa los votantes (las papeletas recibidas) de los votos a candidaturas (los que entran
-          en D'Hondt).
-          {%- if figures.electors_2023 is not none %} El censo de {{ figures.baseline_year }} que se resta
-          ({{ figures.electors_2023|int }}) es el cierre mensual del INE
-          {%- if figures.baseline_date %} del {{ figures.baseline_date|date }}{% endif %}, la base del incremento,
-          porque da el desglose por provincia y país que el modelo necesita
-          {%- if figures.electors_gap is not none %}; no es el censo CERA oficial de esas generales en Infoelectoral,
-          {{ figures.electors_official|int }} electores
-          {%- if figures.electors_gap > 0 %}, {{ figures.electors_gap|int }} más
-          {%- elif figures.electors_gap < 0 %}, {{ (-figures.electors_gap)|int }} menos{% endif %}{% endif %}.
-          {%- endif %}
+          Cada simulación es una de las {{ q3.n_sim|int }} elecciones que el modelo sortea con los sondeos publicados
+          hasta el {{ snapshot_day }}: unos votos por provincia y partido y el reparto de escaños que sale de ellos. A
+          cada una le sumamos el voto exterior de un escenario, repetimos el reparto en las {{ pr.total }} provincias con
+          las mismas reglas del modelo y comparamos sus escaños con los de esa misma simulación sin sumar nada. Como es
+          la misma simulación con y sin el voto exterior, la diferencia es sólo suya, no del azar del sorteo.
         </p>
         <p>
-          Hay dos censos. El de la convocatoria es el que el INE cerró el
-          {{ (study_meta.election or {}).get('census_closed')|date }}{% if figures.census_total is not none %}
-          ({{ figures.census_total|int }} electores){% endif %}.
-          {%- if figures.litigation is not none %} El otro resta las {{ figures.litigation|int }} inscripciones en
-          litigio{% if litigation.get('as_of') %} (la cifra al {{ litigation.as_of|date }}{% if litigation.get('source') %},
-          {{ litigation.source }}{% endif %}){% endif %}: nadie publica dónde están, así que se quitan de las filas
-          latinoamericanas, por provincia en proporción a su crecimiento latinoamericano desde la ley y, dentro de cada
-          provincia, por país.{% endif %}
+          Cada escenario se lee de dos maneras. Los escaños de las barras, de las casillas y de las cifras de arriba
+          salen del reparto central, el mismo que la web da como titular de escaños: una sola pasada sobre el voto
+          central de cada provincia, sin sorteo. La línea fina y las probabilidades salen de las {{ q3.n_sim|int }}
+          simulaciones. Las dos lecturas pueden no coincidir: el reparto central es una sola configuración de restos, y
+          un escaño que en ella queda lejos puede quedar cerca en muchas simulaciones, y al revés. Por eso el rango va
+          siempre al lado de los escaños.
         </p>
         <p>
-          La brecha es lo que le falta, en votos, al aspirante al último escaño de cada provincia en
-          {{ figures.baseline_year }} para igualar el cociente de quien lo ganó. El efecto neto es lo que el voto CERA
-          nuevo da al aspirante menos lo que da a quien defiende el escaño: el escaño sólo cambia si el neto supera la
-          brecha.
+          Lo que haría falta tiene dos referencias. En el reparto central la derecha suma {{ b.right|int }} escaños y
+          tendría que perder {{ b.needed|int }} para quedarse por debajo de {{ q3.majority|int }}. Pero la mayoría se
+          juega sobre todo en las simulaciones en las que parte con menos: en una de cada cuatro suma
+          {{ whole(b.quartile) }} o menos, y desde ahí le bastaría con perder {{ whole(b.needed_quartile) }}.
         </p>
         <p>
-          La rejilla reparte todo el voto exterior igual en cada provincia: en la columna observada, el
-          {{ q3.uniform }} de izquierda + derecha va a la izquierda, y los separatistas, regionalistas y otros conservan
-          su cuota del CERA de {{ split_year }}. Ese reparto uniforme no es el real
-          {%- if figures.grid_observed is not none and q3.real_left is not none %}
-          {%- if figures.grid_observed > q3.real_left %}: da voto de izquierda a provincias cuyo CERA vota a la derecha,
-          y por eso la celda observada da {{ seats(figures.grid_observed) }} y el cálculo con el reparto real de cada
-          provincia, {{ seats(q3.real_left) }}{% else %}; aquí la celda observada da {{ seats(figures.grid_observed) }} y
-          el cálculo con el reparto real, {{ seats(q3.real_left) }}{% endif %}
-          {%- endif %}. Las tres dimensiones multiplican el censo de {{ figures.baseline_year }} («real» es el del 29-N)
-          y la participación por origen, o fijan la parte de izquierda + derecha que va a la izquierda.
+          El voto exterior de 2023 se repartió entre las candidaturas de entonces. Para sumarlo a las simulaciones, cada
+          candidatura pasa al partido del 29-N con su misma sigla{% if renamed.rows %} ({{ renamed.rows|join(', ') }}){% endif %},
+          y las que el modelo no simula van al resto, que cuenta para el umbral pero no recibe escaños.
+          {%- if unfed %} {{ names(unfed) }} no reciben voto exterior: en 2023 no tuvieron voto CERA propio.{% endif %}
         </p>
         <p>
-          La colocación óptima lleva los votos útiles de las altas de la tabla, poco a poco, a la provincia donde el siguiente
-          escaño del PSOE cuesta menos votos, como si alguien pudiera dirigir cada inscripción y cada voto: es un límite
-          superior, no una previsión.
-          {%- if q3.contrast is not none %} Con las mismas altas en sus provincias reales y el reparto real, da
-          {{ seats(q3.contrast) }}.{% endif %}
+          Cada gráfico mueve una cosa distinta. Las filas de «Electores nuevos desde 2023» sólo suman el voto de los
+          {{ census_row.change|int }} electores que el censo de la convocatoria tiene de más sobre el de 2023, con la
+          participación y el voto a la izquierda de su título. Las de «Todo el censo exterior» y la rejilla cambian el
+          voto de sus {{ q3.grid.electors|int }} electores: quitan el voto CERA de 2023 de cada provincia y ponen el del
+          escenario. La colocación a ciegas sólo mueve la bolsa de los {{ pl.pool|int }} electores que entraron con la
+          ley{% if pl.countries %} desde {{ names(pl.countries) }}{% endif %}, y su voto va al PSOE.
+        </p>
+        <p>
+          La colocación es a ciegas porque quien quisiera colocar electores sólo podía guiarse por los resultados de
+          2023: el plan se decide con ellos, llevando los votos poco a poco a la provincia donde al PSOE le costaba menos
+          el siguiente escaño, y después se aplica a las simulaciones del 29-N. Es un límite, no una previsión: supone
+          que alguien pudiera dirigir cada inscripción y cada voto.
+        </p>
+        <p>
+          Es una foto fija: las simulaciones son las de la predicción publicada con los sondeos hasta el
+          {{ snapshot_day }}, antes de votar, y no se recalculan. Después del 29-N la tarjeta sólo añade arriba lo que
+          pasó.
+        </p>
+        <p>
+          La tabla da los {{ voters_row.change|int }} votantes nuevos; {{ majority.expected.convocatoria.counts.votes|int }}
+          de ellos son votos a candidaturas, los que se suman al reparto (el resto son votos en blanco y nulos).
         </p>
         {% endcall %}
+        {% endif %}
       {{ m.card_end() }}
       {% set report, history, fv, passed = debate.report, debate.history, debate.verdict, debate.passed %}
       {% set baseline = figures.baseline_year or 'las últimas generales' %}

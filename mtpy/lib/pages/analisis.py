@@ -14,8 +14,8 @@ from ...core.api import HttpError
 from .. import bundle
 from ..webapi import site
 from .common import api_url, bundle_part, common_context
-from .cera import (MONTHS_LONG, SCENARIOS, UNIFORM_SPLIT, _census_version, _check, _debate, _get, _question_1,
-                   _question_2, _question_3, _sigla, _two_periods, _version)
+from .cera import (MONTHS_LONG, _census_version, _check, _debate, _get, _increment, _majority, _question_1,
+                   _question_2, _two_periods, _version)
 from . import ban, herd, lean, shy
 from .filters import delta_badge, fmt_int, fmt_pct
 
@@ -30,16 +30,12 @@ CERA = 'voto-cera'
 VERDICTS = [('SÍ', 'q1'), ('SIN EVIDENCIA', 'q2'), ('NO', 'q3')]
 QUESTIONS = ('¿Se dispara el censo de los españoles en el exterior?',
              '¿Sesgo de izquierdas o reparto en provincias «estratégicas»?',
-             '¿Pueden alterar el reparto de escaños el 29-N?')
+             '¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el 29-N?')
 ARTICLE = {'url': 'https://medium.com/@luis_sancho/el-voto-cera-en-espa%C3%B1a-y-el-efecto-de-la-ley-de-nietos-ae2cd1b063a5',
            'date': '2026-06-30'}
 # First auto of the Supreme Court that suspended the inscriptions in litigation: a fact of the context, not of the
 # data (spec D7); the second one is the ``as_of`` of ``params.litigation``
 SUSPENDED_ON = '2026-09-10'
-# Net effect of each scenario in the rows of ``prediction.last_seat``
-SCENARIO_NET = {'convocatoria': 'net', 'sin_litigio': 'net_b'}
-# Rows of the gap chart: the provinces with the smallest gap of the last seat
-GAP_SHOWN = 10
 REPORT_KEYS = ('n_mean', 'n_max', 'votes_mean', 'votes_max')
 CSV_LABELS = {
     'voto-cera': {
@@ -241,60 +237,7 @@ def _previous_election(check: dict, meta: dict) -> dict:
     return max(rows, key=lambda row: row['date']) if rows else {}
 
 
-def _grid_cell(grid: Optional[dict], rows_key: str, cols_key: str, column: float = UNIFORM_SPLIT):
-    """
-    Cell of a sensitivity grid at its smallest participation and at a given column.
-
-    Parameters
-    ----------
-    grid : dict or None
-        Grid with the row values under ``rows_key``, the column values under ``cols_key`` and ``values``.
-    rows_key : str
-        Key of the participations (the rows).
-    cols_key : str
-        Key of the shares of the vote (the columns).
-    column : float, optional
-        Column value (``UNIFORM_SPLIT``: the uniform split).
-
-    Returns
-    -------
-    int or None
-        The cell, or ``None`` when the grid or the column is missing.
-    """
-    rows, cols, values = _get(grid, rows_key) or [], _get(grid, cols_key) or [], _get(grid, 'values') or []
-    j = next((index for index, value in enumerate(cols) if value is not None and abs(value - column) < 1e-9), None)
-
-    if not rows or j is None:
-        return None
-
-    i = rows.index(min(rows))
-
-    try:
-        return values[i][j]
-    except (IndexError, TypeError):
-        return None
-
-
-def _latest_generales(vote: dict) -> dict:
-    """
-    Row of the latest general election of ``vote.processes``.
-
-    Parameters
-    ----------
-    vote : dict
-        Data of the ``vote`` part.
-
-    Returns
-    -------
-    dict
-        The row, or ``{}`` without general elections.
-    """
-    rows = [row for row in vote.get('processes') or [] if row.get('kind') == 'generales' and row.get('date')]
-
-    return max(rows, key=lambda row: row['date']) if rows else {}
-
-
-def _long_date(iso: Optional[str]) -> Optional[str]:
+def _long_date(iso: Optional[str], year: bool = True) -> Optional[str]:
     """
     Date in words, as the pill of the election says it: ``'29 de noviembre de 2026'``.
 
@@ -302,6 +245,8 @@ def _long_date(iso: Optional[str]) -> Optional[str]:
     ----------
     iso : str or None
         ISO date ``YYYY-MM-DD``.
+    year : bool, optional
+        Whether to add the year (without it, ``'23 de noviembre'``, as the card of question 3 dates its snapshot).
 
     Returns
     -------
@@ -313,7 +258,10 @@ def _long_date(iso: Optional[str]) -> Optional[str]:
     except ValueError:
         return None
 
-    return '{} de {} de {}'.format(d, MONTHS_LONG[m - 1], y) if 1 <= m <= len(MONTHS_LONG) else None
+    if not 1 <= m <= len(MONTHS_LONG):
+        return None
+
+    return '{} de {}'.format(d, MONTHS_LONG[m - 1]) + (' de {}'.format(y) if year else '')
 
 
 def _figures(parts: dict) -> dict:
@@ -328,16 +276,13 @@ def _figures(parts: dict) -> dict:
     Returns
     -------
     dict
-        ``census_total``, ``electors_2023`` (the monthly close of ``baseline_date``, the base of the increment),
-        ``electors_official`` (the CERA electors of the baseline election in ``participation.generales``, from
-        Infoelectoral) and ``electors_gap`` (``electors_official - electors_2023``), ``baseline_date``,
-        ``growth_abs``, ``growth_pct``, ``baseline_year``, ``net_before``,
-        ``net_after``, ``g1``, ``g2`` and ``ratio`` (the additions of the two periods the page shows and their
-        pace: ``periods_version`` says which, ``now`` or, when the part lacks it, ``article``), ``g1_article``,
-        ``g2_article``, ``ratio_article`` (the replication of the article with its window), ``latam_rate``,
-        ``rest_rate``, ``p_slope``, ``r``, ``n_ecological``, ``n_over_gap_2023``, ``decided_2023``,
-        ``net_psoe_2023``, ``voters_projected``, ``votes_projected``, ``voters_2023``, ``participation_projected``,
-        ``left_share``, ``litigation``, ``max_gain``, ``grid_observed``, ``placement_observed``, ``pool``,
+        ``census_total``, ``electors_2023`` (the monthly close of the baseline date of the study, the base of
+        the increment), ``growth_abs``, ``growth_pct``, ``baseline_year``, ``net_before``, ``net_after``, ``g1``,
+        ``g2`` and ``ratio`` (the additions of the two periods the page shows and their pace: ``periods_version``
+        says which, ``now`` or, when the part lacks it, ``article``), ``g1_article``, ``g2_article``,
+        ``ratio_article`` (the replication of the article with its window), ``latam_rate``, ``rest_rate``,
+        ``p_slope``, ``r``, ``n_ecological``, ``n_over_gap_2023``, ``decided_2023``, ``net_psoe_2023``,
+        ``voters_projected``, ``votes_projected``, ``voters_2023``, ``litigation``, ``max_gain``, ``pool``,
         ``report``, ``sensitive_all`` and ``sensitive_countries`` (the shares of the sensitive provinces in the
         version of ``placement.sensitive`` the page shows, ``sensitive_version``), ``changed`` and ``n_changed``
         (the provinces whose seats change in the ``convocatoria`` scenario); ``None`` for what the parts do not
@@ -363,16 +308,10 @@ def _figures(parts: dict) -> dict:
     voters = scenario.get('voters_projected')
     max_gain = _get(params, 'check', 'max_gain')
     report = prediction.get('report') or {}
-    baseline = _get(params, 'election', 'baseline') or previous.get('date')
-    official = next((row.get('electors') for row in parts['participation'].get('generales') or []
-                     if baseline and row.get('date') == baseline), None)
 
     return {
         'census_total': _get(meta, 'election', 'census_total'),
         'electors_2023': electors_2023,
-        'electors_official': official,
-        'electors_gap': official - electors_2023 if official is not None and electors_2023 is not None else None,
-        'baseline_date': _get(meta, 'election', 'baseline_date'),
         'growth_abs': new_electors,
         'growth_pct': 100 * new_electors / electors_2023 if electors_2023 else None,
         'baseline_year': (_get(params, 'election', 'baseline') or previous.get('date') or '')[:4] or None,
@@ -396,12 +335,8 @@ def _figures(parts: dict) -> dict:
         'voters_projected': voters,
         'votes_projected': scenario.get('votes_projected'),
         'voters_2023': scenario.get('voters_2023'),
-        'participation_projected': round(100 * voters / census_new, 1) if voters is not None and census_new else None,
-        'left_share': _latest_generales(vote).get('left_share'),
         'litigation': _get(params, 'litigation', 'count'),
         'max_gain': max_gain if max_gain is not None else _get(meta, 'registered', 'max_gain'),
-        'grid_observed': _grid_cell(sensitivity.get('grid'), 'participations', 'left_fracs'),
-        'placement_observed': _grid_cell(sensitivity.get('placement'), 'participations', 'fracs'),
         'pool': _get(sensitivity, 'placement', 'pool'),
         'report': {key: report.get(key) for key in REPORT_KEYS},
         'sensitive_all': _get(sensitive, sensitive_version, 'all'),
@@ -494,9 +429,10 @@ def _csv_links(study: str) -> list:
             for name in bundle.STUDY_CSV[study]]
 
 
-def _island(state: dict, parts: dict, figures: dict) -> dict:
+def _island(state: dict, parts: dict) -> dict:
     """
-    The ``initial`` island of the CERA page: only what the charts draw.
+    The ``initial`` island of the CERA page: only what the charts draw (those of questions 1 and 2; the card of
+    question 3 draws in HTML and CSS).
 
     Parameters
     ----------
@@ -504,32 +440,23 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
         ``state`` of the common context.
     parts : dict
         The data of every part by name.
-    figures : dict
-        ``_figures`` of the page.
 
     Returns
     -------
     dict
         ``state``; ``census`` (``series``, ``marks`` and ``periods``, the two ``[start, end]`` periods the page
         shows: ``now``, or the article's when the part lacks them); ``origins`` (``name``, ``g1``, ``g2``,
-        ``ratio`` of those two periods per origin);
-        ``participation`` (``process``, ``origin``, ``rate``); ``ecological`` (``rows`` with ``name``,
-        ``latam_share``, ``left_share``, ``census``, plus ``r`` and ``slope``); ``slope`` (the block margin of each
-        regional election, ``community``, ``previous``, ``last``); ``cannibal`` (``community``, ``d_psoe``,
-        ``d_other_left``); ``sensitive`` (the version of ``placement.sensitive`` the page shows: ``period``,
-        ``countries`` and ``all``); ``gap`` (per scenario, the ``GAP_SHOWN``
-        provinces with the smallest gap, ``name``, ``winner`` and ``runner_up`` by their siglas, ``gap``, ``net``,
-        for labels like «Girona (JxCat/PP)») and ``radar``
-        (``today``: the expected participation, no directed placement and the left share of the last general
-        election, in %; ``max``: 100 on every axis).
+        ``ratio`` of those two periods per origin); ``participation`` (``process``, ``origin``, ``rate``);
+        ``ecological`` (``rows`` with ``name``, ``latam_share``, ``left_share``, ``census``, plus ``r`` and
+        ``slope``); ``slope`` (the block margin of each regional election, ``community``, ``previous``, ``last``);
+        ``cannibal`` (``community``, ``d_psoe``, ``d_other_left``) and ``sensitive`` (the version of
+        ``placement.sensitive`` the page shows: ``period``, ``countries`` and ``all``).
     """
     census, vote, participation = parts['census'], parts['vote'], parts['participation']
     version = _census_version(census)
     sensitive = parts['placement'].get('sensitive') or {}
     ecological = vote.get('ecological') or {}
     regional = participation.get('autonomicas') or []
-    last_seat = sorted(parts['prediction'].get('last_seat') or [],
-                       key=lambda row: (row.get('gap') is None, row.get('gap') or 0))[:GAP_SHOWN]
 
     return {
         'state': state,
@@ -549,11 +476,6 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
                    'last': _get(row, 'last', 'margin')} for row in regional],
         'cannibal': [{key: row.get(key) for key in ('community', 'd_psoe', 'd_other_left')} for row in regional],
         'sensitive': sensitive.get(_version(sensitive)),
-        'gap': {scenario: [{'name': row.get('name'), 'winner': _sigla(row, 'winner'),
-                            'runner_up': _sigla(row, 'runner_up'), 'gap': row.get('gap'),
-                            'net': row.get(SCENARIO_NET[scenario])}
-                           for row in last_seat] for scenario in SCENARIOS},
-        'radar': {'today': [figures['participation_projected'], 0, figures['left_share']], 'max': [100, 100, 100]},
     }
 
 
@@ -571,15 +493,18 @@ def cera_context(state: dict) -> dict:
     dict
         ``common_context`` of ``/analisis`` plus the data of the eight parts after ``meta`` under their names
         (``census``, ``participation``, ``vote``, ``placement``, ``prediction``, ``sensitivity``, ``majority``,
-        ``check``) and the
-        one of ``meta`` as ``study_meta`` (``meta`` stays the run metadata of the common context, which the footer
-        reads), ``verdicts`` (``verdict_rows``), ``figures``
-        (``_figures``), ``kpis`` (``_kpis``), ``registered`` (``{'at', 'claim'}`` of the registration, or ``None``
-        while it is a draft), ``checked`` (whether ``check.verdict`` is set), ``sources`` (``meta.sources``),
-        ``csv_links`` (``_csv_links``), ``article`` (``ARTICLE``), ``initial`` (``_island``), ``election_day``
-        (the date of the election in words, ``_long_date``), the view models of the three questions, ``q1``,
-        ``q2`` and ``q3`` (``cera._question_1``, ``_question_2`` and ``_question_3``), and those of the debate and
-        of the check, ``debate`` (``cera._debate``) and ``comprobacion`` (``cera._check``).
+        ``check``) and the one of ``meta`` as ``study_meta`` (``meta`` stays the run metadata of the common
+        context, which the footer reads); ``verdicts`` (``verdict_rows``), ``figures`` (``_figures``), ``kpis``
+        (``_kpis``), ``registered`` (``{'at', 'claim'}`` of the registration, or ``None`` while it is a draft),
+        ``checked`` (whether ``check.verdict`` is set), ``sources`` (``meta.sources``), ``csv_links``
+        (``_csv_links``), ``article`` (``ARTICLE``), ``initial`` (``_island``) and ``election_day`` (the date of
+        the election in words, ``_long_date``); the view models of the three questions, ``q1``, ``q2`` and ``q3``
+        (``cera._question_1``, ``_question_2`` and ``_majority``, ``None`` without the ``majority`` part), and
+        those of the debate and of the check, ``debate`` (``cera._debate``) and ``comprobacion`` (``cera._check``);
+        ``increment`` (``cera._increment`` of ``prediction``: the two census scenarios the debate and the check
+        read); for the card of question 3, ``snapshot_day`` (the ``as_of`` of its snapshot in words, without the
+        year, or ``None``) and ``census_closed_day`` (the close of the census of the convocation, the same way),
+        and ``words`` and ``masculine_words`` (``ban.words`` and ``ban.masculine_words``: a small count in words).
 
     Raises
     ------
@@ -590,6 +515,7 @@ def cera_context(state: dict) -> dict:
     parts = {part: study_part(CERA, part) or {} for part in bundle.STUDY_PARTS[CERA]}
     meta = parts['meta']
     figures = _figures(parts)
+    q3 = _majority(parts['majority'], meta)
     context.update({part: data for part, data in parts.items() if part != 'meta'})
     context.update(
         study_meta=meta,
@@ -602,15 +528,19 @@ def cera_context(state: dict) -> dict:
         sources=meta.get('sources') or [],
         csv_links=_csv_links(CERA),
         article=ARTICLE,
-        initial=_island(context['state'], parts, figures),
+        initial=_island(context['state'], parts),
         election_day=_long_date(_get(meta, 'election', 'date')),
         q1=_question_1(parts['census'], figures),
         q2=_question_2(parts, figures),
+        q3=q3,
+        increment=_increment(parts['prediction']),
+        snapshot_day=_long_date(q3['as_of'], year=False) if q3 else None,
+        census_closed_day=_long_date(_get(meta, 'election', 'census_closed'), year=False),
+        words=ban.words,
+        masculine_words=ban.masculine_words,
         debate=_debate(parts, _previous_election(parts['check'], meta)),
         comprobacion=_check(parts),
     )
-    context['q3'] = _question_3(parts, figures, context['initial']['gap'][SCENARIOS[0]],
-                                api_url(CERA, 'prediction', kind='study', fmt='csv', table='last-seat'))
 
     return context
 
