@@ -31,7 +31,11 @@ class Load(SequenceJob):
     vote and writes ``data/cera/majority.json`` (`mtpy.lib.studies.cera.snapshot.take_snapshot`): it rebuilds the run
     (``run_id``, the latest by default), refuses unless the rebuilt run equals the published one, and refuses to
     replace an existing file unless ``overwrite``. With ``dry_run`` it does all the checks and writes nothing. It
-    writes a file of the repository, so it runs on the laptop only (the ECS launcher refuses it).
+    writes a file of the repository, so it runs on the laptop only (the ECS launcher refuses it). Its result line
+    says ``saved`` (the file was written), ``checked`` (a dry run that passed every check), ``refused`` (a check
+    failed, with the reason; nothing written) or ``failed`` (any other error). ``overwrite`` applies to every action
+    of ``what`` that takes it: ``what: ["polls", "majority"]`` with ``overwrite`` replaces both the cycle of polls
+    and the snapshot.
 
     The console output has the four levels of ``publish``: 0, the header and the final summary; 1, also
     ``[i/n] scope: empezando``, the names block, the warnings and the result line of each scope; 2, also one line
@@ -68,9 +72,9 @@ class Load(SequenceJob):
         python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
         python job.py load '{"what":"params","scopes":"all"}'
         python job.py load '{"what":"params","scopes":"all","dry_run":true}'
-        python job.py load '{"what":"majority","run_id":"20261124-102045","dry_run":true}'
-        python job.py load '{"what":"majority","run_id":"20261124-102045"}'
-        python job.py load '{"what":"majority","run_id":"20261124-102045","overwrite":true}'
+        python job.py load '{"what":"majority","dry_run":true}'
+        python job.py load '{"what":"majority"}'
+        python job.py load '{"what":"majority","run_id":"<run>","overwrite":true}'
 
     In Docker (JSON without spaces)::
 
@@ -100,7 +104,8 @@ class Load(SequenceJob):
         event_date : str, optional
             Election day (``YYYY-MM-DD``) to load; the next election of each scope by default. Only ``polls``.
         overwrite : bool, default False
-            Replace the whole cycle instead of saving only the new polls. Only ``polls``.
+            With ``polls``, replace the whole cycle instead of saving only the new polls; with ``majority``, replace
+            an existing snapshot. ``params`` ignores it.
         force : bool, default False
             Add the unmapped pollsters and sponsors to the catalogues and go on. Only ``polls``.
         years : list of str, optional
@@ -127,7 +132,8 @@ class Load(SequenceJob):
         -------
         dict
             With one action, ``{scope: result}``: the figures of `load.load_polls` or `load.load_params`
-            (``status`` ``loaded`` or ``checked``), or ``status`` ``failed`` (``skipped`` with ``'all'``, see the
+            (``status`` ``loaded`` or ``checked``) or of `take_snapshot` (``saved`` or ``checked``; ``refused``
+            with the ``reason`` when a check fails), or ``status`` ``failed`` (``skipped`` with ``'all'``, see the
             class docstring) with the ``reason``; always the ``warnings`` raised. With several actions,
             ``{scope: {action: result}}``.
 

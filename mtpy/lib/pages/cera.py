@@ -847,7 +847,7 @@ def _majority_base(part: dict) -> dict:
     -------
     dict
         ``{'right', 'needed', 'p', 'quartile', 'needed_quartile', 'p_quartile', 'p_without'}``: ``needed`` the
-        seats the right can lose and keep the majority (``right − majority + 1``), ``quartile`` the percentile 25
+        seats the right must lose to lose the majority (``right − majority + 1``), ``quartile`` the percentile 25
         of its seats over the simulations, ``p_quartile`` the simulations with the right at or under it and
         ``p_without`` those with the right under the majority.
     """

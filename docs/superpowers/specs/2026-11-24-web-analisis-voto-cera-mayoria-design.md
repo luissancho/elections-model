@@ -665,3 +665,26 @@ Los bloques del estudio (`data/cera/params.json`) son los de 2023: izquierda = P
 VOX y Cs. La comprobación de la predicción registrada cuenta el saldo «de la izquierda» con ellos, así que con los
 resultados del 29-N dejaría a FA y a SALF en «Otros» si no se añaden. No lo toca este cambio; hay que decidirlo
 antes de publicar la comprobación.
+
+## Después del 29-N: pasos
+
+1. Cargar los resultados y el escrutinio CERA del 29-N como dice la spec del 2026-10-19. El fichero de siglas de
+   los resultados sirve a dos lecturas: «Comprobación», con los `blocks` de `data/cera/params.json` (hoy sin FA ni
+   SALF), y la banda «Qué pasó el 29-N», con los bloques de la foto a través de `majority.aliases`.
+2. Ejecutar `publish study`. Si se niega, el mensaje nombra las siglas que hay que añadir a `majority.aliases` de
+   `data/cera/params.json`: cada sigla oficial con escaño va a un partido del modelo, o a `"-"` si es una
+   candidatura que el modelo no simula (sus escaños van al resto). También se niega si un alias apunta a algo que
+   no es un partido del modelo ni `"-"`, o si un partido de la derecha o de la izquierda no tiene ninguna sigla.
+3. Leer la banda una vez, a mano, contra los totales de Interior: los escaños de la derecha, si tiene mayoría
+   absoluta y los escaños que movió el voto exterior (contados provincia a provincia, los mismos que las provincias
+   decididas de «Comprobación»).
+4. La foto no se vuelve a tomar: `data/cera/majority.json` y el código que la midió se quedan como están.
+5. Las pruebas que habrá que tocar entonces, porque fijan el estado de antes del escrutinio con los datos reales:
+   en `tests/test_cera_study.py`, `test_compute_cera_runs_end_to_end` (las comprobaciones son sólo 2019 y 2023 y
+   no hay `verdict_input`) y `test_read_scrutinies_skips_the_elections_without_results_and_needs_their_candidatures`
+   (con el escrutinio del 29-N y sin sus resultados en la lista, ese escrutinio sale como omitido); en
+   `tests/test_publish_studies.py`, `test_export_study_figures` (las elecciones de la comprobación son sólo 2019 y
+   2023, sin veredicto),
+   `test_export_study_majority_carries_the_snapshot_the_ranges_and_the_csv` (`outcome` nulo) y
+   `test_the_majority_fixture_is_what_the_exporter_writes` (el fixture `study-majority.json` lleva `outcome` nulo:
+   hay que regenerarlo). Las dos pruebas del resultado y de la tabla congelada ya valen antes y después.
