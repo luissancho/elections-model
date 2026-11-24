@@ -676,8 +676,8 @@ antes de publicar la comprobación.
    candidatura que el modelo no simula (sus escaños van al resto). También se niega si un alias apunta a algo que
    no es un partido del modelo ni `"-"`, o si un partido de la derecha o de la izquierda no tiene ninguna sigla.
 3. Leer la banda una vez, a mano, contra los totales de Interior: los escaños de la derecha, si tiene mayoría
-   absoluta y los escaños que movió el voto exterior (contados provincia a provincia, los mismos que las provincias
-   decididas de «Comprobación»).
+   absoluta y los escaños que movió el voto exterior (contados provincia a provincia, en las provincias decididas
+   de «Comprobación»; una provincia puede mover más de un escaño).
 4. La foto no se vuelve a tomar: `data/cera/majority.json` y el código que la midió se quedan como están.
 5. Las pruebas que habrá que tocar entonces, porque fijan el estado de antes del escrutinio con los datos reales:
    en `tests/test_cera_study.py`, `test_compute_cera_runs_end_to_end` (las comprobaciones son sólo 2019 y 2023 y
