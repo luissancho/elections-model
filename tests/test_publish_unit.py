@@ -1858,3 +1858,17 @@ def test_export_seat_odds_is_empty_without_a_central_allocation():
 def test_seat_odds_is_a_mode_part_written_with_the_others():
     assert bundle.MODE_PARTS[-3:] == ('scenario', 'seat-odds', 'projection')
     assert [name for name, _ in publish.forecast.MODE_EXPORTERS] == list(bundle.MODE_PARTS)
+
+
+def test_fitted_simulator_and_run_mode_are_the_recipe_of_publish_forecast():
+    """`fitted_simulator` y `run_mode` son la receta de `publish_forecast`: construye en nowcast, ajusta y corre."""
+    factory, steps = FakeSimulator(), []
+    sim = publish.fitted_simulator('es', '2026-11-29', drange=6, alpha=0.05, seed=42, max_fc=10,
+                                   correctors=dict(publish.DEFAULT_CORRECTORS), today='2026-11-23',
+                                   simulator=factory, step=steps.append)
+    publish.run_mode(sim, 'forecast', 50)
+    assert steps == ['init', 'fit'] and [call[0] for call in factory.calls] == ['init', 'fit_forecast', 'run']
+    init = factory.calls[0][3]
+    assert init['today'] == '2026-11-23' and init['mode'] == 'nowcast' and init['house_effects'] is True
+    assert 'limit_date' not in init and factory.calls[1][1] == {'names': NAMES, 'max_fc': 10, 'fillna': True}
+    assert factory.calls[2][1:] == ('forecast', {'split': True, 'random': True, 'n_sim': 50, 'horizon': 'deadline'})
