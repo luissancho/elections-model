@@ -530,7 +530,7 @@ Mismo sobre que el resto, con `scope` y `run_id` a `null` (y `mode` a `null`). L
 
 ### `voto-cera`
 
-Ocho partes:
+Nueve partes:
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
@@ -541,6 +541,7 @@ Ocho partes:
 | `placement` | `study-placement@1` | `sensitive` (dict), `acceleration`, `correlations` (dict), `madrid` |
 | `prediction` | `study-prediction@1` | `scenarios` (dict), `last_seat`, `report` (dict) |
 | `sensitivity` | `study-sensitivity@1` | `grid` (dict), `scenarios`, `placement` (dict) |
+| `majority` | `study-majority@1` | `run` (dict), `majority` (entero), `blocks` (dict), `lineage` (dict), `base` (dict), `expected` (dict), `new_electors` (dict), `grid` (dict), `placement` (dict), `outcome` (dict o `null`) |
 | `check` | `study-check@1` | `elections`, `rows`, `verdict` (texto o `null`) |
 
 Los valores sin tipo son listas. `registered_at`, `registered_commit`, `registered_changed_at`, `checked_at` y `commit`
@@ -555,9 +556,12 @@ Gemelos CSV (`studies/{study}/csv/{nombre}.csv`); el primero de cada parte es el
 | `vote` | `vote`, `ecological` |
 | `prediction` | `last-seat` |
 | `sensitivity` | `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` |
+| `majority` | `majority-grid`, `majority-new-electors`, `majority-placement`, `majority-provinces` |
 | `check` | `check` |
 
 `meta`, `placement` no tienen gemelo.
+
+`majority` es una foto fija de la previsión del modelo, la del run que dice `run` (`run_id`, `as_of`, `n_sim`, `seed`): la escribe una sola vez `load majority` y no cambia con los runs posteriores. Los recuentos (`lost`, `gained`, `moved` y las distribuciones `right` y `left`) son simulaciones de `run.n_sim`; cada `counts` lleva además `range`, el intervalo del 2,5 % al 97,5 % del cambio de escaños de la derecha. `outcome` es `null` hasta que se comprueba la elección. `blocks` es la composición de bloques del run, tal cual; sólo se leen `Derecha` e `Izquierda`.
 
 ### `sesgo-cis`
 
@@ -983,7 +987,7 @@ sobrescriben en cada publicación.
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
-| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`, `voto-oculto`, `andorra`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `elections`, `current`, `weeks`, `chance`; `voto-oculto`: `meta`, `summary`, `elections`, `groups`; `andorra`: `meta`, `summary`, `pairs`, `elections`, `cells`, `houses`, `latest`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `elections`, `weeks`, `chance`, `robustness` (`summary`); de `voto-oculto`: `elections`, `groups`; de `andorra`: `pairs`, `elections`, `cells`, `houses`, `latest-polls` (`latest`) |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`, `rebano`, `voto-oculto`, `andorra`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `majority`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`; `rebano`: `meta`, `summary`, `elections`, `current`, `weeks`, `chance`; `voto-oculto`: `meta`, `summary`, `elections`, `groups`; `andorra`: `meta`, `summary`, `pairs`, `elections`, `cells`, `houses`, `latest`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `majority-grid`, `majority-new-electors`, `majority-placement`, `majority-provinces` (`majority`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`); de `rebano`: `elections`, `weeks`, `chance`, `robustness` (`summary`); de `voto-oculto`: `elections`, `groups`; de `andorra`: `pairs`, `elections`, `cells`, `houses`, `latest-polls` (`latest`) |
 
 - `meta`, `placement` y `summary` (salvo el de `rebano`, que tiene `robustness`) no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
   no pertenece a la parte.

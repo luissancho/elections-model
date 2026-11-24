@@ -49,10 +49,14 @@ CSV_LABELS = {
         'participation': 'Participación CERA por origen y en las generales',
         'vote': 'Voto CERA por proceso electoral',
         'ecological': 'Inferencia ecológica por provincia',
-        'last-seat': 'Último escaño por provincia',
-        'sensitivity-grid': 'Rejilla de participación y voto a la izquierda',
-        'sensitivity-scenarios': 'Escenarios de censo, participación y sesgo',
-        'placement-grid': 'Rejilla de colocación óptima',
+        'last-seat': 'Último escaño por provincia (sobre 2023)',
+        'sensitivity-grid': 'Rejilla de participación y voto a la izquierda (sobre 2023)',
+        'sensitivity-scenarios': 'Escenarios de censo, participación y sesgo (sobre 2023)',
+        'placement-grid': 'Rejilla de colocación óptima (sobre 2023)',
+        'majority-grid': 'Mayoría: rejilla de todo el censo',
+        'majority-new-electors': 'Mayoría: rejilla de los electores nuevos',
+        'majority-placement': 'Mayoría: colocación a ciegas',
+        'majority-provinces': 'Mayoría: provincias',
         'check': 'Comprobación con y sin voto CERA por provincia',
     },
     'sesgo-cis': {
@@ -565,8 +569,9 @@ def cera_context(state: dict) -> dict:
     Returns
     -------
     dict
-        ``common_context`` of ``/analisis`` plus the data of the seven parts after ``meta`` under their names
-        (``census``, ``participation``, ``vote``, ``placement``, ``prediction``, ``sensitivity``, ``check``) and the
+        ``common_context`` of ``/analisis`` plus the data of the eight parts after ``meta`` under their names
+        (``census``, ``participation``, ``vote``, ``placement``, ``prediction``, ``sensitivity``, ``majority``,
+        ``check``) and the
         one of ``meta`` as ``study_meta`` (``meta`` stays the run metadata of the common context, which the footer
         reads), ``verdicts`` (``verdict_rows``), ``figures``
         (``_figures``), ``kpis`` (``_kpis``), ``registered`` (``{'at', 'claim'}`` of the registration, or ``None``

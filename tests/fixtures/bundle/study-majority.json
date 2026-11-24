@@ -1,0 +1,3351 @@
+{
+  "schema": "study-majority@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-19T12:00:00Z",
+  "data": {
+    "run": {
+      "scope": "es",
+      "event_date": "2026-11-29",
+      "run_id": "20261124-135758",
+      "as_of": "2026-11-23",
+      "n_sim": 10000,
+      "seed": 42,
+      "commit": "6ef522d",
+      "taken_on": "2026-11-24"
+    },
+    "majority": 176,
+    "blocks": {
+      "Izquierda": [
+        "PSOE",
+        "FA",
+        "UP"
+      ],
+      "Derecha": [
+        "PP",
+        "VOX",
+        "SALF"
+      ],
+      "Otros": [
+        "ERC",
+        "JxCat",
+        "EHB",
+        "PNV",
+        "BNG",
+        "CC",
+        "AA"
+      ]
+    },
+    "lineage": {
+      "PP": "PP",
+      "PSOE": "PSOE",
+      "VOX": "VOX",
+      "SUMAR": "FA",
+      "ERC": "ERC",
+      "JxCat": "JxCat",
+      "EHB": "EHB",
+      "PNV": "PNV",
+      "BNG": "BNG",
+      "CC": "CC",
+      "UPN": "PP",
+      "PACMA": "-",
+      "CUP": "-",
+      "FO": "-",
+      "NC": "-",
+      "PDeCAT": "-",
+      "R0": "-",
+      "PUM+J": "-",
+      "UPL": "-",
+      "EV": "-",
+      "PCTE": "-",
+      "GBAI": "-",
+      "AA": "AA",
+      "EB": "-",
+      "JM+": "-",
+      "XAV": "-",
+      "CEx": "-",
+      "CJ": "-",
+      "FEJ": "-",
+      "PAR": "-",
+      "PH": "-",
+      "XH": "-",
+      "VP": "-",
+      "ZSi": "-",
+      "VB": "-",
+      "REGION": "-",
+      "AHORACAN": "-",
+      "AUTONOMOS": "-",
+      "EVB": "-",
+      "CpM": "-",
+      "JxG": "-",
+      "PREPAL": "-",
+      "SomosCc": "-",
+      "ALM": "-",
+      "FIA": "-",
+      "3e": "-",
+      "UdCa": "-",
+      "GIPTV": "-",
+      "PUEDE": "-",
+      "EVC": "-",
+      "LIBRES": "-",
+      "UNIDOSSI": "-",
+      "+RDS+": "-",
+      "CCD": "-",
+      "FC": "-"
+    },
+    "base": {
+      "with_majority": 8807,
+      "central": {
+        "Derecha": 190,
+        "Izquierda": 129
+      },
+      "right_seats": {
+        "134": 1,
+        "146": 1,
+        "149": 1,
+        "150": 1,
+        "151": 3,
+        "153": 2,
+        "154": 3,
+        "155": 2,
+        "156": 8,
+        "157": 4,
+        "158": 10,
+        "159": 8,
+        "160": 12,
+        "161": 15,
+        "162": 20,
+        "163": 31,
+        "164": 26,
+        "165": 36,
+        "166": 48,
+        "167": 59,
+        "168": 73,
+        "169": 57,
+        "170": 86,
+        "171": 100,
+        "172": 142,
+        "173": 131,
+        "174": 141,
+        "175": 172,
+        "176": 218,
+        "177": 214,
+        "178": 243,
+        "179": 273,
+        "180": 305,
+        "181": 297,
+        "182": 350,
+        "183": 329,
+        "184": 374,
+        "185": 367,
+        "186": 349,
+        "187": 392,
+        "188": 388,
+        "189": 386,
+        "190": 365,
+        "191": 342,
+        "192": 343,
+        "193": 316,
+        "194": 346,
+        "195": 301,
+        "196": 325,
+        "197": 277,
+        "198": 219,
+        "199": 209,
+        "200": 186,
+        "201": 178,
+        "202": 149,
+        "203": 123,
+        "204": 108,
+        "205": 94,
+        "206": 75,
+        "207": 65,
+        "208": 44,
+        "209": 67,
+        "210": 29,
+        "211": 42,
+        "212": 24,
+        "213": 19,
+        "214": 22,
+        "215": 10,
+        "216": 15,
+        "217": 4,
+        "218": 5,
+        "219": 2,
+        "220": 7,
+        "221": 4,
+        "222": 2,
+        "223": 3,
+        "226": 2
+      }
+    },
+    "expected": {
+      "convocatoria": {
+        "table": {
+          "census": [
+            2327388,
+            2769645
+          ],
+          "new_electors": 442257,
+          "voters": [
+            208431,
+            239221
+          ],
+          "votes": [
+            203152,
+            233634
+          ]
+        },
+        "counts": {
+          "votes": 30482,
+          "lost": 8,
+          "gained": 3,
+          "moved": 817,
+          "right": {
+            "-2": 7,
+            "-1": 345,
+            "0": 9482,
+            "1": 164,
+            "2": 2
+          },
+          "left": {
+            "-1": 110,
+            "0": 9483,
+            "1": 397,
+            "2": 10
+          },
+          "central": {
+            "right": 0,
+            "left": 0
+          },
+          "range": [
+            -1.0,
+            0.0
+          ]
+        },
+        "provinces": [
+          {
+            "region_id": 1,
+            "moved": 8,
+            "right_lost": 0,
+            "right_gained": 4,
+            "name": "Álava"
+          },
+          {
+            "region_id": 2,
+            "moved": 6,
+            "right_lost": 5,
+            "right_gained": 0,
+            "name": "Albacete"
+          },
+          {
+            "region_id": 3,
+            "moved": 25,
+            "right_lost": 19,
+            "right_gained": 0,
+            "name": "Alicante"
+          },
+          {
+            "region_id": 4,
+            "moved": 30,
+            "right_lost": 26,
+            "right_gained": 0,
+            "name": "Almería"
+          },
+          {
+            "region_id": 5,
+            "moved": 13,
+            "right_lost": 9,
+            "right_gained": 0,
+            "name": "Ávila"
+          },
+          {
+            "region_id": 6,
+            "moved": 0,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Badajoz"
+          },
+          {
+            "region_id": 7,
+            "moved": 22,
+            "right_lost": 18,
+            "right_gained": 0,
+            "name": "Baleares"
+          },
+          {
+            "region_id": 8,
+            "moved": 82,
+            "right_lost": 24,
+            "right_gained": 15,
+            "name": "Barcelona"
+          },
+          {
+            "region_id": 9,
+            "moved": 1,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Burgos"
+          },
+          {
+            "region_id": 10,
+            "moved": 6,
+            "right_lost": 4,
+            "right_gained": 0,
+            "name": "Cáceres"
+          },
+          {
+            "region_id": 11,
+            "moved": 5,
+            "right_lost": 3,
+            "right_gained": 0,
+            "name": "Cádiz"
+          },
+          {
+            "region_id": 12,
+            "moved": 12,
+            "right_lost": 11,
+            "right_gained": 0,
+            "name": "Castellón"
+          },
+          {
+            "region_id": 13,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Ciudad Real"
+          },
+          {
+            "region_id": 14,
+            "moved": 3,
+            "right_lost": 1,
+            "right_gained": 2,
+            "name": "Córdoba"
+          },
+          {
+            "region_id": 15,
+            "moved": 11,
+            "right_lost": 2,
+            "right_gained": 4,
+            "name": "La Coruña"
+          },
+          {
+            "region_id": 16,
+            "moved": 3,
+            "right_lost": 2,
+            "right_gained": 0,
+            "name": "Cuenca"
+          },
+          {
+            "region_id": 17,
+            "moved": 13,
+            "right_lost": 6,
+            "right_gained": 4,
+            "name": "Gerona"
+          },
+          {
+            "region_id": 18,
+            "moved": 36,
+            "right_lost": 11,
+            "right_gained": 16,
+            "name": "Granada"
+          },
+          {
+            "region_id": 19,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Guadalajara"
+          },
+          {
+            "region_id": 20,
+            "moved": 11,
+            "right_lost": 0,
+            "right_gained": 5,
+            "name": "Guipúzcoa"
+          },
+          {
+            "region_id": 21,
+            "moved": 2,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Huelva"
+          },
+          {
+            "region_id": 22,
+            "moved": 3,
+            "right_lost": 3,
+            "right_gained": 0,
+            "name": "Huesca"
+          },
+          {
+            "region_id": 23,
+            "moved": 0,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Jaén"
+          },
+          {
+            "region_id": 24,
+            "moved": 4,
+            "right_lost": 4,
+            "right_gained": 0,
+            "name": "León"
+          },
+          {
+            "region_id": 25,
+            "moved": 17,
+            "right_lost": 4,
+            "right_gained": 2,
+            "name": "Lérida"
+          },
+          {
+            "region_id": 26,
+            "moved": 6,
+            "right_lost": 3,
+            "right_gained": 1,
+            "name": "La Rioja"
+          },
+          {
+            "region_id": 27,
+            "moved": 23,
+            "right_lost": 0,
+            "right_gained": 19,
+            "name": "Lugo"
+          },
+          {
+            "region_id": 28,
+            "moved": 189,
+            "right_lost": 77,
+            "right_gained": 34,
+            "name": "Madrid"
+          },
+          {
+            "region_id": 29,
+            "moved": 21,
+            "right_lost": 13,
+            "right_gained": 0,
+            "name": "Málaga"
+          },
+          {
+            "region_id": 30,
+            "moved": 20,
+            "right_lost": 18,
+            "right_gained": 0,
+            "name": "Murcia"
+          },
+          {
+            "region_id": 31,
+            "moved": 18,
+            "right_lost": 2,
+            "right_gained": 8,
+            "name": "Navarra"
+          },
+          {
+            "region_id": 32,
+            "moved": 35,
+            "right_lost": 0,
+            "right_gained": 35,
+            "name": "Orense"
+          },
+          {
+            "region_id": 33,
+            "moved": 20,
+            "right_lost": 10,
+            "right_gained": 2,
+            "name": "Asturias"
+          },
+          {
+            "region_id": 34,
+            "moved": 1,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Palencia"
+          },
+          {
+            "region_id": 35,
+            "moved": 17,
+            "right_lost": 14,
+            "right_gained": 0,
+            "name": "Las Palmas"
+          },
+          {
+            "region_id": 36,
+            "moved": 10,
+            "right_lost": 0,
+            "right_gained": 5,
+            "name": "Pontevedra"
+          },
+          {
+            "region_id": 37,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Salamanca"
+          },
+          {
+            "region_id": 38,
+            "moved": 49,
+            "right_lost": 9,
+            "right_gained": 13,
+            "name": "S. C. Tenerife"
+          },
+          {
+            "region_id": 39,
+            "moved": 2,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Cantabria"
+          },
+          {
+            "region_id": 40,
+            "moved": 4,
+            "right_lost": 4,
+            "right_gained": 0,
+            "name": "Segovia"
+          },
+          {
+            "region_id": 41,
+            "moved": 10,
+            "right_lost": 6,
+            "right_gained": 0,
+            "name": "Sevilla"
+          },
+          {
+            "region_id": 42,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Soria"
+          },
+          {
+            "region_id": 43,
+            "moved": 20,
+            "right_lost": 4,
+            "right_gained": 4,
+            "name": "Tarragona"
+          },
+          {
+            "region_id": 44,
+            "moved": 3,
+            "right_lost": 2,
+            "right_gained": 0,
+            "name": "Teruel"
+          },
+          {
+            "region_id": 45,
+            "moved": 10,
+            "right_lost": 8,
+            "right_gained": 0,
+            "name": "Toledo"
+          },
+          {
+            "region_id": 46,
+            "moved": 37,
+            "right_lost": 27,
+            "right_gained": 0,
+            "name": "Valencia"
+          },
+          {
+            "region_id": 47,
+            "moved": 2,
+            "right_lost": 2,
+            "right_gained": 0,
+            "name": "Valladolid"
+          },
+          {
+            "region_id": 48,
+            "moved": 8,
+            "right_lost": 0,
+            "right_gained": 5,
+            "name": "Vizcaya"
+          },
+          {
+            "region_id": 49,
+            "moved": 10,
+            "right_lost": 2,
+            "right_gained": 0,
+            "name": "Zamora"
+          },
+          {
+            "region_id": 50,
+            "moved": 11,
+            "right_lost": 7,
+            "right_gained": 0,
+            "name": "Zaragoza"
+          },
+          {
+            "region_id": 51,
+            "moved": 8,
+            "right_lost": 3,
+            "right_gained": 0,
+            "name": "Ceuta"
+          },
+          {
+            "region_id": 52,
+            "moved": 0,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Melilla"
+          }
+        ]
+      },
+      "sin_litigio": {
+        "table": {
+          "census": [
+            2327388,
+            2606625
+          ],
+          "new_electors": 279237,
+          "voters": [
+            208431,
+            231070
+          ],
+          "votes": [
+            203152,
+            225564
+          ]
+        },
+        "counts": {
+          "votes": 22412,
+          "lost": 6,
+          "gained": 3,
+          "moved": 625,
+          "right": {
+            "-2": 6,
+            "-1": 273,
+            "0": 9610,
+            "1": 110,
+            "2": 1
+          },
+          "left": {
+            "-1": 80,
+            "0": 9595,
+            "1": 318,
+            "2": 7
+          },
+          "central": {
+            "right": 0,
+            "left": 0
+          },
+          "range": [
+            -1.0,
+            0.0
+          ]
+        },
+        "provinces": [
+          {
+            "region_id": 1,
+            "moved": 6,
+            "right_lost": 0,
+            "right_gained": 2,
+            "name": "Álava"
+          },
+          {
+            "region_id": 2,
+            "moved": 6,
+            "right_lost": 5,
+            "right_gained": 0,
+            "name": "Albacete"
+          },
+          {
+            "region_id": 3,
+            "moved": 22,
+            "right_lost": 16,
+            "right_gained": 0,
+            "name": "Alicante"
+          },
+          {
+            "region_id": 4,
+            "moved": 10,
+            "right_lost": 9,
+            "right_gained": 0,
+            "name": "Almería"
+          },
+          {
+            "region_id": 5,
+            "moved": 7,
+            "right_lost": 5,
+            "right_gained": 0,
+            "name": "Ávila"
+          },
+          {
+            "region_id": 6,
+            "moved": 0,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Badajoz"
+          },
+          {
+            "region_id": 7,
+            "moved": 19,
+            "right_lost": 16,
+            "right_gained": 0,
+            "name": "Baleares"
+          },
+          {
+            "region_id": 8,
+            "moved": 70,
+            "right_lost": 21,
+            "right_gained": 13,
+            "name": "Barcelona"
+          },
+          {
+            "region_id": 9,
+            "moved": 1,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Burgos"
+          },
+          {
+            "region_id": 10,
+            "moved": 6,
+            "right_lost": 4,
+            "right_gained": 0,
+            "name": "Cáceres"
+          },
+          {
+            "region_id": 11,
+            "moved": 3,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Cádiz"
+          },
+          {
+            "region_id": 12,
+            "moved": 12,
+            "right_lost": 11,
+            "right_gained": 0,
+            "name": "Castellón"
+          },
+          {
+            "region_id": 13,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Ciudad Real"
+          },
+          {
+            "region_id": 14,
+            "moved": 3,
+            "right_lost": 1,
+            "right_gained": 2,
+            "name": "Córdoba"
+          },
+          {
+            "region_id": 15,
+            "moved": 8,
+            "right_lost": 2,
+            "right_gained": 4,
+            "name": "La Coruña"
+          },
+          {
+            "region_id": 16,
+            "moved": 3,
+            "right_lost": 2,
+            "right_gained": 0,
+            "name": "Cuenca"
+          },
+          {
+            "region_id": 17,
+            "moved": 13,
+            "right_lost": 6,
+            "right_gained": 4,
+            "name": "Gerona"
+          },
+          {
+            "region_id": 18,
+            "moved": 20,
+            "right_lost": 7,
+            "right_gained": 7,
+            "name": "Granada"
+          },
+          {
+            "region_id": 19,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Guadalajara"
+          },
+          {
+            "region_id": 20,
+            "moved": 6,
+            "right_lost": 0,
+            "right_gained": 2,
+            "name": "Guipúzcoa"
+          },
+          {
+            "region_id": 21,
+            "moved": 2,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Huelva"
+          },
+          {
+            "region_id": 22,
+            "moved": 3,
+            "right_lost": 3,
+            "right_gained": 0,
+            "name": "Huesca"
+          },
+          {
+            "region_id": 23,
+            "moved": 0,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Jaén"
+          },
+          {
+            "region_id": 24,
+            "moved": 3,
+            "right_lost": 3,
+            "right_gained": 0,
+            "name": "León"
+          },
+          {
+            "region_id": 25,
+            "moved": 14,
+            "right_lost": 4,
+            "right_gained": 0,
+            "name": "Lérida"
+          },
+          {
+            "region_id": 26,
+            "moved": 5,
+            "right_lost": 3,
+            "right_gained": 1,
+            "name": "La Rioja"
+          },
+          {
+            "region_id": 27,
+            "moved": 12,
+            "right_lost": 0,
+            "right_gained": 8,
+            "name": "Lugo"
+          },
+          {
+            "region_id": 28,
+            "moved": 138,
+            "right_lost": 54,
+            "right_gained": 24,
+            "name": "Madrid"
+          },
+          {
+            "region_id": 29,
+            "moved": 17,
+            "right_lost": 11,
+            "right_gained": 0,
+            "name": "Málaga"
+          },
+          {
+            "region_id": 30,
+            "moved": 20,
+            "right_lost": 18,
+            "right_gained": 0,
+            "name": "Murcia"
+          },
+          {
+            "region_id": 31,
+            "moved": 13,
+            "right_lost": 1,
+            "right_gained": 6,
+            "name": "Navarra"
+          },
+          {
+            "region_id": 32,
+            "moved": 22,
+            "right_lost": 0,
+            "right_gained": 22,
+            "name": "Orense"
+          },
+          {
+            "region_id": 33,
+            "moved": 12,
+            "right_lost": 6,
+            "right_gained": 1,
+            "name": "Asturias"
+          },
+          {
+            "region_id": 34,
+            "moved": 1,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Palencia"
+          },
+          {
+            "region_id": 35,
+            "moved": 14,
+            "right_lost": 11,
+            "right_gained": 0,
+            "name": "Las Palmas"
+          },
+          {
+            "region_id": 36,
+            "moved": 6,
+            "right_lost": 0,
+            "right_gained": 3,
+            "name": "Pontevedra"
+          },
+          {
+            "region_id": 37,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Salamanca"
+          },
+          {
+            "region_id": 38,
+            "moved": 36,
+            "right_lost": 7,
+            "right_gained": 10,
+            "name": "S. C. Tenerife"
+          },
+          {
+            "region_id": 39,
+            "moved": 2,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Cantabria"
+          },
+          {
+            "region_id": 40,
+            "moved": 3,
+            "right_lost": 3,
+            "right_gained": 0,
+            "name": "Segovia"
+          },
+          {
+            "region_id": 41,
+            "moved": 8,
+            "right_lost": 5,
+            "right_gained": 0,
+            "name": "Sevilla"
+          },
+          {
+            "region_id": 42,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Soria"
+          },
+          {
+            "region_id": 43,
+            "moved": 19,
+            "right_lost": 3,
+            "right_gained": 4,
+            "name": "Tarragona"
+          },
+          {
+            "region_id": 44,
+            "moved": 3,
+            "right_lost": 2,
+            "right_gained": 0,
+            "name": "Teruel"
+          },
+          {
+            "region_id": 45,
+            "moved": 8,
+            "right_lost": 7,
+            "right_gained": 0,
+            "name": "Toledo"
+          },
+          {
+            "region_id": 46,
+            "moved": 34,
+            "right_lost": 26,
+            "right_gained": 0,
+            "name": "Valencia"
+          },
+          {
+            "region_id": 47,
+            "moved": 1,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Valladolid"
+          },
+          {
+            "region_id": 48,
+            "moved": 7,
+            "right_lost": 0,
+            "right_gained": 4,
+            "name": "Vizcaya"
+          },
+          {
+            "region_id": 49,
+            "moved": 4,
+            "right_lost": 1,
+            "right_gained": 0,
+            "name": "Zamora"
+          },
+          {
+            "region_id": 50,
+            "moved": 10,
+            "right_lost": 6,
+            "right_gained": 0,
+            "name": "Zaragoza"
+          },
+          {
+            "region_id": 51,
+            "moved": 8,
+            "right_lost": 3,
+            "right_gained": 0,
+            "name": "Ceuta"
+          },
+          {
+            "region_id": 52,
+            "moved": 0,
+            "right_lost": 0,
+            "right_gained": 0,
+            "name": "Melilla"
+          }
+        ]
+      }
+    },
+    "new_electors": {
+      "participations": [
+        0.09,
+        0.2,
+        0.3,
+        0.5,
+        0.7
+      ],
+      "left_fracs": [
+        0.5,
+        0.6,
+        0.7,
+        0.8
+      ],
+      "electors": 442257,
+      "cells": [
+        [
+          {
+            "votes": 39405,
+            "lost": 13,
+            "gained": 7,
+            "moved": 1149,
+            "right": {
+              "-2": 7,
+              "-1": 481,
+              "0": 9242,
+              "1": 264,
+              "2": 6
+            },
+            "left": {
+              "-2": 3,
+              "-1": 167,
+              "0": 9270,
+              "1": 548,
+              "2": 12
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 39405,
+            "lost": 18,
+            "gained": 2,
+            "moved": 1436,
+            "right": {
+              "-2": 38,
+              "-1": 881,
+              "0": 8950,
+              "1": 128,
+              "2": 3
+            },
+            "left": {
+              "-2": 2,
+              "-1": 76,
+              "0": 8905,
+              "1": 970,
+              "2": 47
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 39405,
+            "lost": 23,
+            "gained": 1,
+            "moved": 1781,
+            "right": {
+              "-3": 1,
+              "-2": 81,
+              "-1": 1281,
+              "0": 8580,
+              "1": 56,
+              "2": 1
+            },
+            "left": {
+              "-1": 32,
+              "0": 8481,
+              "1": 1383,
+              "2": 104
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 39405,
+            "lost": 30,
+            "gained": 0,
+            "moved": 2207,
+            "right": {
+              "-3": 3,
+              "-2": 164,
+              "-1": 1678,
+              "0": 8130,
+              "1": 25
+            },
+            "left": {
+              "-1": 19,
+              "0": 8009,
+              "1": 1783,
+              "2": 183,
+              "3": 6
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 87567,
+            "lost": 18,
+            "gained": 12,
+            "moved": 2404,
+            "right": {
+              "-2": 46,
+              "-1": 934,
+              "0": 8392,
+              "1": 612,
+              "2": 16
+            },
+            "left": {
+              "-2": 8,
+              "-1": 353,
+              "0": 8491,
+              "1": 1085,
+              "2": 63
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 87567,
+            "lost": 33,
+            "gained": 6,
+            "moved": 2956,
+            "right": {
+              "-3": 6,
+              "-2": 161,
+              "-1": 1715,
+              "0": 7810,
+              "1": 302,
+              "2": 6
+            },
+            "left": {
+              "-2": 2,
+              "-1": 153,
+              "0": 7735,
+              "1": 1899,
+              "2": 204,
+              "3": 7
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 87567,
+            "lost": 64,
+            "gained": 1,
+            "moved": 3621,
+            "right": {
+              "-4": 3,
+              "-3": 30,
+              "-2": 350,
+              "-1": 2399,
+              "0": 7090,
+              "1": 125,
+              "2": 3
+            },
+            "left": {
+              "-2": 2,
+              "-1": 72,
+              "0": 6891,
+              "1": 2560,
+              "2": 433,
+              "3": 39,
+              "4": 3
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 87567,
+            "lost": 95,
+            "gained": 0,
+            "moved": 4367,
+            "right": {
+              "-6": 1,
+              "-4": 10,
+              "-3": 68,
+              "-2": 644,
+              "-1": 2940,
+              "0": 6292,
+              "1": 45
+            },
+            "left": {
+              "-1": 42,
+              "0": 6049,
+              "1": 3053,
+              "2": 754,
+              "3": 92,
+              "4": 9,
+              "6": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 131350,
+            "lost": 26,
+            "gained": 21,
+            "moved": 3369,
+            "right": {
+              "-3": 4,
+              "-2": 94,
+              "-1": 1273,
+              "0": 7750,
+              "1": 836,
+              "2": 43
+            },
+            "left": {
+              "-2": 13,
+              "-1": 477,
+              "0": 7866,
+              "1": 1509,
+              "2": 131,
+              "3": 4
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 131350,
+            "lost": 62,
+            "gained": 7,
+            "moved": 4118,
+            "right": {
+              "-4": 5,
+              "-3": 17,
+              "-2": 348,
+              "-1": 2270,
+              "0": 6932,
+              "1": 419,
+              "2": 9
+            },
+            "left": {
+              "-2": 3,
+              "-1": 197,
+              "0": 6826,
+              "1": 2511,
+              "2": 428,
+              "3": 31,
+              "4": 4
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 131350,
+            "lost": 104,
+            "gained": 3,
+            "moved": 4957,
+            "right": {
+              "-6": 1,
+              "-4": 12,
+              "-3": 82,
+              "-2": 719,
+              "-1": 3052,
+              "0": 5954,
+              "1": 176,
+              "2": 4
+            },
+            "left": {
+              "-2": 2,
+              "-1": 76,
+              "0": 5721,
+              "1": 3201,
+              "2": 874,
+              "3": 108,
+              "4": 17,
+              "6": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 131350,
+            "lost": 139,
+            "gained": 0,
+            "moved": 5778,
+            "right": {
+              "-7": 1,
+              "-6": 1,
+              "-5": 1,
+              "-4": 33,
+              "-3": 222,
+              "-2": 1185,
+              "-1": 3508,
+              "0": 4996,
+              "1": 51,
+              "2": 2
+            },
+            "left": {
+              "-1": 35,
+              "0": 4731,
+              "1": 3580,
+              "2": 1324,
+              "3": 283,
+              "4": 42,
+              "5": 3,
+              "6": 1,
+              "7": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 218917,
+            "lost": 49,
+            "gained": 33,
+            "moved": 4987,
+            "right": {
+              "-4": 3,
+              "-3": 13,
+              "-2": 238,
+              "-1": 1804,
+              "0": 6674,
+              "1": 1166,
+              "2": 98,
+              "3": 4
+            },
+            "left": {
+              "-3": 1,
+              "-2": 31,
+              "-1": 699,
+              "0": 6738,
+              "1": 2198,
+              "2": 308,
+              "3": 21,
+              "4": 4
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 218917,
+            "lost": 100,
+            "gained": 14,
+            "moved": 5867,
+            "right": {
+              "-7": 1,
+              "-4": 14,
+              "-3": 103,
+              "-2": 759,
+              "-1": 3018,
+              "0": 5540,
+              "1": 540,
+              "2": 24,
+              "3": 1
+            },
+            "left": {
+              "-2": 6,
+              "-1": 252,
+              "0": 5346,
+              "1": 3285,
+              "2": 944,
+              "3": 143,
+              "4": 22,
+              "5": 1,
+              "7": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 218917,
+            "lost": 158,
+            "gained": 5,
+            "moved": 6859,
+            "right": {
+              "-7": 1,
+              "-5": 8,
+              "-4": 51,
+              "-3": 348,
+              "-2": 1499,
+              "-1": 3627,
+              "0": 4223,
+              "1": 237,
+              "2": 6
+            },
+            "left": {
+              "-2": 2,
+              "-1": 93,
+              "0": 3953,
+              "1": 3716,
+              "2": 1699,
+              "3": 452,
+              "4": 69,
+              "5": 13,
+              "6": 2,
+              "7": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 218917,
+            "lost": 228,
+            "gained": 0,
+            "moved": 7691,
+            "right": {
+              "-8": 1,
+              "-7": 1,
+              "-6": 5,
+              "-5": 27,
+              "-4": 173,
+              "-3": 686,
+              "-2": 2193,
+              "-1": 3776,
+              "0": 3072,
+              "1": 64,
+              "2": 2
+            },
+            "left": {
+              "-1": 37,
+              "0": 2804,
+              "1": 3736,
+              "2": 2305,
+              "3": 856,
+              "4": 206,
+              "5": 46,
+              "6": 9,
+              "8": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 306484,
+            "lost": 57,
+            "gained": 41,
+            "moved": 6206,
+            "right": {
+              "-4": 6,
+              "-3": 36,
+              "-2": 383,
+              "-1": 2185,
+              "0": 5820,
+              "1": 1410,
+              "2": 146,
+              "3": 11,
+              "4": 3
+            },
+            "left": {
+              "-3": 3,
+              "-2": 50,
+              "-1": 820,
+              "0": 5900,
+              "1": 2627,
+              "2": 530,
+              "3": 62,
+              "4": 8
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 306484,
+            "lost": 132,
+            "gained": 17,
+            "moved": 7114,
+            "right": {
+              "-7": 1,
+              "-5": 3,
+              "-4": 38,
+              "-3": 240,
+              "-2": 1265,
+              "-1": 3319,
+              "0": 4487,
+              "1": 597,
+              "2": 47,
+              "3": 3
+            },
+            "left": {
+              "-2": 9,
+              "-1": 287,
+              "0": 4210,
+              "1": 3579,
+              "2": 1501,
+              "3": 352,
+              "4": 53,
+              "5": 7,
+              "6": 1,
+              "7": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -3.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 306484,
+            "lost": 220,
+            "gained": 4,
+            "moved": 8060,
+            "right": {
+              "-8": 1,
+              "-6": 8,
+              "-5": 31,
+              "-4": 169,
+              "-3": 688,
+              "-2": 2117,
+              "-1": 3744,
+              "0": 3015,
+              "1": 218,
+              "2": 9
+            },
+            "left": {
+              "-2": 1,
+              "-1": 91,
+              "0": 2694,
+              "1": 3695,
+              "2": 2356,
+              "3": 870,
+              "4": 223,
+              "5": 59,
+              "6": 8,
+              "7": 2,
+              "8": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 306484,
+            "lost": 321,
+            "gained": 0,
+            "moved": 8778,
+            "right": {
+              "-8": 1,
+              "-7": 3,
+              "-6": 25,
+              "-5": 128,
+              "-4": 446,
+              "-3": 1327,
+              "-2": 2797,
+              "-1": 3362,
+              "0": 1860,
+              "1": 49,
+              "2": 2
+            },
+            "left": {
+              "-1": 25,
+              "0": 1617,
+              "1": 3218,
+              "2": 2844,
+              "3": 1510,
+              "4": 549,
+              "5": 191,
+              "6": 35,
+              "7": 10,
+              "8": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -4.0,
+              0.0
+            ]
+          }
+        ]
+      ]
+    },
+    "grid": {
+      "participations": [
+        0.09,
+        0.2,
+        0.3,
+        0.5,
+        0.7
+      ],
+      "left_fracs": [
+        0.5,
+        0.6,
+        0.7,
+        0.8
+      ],
+      "electors": 2769645,
+      "cells": [
+        [
+          {
+            "votes": 43623,
+            "lost": 32,
+            "gained": 26,
+            "moved": 3621,
+            "right": {
+              "-3": 6,
+              "-2": 112,
+              "-1": 1319,
+              "0": 7302,
+              "1": 1177,
+              "2": 82,
+              "3": 2
+            },
+            "left": {
+              "-2": 77,
+              "-1": 1127,
+              "0": 7223,
+              "1": 1439,
+              "2": 128,
+              "3": 6
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -1.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 43623,
+            "lost": 96,
+            "gained": 3,
+            "moved": 4548,
+            "right": {
+              "-6": 1,
+              "-5": 1,
+              "-4": 9,
+              "-3": 86,
+              "-2": 618,
+              "-1": 2913,
+              "0": 6149,
+              "1": 222,
+              "2": 1
+            },
+            "left": {
+              "-2": 2,
+              "-1": 256,
+              "0": 6003,
+              "1": 2975,
+              "2": 661,
+              "3": 90,
+              "4": 11,
+              "5": 1,
+              "6": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 43623,
+            "lost": 186,
+            "gained": 0,
+            "moved": 6263,
+            "right": {
+              "-7": 2,
+              "-6": 1,
+              "-5": 1,
+              "-4": 77,
+              "-3": 393,
+              "-2": 1558,
+              "-1": 3722,
+              "0": 4239,
+              "1": 7
+            },
+            "left": {
+              "-1": 27,
+              "0": 4205,
+              "1": 3694,
+              "2": 1593,
+              "3": 407,
+              "4": 66,
+              "5": 6,
+              "6": 1,
+              "8": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 43623,
+            "lost": 266,
+            "gained": 0,
+            "moved": 7736,
+            "right": {
+              "-8": 2,
+              "-7": 1,
+              "-6": 5,
+              "-5": 59,
+              "-4": 252,
+              "-3": 891,
+              "-2": 2341,
+              "-1": 3743,
+              "0": 2705,
+              "1": 1
+            },
+            "left": {
+              "-1": 8,
+              "0": 2703,
+              "1": 3706,
+              "2": 2374,
+              "3": 880,
+              "4": 263,
+              "5": 56,
+              "6": 8,
+              "7": 1,
+              "9": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -4.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 345238,
+            "lost": 75,
+            "gained": 50,
+            "moved": 7240,
+            "right": {
+              "-7": 1,
+              "-4": 14,
+              "-3": 74,
+              "-2": 599,
+              "-1": 2381,
+              "0": 4876,
+              "1": 1751,
+              "2": 269,
+              "3": 34,
+              "4": 1
+            },
+            "left": {
+              "-3": 5,
+              "-2": 111,
+              "-1": 1082,
+              "0": 4940,
+              "1": 2912,
+              "2": 811,
+              "3": 120,
+              "4": 17,
+              "5": 1,
+              "6": 1
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -2.0,
+              2.0
+            ]
+          },
+          {
+            "votes": 345238,
+            "lost": 214,
+            "gained": 10,
+            "moved": 8367,
+            "right": {
+              "-9": 1,
+              "-7": 2,
+              "-6": 4,
+              "-5": 36,
+              "-4": 209,
+              "-3": 789,
+              "-2": 2049,
+              "-1": 3453,
+              "0": 3007,
+              "1": 423,
+              "2": 26,
+              "3": 1
+            },
+            "left": {
+              "-2": 5,
+              "-1": 212,
+              "0": 2547,
+              "1": 3488,
+              "2": 2397,
+              "3": 986,
+              "4": 292,
+              "5": 63,
+              "6": 9,
+              "9": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -4.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 345238,
+            "lost": 432,
+            "gained": 0,
+            "moved": 9266,
+            "right": {
+              "-10": 1,
+              "-8": 7,
+              "-7": 20,
+              "-6": 89,
+              "-5": 306,
+              "-4": 872,
+              "-3": 1844,
+              "-2": 2871,
+              "-1": 2675,
+              "0": 1264,
+              "1": 50,
+              "2": 1
+            },
+            "left": {
+              "-1": 39,
+              "0": 998,
+              "1": 2403,
+              "2": 2907,
+              "3": 2001,
+              "4": 1056,
+              "5": 410,
+              "6": 144,
+              "7": 36,
+              "8": 5,
+              "10": 1
+            },
+            "central": {
+              "right": -2,
+              "left": 2
+            },
+            "range": [
+              -5.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 345238,
+            "lost": 658,
+            "gained": 0,
+            "moved": 9720,
+            "right": {
+              "-10": 3,
+              "-9": 10,
+              "-8": 47,
+              "-7": 156,
+              "-6": 361,
+              "-5": 914,
+              "-4": 1688,
+              "-3": 2414,
+              "-2": 2411,
+              "-1": 1520,
+              "0": 474,
+              "1": 2
+            },
+            "left": {
+              "-1": 8,
+              "0": 376,
+              "1": 1327,
+              "2": 2255,
+              "3": 2409,
+              "4": 1777,
+              "5": 1061,
+              "6": 514,
+              "7": 178,
+              "8": 73,
+              "9": 17,
+              "10": 4,
+              "11": 1
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -6.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 619433,
+            "lost": 107,
+            "gained": 64,
+            "moved": 8817,
+            "right": {
+              "-7": 1,
+              "-5": 6,
+              "-4": 55,
+              "-3": 269,
+              "-2": 1039,
+              "-1": 2609,
+              "0": 3724,
+              "1": 1749,
+              "2": 451,
+              "3": 88,
+              "4": 8,
+              "5": 1
+            },
+            "left": {
+              "-4": 1,
+              "-3": 11,
+              "-2": 158,
+              "-1": 1038,
+              "0": 3561,
+              "1": 3156,
+              "2": 1523,
+              "3": 432,
+              "4": 103,
+              "5": 15,
+              "6": 2
+            },
+            "central": {
+              "right": 0,
+              "left": 0
+            },
+            "range": [
+              -3.0,
+              2.0
+            ]
+          },
+          {
+            "votes": 619433,
+            "lost": 345,
+            "gained": 11,
+            "moved": 9512,
+            "right": {
+              "-9": 1,
+              "-8": 3,
+              "-7": 8,
+              "-6": 52,
+              "-5": 214,
+              "-4": 661,
+              "-3": 1548,
+              "-2": 2608,
+              "-1": 2815,
+              "0": 1658,
+              "1": 382,
+              "2": 49,
+              "3": 1
+            },
+            "left": {
+              "-2": 3,
+              "-1": 161,
+              "0": 1208,
+              "1": 2508,
+              "2": 2811,
+              "3": 1869,
+              "4": 934,
+              "5": 380,
+              "6": 97,
+              "7": 26,
+              "8": 2,
+              "9": 1
+            },
+            "central": {
+              "right": -2,
+              "left": 2
+            },
+            "range": [
+              -5.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 619433,
+            "lost": 674,
+            "gained": 1,
+            "moved": 9858,
+            "right": {
+              "-11": 1,
+              "-10": 1,
+              "-9": 16,
+              "-8": 69,
+              "-7": 174,
+              "-6": 461,
+              "-5": 1017,
+              "-4": 1830,
+              "-3": 2327,
+              "-2": 2216,
+              "-1": 1390,
+              "0": 461,
+              "1": 37
+            },
+            "left": {
+              "-1": 19,
+              "0": 274,
+              "1": 1084,
+              "2": 1941,
+              "3": 2327,
+              "4": 1965,
+              "5": 1304,
+              "6": 658,
+              "7": 282,
+              "8": 110,
+              "9": 29,
+              "10": 4,
+              "11": 3
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -7.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 619433,
+            "lost": 1005,
+            "gained": 0,
+            "moved": 9960,
+            "right": {
+              "-12": 5,
+              "-11": 8,
+              "-10": 45,
+              "-9": 143,
+              "-8": 361,
+              "-7": 735,
+              "-6": 1283,
+              "-5": 1796,
+              "-4": 2118,
+              "-3": 1791,
+              "-2": 1175,
+              "-1": 447,
+              "0": 91,
+              "1": 2
+            },
+            "left": {
+              "-1": 2,
+              "0": 59,
+              "1": 322,
+              "2": 895,
+              "3": 1594,
+              "4": 2028,
+              "5": 1901,
+              "6": 1411,
+              "7": 944,
+              "8": 489,
+              "9": 237,
+              "10": 85,
+              "11": 24,
+              "12": 7,
+              "13": 2
+            },
+            "central": {
+              "right": -4,
+              "left": 4
+            },
+            "range": [
+              -8.0,
+              -1.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 1167822,
+            "lost": 154,
+            "gained": 88,
+            "moved": 9776,
+            "right": {
+              "-9": 1,
+              "-8": 1,
+              "-7": 2,
+              "-6": 13,
+              "-5": 47,
+              "-4": 220,
+              "-3": 710,
+              "-2": 1577,
+              "-1": 2586,
+              "0": 2520,
+              "1": 1557,
+              "2": 568,
+              "3": 157,
+              "4": 35,
+              "5": 6
+            },
+            "left": {
+              "-4": 4,
+              "-3": 27,
+              "-2": 178,
+              "-1": 771,
+              "0": 2163,
+              "1": 2845,
+              "2": 2233,
+              "3": 1108,
+              "4": 486,
+              "5": 132,
+              "6": 43,
+              "7": 9,
+              "8": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -4.0,
+              2.0
+            ]
+          },
+          {
+            "votes": 1167822,
+            "lost": 578,
+            "gained": 12,
+            "moved": 9958,
+            "right": {
+              "-11": 1,
+              "-10": 1,
+              "-9": 13,
+              "-8": 53,
+              "-7": 197,
+              "-6": 444,
+              "-5": 986,
+              "-4": 1612,
+              "-3": 2108,
+              "-2": 2168,
+              "-1": 1484,
+              "0": 664,
+              "1": 222,
+              "2": 43,
+              "3": 4
+            },
+            "left": {
+              "-2": 4,
+              "-1": 58,
+              "0": 340,
+              "1": 996,
+              "2": 1811,
+              "3": 2217,
+              "4": 1879,
+              "5": 1395,
+              "6": 736,
+              "7": 371,
+              "8": 136,
+              "9": 47,
+              "10": 9,
+              "12": 1
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -7.0,
+              1.0
+            ]
+          },
+          {
+            "votes": 1167822,
+            "lost": 1154,
+            "gained": 0,
+            "moved": 9994,
+            "right": {
+              "-14": 1,
+              "-13": 4,
+              "-12": 9,
+              "-11": 38,
+              "-10": 128,
+              "-9": 338,
+              "-8": 665,
+              "-7": 1119,
+              "-6": 1578,
+              "-5": 1834,
+              "-4": 1850,
+              "-3": 1334,
+              "-2": 741,
+              "-1": 286,
+              "0": 69,
+              "1": 4,
+              "2": 2
+            },
+            "left": {
+              "-1": 1,
+              "0": 28,
+              "1": 148,
+              "2": 438,
+              "3": 984,
+              "4": 1542,
+              "5": 1868,
+              "6": 1723,
+              "7": 1350,
+              "8": 985,
+              "9": 507,
+              "10": 269,
+              "11": 104,
+              "12": 38,
+              "13": 10,
+              "14": 4,
+              "15": 1
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -9.0,
+              -1.0
+            ]
+          },
+          {
+            "votes": 1167822,
+            "lost": 1815,
+            "gained": 0,
+            "moved": 10000,
+            "right": {
+              "-16": 3,
+              "-15": 9,
+              "-14": 25,
+              "-13": 104,
+              "-12": 218,
+              "-11": 440,
+              "-10": 769,
+              "-9": 1175,
+              "-8": 1491,
+              "-7": 1700,
+              "-6": 1567,
+              "-5": 1225,
+              "-4": 763,
+              "-3": 354,
+              "-2": 122,
+              "-1": 33,
+              "0": 2
+            },
+            "left": {
+              "0": 2,
+              "1": 18,
+              "2": 79,
+              "3": 208,
+              "4": 541,
+              "5": 911,
+              "6": 1309,
+              "7": 1642,
+              "8": 1608,
+              "9": 1374,
+              "10": 978,
+              "11": 671,
+              "12": 346,
+              "13": 204,
+              "14": 62,
+              "15": 27,
+              "16": 15,
+              "17": 5
+            },
+            "central": {
+              "right": -8,
+              "left": 8
+            },
+            "range": [
+              -12.0,
+              -3.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 1716212,
+            "lost": 183,
+            "gained": 91,
+            "moved": 9947,
+            "right": {
+              "-9": 1,
+              "-8": 4,
+              "-7": 13,
+              "-6": 43,
+              "-5": 158,
+              "-4": 458,
+              "-3": 1052,
+              "-2": 1797,
+              "-1": 2267,
+              "0": 2039,
+              "1": 1323,
+              "2": 589,
+              "3": 190,
+              "4": 57,
+              "5": 8,
+              "6": 1
+            },
+            "left": {
+              "-4": 1,
+              "-3": 32,
+              "-2": 182,
+              "-1": 586,
+              "0": 1492,
+              "1": 2255,
+              "2": 2307,
+              "3": 1653,
+              "4": 895,
+              "5": 394,
+              "6": 143,
+              "7": 42,
+              "8": 14,
+              "9": 4
+            },
+            "central": {
+              "right": -2,
+              "left": 2
+            },
+            "range": [
+              -4.0,
+              3.0
+            ]
+          },
+          {
+            "votes": 1716212,
+            "lost": 842,
+            "gained": 7,
+            "moved": 9994,
+            "right": {
+              "-13": 1,
+              "-12": 3,
+              "-11": 13,
+              "-10": 42,
+              "-9": 129,
+              "-8": 304,
+              "-7": 680,
+              "-6": 1091,
+              "-5": 1606,
+              "-4": 1827,
+              "-3": 1806,
+              "-2": 1289,
+              "-1": 776,
+              "0": 312,
+              "1": 97,
+              "2": 19,
+              "3": 4,
+              "4": 1
+            },
+            "left": {
+              "-2": 2,
+              "-1": 23,
+              "0": 89,
+              "1": 388,
+              "2": 824,
+              "3": 1445,
+              "4": 1828,
+              "5": 1793,
+              "6": 1459,
+              "7": 1066,
+              "8": 610,
+              "9": 283,
+              "10": 126,
+              "11": 43,
+              "12": 16,
+              "13": 5
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -8.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 1716212,
+            "lost": 1706,
+            "gained": 0,
+            "moved": 10000,
+            "right": {
+              "-16": 3,
+              "-15": 6,
+              "-14": 25,
+              "-13": 84,
+              "-12": 194,
+              "-11": 352,
+              "-10": 690,
+              "-9": 1092,
+              "-8": 1415,
+              "-7": 1643,
+              "-6": 1592,
+              "-5": 1328,
+              "-4": 857,
+              "-3": 459,
+              "-2": 177,
+              "-1": 68,
+              "0": 10,
+              "1": 5
+            },
+            "left": {
+              "-1": 1,
+              "0": 6,
+              "1": 21,
+              "2": 84,
+              "3": 258,
+              "4": 538,
+              "5": 909,
+              "6": 1315,
+              "7": 1595,
+              "8": 1566,
+              "9": 1359,
+              "10": 1009,
+              "11": 677,
+              "12": 353,
+              "13": 186,
+              "14": 69,
+              "15": 41,
+              "16": 8,
+              "17": 5
+            },
+            "central": {
+              "right": -6,
+              "left": 6
+            },
+            "range": [
+              -12.0,
+              -2.0
+            ]
+          },
+          {
+            "votes": 1716212,
+            "lost": 2734,
+            "gained": 0,
+            "moved": 10000,
+            "right": {
+              "-22": 1,
+              "-19": 5,
+              "-18": 10,
+              "-17": 29,
+              "-16": 84,
+              "-15": 218,
+              "-14": 377,
+              "-13": 657,
+              "-12": 994,
+              "-11": 1295,
+              "-10": 1421,
+              "-9": 1509,
+              "-8": 1309,
+              "-7": 965,
+              "-6": 597,
+              "-5": 332,
+              "-4": 132,
+              "-3": 50,
+              "-2": 14,
+              "-1": 1
+            },
+            "left": {
+              "1": 1,
+              "2": 7,
+              "3": 27,
+              "4": 75,
+              "5": 181,
+              "6": 371,
+              "7": 639,
+              "8": 1013,
+              "9": 1287,
+              "10": 1476,
+              "11": 1467,
+              "12": 1229,
+              "13": 863,
+              "14": 643,
+              "15": 376,
+              "16": 199,
+              "17": 91,
+              "18": 33,
+              "19": 15,
+              "20": 3,
+              "21": 3,
+              "22": 1
+            },
+            "central": {
+              "right": -10,
+              "left": 11
+            },
+            "range": [
+              -15.0,
+              -5.0
+            ]
+          }
+        ]
+      ]
+    },
+    "placement": {
+      "participations": [
+        0.09,
+        0.2,
+        0.5,
+        1.0
+      ],
+      "fracs": [
+        0.5,
+        0.6,
+        0.7,
+        0.8,
+        1.0
+      ],
+      "pool": 181032,
+      "cells": [
+        [
+          {
+            "votes": 8065,
+            "lost": 84,
+            "gained": 0,
+            "moved": 3555,
+            "right": {
+              "-4": 1,
+              "-3": 2,
+              "-2": 172,
+              "-1": 3069,
+              "0": 6750,
+              "1": 6
+            },
+            "left": {
+              "-1": 6,
+              "0": 6492,
+              "1": 3216,
+              "2": 275,
+              "3": 10,
+              "4": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -1.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 9678,
+            "lost": 87,
+            "gained": 0,
+            "moved": 3681,
+            "right": {
+              "-4": 1,
+              "-3": 6,
+              "-2": 211,
+              "-1": 3151,
+              "0": 6625,
+              "1": 6
+            },
+            "left": {
+              "-1": 6,
+              "0": 6368,
+              "1": 3291,
+              "2": 317,
+              "3": 17,
+              "4": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -1.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 11291,
+            "lost": 101,
+            "gained": 0,
+            "moved": 3863,
+            "right": {
+              "-4": 1,
+              "-3": 13,
+              "-2": 291,
+              "-1": 3249,
+              "0": 6440,
+              "1": 6
+            },
+            "left": {
+              "-1": 6,
+              "0": 6188,
+              "1": 3383,
+              "2": 392,
+              "3": 30,
+              "4": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 12904,
+            "lost": 110,
+            "gained": 0,
+            "moved": 4127,
+            "right": {
+              "-5": 1,
+              "-3": 21,
+              "-2": 429,
+              "-1": 3379,
+              "0": 6165,
+              "1": 5
+            },
+            "left": {
+              "-1": 5,
+              "0": 5925,
+              "1": 3496,
+              "2": 528,
+              "3": 45,
+              "5": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 16130,
+            "lost": 155,
+            "gained": 0,
+            "moved": 4702,
+            "right": {
+              "-5": 1,
+              "-4": 5,
+              "-3": 75,
+              "-2": 746,
+              "-1": 3609,
+              "0": 5560,
+              "1": 4
+            },
+            "left": {
+              "-1": 4,
+              "0": 5346,
+              "1": 3693,
+              "2": 837,
+              "3": 110,
+              "4": 9,
+              "5": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 17922,
+            "lost": 184,
+            "gained": 0,
+            "moved": 5168,
+            "right": {
+              "-5": 1,
+              "-4": 8,
+              "-3": 114,
+              "-2": 1043,
+              "-1": 3757,
+              "0": 5073,
+              "1": 4
+            },
+            "left": {
+              "-1": 4,
+              "0": 4875,
+              "1": 3824,
+              "2": 1121,
+              "3": 162,
+              "4": 13,
+              "5": 1
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -2.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 21507,
+            "lost": 218,
+            "gained": 0,
+            "moved": 5512,
+            "right": {
+              "-5": 5,
+              "-4": 27,
+              "-3": 261,
+              "-2": 1342,
+              "-1": 3653,
+              "0": 4708,
+              "1": 4
+            },
+            "left": {
+              "-1": 4,
+              "0": 4530,
+              "1": 3699,
+              "2": 1407,
+              "3": 319,
+              "4": 35,
+              "5": 6
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 25091,
+            "lost": 239,
+            "gained": 0,
+            "moved": 5990,
+            "right": {
+              "-5": 8,
+              "-4": 50,
+              "-3": 386,
+              "-2": 1676,
+              "-1": 3637,
+              "0": 4239,
+              "1": 4
+            },
+            "left": {
+              "-1": 4,
+              "0": 4048,
+              "1": 3670,
+              "2": 1745,
+              "3": 457,
+              "4": 65,
+              "5": 11
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 28675,
+            "lost": 262,
+            "gained": 0,
+            "moved": 6399,
+            "right": {
+              "-5": 13,
+              "-4": 76,
+              "-3": 519,
+              "-2": 1876,
+              "-1": 3632,
+              "0": 3880,
+              "1": 4
+            },
+            "left": {
+              "-1": 4,
+              "0": 3636,
+              "1": 3650,
+              "2": 1971,
+              "3": 614,
+              "4": 105,
+              "5": 20
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 35844,
+            "lost": 313,
+            "gained": 0,
+            "moved": 7006,
+            "right": {
+              "-6": 5,
+              "-5": 22,
+              "-4": 177,
+              "-3": 765,
+              "-2": 2112,
+              "-1": 3547,
+              "0": 3368,
+              "1": 4
+            },
+            "left": {
+              "-1": 4,
+              "0": 3021,
+              "1": 3524,
+              "2": 2218,
+              "3": 940,
+              "4": 251,
+              "5": 34,
+              "6": 8
+            },
+            "central": {
+              "right": -1,
+              "left": 1
+            },
+            "range": [
+              -3.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 44805,
+            "lost": 512,
+            "gained": 0,
+            "moved": 8634,
+            "right": {
+              "-7": 5,
+              "-6": 20,
+              "-5": 141,
+              "-4": 632,
+              "-3": 1689,
+              "-2": 2890,
+              "-1": 3100,
+              "0": 1521,
+              "1": 2
+            },
+            "left": {
+              "-1": 2,
+              "0": 1381,
+              "1": 2893,
+              "2": 2895,
+              "3": 1806,
+              "4": 778,
+              "5": 205,
+              "6": 32,
+              "7": 8
+            },
+            "central": {
+              "right": -2,
+              "left": 2
+            },
+            "range": [
+              -4.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 53767,
+            "lost": 537,
+            "gained": 0,
+            "moved": 8792,
+            "right": {
+              "-7": 6,
+              "-6": 35,
+              "-5": 196,
+              "-4": 709,
+              "-3": 1777,
+              "-2": 2939,
+              "-1": 2974,
+              "0": 1363,
+              "1": 1
+            },
+            "left": {
+              "-1": 1,
+              "0": 1231,
+              "1": 2776,
+              "2": 2897,
+              "3": 1910,
+              "4": 859,
+              "5": 260,
+              "6": 56,
+              "7": 9,
+              "8": 1
+            },
+            "central": {
+              "right": -2,
+              "left": 2
+            },
+            "range": [
+              -4.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 62728,
+            "lost": 610,
+            "gained": 0,
+            "moved": 8938,
+            "right": {
+              "-8": 1,
+              "-7": 14,
+              "-6": 75,
+              "-5": 343,
+              "-4": 910,
+              "-3": 1990,
+              "-2": 2871,
+              "-1": 2595,
+              "0": 1200,
+              "1": 1
+            },
+            "left": {
+              "-1": 1,
+              "0": 1083,
+              "1": 2434,
+              "2": 2801,
+              "3": 2057,
+              "4": 1084,
+              "5": 402,
+              "6": 111,
+              "7": 25,
+              "8": 2
+            },
+            "central": {
+              "right": -2,
+              "left": 2
+            },
+            "range": [
+              -5.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 71689,
+            "lost": 671,
+            "gained": 0,
+            "moved": 9135,
+            "right": {
+              "-8": 2,
+              "-7": 28,
+              "-6": 119,
+              "-5": 453,
+              "-4": 1156,
+              "-3": 2169,
+              "-2": 2776,
+              "-1": 2301,
+              "0": 995,
+              "1": 1
+            },
+            "left": {
+              "-1": 1,
+              "0": 904,
+              "1": 2154,
+              "2": 2679,
+              "3": 2205,
+              "4": 1308,
+              "5": 538,
+              "6": 165,
+              "7": 40,
+              "8": 6
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -5.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 89611,
+            "lost": 706,
+            "gained": 0,
+            "moved": 9449,
+            "right": {
+              "-8": 8,
+              "-7": 44,
+              "-6": 158,
+              "-5": 544,
+              "-4": 1277,
+              "-3": 2193,
+              "-2": 2717,
+              "-1": 2163,
+              "0": 895,
+              "1": 1
+            },
+            "left": {
+              "-1": 1,
+              "0": 579,
+              "1": 1716,
+              "2": 2497,
+              "3": 2363,
+              "4": 1605,
+              "5": 829,
+              "6": 293,
+              "7": 90,
+              "8": 21,
+              "9": 6
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -5.0,
+              0.0
+            ]
+          }
+        ],
+        [
+          {
+            "votes": 89611,
+            "lost": 706,
+            "gained": 0,
+            "moved": 9449,
+            "right": {
+              "-8": 8,
+              "-7": 44,
+              "-6": 158,
+              "-5": 544,
+              "-4": 1277,
+              "-3": 2193,
+              "-2": 2717,
+              "-1": 2163,
+              "0": 895,
+              "1": 1
+            },
+            "left": {
+              "-1": 1,
+              "0": 579,
+              "1": 1716,
+              "2": 2497,
+              "3": 2363,
+              "4": 1605,
+              "5": 829,
+              "6": 293,
+              "7": 90,
+              "8": 21,
+              "9": 6
+            },
+            "central": {
+              "right": -3,
+              "left": 3
+            },
+            "range": [
+              -5.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 107533,
+            "lost": 748,
+            "gained": 0,
+            "moved": 9606,
+            "right": {
+              "-8": 13,
+              "-7": 73,
+              "-6": 227,
+              "-5": 671,
+              "-4": 1448,
+              "-3": 2291,
+              "-2": 2601,
+              "-1": 1931,
+              "0": 745
+            },
+            "left": {
+              "0": 411,
+              "1": 1409,
+              "2": 2262,
+              "3": 2404,
+              "4": 1828,
+              "5": 1056,
+              "6": 415,
+              "7": 162,
+              "8": 45,
+              "9": 7,
+              "10": 1
+            },
+            "central": {
+              "right": -4,
+              "left": 4
+            },
+            "range": [
+              -6.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 125455,
+            "lost": 775,
+            "gained": 0,
+            "moved": 9683,
+            "right": {
+              "-9": 5,
+              "-8": 20,
+              "-7": 104,
+              "-6": 296,
+              "-5": 824,
+              "-4": 1591,
+              "-3": 2288,
+              "-2": 2512,
+              "-1": 1727,
+              "0": 633
+            },
+            "left": {
+              "0": 333,
+              "1": 1202,
+              "2": 2080,
+              "3": 2387,
+              "4": 1904,
+              "5": 1223,
+              "6": 565,
+              "7": 215,
+              "8": 72,
+              "9": 16,
+              "10": 2,
+              "11": 1
+            },
+            "central": {
+              "right": -4,
+              "left": 4
+            },
+            "range": [
+              -6.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 143377,
+            "lost": 960,
+            "gained": 0,
+            "moved": 9763,
+            "right": {
+              "-11": 1,
+              "-10": 4,
+              "-9": 25,
+              "-8": 85,
+              "-7": 261,
+              "-6": 670,
+              "-5": 1234,
+              "-4": 1845,
+              "-3": 2101,
+              "-2": 2002,
+              "-1": 1312,
+              "0": 460
+            },
+            "left": {
+              "0": 247,
+              "1": 885,
+              "2": 1644,
+              "3": 2034,
+              "4": 1983,
+              "5": 1498,
+              "6": 983,
+              "7": 459,
+              "8": 170,
+              "9": 80,
+              "10": 13,
+              "11": 2,
+              "12": 2
+            },
+            "central": {
+              "right": -5,
+              "left": 5
+            },
+            "range": [
+              -7.0,
+              0.0
+            ]
+          },
+          {
+            "votes": 179222,
+            "lost": 1234,
+            "gained": 0,
+            "moved": 9842,
+            "right": {
+              "-12": 3,
+              "-11": 13,
+              "-10": 49,
+              "-9": 130,
+              "-8": 373,
+              "-7": 728,
+              "-6": 1150,
+              "-5": 1492,
+              "-4": 1666,
+              "-3": 1744,
+              "-2": 1454,
+              "-1": 907,
+              "0": 291
+            },
+            "left": {
+              "0": 167,
+              "1": 595,
+              "2": 1168,
+              "3": 1575,
+              "4": 1702,
+              "5": 1609,
+              "6": 1274,
+              "7": 946,
+              "8": 575,
+              "9": 244,
+              "10": 91,
+              "11": 43,
+              "12": 10,
+              "13": 1
+            },
+            "central": {
+              "right": -5,
+              "left": 5
+            },
+            "range": [
+              -8.0,
+              0.0
+            ]
+          }
+        ]
+      ]
+    },
+    "outcome": null
+  }
+}

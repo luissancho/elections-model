@@ -5964,8 +5964,8 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert [kpi['label'] for kpi in context['kpis']] == ['Censo CERA 29-N', 'Inscripciones en litigio',
                                                          'Votantes CERA esperados']
     assert context['kpis'][0]['value'] == '2.769.645' and context['kpis'][2]['value'] == '239.221'
-    assert len(context['csv_links']) == 11
-    assert {'label': 'Último escaño por provincia',
+    assert len(context['csv_links']) == 15
+    assert {'label': 'Último escaño por provincia (sobre 2023)',
             'href': '/api/v1/studies/voto-cera/prediction?format=csv&table=last-seat'} in context['csv_links']
     assert context['article']['date'] == '2026-06-30' and context['article']['url'].startswith('https://medium.com/')
     assert [page['href'] for page in context['pages'] if page['active']] == ['/analisis']
@@ -7570,7 +7570,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     # data and method: the sources, the CSV and, last, the article
     datos = cera_section(page, 'datos')
     assert '<ul class="src-list">' in datos and '<a href="https://infoelectoral.interior.gob.es/">' in datos
-    assert datos.count('class="pill brand" href="/api/v1/studies/voto-cera/') == 11
+    assert datos.count('class="pill brand" href="/api/v1/studies/voto-cera/') == 15
     assert page.count('medium.com') == 1 and page.index('medium.com') > page.index('id="datos"')
     assert datos.rstrip().endswith('El voto CERA en España y el efecto de la «Ley de Nietos»</a>.</p>')
     assert 'se publicó en Medium el 30 jun 2026' in datos

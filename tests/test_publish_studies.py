@@ -1,5 +1,6 @@
 """Tests de `mtpy/lib/publish/studies.py` sobre el estudio CERA real de `data/`, calculado una vez por módulo."""
 import dataclasses
+import json
 import os
 
 import pytest
@@ -194,3 +195,46 @@ def test_study_runners_declare_which_studies_register():
     assert publish.STUDY_RUNNERS["voto-cera"]["registrable"] is True
     assert publish.STUDY_RUNNERS["sesgo-cis"]["registrable"] is False
     assert set(publish.STUDY_RUNNERS) == set(publish.STUDY_EXPORTERS) == set(publish.STUDY_META) == set(bundle.STUDIES)
+
+
+def test_export_study_majority_carries_the_snapshot_the_ranges_and_the_csv(study):
+    """La parte lleva la foto fija sin tocarla, el rango de cada recuento y los cuatro gemelos CSV."""
+    data, frames = publish.export_study_majority(study)
+    assert data['outcome'] is None
+    assert all(data[key] == study.majority[key] for key in ('run', 'majority', 'blocks', 'lineage', 'base'))
+    assert 'range' not in study.majority['grid']['cells'][0][0]  # the study's own copy is not touched
+    assert data['expected']['convocatoria']['counts']['range'] == [-1.0, 0.0]
+    assert data['grid']['cells'][4][3]['range'] == [-15.0, -5.0] and data['grid']['cells'][2][1]['range'] == [-5.0, 1.0]
+    assert list(frames) == ['majority-grid', 'majority-new-electors', 'majority-placement', 'majority-provinces']
+    grid = frames['majority-grid'].set_index(['participation', 'left_frac'])
+    assert grid.loc[(0.7, 0.8), ['lost', 'with_majority', 'central_right', 'right_lo', 'right_hi']].tolist() == [
+        2734, 6073, -10, -15, -5]
+    assert len(frames['majority-grid']) == len(frames['majority-new-electors']) == 20
+    assert len(frames['majority-placement']) == 20 and len(frames['majority-provinces']) == 104
+
+
+def test_export_study_majority_never_touches_the_snapshot_of_the_study(study):
+    """El `range` se añade a una copia: ningún recuento del estudio lo gana, ni los de `expected`."""
+    data = publish.export_study_majority(study)[0]
+    own = [study.majority['expected'][key]['counts'] for key in ('convocatoria', 'sin_litigio')]
+    for part in ('new_electors', 'grid', 'placement'):
+        own += [cell for row in study.majority[part]['cells'] for cell in row]
+    assert len(own) == 2 + 3 * 20 and all('range' not in counts for counts in own)
+    ranged = [data['expected'][key]['counts'] for key in ('convocatoria', 'sin_litigio')]
+    for part in ('new_electors', 'grid', 'placement'):
+        ranged += [cell for row in data[part]['cells'] for cell in row]
+    assert len(ranged) == len(own) and all('range' in counts for counts in ranged)
+
+
+def test_export_study_majority_fails_clearly_without_the_snapshot(study):
+    """Sin `data/cera/majority.json` el exportador falla y dice cómo tomarlo."""
+    with pytest.raises(ValueError, match='load'):
+        publish.export_study_majority(dataclasses.replace(study, majority=None))
+
+
+def test_the_majority_fixture_is_what_the_exporter_writes(study):
+    """El fixture `study-majority.json` es la parte real tras un viaje por JSON: si cambia, se pone en rojo."""
+    with open(os.path.join(ROOT, 'tests', 'fixtures', 'bundle', 'study-majority.json'), encoding='utf-8') as handle:
+        fixture = json.load(handle)
+    published = bundle.loads(bundle.dumps(publish.export_study_majority(study)[0]))
+    assert fixture['schema'] == 'study-majority@1' and fixture['data'] == published
