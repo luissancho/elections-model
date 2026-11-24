@@ -3,7 +3,8 @@
 Proyecto mediano. Luis lo pidió el 2026-11-24, primer día de la veda («Quiero actualizar el análisis del Voto CERA,
 partiendo de las predicciones del modelo para el 29-N, en lugar de los resultados de 2023») y decidió el resto en la
 conversación y sobre una maqueta. Lo que es suyo está en «Decisiones de Luis»; lo que no, en «Decisiones mías, por
-revisar». Maqueta (cuarta versión: las correcciones de Luis a la segunda, con cifras reales de la prueba):
+revisar». Maqueta (quinta versión: las correcciones de Luis a la segunda y a la cuarta, con cifras reales de la
+prueba):
 `docs/superpowers/specs/2026-11-24-web-analisis-voto-cera-mayoria-mockup.html`. Diseño original del estudio:
 `docs/superpowers/specs/2026-10-19-web-analisis-voto-cera-design.md`.
 
@@ -32,13 +33,18 @@ las mismas tres palancas, y deja de hablar de escaños de 2023.
   la fila de KPI leen también `prediction` y `sensitivity`.
 - **El modelo.** El run publicado de `es` (hoy `20261124-102045`, datos hasta el 2026-11-23, 10.000 simulaciones,
   semilla 42) da a la derecha (PP, VOX y SALF, los bloques de la web: `meta.bmaps.blocks`) 190 escaños de reparto
-  central y mayoría absoluta en 8.734 simulaciones (87,3 %). El bundle publica medianas, reparto central y
-  probabilidades; **no** publica los votos por provincia de cada simulación.
+  central y mayoría absoluta en 8.734 simulaciones (87,3 %). El bundle publica medianas, reparto central,
+  probabilidades (redondeadas a tres decimales) y, en la parte `dist`, los escaños nacionales de cada partido en
+  cada simulación; **no** publica ni los votos ni los escaños por provincia de cada simulación.
 - **El run se puede rehacer en local** simulación a simulación (78 s): el `Simulator` con los parámetros del
-  `meta` del run y `today='2026-11-23'`, `fit_forecast`, modo `forecast` y
-  `run(split=True, random=True, n_sim=10000, horizon='deadline')`, el mismo camino de `publish.publish_forecast`.
-  Cada simulación guarda el voto por provincia y partido (`units[..., vpred_pct]`, que por los votos válidos de la
-  elección anterior da los votos que el simulador reparte) y sus escaños (`results`).
+  `meta` del run y `today` igual a su `as_of` (el `meta` no guarda `today`, y sólo sirve para fijar ese ancla),
+  `fit_forecast`, modo `forecast` y `run(split=True, random=True, n_sim=10000, horizon='deadline')`, el mismo
+  camino de `publish.publish_forecast`. Saltarse el run del modo `nowcast` no cambia nada: cada `run` vuelve a
+  sembrar. Cada simulación guarda el voto por provincia y partido (`units[..., vpred_pct]`) y sus escaños
+  (`results`). Los votos que el simulador reparte son ese porcentaje por la base de la provincia,
+  `sim.prev_totals['votes']`, que **no** son los votos válidos de 2023 tal cual: desde el método 19 van escalados
+  por el cambio del censo de residentes (`apply_census`).
+- El run del 23-N no está en el bundle local (`files/site/v1/`): hay que leerlo del bundle publicado.
 - **Prueba hecha** (scripts de usar y tirar): un reparto D'Hondt vectorizado sobre esos votos reproduce las 10.000
   simulaciones guardadas; aplicar 63 escenarios de voto exterior a las 10.000 lleva 12 s. Las cifras están en
   «Cifras de la prueba».
@@ -64,6 +70,12 @@ las mismas tres palancas, y deja de hablar de escaños de 2023.
     el run del 23-N, como el resto de la web.
 12. Vio en la maqueta lo que desaparece de la tarjeta (tabla de escaños 2023 → 29-N, gráfico de brechas de 2023,
     radar, colocación «sabiendo el resultado») y sólo pidió recuperar el censo y la tabla de dimensiones.
+13. Sobre la cuarta maqueta: el embudo no lleva la barra «Simulaciones», que siempre es el 100 %.
+14. No hay selector de censo: sólo el de la convocatoria, «con el aviso de los del litigio».
+15. La tabla de las dos dimensiones sólo lleva la probabilidad de mayoría, sin los cambios medios de escaños.
+16. La colocación no lleva tabla («creo que sólo estorba»): queda como un comentario.
+17. Preguntó qué significa que la derecha «gane» la mayoría en 2 simulaciones. No es un error: el voto exterior que
+    se espera no va sólo a la izquierda (ver D6). La forma de contarlo es mía.
 
 ## Objetivos
 
@@ -134,6 +146,11 @@ añadir nada. Es una comparación emparejada: las diferencias no llevan ruido de
   en 2023 no tuvieron voto CERA propio.
 - Antes de aplicar ningún escenario, el reparto vectorizado con `Δ = 0` tiene que dar los escaños guardados en las
   10.000 simulaciones. Si no, la foto no se hace.
+- Precisiones que la prueba dejó fijadas: la base de votos y del umbral es `sim.prev_totals['votes']`, nunca los
+  totales de 2023 del estudio; `Δ` se suma sin redondear; la base del umbral es esa base más la suma neta de `Δ` en
+  la provincia (con el resto, antes de recortar a cero); el sesgo (`_biased_split`) se aplica a las candidaturas
+  de 2023 con los bloques del estudio y sólo después se pasa a los partidos del modelo; una candidatura sin sigla
+  va al resto.
 
 ### D2. Los escenarios
 
@@ -143,7 +160,8 @@ Todos reutilizan las funciones y los parámetros del estudio (`seats.py`, `stres
    `extra` del modelo de incremento (`new_electors` + `increment_votes`: los electores nuevos desde 2023, con la
    participación por origen de `params.participation` y el reparto del escrutinio CERA de 2023 de cada provincia).
    Además del total, se guarda por provincia: en cuántas simulaciones cambia su reparto, en cuántas la derecha
-   pierde escaño allí y en cuántas lo gana.
+   pierde escaño allí y en cuántas lo gana. La página sólo enseña el censo de la convocatoria; del otro usa los
+   totales para el aviso del litigio.
 2. **Dos dimensiones, sólo los electores nuevos** (`new_electors`): participación × 1, × 2 y × 3 (las dos tasas
    por origen) cruzada con sesgo empírico, 70 % y 90 % (`_biased_split`: la parte del voto a izquierda o derecha que
    va a la izquierda). Nueve filas, censo de la convocatoria. La fila (× 1, empírico) es el voto que se espera.
@@ -186,12 +204,15 @@ Una acción de job dentro de `mtpy` (propongo el job `load`, que ya tiene el pre
 fichero versionado de `data/` a partir de la base), que recibe el id del run (por defecto, el `latest` del ámbito)
 y:
 
-1. Lee el `meta` del run publicado y rehace el run con sus parámetros, por el mismo camino que
+1. Lee del bundle publicado el `meta` del run y rehace el run con sus parámetros, por el mismo camino que
    `publish.publish_forecast` construye y corre el simulador (no una copia de la receta).
-2. Comprueba que el `summary` y el `scenario` del modo `forecast` que salen del run rehecho, pasados por los mismos
-   exportadores, son iguales a los publicados. Hoy: 190 escaños y 8.734 simulaciones para la derecha.
+2. Comprueba que el run rehecho es el publicado comparando, con los mismos exportadores, la parte `dist` del modo
+   `forecast` (los escaños nacionales de cada partido en cada una de las 10.000 simulaciones, iguales una a una) y
+   el `scenario` (el reparto central). El `summary` no sirve para esto: va redondeado. De la `dist` publicada sale
+   también la base: hoy, 8.734 simulaciones con mayoría de la derecha y 190 escaños de reparto central.
 3. Comprueba el reparto vectorizado de D1.
-4. Calcula el estudio (`compute_cera`) para tomar de él censos, repartos, bolsa y parámetros, y aplica D2.
+4. Toma del estudio censos, repartos, bolsa y parámetros, y aplica D2. La acción no puede depender del fichero que
+   va a escribir: las entradas del estudio se calculan sin la foto.
 5. Escribe el fichero. Pide árbol limpio (apunta el commit), no pisa un fichero existente sin `overwrite` y con
    `dry_run` hace todo menos escribir.
 
@@ -202,7 +223,8 @@ que toca la base y el bundle queda en la acción.
 ### D5. La publicación: una parte nueva, `majority`
 
 - `compute_cera` lee y valida el fichero y lo lleva en `CeraStudy`. El fichero pasa a ser una entrada obligatoria
-  del estudio: sin él, `publish study` falla con un mensaje claro.
+  del estudio: sin él, `publish study` falla con un mensaje claro. Por eso la foto entra en la rama antes que este
+  paso (ver «Orden de construcción»).
 - `bundle.STUDY_PARTS['voto-cera']` gana `majority` (esquema `study-majority`), con su exportador y sus gemelos
   CSV (rejilla, dos dimensiones, colocación y provincias). `docs/web/contrato.md` lo recoge.
 - La parte lleva lo de D3 más `outcome`, nulo hasta que exista la comprobación del 29-N (D7).
@@ -216,28 +238,34 @@ Como la maqueta, de arriba abajo:
   tres respuestas», con una frase que sale de la foto («con el voto que se espera, la mayoría cambia de manos en
   el 0,07 % de las simulaciones del modelo»), y en el índice de secciones.
 - **Entradilla** con el método en tres líneas y la pastilla «Foto fija · datos hasta el 23 de noviembre».
-- **Tres cifras**: mayoría de la derecha hoy (87,3 %, 8.734 de 10.000); con el voto CERA que se espera (8.731: la
-  pierde en 5 y la gana en 2); en el extremo de la rejilla (61,0 %).
-- **«Con el voto que se espera»**, con el selector de censo de hoy (convocatoria / sin litigio):
+- **Tres cifras**: mayoría de la derecha hoy (87,3 %, 8.734 de 10.000); con el voto CERA que se espera (8.731 de
+  10.000, 3 menos); en el extremo de la rejilla (61,0 %).
+- **«Con el voto que se espera»**, sólo con el censo de la convocatoria (sin selector):
   - tabla 2023 → 29-N con tres filas: censo CERA, votantes CERA y votos a candidaturas;
-  - embudo en porcentaje de las simulaciones: mueven algún escaño (8,97 %), cambian el total de la derecha
-    (5,71 %; 3,75 % a la baja y 1,96 % al alza), cambian la mayoría (0,07 %; aquí sí en simulaciones, 5 y 2);
-  - nota del litigio, con sus cifras;
+  - embudo de tres barras, en porcentaje de las simulaciones: mueven algún escaño (8,97 %), cambian el total de la
+    derecha (5,71 %; 3,75 % a la baja y 1,96 % al alza), cambian la mayoría (0,07 %; aquí sí en simulaciones: la
+    derecha la pierde en 5 y la consigue en 2);
+  - una línea que explica ese «la consigue en 2»: el voto exterior que se espera se reparte como el de 2023 en cada
+    provincia y en algunas (Orense, Lugo) suma más a la derecha, así que en 2 simulaciones en las que la derecha se
+    quedaba en 175 escaños le da el 176;
+  - aviso del litigio: sin las 163.020 inscripciones serían 22.412 votos nuevos y la mayoría cambiaría en el
+    0,06 % de las simulaciones (4 y 2);
   - barras «Dónde mueve escaños»: las diez provincias donde más veces cambia un escaño, en porcentaje de las
     simulaciones, partidas en «la derecha pierde», «la derecha gana» y «cambia entre otros partidos».
 - **«¿Qué haría falta para que importara?»**:
-  - tabla de las dos dimensiones (participación, sesgo, probabilidad de mayoría, cambio medio de escaños de la
-    derecha y de la izquierda), sólo los electores nuevos;
+  - tabla de las dos dimensiones, sólo los electores nuevos: participación, sesgo y probabilidad de mayoría;
   - rejilla de todo el censo exterior, participación × voto a la izquierda, con la probabilidad en cada casilla;
-  - rejilla de la colocación a ciegas, participación × voto al PSOE, y a su lado cómo se hace la cuenta y por qué
-    es a ciegas.
+  - un comentario sobre la colocación, sin tabla: por qué es a ciegas (quien colocara electores sólo podía guiarse
+    por 2023) y entre qué dos cifras quedaría la mayoría, las de los extremos de la rejilla de colocación (86,5 %
+    con la participación de 2023 y la mitad del voto al PSOE; 75,1 % si votaran todos, y todos al PSOE). Es un
+    límite, no una previsión.
 - **Resumen** y **«Cómo leerlo»**.
 
 Las casillas se sombrean por lo que baja la probabilidad respecto a la de hoy. Las probabilidades de las casillas
 van con un decimal; el embudo y las barras, con dos (ver «Decisiones mías»).
 
-De la tarjeta salen la tabla de escaños 2023 → 29-N, el gráfico de brechas, el radar y la rejilla de colocación
-«óptima» con escaños. Sus datos siguen en el bundle y en los CSV de «Datos y método».
+De la tarjeta salen la tabla de escaños 2023 → 29-N, el selector de censo, el gráfico de brechas, el radar y la
+rejilla de colocación «óptima» con escaños. Sus datos siguen en el bundle y en los CSV de «Datos y método».
 
 ### D7. Después del 29-N
 
@@ -246,16 +274,22 @@ enciende «Comprobada con el escrutinio»), la parte lleva `outcome` y la tarjet
 el 29-N»: los escaños de la derecha, si tuvo mayoría, cuántos escaños decidió el voto CERA y si la mayoría habría
 sido otra sin él. Debajo, una línea dice que lo que sigue es la foto del 23 de noviembre tal como se publicó.
 
-`outcome` sale de los resultados oficiales y de `check.with_without`, con los bloques de la foto. La
-correspondencia entre las siglas oficiales del 29-N y los partidos del modelo se cierra al cargar esos
-resultados; hasta entonces `outcome` es nulo y las pruebas fijan ese estado.
+`outcome` sale de los resultados oficiales y de `check.with_without`, con los bloques de la foto, y se construye
+ahora, para que la banda aparezca al cargar resultados y escrutinio sin tocar código. Con los datos reales de hoy
+es nulo; el estado con resultados se prueba con unos resultados del 29-N inventados.
+
+Las siglas oficiales del 29-N pueden no coincidir con los nombres del modelo (una coalición, otra grafía). Para
+eso hay un mapa de alias en `data/cera/params.json`, de sigla oficial a partido del modelo, vacío hasta entonces.
+Si algún partido de los dos bloques de la foto no aparece en los resultados, ni por su nombre ni por un alias, el
+estudio no se publica y dice cuál falta: una banda con la mayoría mal contada es peor que no publicar.
 
 ### D8. Los textos
 
 Los de la maqueta valen de punto de partida. «Cómo leerlo» explica: qué es una simulación y qué se compara; el
 paso de las candidaturas de 2023 a los partidos del 29-N; qué mueve cada tabla (sólo los electores nuevos, todo
 el censo exterior, la bolsa colocada); por qué la colocación es a ciegas y es un límite; y por qué es una foto
-fija. Todas las cifras de los textos salen de la parte. Los textos son provisionales hasta que Luis los revise.
+fija. Todas las cifras de los textos salen de la parte. No se dice que las simulaciones están en votos de 2023: la
+base de cada provincia va escalada por el censo. Los textos son provisionales hasta que Luis los revise.
 
 ## Cifras de la prueba (run 20261124-102045), para contrastar la construcción
 
@@ -313,22 +347,26 @@ Si el run publicado al hacer la foto es otro, las cifras serán las suyas; estas
    entre FA y UP pediría un supuesto más y le quitaría eficacia a la izquierda.
 3. **La rejilla de todo el censo quita el voto CERA de 2023** del voto del modelo antes de poner el del escenario,
    como hace hoy sobre 2023.
-4. **Las rejillas y la tabla de dos dimensiones sólo con el censo de la convocatoria**; el selector de censo sólo
-   mueve el bloque «Con el voto que se espera».
-5. **Nueve filas en la tabla de dos dimensiones** (los tres niveles de cada una) y sus columnas: probabilidad de
-   mayoría y cambio medio de escaños de derecha e izquierda. Los votos nuevos van en la nota.
+4. **Cómo se cuenta que la derecha también puede ganar la mayoría**: «la pierde en 5 y la consigue en 2», la línea
+   que lo explica y «3 menos» en la cifra de cabecera.
+5. **Nueve filas en la tabla de dos dimensiones** (los tres niveles de cada una). Los votos nuevos van en la nota.
 6. **Dos decimales en el embudo y en las barras**, uno en las casillas. Con uno, casi todas las provincias
    empataban en 0,3 % y las partes del embudo no sumaban el total.
 7. **Gráfico nuevo de provincias** en el sitio del de brechas de 2023.
 8. **La tabla de censo, votantes y votos sale de la foto**, no de `prediction`.
-9. **Qué guarda la foto** (D3), incluidos el histograma de la base y las distribuciones del cambio de escaños, que
-   la página no enseña enteros.
+9. **Qué guarda la foto** (D3). Guarda más de lo que la tarjeta enseña, porque después del 29-N no se podrá
+   calcular: el histograma de la base, las distribuciones del cambio de escaños, las provincias del censo sin
+   litigio y la rejilla entera de la colocación (la tarjeta sólo cita sus dos extremos). Van también en los CSV.
 10. **La banda del 29-N aparece con la comprobación**, no la noche electoral, y qué dice (D7).
 11. **La acción vive en el job `load`**, pide árbol limpio y no pisa la foto sin `overwrite`.
 12. **Texto corto del índice de secciones**: «3 · ¿Quitan la mayoría?» en lugar de «3 · ¿Mueven escaños?».
 13. **Los CSV antiguos de la pregunta 3 siguen listados** en «Datos y método», con una etiqueta que diga que son
     sobre 2023.
 14. **Todos los textos** de la tarjeta.
+15. **La foto la hace quien construye**, en local y nada más existir la acción, y entra en la rama. Lee la base
+    (sólo lectura, como la prueba) y escribe un fichero del repositorio.
+16. **Si falta un partido de los bloques en los resultados del 29-N, el estudio no se publica** (D7).
+17. **El run rehecho se comprueba contra la parte `dist`**, simulación a simulación.
 
 ## Lo que queda a quien lo construya
 
@@ -350,22 +388,46 @@ Si el run publicado al hacer la foto es otro, las cifras serán las suyas; estas
 - El módulo puro, con simulaciones pequeñas hechas a mano: el reparto vectorizado coincide con
   `Simulator.alloc_seats`, también en empates y con el umbral; un escenario con `Δ = 0` no mueve nada; `lost`,
   `gained`, `moved` y las distribuciones salen como se calculan a mano.
-- La acción, con dobles: se niega si el run rehecho no coincide con el publicado o si el reparto no reproduce las
-  simulaciones; no pisa la foto; `dry_run` no escribe.
+- La acción, con dobles del simulador y del bundle: se niega si la `dist` del run rehecho difiere de la publicada
+  en una sola simulación o si el reparto no reproduce las simulaciones; no pisa la foto; `dry_run` no escribe.
+- `outcome`: nulo con los datos reales; con resultados inventados, los escaños y la mayoría con y sin voto CERA;
+  con un partido de los bloques ausente, el estudio se niega; con un alias, lo encuentra.
 - La foto real: forma y coherencia (recuentos entre 0 y `n_sim`, ejes del tamaño de sus matrices, 52 provincias,
   la fila × 1 empírico igual al voto que se espera en la convocatoria) y, mientras no haya resultados del 29-N,
   que sus votos coinciden con los de `prediction`.
 - Publicación: la parte y sus CSV; las siete partes actuales, byte a byte como antes; el registro intacto.
-- Página, con la parte de ejemplo: los dos estados (antes y después de la comprobación), los dos censos, el
-  titular nuevo en los tres sitios, y `assert_public_wording`.
-- En el navegador, a 1280 y a 390 px: selector de censo, tablas sin cortar, imagen descargable.
+- Página, con la parte de ejemplo: los dos estados (antes y después de la comprobación), el titular nuevo en los
+  tres sitios, y `assert_public_wording`.
+- En el navegador, a 1280 y a 390 px: tablas y barras sin cortar, imagen descargable.
+
+## Orden de construcción
+
+La foto tiene fecha de caducidad (un sondeo anterior al 23-N corregido o cargado tarde ya impediría rehacer el
+run), así que va primero:
+
+1. El módulo puro del cálculo emparejado, con sus pruebas. Se puede contrastar sin base de datos con el material
+   de la prueba, guardado fuera del repositorio en `files/stage/cera-majority-spike/` (scripts, las 10.000
+   simulaciones y sus resultados).
+2. La acción, y con ella **la foto**: se lanza en local, se comprueban sus cifras contra «Cifras de la prueba» y
+   el fichero entra en la rama.
+3. La lectura del fichero en el estudio, la parte nueva y sus CSV.
+4. La página, `outcome` y los textos.
 
 ## Lo que hace Luis al final
 
-1. Lanzar la acción de la foto en local, antes del 29-N, y revisar su resumen.
-2. Hacer commit del fichero.
-3. Desplegar y publicar el estudio (`publish study`, sin `register`).
-4. Tras el escrutinio CERA: cargar resultados y escrutinio como ya estaba previsto y volver a publicar el estudio.
+1. Revisar la foto (su resumen y el fichero) y los textos.
+2. Desplegar y publicar el estudio (`publish study`, sin `register`).
+3. Tras el escrutinio CERA: cargar resultados y escrutinio como ya estaba previsto, añadir los alias de siglas que
+   hagan falta y volver a publicar el estudio.
+
+## Revisión del constructor (2026-11-24)
+
+Un revisor sin la conversación leyó el diseño contra el código. No dejó preguntas para Luis. Cambió esto:
+
+- La comprobación del run rehecho era floja (`summary` redondeado, `scenario` sin sorteo): ahora es la `dist`.
+- La base de votos no son los válidos de 2023 sino `sim.prev_totals['votes']`, escalada por el censo.
+- El fichero obligatorio chocaba con que la foto se hiciera al final: ahora se hace al principio y entra en la rama.
+- `outcome` se construye y se prueba ahora, con alias de siglas y negándose si falta un partido.
 
 ## Visto por el camino, fuera del alcance
 
