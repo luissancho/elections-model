@@ -43,6 +43,10 @@
                 "VOX": {"type": "sub", "names": ["PP"], "regions": ["38"], "keep": true},
                 "SALF": {"type": "sub", "names": ["VOX"]},
                 "AA": {"type": "sub", "names": ["FA"], "regions": ["4", "11", "14", "18", "21", "23", "29", "41"]}
+            },
+            "dates": {
+                "call": "2026-10-05",
+                "campaign": "2026-11-13"
             }
         },
         "2023-07-23": {
@@ -85,6 +89,10 @@
                 "SUMAR": {"type": "agg", "names": ["UP", "MP", "MES", "CHA"]},
                 "NA+": {"type": "split", "names": ["PP", "UPN"]},
                 "PRC": {"type": "split", "names": ["PP", "PSOE"]}
+            },
+            "dates": {
+                "call": "2023-05-29",
+                "campaign": "2023-07-07"
             }
         },
         "2019-11-10": {
@@ -122,6 +130,10 @@
             "smap": {
                 "MP": [{"type": "sub", "names": ["UP"]}, {"type": "agg", "names": ["COMPROMIS"]}],
                 "CUP": {"type": "sub", "names": ["ERC", "JxCat"]}
+            },
+            "dates": {
+                "call": "2019-09-24",
+                "campaign": "2019-11-01"
             }
         },
         "2019-04-28": {
@@ -154,6 +166,10 @@
                 "JxCat": {"type": "agg", "names": ["CDC", "PDeCAT"]},
                 "COMPROMIS": {"type": "agg", "names": ["UP"], "regions": ["3", "12", "46"]},
                 "NA+": {"type": "agg", "names": ["PP", "Cs"], "regions": ["31"]}
+            },
+            "dates": {
+                "call": "2019-03-04",
+                "campaign": "2019-04-12"
             }
         },
         "2016-06-26": {
@@ -182,6 +198,10 @@
             },
             "smap": {
                 "UP": {"type": "agg", "names": ["IU"]}
+            },
+            "dates": {
+                "call": "2016-05-03",
+                "campaign": "2016-06-10"
             }
         },
         "2015-12-20": {
@@ -214,6 +234,10 @@
                 "Cs": [],
                 "CDC": {"type": "agg", "names": ["CiU"]},
                 "EHB": {"type": "agg", "names": ["AMAIUR"]}
+            },
+            "dates": {
+                "call": "2015-10-26",
+                "campaign": "2015-12-04"
             }
         },
         "2011-11-20": {
@@ -239,6 +263,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-09-26",
+                "campaign": "2011-11-04"
             }
         },
         "2008-03-09": {
@@ -264,6 +292,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2008-01-14",
+                "campaign": "2008-02-22"
             }
         },
         "2004-03-14": {
@@ -288,6 +320,13 @@
                 "vs": {
                     "Derecha": ["PP"],
                     "Izquierda": ["PSOE", "IU"]
+                }
+            },
+            "dates": {
+                "call": "2004-01-19",
+                "campaign": "2004-02-27",
+                "key": {
+                    "2004-03-11": "11-M"
                 }
             }
         },
@@ -314,6 +353,10 @@
                     "Derecha": ["PP"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2000-01-17",
+                "campaign": "2000-02-25"
             }
         },
         "1996-03-03": {
@@ -341,6 +384,10 @@
                     "Derecha": ["PP", "CDS"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "1996-01-08",
+                "campaign": "1996-02-16"
             }
         },
         "1993-06-06": {
@@ -545,6 +592,10 @@
             },
             "smap": {
                 "SALF": {"type": "sub", "names": ["VOX"]}
+            },
+            "dates": {
+                "call": "2026-03-23",
+                "campaign": "2026-05-01"
             }
         },
         "2022-06-19": {
@@ -573,6 +624,10 @@
             "smap": {
                 "PorA": {"type": "agg", "names": ["UP"]},
                 "AA": {"type": "sub", "names": ["PorA"]}
+            },
+            "dates": {
+                "call": "2022-04-25",
+                "campaign": "2022-06-03"
             }
         },
         "2018-12-02": {
@@ -597,6 +652,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "PACMA", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2018-10-08",
+                "campaign": "2018-11-16"
             }
         },
         "2015-03-22": {
@@ -621,6 +680,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-01-26",
+                "campaign": "2015-03-06"
             }
         },
         "2012-03-25": {
@@ -645,6 +708,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2012-01-30",
+                "campaign": "2012-03-09"
             }
         }
     },
@@ -690,6 +757,10 @@
             },
             "smap": {
                 "SALF": {"type": "sub", "names": ["VOX"]}
+            },
+            "dates": {
+                "call": "2025-12-15",
+                "campaign": "2026-01-23"
             }
         },
         "2023-05-28": {
@@ -714,6 +785,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -738,6 +813,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -762,6 +841,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -786,6 +869,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -839,6 +926,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "IU", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -863,6 +954,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU", "PACMA"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -887,6 +982,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2012-03-25": {
@@ -911,6 +1010,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2012-01-30",
+                "campaign": "2012-03-09"
             }
         },
         "2011-05-22": {
@@ -935,6 +1038,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -991,6 +1098,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -1016,6 +1127,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -1043,7 +1158,11 @@
                 }
             },
             "threshold": 30,
-            "threshold_scope": 6
+            "threshold_scope": 6,
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
+            }
         },
         "2011-05-22": {
             "parties": {
@@ -1070,7 +1189,11 @@
                 }
             },
             "threshold": 30,
-            "threshold_scope": 6
+            "threshold_scope": 6,
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
+            }
         }
     },
     "es-cl": {
@@ -1116,6 +1239,10 @@
             "smap": {
                 "IU": {"type": "sub", "names": ["UP"]},
                 "SALF": {"type": "sub", "names": ["VOX"]}
+            },
+            "dates": {
+                "call": "2026-01-19",
+                "campaign": "2026-02-27"
             }
         },
         "2022-02-13": {
@@ -1140,6 +1267,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2021-12-20",
+                "campaign": "2022-01-28"
             }
         },
         "2019-05-26": {
@@ -1164,6 +1295,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -1188,6 +1323,10 @@
                     "Derecha": ["PP", "Cs", "UPyD", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -1212,6 +1351,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -1265,6 +1408,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -1288,6 +1435,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -1311,6 +1462,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -1334,6 +1489,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -1393,6 +1552,10 @@
             },
             "smap": {
                 "AC": {"type": "sub", "names": ["JxCat"]}
+            },
+            "dates": {
+                "call": "2024-03-18",
+                "campaign": "2024-04-26"
             }
         },
         "2021-02-14": {
@@ -1422,6 +1585,10 @@
             "smap": {
                 "VOX": {"type": "sub", "names": ["PP", "Cs"]},
                 "PDeCAT": {"type": "sub", "names": ["JxCat"]}
+            },
+            "dates": {
+                "call": "2020-12-21",
+                "campaign": "2021-01-29"
             }
         },
         "2017-12-21": {
@@ -1447,6 +1614,10 @@
                     "Derecha": ["Cs", "PP"],
                     "Izquierda": ["PSC"]
                 }
+            },
+            "dates": {
+                "call": "2017-10-27",
+                "campaign": "2017-12-05"
             }
         },
         "2015-09-27": {
@@ -1472,6 +1643,10 @@
                     "Derecha": ["Cs", "PP"],
                     "Izquierda": ["PSC", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2015-08-03",
+                "campaign": "2015-09-11"
             }
         },
         "2012-11-25": {
@@ -1497,6 +1672,10 @@
                     "Derecha": ["PP", "Cs"],
                     "Izquierda": ["PSC"]
                 }
+            },
+            "dates": {
+                "call": "2012-10-01",
+                "campaign": "2012-11-09"
             }
         },
         "2010-11-28": {
@@ -1522,6 +1701,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSC"]
                 }
+            },
+            "dates": {
+                "call": "2010-10-04",
+                "campaign": "2010-11-12"
             }
         }
     },
@@ -1576,6 +1759,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-04-28": {
@@ -1600,6 +1787,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-03-04",
+                "campaign": "2019-04-12"
             }
         },
         "2015-05-24": {
@@ -1624,6 +1815,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -1648,6 +1843,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -1701,6 +1900,10 @@
             },
             "smap": {
                 "SUMAR": {"type": "sub", "names": ["UP"]}
+            },
+            "dates": {
+                "call": "2023-12-25",
+                "campaign": "2024-02-02"
             }
         },
         "2020-07-12": {
@@ -1729,6 +1932,10 @@
             "smap": {
                 "UP": {"type": "agg", "names": ["EM"]},
                 "VOX": {"type": "sub", "names": ["PP"]}
+            },
+            "dates": {
+                "call": "2020-05-18",
+                "campaign": "2020-06-26"
             }
         },
         "2016-09-25": {
@@ -1754,6 +1961,10 @@
                     "Derecha": ["PP", "Cs"],
                     "Izquierda": ["PSOE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2016-08-01",
+                "campaign": "2016-09-09"
             }
         },
         "2012-10-21": {
@@ -1779,6 +1990,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2012-08-27",
+                "campaign": "2012-10-05"
             }
         },
         "2009-03-01": {
@@ -1803,6 +2018,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2009-01-05",
+                "campaign": "2009-02-13"
             }
         }
     },
@@ -1851,6 +2070,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["MM", "PSOE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2021-05-04": {
@@ -1874,6 +2097,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["MM", "PSOE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2021-03-10",
+                "campaign": "2021-04-18"
             }
         },
         "2019-05-26": {
@@ -1900,6 +2127,10 @@
             },
             "smap": {
                 "MM": {"type": "sub", "names": ["UP"]}
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -1923,6 +2154,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU", "EQUO"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -1946,6 +2181,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -1998,6 +2237,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP", "MP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -2021,6 +2264,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU", "PACMA"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -2046,7 +2293,11 @@
                 }
             },
             "threshold": null,
-            "threshold_scope": 5
+            "threshold_scope": 5,
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
+            }
         },
         "2011-05-22": {
             "parties": {
@@ -2071,7 +2322,11 @@
                 }
             },
             "threshold": null,
-            "threshold_scope": 5
+            "threshold_scope": 5,
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
+            }
         }
     },
     "es-nc": {
@@ -2129,6 +2384,10 @@
             },
             "smap": {
                 "NA+": {"type": "split", "names": ["UPN", "PP"]}
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -2157,6 +2416,10 @@
             },
             "smap": {
                 "NA+": {"type": "agg", "names": ["UPN", "PP", "Cs"]}
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -2182,6 +2445,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["UP", "PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -2207,6 +2474,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -2262,6 +2533,10 @@
             },
             "smap": {
                 "SUMAR": {"type": "sub", "names": ["UP"]}
+            },
+            "dates": {
+                "call": "2024-02-26",
+                "campaign": "2024-04-05"
             }
         },
         "2020-07-12": {
@@ -2287,6 +2562,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSE-EE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2020-05-18",
+                "campaign": "2020-06-26"
             }
         },
         "2016-09-25": {
@@ -2312,6 +2591,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["UP", "PSE-EE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2016-08-01",
+                "campaign": "2016-09-09"
             }
         },
         "2012-10-21": {
@@ -2337,6 +2620,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSE-EE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2012-08-27",
+                "campaign": "2012-10-05"
             }
         },
         "2009-03-01": {
@@ -2362,6 +2649,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSE-EE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2009-01-05",
+                "campaign": "2009-02-13"
             }
         }
     },
@@ -2414,6 +2705,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP", "GxF"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -2439,6 +2734,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "GxF", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -2464,6 +2763,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU", "GxF"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -2488,6 +2791,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -2538,6 +2845,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -2562,6 +2873,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -2586,6 +2901,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -2610,6 +2929,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -2650,6 +2973,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP", "SUMAR"]
                 }
+            },
+            "dates": {
+                "call": "2025-10-27",
+                "campaign": "2025-12-05"
             }
         },
         "2023-05-28": {
@@ -2673,6 +3000,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP", "MP"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -2696,6 +3027,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -2719,6 +3054,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -2742,6 +3081,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     },
@@ -2792,6 +3135,10 @@
                     "Derecha": ["PP", "VOX", "Cs"],
                     "Izquierda": ["PSOE", "UP"]
                 }
+            },
+            "dates": {
+                "call": "2023-04-03",
+                "campaign": "2023-05-12"
             }
         },
         "2019-05-26": {
@@ -2816,6 +3163,10 @@
                     "Derecha": ["PP", "Cs", "VOX"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2019-04-01",
+                "campaign": "2019-05-10"
             }
         },
         "2015-05-24": {
@@ -2840,6 +3191,10 @@
                     "Derecha": ["PP", "Cs", "UPyD"],
                     "Izquierda": ["PSOE", "UP", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2015-03-30",
+                "campaign": "2015-05-08"
             }
         },
         "2011-05-22": {
@@ -2864,6 +3219,10 @@
                     "Derecha": ["PP", "UPyD"],
                     "Izquierda": ["PSOE", "IU"]
                 }
+            },
+            "dates": {
+                "call": "2011-03-28",
+                "campaign": "2011-05-06"
             }
         }
     }

@@ -9,7 +9,7 @@ from .. import bundle
 from ..bundle import POLL_ERRORS_WINDOW
 from ..webapi import check_date, event_params, site
 from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color,
-                     bundle_part, common_context, ink_color, parse_state)
+                     bundle_part, common_context, ink_color, key_dates, parse_state)
 from .filters import _is_missing, _madrid_tz, fmt_date, fmt_num, fmt_pct
 from .previews import PREVIEW_ROWS, preview_change, preview_version, with_figures
 from .promedios import (BLOCK_ORDER, _leaders, chart_polls, fitted_blocks, poll_months, polls_table,
@@ -1317,7 +1317,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         one only when published), the keys of the "Todas las encuestas" table of
         Promedios drawn from the ``cycle`` part (``has_cycle``, ``table``, ``table_parties``, ``table_total``,
         ``has_seats``, ``months``, ``pollsters`` and ``csv_href``; ``has_cycle`` is false for an election
-        published before the part existed, and the table then gives way to a notice) and ``initial`` (``state``,
+        published before the part existed, and the table then gives way to a notice), ``key_dates`` (``key_dates``
+        of the parameters of the election: the marks of the chart of the average) and ``initial`` (``state``,
         ``meta``, ``results`` (``n_seats``, ``majority`` (``majority_of``), ``rows`` (``name``, ``seats`` and
         ``pct`` of each party, as published) and ``blocks`` (``name`` and ``seats`` of each block) for the
         hemicycle), ``result`` (``date`` and ``values``, the ``pct`` of every party with one: the official
@@ -1331,9 +1332,9 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         like the hemicycle), ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for
         the error histogram), ``catalog`` (``parties`` of the table, of the results and of the series,
         ``chart_parties``, plus ``bmaps`` (``main`` of the meta and the ``blocks`` of the curve), for the
-        browser's catalogue), with the series, ``series`` (rounded to two decimals, ``round_series``) and, with
-        the cycle, ``polls`` (``chart_polls``)), and ``preview`` (``result_preview``: what the link previews of the
-        page say, its image and its description).
+        browser's catalogue), ``key_dates``, with the series, ``series`` (rounded to two decimals,
+        ``round_series``) and, with the cycle, ``polls`` (``chart_polls``)), and ``preview`` (``result_preview``:
+        what the link previews of the page say, its image and its description).
 
     Raises
     ------
@@ -1442,6 +1443,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['months'] = poll_months(cycle_polls)
     context['pollsters'] = pollster_options(cycle_polls)
     context['csv_href'] = api_url(scope, 'cycle', fmt='csv', kind='event', date=date)
+    # the key dates of the election (its call, the start of its campaign…): the marks of the chart of the average
+    context['key_dates'] = key_dates(params)
     context['preview'] = result_preview(result_title(meta, date), date, results_rows, previous_result(scope, date),
                                         context['site_host'])
     context['initial'] = {
@@ -1465,6 +1468,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         'poll_errors': [{key: row.get(key) for key in ('error_avg', 'error_blocks_abs')} for row in poll_rows],
         'catalog': {'parties': [dict(catalog[name], name=name) for name in parties],
                     'bmaps': {'main': list(meta.get('main') or []), 'blocks': blocks_map}},
+        'key_dates': context['key_dates'],
     }
 
     if cycle is not None:

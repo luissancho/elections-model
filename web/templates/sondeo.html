@@ -186,6 +186,11 @@
           Los puntos son sólo los sondeos de {{ house.name }}; la línea es el promedio de todas las encuestadoras. El
           anillo marca el sondeo de esta página. Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar
           partidos y el eje vertical se ajusta a lo que queda a la vista.
+          {% if key_dates %}
+          Las líneas verticales discontinuas marcan las fechas clave de la elección, como la convocatoria y el
+          inicio de la campaña.
+          En el móvil sólo se dibujan con la ventana de 6 meses o menos.
+          {% endif %}
         </p>
         <p>
           Separarse del promedio no es equivocarse: el acierto de cada encuestadora se mide con los resultados, en

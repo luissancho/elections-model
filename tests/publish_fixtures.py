@@ -9,6 +9,11 @@ from tests.fakes import FakeComputer, FakeSimulator, synthetic_event
 from tests.test_webapi_unit import PARTIES
 
 
+# The day the publication takes as today when a test gives none: the eve of the LOREG window of the election of `es`
+# of `patched` (the five days before 2026-11-29), so the guard does not depend on the day the tests run
+TODAY = '2026-11-23'
+
+
 def entry(scope, run_id):
     return {'latest': run_id, 'run_at': '2026-10-08T12:00:00Z', 'event_date': '2026-11-29', 'as_of': '2026-10-05',
             'date_last': '2026-10-01', 'n_polls': 6}
@@ -24,8 +29,16 @@ def patched(monkeypatch):
     """`resolve_scopes`, `next_event_date`, `publish_forecast`, `publish_analysis` y `publish_parties` sin base: `es`
     publica de verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y la procedencia sustituidos, `es-md` no
     tiene evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete; el
-    catálogo de partidos sale de `PARTIES`."""
+    catálogo de partidos sale de `PARTIES`. Sin `today`, el día de la publicación es `TODAY` y no el del reloj: la
+    elección de `es` es la del 29-N y, con el reloj real, del 24 al 29 de noviembre de 2026 la guardia de la LOREG
+    rechazaba todo lo que estos tests publican."""
     calls = []
+    real_today = publish.common._today
+
+    # every module of the package that took `_today` by name, so the guard, the anchor and the pointers agree
+    for module in (publish.common, publish.forecast, publish.events, publish.pointers, publish.studies):
+        monkeypatch.setattr(module, '_today', lambda today=None: real_today(TODAY if today is None else today))
+
     real_forecast = publish.publish_forecast
     real_analysis = publish.publish_analysis
     real_event = publish.publish_event

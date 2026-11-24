@@ -16,14 +16,17 @@ export const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
  * Data of the two views of the average: the parties of the series and, when the scope has blocks, the blocks
  * computed in the browser (`blocks.js`) with the published block projection.
  *
- * @param {object} initial the page's initial data (`series`, `polls`, `projection` and, in the detail of a past
- *   election, `result`, the official result the chart marks, and `block_colors`, the colour of each block as the
- *   page paints it elsewhere)
+ * @param {object} initial the page's initial data (`series`, `polls`, `projection`, `key_dates`, the key dates
+ *   of the election as `[{date, label, kind}]`, none without them, and, in the detail of a past election, `result`,
+ *   the official result the chart marks, and `block_colors`, the colour of each block as the page paints it
+ *   elsewhere)
  * @param {Catalog} catalog party catalogue of the run
  * @returns {object} `partidos` and `bloques` (null without blocks): `series`, `polls`, `projection`, `result`
  *   (null without one), `parties`, `colors`, `defaults` (names shown by default, null for all) and `toPolls`
- *   (polls of the view from polls by party) and `marks` (`[{date, label}]`, dashed lines of the chart: none in
- *   `partidos`, the entry of each party of `series.first_polls` in `bloques`, by date); in `bloques` the defaults
+ *   (polls of the view from polls by party) and `marks` (`[{date, label, kind}]`, dashed lines of the chart:
+ *   the key dates of the election, `initial.key_dates`, in both views, each with its `kind`, which a narrow chart
+ *   reads to draw them only with a short window (`seriesOption`), and, after them in `bloques`, the entry of each
+ *   party of `series.first_polls`, by date, without a `kind`: drawn with every window); in `bloques` the defaults
  *   leave `REST_BLOCK` out (when the map has other blocks); `bloques` also `members`
  *   (the map of the blocks, for the line naming their parties) and `breakdown` (`{members, values, colors}`: the
  *   series and colour of each party, which break a day of a block down in the tooltip)
@@ -38,6 +41,8 @@ export function seriesViews(initial, catalog) {
   const entries = Object.entries(series.first_polls || {})
     .sort(([, a], [, b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([name, date]) => ({date, label: `Entra ${name}`}));
+  // the key dates of the election (its call, the start of its campaign…), dashed lines of both views
+  const keyMarks = (initial.key_dates || []).map(({date, label, kind}) => ({date, label, kind}));
   return {
     partidos: {
       series,
@@ -48,7 +53,7 @@ export function seriesViews(initial, catalog) {
       colors: mapNames(parties, (name) => catalog.color(name)),
       defaults: main.length ? main : null,
       toPolls: (chosen) => chosen,
-      marks: [],
+      marks: keyMarks,
     },
     bloques: names.length ? {
       series: blockSeries(series, blocks),
@@ -65,7 +70,7 @@ export function seriesViews(initial, catalog) {
       toPolls: (chosen) => blockPolls(chosen, blocks),
       members: blocks,
       breakdown: {members: blocks, values: series.mean, colors: mapNames(parties, (name) => catalog.color(name))},
-      marks: entries,
+      marks: [...keyMarks, ...entries],
     } : null,
   };
 }

@@ -79,6 +79,11 @@
           cada partido ese día.
           {% endif %}
           Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
+          {% if key_dates %}
+          Las líneas verticales discontinuas marcan las fechas clave de la elección, como la convocatoria y el
+          inicio de la campaña.
+          En el móvil sólo se dibujan con la ventana de 6 meses o menos.
+          {% endif %}
         </p>
         <p>
           El eje vertical no empieza en cero: se ajusta a la ventana y a los partidos visibles, con marcas de 5 en 5
@@ -402,7 +407,12 @@
       {% endif %}
       </section>
       {% endif %}
+      {#- the section holds two cards: the evolution of the updates, only with the election called (its table compares
+          with the call and the start of the campaign; Luis, 2026-11-23), and the house against the average, only with
+          polls; without both there is no section, and the index leaves it out (`promedios_context`) -#}
+      {% if evolution or pollsters %}
       <section class="event-section" id="evolucion">
+      {% if evolution %}
       {#- one card for the two metrics: the % Voto / Escaños switch changes the chart and the table of changes
           (`pages/evolution-wire.js`) -#}
       {{ m.card_start('evolution', 'Evolución de las actualizaciones', 'El voto y los escaños de cada partido en cada actualización del modelo, de la primera a la última.', '· voto o escaños de cada actualización',
@@ -433,11 +443,16 @@
           sus escaños del reparto central. Si un día hubo varias actualizaciones, se muestra la última. Un punto
           hueco marca un día en que la cifra del partido cambió frente al día anterior (el voto, redondeado a un
           decimal, o el número de escaños); si no cambió, el punto es lleno.
+          {% if key_dates %}
+          Las líneas verticales discontinuas marcan las fechas clave de la elección, como la convocatoria y el
+          inicio de la campaña.
+          {% endif %}
         </p>
         <p>
           La tabla que se abre con «Ver los datos» da la cifra de cada partido el último día y cuánto ha cambiado
-          frente al día anterior, a hace una semana y al primer día de la serie, cada columna con su fecha: flecha
-          verde si sube y roja si baja. Recoge todos los partidos, también los que no estén marcados en la leyenda.
+          frente al día anterior, al inicio de la campaña (cuando ya ha empezado) y a la convocatoria, cada columna
+          con su fecha: flecha verde si sube y roja si baja. Recoge todos los partidos, también los que no estén
+          marcados en la leyenda.
         </p>
         <p>
           Esto no es una serie de sondeos ni la curva del promedio. La curva del promedio revisa el pasado: el valor
@@ -453,6 +468,7 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
+      {% endif %}
       {% if pollsters %}
       {#- the subtitle and the file of the image get the house chosen in front (`promedios.js`) -#}
       {{ m.card_start('pollster', 'Una encuestadora frente al promedio', 'Los sondeos de una sola encuestadora frente al promedio de todas, para ver si suele quedar por encima o por debajo.',
@@ -488,6 +504,11 @@
           Los puntos son sólo los sondeos de la encuestadora elegida; la línea es el promedio de todas.
           Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar partidos y el eje vertical se
           ajusta a lo que queda a la vista.
+          {% if key_dates %}
+          Las líneas verticales discontinuas marcan las fechas clave de la elección, como la convocatoria y el
+          inicio de la campaña.
+          En el móvil sólo se dibujan con la ventana de 6 meses o menos.
+          {% endif %}
         </p>
         <p>
           Separarse del promedio no es equivocarse: el acierto de cada encuestadora se mide con los resultados, en el
@@ -497,6 +518,7 @@
       {{ m.card_end() }}
       {% endif %}
       </section>
+      {% endif %}
       <section class="event-section" id="tabla">
       {% if table_total %}
       {{ m.card_start('polls', 'Todas las encuestas', ('Lo que publicó cada sondeo del ciclo: la estimación de voto (%) y, en las encuestadoras que los dan, los escaños. Sombreado, el partido que va primero. Pulsa una cabecera para ordenar.' if has_seats else 'Estimación de voto (%) de cada sondeo del ciclo, tal como se publicó. Sombreado, el partido más votado. Pulsa una cabecera para ordenar.')) }}
