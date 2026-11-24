@@ -10,6 +10,7 @@ from mtpy.lib.studies.cera import study as study_module
 from mtpy.lib.studies.cera.data import check_majority
 from mtpy.lib.studies.cera.majority import seat_range
 from mtpy.lib.studies.cera.scenarios import expected_table
+from tests.test_cera_seats import study_inputs  # noqa: F401 (the module-scoped fixture shared with the seat tests)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -155,3 +156,22 @@ def test_the_real_snapshot_is_the_run_of_23_n_and_agrees_with_the_study(study):
     assert len(every) == 60
     assert all(seat_range(c['right'])[0] <= c['central']['right'] <= seat_range(c['right'])[1] for c in every)
     assert check_majority(snap, study.params) == []
+
+
+def test_the_study_has_no_outcome_until_the_election_is_checked(study):
+    """Sin escrutinio del 29-N el estudio no tiene resultado, y el parámetro de los alias existe vacío."""
+    assert study.outcome is None and study.params['majority'] == {'aliases': {}}
+
+
+def test_outcome_of_needs_the_check_of_the_election_and_a_snapshot(study_inputs):
+    """La rama que correrá tras el 29-N: con escrutinio y foto da el resultado; sin una de las dos, None."""
+    s = study_inputs
+    date = '2026-11-29'
+    params = {'election': {'date': date}, 'majority': {'aliases': {'SUMAR': 'FA'}}}
+    inputs = {'results': {date: s.results_2023}, 'cera': {date: s.cera_2023}}
+    snapshot = {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'FA']}, 'majority': 176}
+    out = study_module._outcome_of(params, inputs, {date: {}}, snapshot)
+    assert out == {'right': 170, 'left': 152, 'right_without': 169, 'left_without': 153, 'has_majority': False,
+                   'majority_without': False, 'changed': False, 'moved': 1, 'net': {'Derecha': 1, 'Izquierda': -1}}
+    assert study_module._outcome_of(params, inputs, {date: {}}, None) is None
+    assert study_module._outcome_of(params, inputs, {}, snapshot) is None

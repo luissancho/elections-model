@@ -1,5 +1,7 @@
 """La comprobación con y sin CERA: qué escaños decidió el voto exterior y la regla del veredicto."""
-from mtpy.lib.studies.cera.check import verdict, with_without
+import pytest
+
+from mtpy.lib.studies.cera.check import majority_outcome, verdict, with_without
 from mtpy.lib.studies.cera.data import read_scrutiny
 from tests.test_cera_seats import study_inputs  # noqa: F401 (the module-scoped fixture shared with the seat tests)
 
@@ -46,3 +48,32 @@ def test_with_without_counts_the_scrutiny_voters_when_given(study_inputs):
 def test_verdict_threshold():
     assert verdict(-1, -1, 1) == verdict(0, 0, 1) == verdict(1, 1, 1) == 'acierto'
     assert verdict(2, 0, 1) == verdict(0, 2, 1) == 'fallo'
+
+
+def test_majority_outcome_counts_the_blocks_with_and_without_the_exterior_vote(study_inputs):
+    """Los escaños de los dos bloques con y sin el voto exterior (2023: Madrid pasa un escaño del PSOE al PP)."""
+    blocks = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'FA']}
+    out = majority_outcome(study_inputs.results_2023, study_inputs.cera_2023, blocks, 176, aliases={'SUMAR': 'FA'})
+    assert out == {'right': 170, 'left': 152, 'right_without': 169, 'left_without': 153, 'has_majority': False,
+                   'majority_without': False, 'changed': False, 'moved': 1, 'net': {'Derecha': 1, 'Izquierda': -1}}
+    low = majority_outcome(study_inputs.results_2023, study_inputs.cera_2023, blocks, 170, aliases={'SUMAR': 'FA'})
+    assert (low['has_majority'], low['majority_without'], low['changed']) == (True, False, True)
+
+
+def test_majority_outcome_refuses_a_block_party_missing_from_the_results(study_inputs):
+    """Un partido de un bloque sin sigla en los resultados se rechaza con su nombre."""
+    blocks = {'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'FA']}
+    with pytest.raises(ValueError, match='SALF'):
+        majority_outcome(study_inputs.results_2023, study_inputs.cera_2023, blocks, 176, aliases={'SUMAR': 'FA'})
+    with pytest.raises(ValueError, match='FA'):
+        majority_outcome(study_inputs.results_2023, study_inputs.cera_2023, {'Derecha': ['PP'], 'Izquierda': ['FA']},
+                         176)
+
+
+def test_majority_outcome_reads_only_the_two_blocks_of_the_majority(study_inputs):
+    """Un tercer bloque (Otros) no se busca en los resultados ni hace que el estudio se niegue."""
+    blocks = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'FA']}
+    more = dict(blocks, Otros=['ERC', 'NOPE'])
+    args = (study_inputs.results_2023, study_inputs.cera_2023)
+    assert majority_outcome(*args, more, 176, aliases={'SUMAR': 'FA'}) == \
+        majority_outcome(*args, blocks, 176, aliases={'SUMAR': 'FA'})

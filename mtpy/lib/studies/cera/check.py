@@ -5,9 +5,12 @@ The official allocation (with the CERA votes) is compared with the allocation of
 them) province by province, and the CERA voters of each province with the gap of its last seat. The verdict rule
 then judges a prediction of the seats the new CERA electors would move against the largest gain measured.
 """
+from typing import Optional
+
 import pandas as pd
 
 from .data import Results
+from .majority import LEFT, RIGHT
 from .seats import OTHER_BLOCK, _sigla_seats, allocate_results, block_seats, last_seat
 from .stress import peninsular_results
 
@@ -134,3 +137,71 @@ def verdict(net_psoe: int, net_left: int, max_gain: int) -> str:
         `'acierto'` when neither prediction exceeds `max_gain`, `'fallo'` otherwise.
     """
     return HIT if max(net_psoe, net_left) <= max_gain else MISS
+
+
+def majority_outcome(results: Results, cera: pd.DataFrame, blocks: dict, majority: int,
+                     aliases: Optional[dict] = None) -> dict:
+    """
+    The seats of the two blocks of the majority, with and without the exterior vote, from the official results.
+
+    A party of the model stands for the official siglas equal to its name or mapped to it by `aliases`; their seats
+    add up. Only the blocks `RIGHT` and `LEFT` are read: the parties of any other block are never looked for.
+
+    Parameters
+    ----------
+    results : Results
+        The official results of the election, with the CERA votes.
+    cera : pd.DataFrame
+        The CERA votes by `region_id` and candidature full name.
+    blocks : dict
+        Block name to the list of its parties of the model (the snapshot's `blocks`).
+    majority : int
+        The seats of the absolute majority.
+    aliases : dict, optional
+        Official sigla to the party of the model it stands for; empty if `None`.
+
+    Returns
+    -------
+    dict
+        `right`, `left` (official seats of the blocks), `right_without`, `left_without` (seats of the peninsular
+        allocation), `has_majority` (`right >= majority`) and `majority_without` (the same without the exterior
+        vote), `changed` (they differ), `moved` (seats that change hands: the positive differences by sigla over
+        all the siglas of the results, added) and `net` (`{RIGHT: right - right_without, LEFT: left -
+        left_without}`).
+
+    Raises
+    ------
+    ValueError
+        If a party of the right or of the left block has no sigla in the results.
+    """
+    aliases = aliases or {}
+    seats = _sigla_seats(allocate_results(results), results.siglas)
+    seats_without = _sigla_seats(allocate_results(peninsular_results(results, cera)), results.siglas)
+
+    for name in (RIGHT, LEFT):
+        for party in blocks[name]:
+            if not any(aliases.get(sigla, sigla) == party for sigla in seats):
+                raise ValueError(
+                    f'voto-cera: no candidature of the results stands for {party}: add its sigla to '
+                    f'majority.aliases in data/cera/params.json'
+                )
+
+    def total(sigla_seats: dict, name: str) -> int:
+        """Add up the seats of the siglas that stand for the parties of a block."""
+        return sum(count for sigla, count in sigla_seats.items() if aliases.get(sigla, sigla) in blocks[name])
+
+    right, left = total(seats, RIGHT), total(seats, LEFT)
+    right_without, left_without = total(seats_without, RIGHT), total(seats_without, LEFT)
+    has_majority, majority_without = right >= majority, right_without >= majority
+
+    return {
+        'right': right,
+        'left': left,
+        'right_without': right_without,
+        'left_without': left_without,
+        'has_majority': has_majority,
+        'majority_without': majority_without,
+        'changed': has_majority != majority_without,
+        'moved': sum(max(count - seats_without.get(sigla, 0), 0) for sigla, count in seats.items()),
+        'net': {RIGHT: right - right_without, LEFT: left - left_without}
+    }
