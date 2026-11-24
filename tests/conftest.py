@@ -37,3 +37,12 @@ def fresh_app():
     app = App.get_()
     yield app
     App._app = saved
+
+
+@pytest.fixture(scope='session')
+def cera_study():
+    """El estudio CERA calculado una sola vez para toda la sesión (15 s); ningún test debe modificarlo."""
+    from mtpy.core.io import FileSystem
+    from mtpy.lib.studies.cera import compute_cera
+
+    return compute_cera(FileSystem(os.path.join(ROOT, 'data')))

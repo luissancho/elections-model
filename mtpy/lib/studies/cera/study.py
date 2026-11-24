@@ -177,8 +177,9 @@ class CeraStudy:
         `stress.scenario_table` of `SCENARIO_ROWS`.
     placement : dict
         `stress.optimal_placement` of the pool (`grid`, `contrast`) with `PLACEMENT_PARTICIPATIONS` ×
-        `PLACEMENT_FRACS` for `PLACEMENT_CANDIDATURE`, and `pool`, the electors of the pool
-        (`stress.placement_pool` of `params['placement_countries']` since the law).
+        `PLACEMENT_FRACS` for `PLACEMENT_CANDIDATURE`, `pool`, the electors of the pool
+        (`stress.placement_pool` of `params['placement_countries']` since the law), and `electors`, the same pool by
+        `region_id`.
     hist : pd.DataFrame
         `seats.participation_history` over `results`: mean and maximum CERA participation by province since 1986.
     report : dict
@@ -577,7 +578,7 @@ def _seats_block(params: dict, inputs: dict, census: dict, last: pd.DataFrame) -
                               GRID_PARTICIPATIONS, GRID_LEFT_FRACS, results.siglas, blocks),
         'scenario_rows': scenario_table(results, baseline, convocation, countries, params['participation'], split,
                                         results.siglas, blocks, SCENARIO_ROWS),
-        'placement': {**placement, 'pool': int(pool.sum())},
+        'placement': {**placement, 'pool': int(pool.sum()), 'electors': pool},
         'hist': hist,
         'report': report_replication(results, inputs['census_by_province'], hist)
     }
