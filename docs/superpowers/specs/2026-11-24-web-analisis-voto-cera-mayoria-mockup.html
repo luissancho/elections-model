@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maqueta v9 · /analisis/voto-cera · pregunta 3 con el modelo</title>
+<title>Maqueta v10 · /analisis/voto-cera · pregunta 3 con el modelo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
@@ -140,7 +140,7 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
 </head>
 <body>
 <div id="bar">
-  <strong>Maqueta v9 · pregunta 3 con el modelo</strong>
+  <strong>Maqueta v10 · pregunta 3 con el modelo</strong>
   <span class="lbl">Estado</span>
   <div class="grp" id="g-state">
     <button class="on" data-v="pre">Antes del 29-N</button>
@@ -148,9 +148,9 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
   </div>
 </div>
 <p class="q">
-  <b>v9: tus cambios sobre la v8.</b> Las simulaciones que cambian escaños van en tres cifras, y la tercera sólo
-  dice que en el 0,07 % cambia el sentido de la mayoría, sin el desglose. En «¿Qué haría falta?», las barras rojas
-  ganan anchura y la rejilla la pierde: sus títulos pasan a ser «9 % voto» y «50 % izq.», como los de las barras.
+  <b>v10: tus cambios sobre la v9.</b> En las barras rojas cambian cuatro escenarios. De los electores nuevos: el
+  primero pasa a ser «9 % voto + 50 % izq. (como 2023)» y el del centro, «50 % voto + 80 % izq.». De todo el censo:
+  los dos primeros son «30 % voto + 60 % izq.» y «30 % voto + 80 % izq.». Lo demás no cambia.
 </p>
 
 <div id="stage">
@@ -248,7 +248,7 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
           <p class="csub">Barra: escaños que pierde la derecha desde el reparto central del modelo (190). Línea fina: lo que pierde en el 95 % de las simulaciones. A la derecha, la probabilidad de que conserve la mayoría (hoy, 87,3 %).</p>
           <div class="ruler" id="ruler"></div>
           <p class="tnote">Las líneas discontinuas marcan los escaños que la derecha tendría que perder para quedarse sin mayoría: 15 si suma 190, su reparto central, y 6 si suma 181. Con 181 o menos empieza en algo más de una de cada cuatro simulaciones (27,7 %); en el 12,7 % no tiene mayoría ni antes de contar el voto exterior.</p>
-          <p class="tnote">«Voto» es la participación e «izq.», la parte del voto a izquierda o derecha que va a la izquierda. De los electores nuevos se espera que vote el 5 % de los de origen latinoamericano y el 10 % del resto.</p>
+          <p class="tnote">«Voto» es la participación e «izq.», la parte del voto a izquierda o derecha que va a la izquierda. La primera fila aplica a los electores nuevos lo que hizo el censo exterior en 2023; el voto que se espera de ellos es algo menor, un 7 %, y da el mismo resultado.</p>
         </div>
         <div class="tw">
           <p class="ctitle">Todo el censo exterior: participación y voto a la izquierda</p>
@@ -269,8 +269,8 @@ h3.sec { margin: 22px 0 4px; font-size: 16px; }
 
       <div class="sum">
         <b>Con el voto que se espera, ni un escaño: la derecha sigue en 190.</b>
-        En las simulaciones, sólo en el 0,07 % cambia el sentido de la mayoría. Con el triple de participación de los electores nuevos y
-        el 90 % de su voto a la izquierda, un escaño. A la derecha habría que quitarle 15 para dejarla sin mayoría desde el
+        En las simulaciones, sólo en el 0,07 % cambia el sentido de la mayoría. Si votara la mitad de los electores nuevos y
+        el 80 % lo hiciera a la izquierda, dos escaños. A la derecha habría que quitarle 15 para dejarla sin mayoría desde el
         reparto central, y ni el extremo de la rejilla llega (10): por eso la probabilidad sólo baja en las simulaciones en
         las que la derecha ya parte con poco margen.
       </div>
@@ -296,13 +296,13 @@ const GRID = {
 // Grupo y sus filas: título, detalle, escaños desde el reparto central, rango en el 95 % de las simulaciones, mayoría
 const RULER = [
   ['Electores nuevos desde 2023', [
-    ['Voto que se espera', '', 0, [0, 1], '87,3 %'],
-    ['Triple voto + 90 % izq.', '', 1, [0, 2], '86,1 %'],
+    ['9 % voto + 50 % izq.', 'como 2023', 0, [0, 1], '87,3 %'],
+    ['50 % voto + 80 % izq.', '', 2, [0, 3], '85,2 %'],
     ['Colocación a ciegas', '100 % voto + 100 % PSOE', 5, [0, 8], '75,1 %']
   ]],
   ['Todo el censo exterior', [
-    ['30 % voto + 70 % izq.', '', 3, [0, 7], '80,7 %'],
-    ['50 % voto + 70 % izq.', '', 3, [1, 9], '76,0 %'],
+    ['30 % voto + 60 % izq.', '', 2, [0, 5], '84,1 %'],
+    ['30 % voto + 80 % izq.', '', 4, [1, 8], '77,5 %'],
     ['50 % voto + 80 % izq.', '', 8, [3, 12], '70,0 %'],
     ['70 % voto + 80 % izq.', '', 10, [5, 15], '61,0 %']
   ]]
