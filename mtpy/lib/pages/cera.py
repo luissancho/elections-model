@@ -7,6 +7,8 @@ renders, with ``None`` for what the parts do not have (the templates guard it), 
 """
 from typing import Optional
 
+import numpy as np
+
 from .filters import fmt_num, fmt_pct
 
 # Question 1: the countries of its table (the most additions after the law), the provinces shown before «Ver las
@@ -37,6 +39,17 @@ SCENARIOS = tuple(SCENARIO_LABELS)
 PREDICTION_ROWS = (('Votantes CERA', 'voters_2023', 'voters_projected'),
                    ('Votos a candidaturas', 'votes_2023', 'votes_projected'))
 BLOCK_LABELS = {LEFT: 'Escaños izquierda (PSOE + SUMAR)', RIGHT: 'Escaños derecha (PP + VOX)'}
+# Question 3, card of the majority: the ruler (what the right loses, its largest axis, the step of its ticks), its
+# scenarios by group (source in the part, participation, share to the left, name and detail; the name is the
+# cell's when there is none) and the number of provinces listed
+RULER_MAX = 16
+RULER_STEP = 2
+PROVINCES_RANKED = 10
+RULER = (('Electores nuevos desde 2023', (('new_electors', 0.09, 0.5, None, 'como 2023'),
+                                          ('new_electors', 0.5, 0.8, None, None),
+                                          ('placement', 1.0, 1.0, 'Colocación a ciegas', '100 % voto + 100 % PSOE'))),
+         ('Todo el censo exterior', (('grid', 0.3, 0.6, None, None), ('grid', 0.3, 0.8, None, None),
+                                     ('grid', 0.5, 0.8, None, None), ('grid', 0.7, 0.8, None, None))))
 # The debate and the check: the period of ``participation.generales`` before the voto rogado (the historical
 # participation the report of the 23 seats uses) and the provinces of the table of the check shown before «Ver más»
 BEFORE_ROGADO = 'antes'
@@ -862,13 +875,9 @@ def _question_3(parts: dict, figures: dict, gap: list, last_seat_csv: Optional[s
     params = _get(parts['meta'], 'params') or {}
     scenarios = []
 
-    for key in SCENARIOS:
-        scenario = _get(prediction, 'scenarios', key) or {}
-        changed = [row.get('name') for row in scenario.get('changed') or []]
-        scenarios.append({'key': key, 'label': SCENARIO_LABELS[key], 'rows': _scenario_table(scenario),
-                          'changed': changed, 'votes': scenario.get('votes_projected'),
-                          'unchanged': bool(scenario) and not changed
-                          and not any(row.get('change') for row in scenario.get('by_block') or [])})
+    for increment in _increment(prediction)['scenarios']:
+        scenario = _get(prediction, 'scenarios', increment['key']) or {}
+        scenarios.append(increment | {'rows': _scenario_table(scenario), 'votes': scenario.get('votes_projected')})
 
     first, second = scenarios[0]['votes'], scenarios[1]['votes']
     central = _get(prediction, 'scenarios', SCENARIOS[0]) or {}
@@ -894,6 +903,448 @@ def _question_3(parts: dict, figures: dict, gap: list, last_seat_csv: Optional[s
         'placement_countries': [_country_name(name) for name in params.get('placement_countries') or []],
         'three': _scenario_rows(sensitivity, figures),
         'uniform': _pct_label(UNIFORM_SPLIT),
+    }
+
+
+def _increment(prediction: dict) -> dict:
+    """
+    What the debate and the check read of each census scenario of the prediction: its name, the provinces whose
+    seats change and whether nothing changes.
+
+    Parameters
+    ----------
+    prediction : dict
+        Data of the ``prediction`` part.
+
+    Returns
+    -------
+    dict
+        ``scenarios``: per scenario of ``SCENARIOS``, ``{'key', 'label', 'changed', 'unchanged'}``: ``changed`` the
+        names of the provinces whose seats change and ``unchanged`` whether the scenario exists and nothing changes
+        (no province, no block).
+    """
+    scenarios = []
+
+    for key in SCENARIOS:
+        scenario = _get(prediction, 'scenarios', key) or {}
+        changed = [row.get('name') for row in scenario.get('changed') or []]
+        scenarios.append({'key': key, 'label': SCENARIO_LABELS[key], 'changed': changed,
+                          'unchanged': bool(scenario) and not changed
+                          and not any(row.get('change') for row in scenario.get('by_block') or [])})
+
+    return {'scenarios': scenarios}
+
+
+def _whole(x: Optional[float]):
+    """
+    A number as a plain ``int`` when it is whole, else as a plain ``float`` (no numpy scalar, no ``-0.0``).
+
+    Parameters
+    ----------
+    x : float or None
+        The number.
+
+    Returns
+    -------
+    int or float or None
+        The number; ``None`` stays ``None``.
+    """
+    if x is None:
+        return None
+
+    x = float(x)
+
+    return int(x) if x.is_integer() else x
+
+
+def _share(count: int, n_sim: int, decimals: int) -> float:
+    """
+    A count of simulations as a per cent of all of them, rounded once.
+
+    Parameters
+    ----------
+    count : int
+        Simulations counted.
+    n_sim : int
+        Simulations of the run.
+    decimals : int
+        Decimals of the per cent.
+
+    Returns
+    -------
+    float
+        ``round(100 * count / n_sim, decimals)``.
+    """
+    return round(100 * count / n_sim, decimals)
+
+
+def _sims(distribution: dict, test) -> int:
+    """
+    Simulations of a stored distribution (``{'-2': n, ...}``) whose key passes a test.
+
+    Parameters
+    ----------
+    distribution : dict
+        Seats (as string keys) with their number of simulations.
+    test : callable
+        Takes the integer seats and returns whether to count them.
+
+    Returns
+    -------
+    int
+        The simulations counted.
+    """
+    return sum(n for key, n in distribution.items() if test(int(key)))
+
+
+def _scenario_p(counts: dict, base: dict, n_sim: int) -> float:
+    """
+    Probability, in per cent, that the right keeps the majority in a scenario: the simulations that have it in the
+    base run, less those that lose it and plus those that gain it.
+
+    Parameters
+    ----------
+    counts : dict
+        ``counts`` of the scenario (``lost`` and ``gained``).
+    base : dict
+        ``base`` of the part (``with_majority``).
+    n_sim : int
+        Simulations of the run.
+
+    Returns
+    -------
+    float
+        The probability with one decimal.
+    """
+    return _share(base['with_majority'] - counts['lost'] + counts['gained'], n_sim, 1)
+
+
+def _axis_label(x: float) -> str:
+    """
+    A rate of 0 to 1 as the whole per cent the labels of the card write (``0.09`` → ``'9'``).
+
+    Parameters
+    ----------
+    x : float
+        The rate.
+
+    Returns
+    -------
+    str
+        The per cent, with a comma when it is not whole.
+    """
+    return str(_whole(round(100 * x, 1))).replace('.', ',')
+
+
+def _cell_name(participation: float, frac: float) -> str:
+    """
+    Name of a cell of a grid: «30 % voto + 60 % izq.».
+
+    Parameters
+    ----------
+    participation, frac : float
+        Participation and share of the vote that goes to the left.
+
+    Returns
+    -------
+    str
+        The name.
+    """
+    return '{} % voto + {} % izq.'.format(_axis_label(participation), _axis_label(frac))
+
+
+def _cell(part: dict, source: str, participation: float, frac: float) -> Optional[dict]:
+    """
+    The ``counts`` of the cell of a grid of the part at a participation and a share, if the axes have both.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+    source : str
+        ``new_electors``, ``grid`` or ``placement``.
+    participation, frac : float
+        The values of the axes.
+
+    Returns
+    -------
+    dict or None
+        The cell, or ``None`` when the participation or the share is not on the axes of the part.
+    """
+    scenario = part.get(source) or {}
+    rows, cols = scenario.get('participations') or [], scenario.get('left_fracs') or scenario.get('fracs') or []
+    i = next((k for k, x in enumerate(rows) if abs(x - participation) < 1e-9), None)
+    j = next((k for k, x in enumerate(cols) if abs(x - frac) < 1e-9), None)
+
+    if i is None or j is None:
+        return None
+
+    return scenario['cells'][i][j]
+
+
+def _majority_base(part: dict) -> dict:
+    """
+    The ``base`` block of the card: the right's seats in the central allocation, what it has over the majority
+    and the probability of keeping it, in the simulations and in their worst quarter.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+
+    Returns
+    -------
+    dict
+        ``{'right', 'needed', 'p', 'quartile', 'needed_quartile', 'p_quartile', 'p_without'}``: ``needed`` the
+        seats the right can lose and keep the majority (``right − majority + 1``), ``quartile`` the percentile 25
+        of its seats over the simulations, ``p_quartile`` the simulations with the right at or under it and
+        ``p_without`` those with the right under the majority.
+    """
+    base, majority, n_sim = part['base'], part['majority'], part['run']['n_sim']
+    right = base['central'][RIGHT]
+    seats = base['right_seats']
+    quartile = _whole(np.percentile(np.repeat([int(k) for k in seats], list(seats.values())), 25))
+
+    return {'right': right, 'needed': right - majority + 1, 'p': _share(base['with_majority'], n_sim, 1),
+            'quartile': quartile, 'needed_quartile': _whole(quartile - majority + 1),
+            'p_quartile': _share(_sims(seats, lambda k: k <= quartile), n_sim, 1),
+            'p_without': _share(_sims(seats, lambda k: k < majority), n_sim, 1)}
+
+
+def _majority_expected(part: dict) -> dict:
+    """
+    The ``expected``, ``extreme`` and ``table`` blocks of the card: the central change of the right with the
+    census of the convocation and with the last cell of the grid (the most votes abroad, the most to the left).
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+
+    Returns
+    -------
+    dict
+        ``expected`` (``{'seats', 'right', 'p', 'net'}``, ``net`` the simulations that lose the majority less
+        those that gain it), ``extreme`` (``{'seats', 'right', 'p', 'participation', 'left_frac'}``, the last cell
+        of ``grid``) and ``table`` (the census and the voters, 2023 and 29-N).
+    """
+    base, n_sim = part['base'], part['run']['n_sim']
+    scenario = part['expected'][SCENARIOS[0]]
+    counts, grid = scenario['counts'], part['grid']
+    last = grid['cells'][-1][-1]
+    seats, extreme = counts['central']['right'], last['central']['right']
+    table = scenario['table']
+
+    return {
+        'expected': {'seats': seats, 'right': base['central'][RIGHT] + seats, 'p': _scenario_p(counts, base, n_sim),
+                     'net': counts['lost'] - counts['gained']},
+        'extreme': {'seats': extreme, 'right': base['central'][RIGHT] + extreme, 'p': _scenario_p(last, base, n_sim),
+                    'participation': _whole(round(100 * grid['participations'][-1])),
+                    'left_frac': _whole(round(100 * grid['left_fracs'][-1]))},
+        'table': [_table_row('Censo CERA', *table['census']), _table_row('Votantes CERA', *table['voters'])],
+    }
+
+
+def _majority_changes(part: dict) -> dict:
+    """
+    The ``changes`` block of the card: how often the convocation census moves some seat and the right's total.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+
+    Returns
+    -------
+    dict
+        ``{'moved', 'total', 'down', 'up', 'majority'}``, per cent of the simulations with two decimals: some seat
+        moves, the right's total changes (and how much of it down and up) and the right loses or gains the majority.
+    """
+    n_sim, counts = part['run']['n_sim'], part['expected'][SCENARIOS[0]]['counts']
+    down, up = _sims(counts['right'], lambda k: k < 0), _sims(counts['right'], lambda k: k > 0)
+
+    return {'moved': _share(counts['moved'], n_sim, 2), 'total': _share(down + up, n_sim, 2),
+            'down': _share(down, n_sim, 2), 'up': _share(up, n_sim, 2),
+            'majority': _share(counts['lost'] + counts['gained'], n_sim, 2)}
+
+
+def _majority_provinces(part: dict) -> dict:
+    """
+    The ``provinces`` block of the card: the provinces where the convocation census moves a seat most often.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+
+    Returns
+    -------
+    dict
+        ``rows`` (the ``PROVINCES_RANKED`` with most simulations with a seat moved: ``{'name', 'p', 'lost',
+        'gained', 'other', 'width'}``, per cent of the simulations with two decimals, ``other`` the moves that do
+        not change the right and ``width`` relative to the first, one decimal), ``ever`` (provinces that move a
+        seat in some simulation) and ``total``.
+    """
+    n_sim, provinces = part['run']['n_sim'], part['expected'][SCENARIOS[0]]['provinces']
+    ranked = sorted(provinces, key=lambda row: -row['moved'])
+    top = ranked[0]['moved'] if ranked else 0
+    rows = [{'name': row['name'], 'p': _share(row['moved'], n_sim, 2), 'lost': _share(row['right_lost'], n_sim, 2),
+             'gained': _share(row['right_gained'], n_sim, 2),
+             'other': _share(row['moved'] - row['right_lost'] - row['right_gained'], n_sim, 2),
+             'width': round(100 * row['moved'] / top, 1) if top else 0.0} for row in ranked[:PROVINCES_RANKED]]
+
+    return {'rows': rows, 'ever': sum(1 for row in provinces if row['moved'] > 0), 'total': len(provinces)}
+
+
+def _ruler_row(part: dict, entry: tuple) -> Optional[dict]:
+    """
+    A row of the ruler: what the right loses in a scenario of ``RULER`` and the range of that loss.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+    entry : tuple
+        ``(source, participation, frac, name, detail)`` of ``RULER``.
+
+    Returns
+    -------
+    dict or None
+        ``{'name', 'detail', 'seats', 'lo', 'hi', 'p'}`` (``lo`` and ``hi`` the seats lost at the 2.5 and 97.5 %
+        quantiles of the change, cut at zero), or ``None`` when the cell is not on the axes of the part.
+    """
+    source, participation, frac, name, detail = entry
+    counts = _cell(part, source, participation, frac)
+
+    if counts is None:
+        return None
+
+    return {'name': name or _cell_name(participation, frac), 'detail': detail,
+            'seats': _whole(0 - counts['central']['right']),
+            'lo': _whole(max(0.0, -counts['range'][1])), 'hi': _whole(max(0.0, -counts['range'][0])),
+            'p': _scenario_p(counts, part['base'], part['run']['n_sim'])}
+
+
+def _majority_ruler(part: dict, base: dict) -> tuple:
+    """
+    The ``ruler`` block of the card, and the middle scenario of its summary.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+    base : dict
+        ``_majority_base`` of the part.
+
+    Returns
+    -------
+    tuple
+        ``(ruler, middle)``: ``ruler`` is ``{'max', 'ticks', 'marks', 'groups'}`` (the rows of ``RULER`` whose
+        cell the part has, a group without rows left out) and ``middle`` the ``seats`` of the second entry of
+        ``RULER``, or ``None`` when that entry is left out.
+    """
+    groups = [(title, [_ruler_row(part, entry) for entry in entries]) for title, entries in RULER]
+    middle = groups[0][1][1]
+    ruler = {'max': RULER_MAX, 'ticks': list(range(0, RULER_MAX + 1, RULER_STEP)),
+             'marks': [{'at': base['needed_quartile'], 'right': base['quartile']},
+                       {'at': base['needed'], 'right': base['right']}],
+             'groups': [{'title': title, 'rows': [row for row in rows if row]} for title, rows in groups
+                        if any(rows)]}
+
+    return ruler, middle['seats'] if middle else None
+
+
+def _majority_grid(part: dict) -> dict:
+    """
+    The ``grid`` block of the card: the right's change of seats in every cell of the grid of the whole census.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+
+    Returns
+    -------
+    dict
+        ``{'electors', 'cols', 'rows', 'max_drop'}``: a row per participation (``{'label', 'cells'}``) with, per
+        share to the left, ``{'seats', 'p', 'drop'}``: the signed change of the right, the probability of the
+        majority and the per cent of the simulations that lose it less those that gain it (unrounded).
+    """
+    grid, n_sim = part['grid'], part['run']['n_sim']
+    rows = [{'label': _axis_label(participation) + ' % voto',
+             'cells': [{'seats': cell['central']['right'], 'p': _scenario_p(cell, part['base'], n_sim),
+                        'drop': 100 * (cell['lost'] - cell['gained']) / n_sim} for cell in cells]}
+            for participation, cells in zip(grid['participations'], grid['cells'])]
+
+    return {'electors': grid['electors'], 'cols': [_axis_label(frac) + ' % izq.' for frac in grid['left_fracs']],
+            'rows': rows, 'max_drop': max(cell['drop'] for row in rows for cell in row['cells'])}
+
+
+def _majority_placement(part: dict, params: dict) -> dict:
+    """
+    The ``placement`` block of the card: the blind placement of the votes of the countries of the pool.
+
+    Parameters
+    ----------
+    part : dict
+        The ``majority`` part.
+    params : dict
+        ``params`` of the study ``meta`` (``placement_countries``).
+
+    Returns
+    -------
+    dict
+        ``{'pool', 'countries', 'seats', 'p'}``: the electors of the pool, its countries as the prose names them,
+        the seats the right loses over the cells (``[least, most]``) and the probability of the majority
+        (``[highest, lowest]``).
+    """
+    placement, n_sim = part['placement'], part['run']['n_sim']
+    cells = [cell for row in placement['cells'] for cell in row]
+    seats = [0 - cell['central']['right'] for cell in cells]
+    p = [_scenario_p(cell, part['base'], n_sim) for cell in cells]
+    countries = [_country_name(name) for name in params.get('placement_countries') or []]
+
+    return {'pool': placement['pool'], 'countries': countries, 'seats': [min(seats), max(seats)],
+            'p': [max(p), min(p)]}
+
+
+def _majority(part: Optional[dict], meta: Optional[dict]) -> Optional[dict]:
+    """
+    View model of the card of question 3 on the forecast for the election of 2026-11-29: the part ``majority``
+    (a snapshot of the published run measured under many scenarios of the exterior vote) as the figures and the
+    labels the template writes.
+
+    Parameters
+    ----------
+    part : dict or None
+        Data of the ``majority`` part.
+    meta : dict or None
+        Data of the ``meta`` part (``params.litigation.count`` and ``params.placement_countries``).
+
+    Returns
+    -------
+    dict or None
+        ``None`` when the part is empty; else ``as_of``, ``n_sim``, ``majority``, ``litigation``, ``base``
+        (``_majority_base``), ``expected``, ``extreme`` and ``table`` (``_majority_expected``), ``changes``,
+        ``provinces``, ``ruler``, ``grid``, ``placement``, ``summary`` (``{'needed', 'extreme', 'middle'}``: the
+        seats the right can lose, those it loses in the last cell of the grid and in the second row of the
+        ruler) and ``outcome`` (the part's, or ``None``).
+    """
+    if not part:
+        return None
+
+    params = _get(meta, 'params') or {}
+    base = _majority_base(part)
+    figures = _majority_expected(part)
+    ruler, middle = _majority_ruler(part, base)
+
+    return {
+        'as_of': part['run']['as_of'], 'n_sim': part['run']['n_sim'], 'majority': part['majority'],
+        'litigation': _get(params, 'litigation', 'count'), 'base': base, **figures,
+        'changes': _majority_changes(part), 'provinces': _majority_provinces(part), 'ruler': ruler,
+        'grid': _majority_grid(part), 'placement': _majority_placement(part, params),
+        'summary': {'needed': base['needed'], 'extreme': 0 - figures['extreme']['seats'], 'middle': middle},
+        'outcome': part.get('outcome'),
     }
 
 

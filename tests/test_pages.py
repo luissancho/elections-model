@@ -7653,6 +7653,61 @@ def test_cera_page_names_the_candidatures_by_their_siglas(api, fresh_app):
     assert (gap['winner'], gap['runner_up']) == ('PARTIDO POPULAR', 'PARTIDO SOCIALISTA OBRERO ESPAÑOL')
 
 
+def test_cera_majority_view_model_reads_everything_from_the_part():
+    """El modelo de vista de la tarjeta de la mayoría sale entero de la parte publicada (la foto fija real)."""
+    q3 = pages.cera._majority(fixture_data('study-majority'), fixture_data('study-meta'))
+    assert (q3['as_of'], q3['n_sim'], q3['majority'], q3['litigation']) == ('2026-11-23', 10000, 176, 163020)
+    assert q3['base'] == {'right': 190, 'needed': 15, 'p': 88.1, 'quartile': 181, 'needed_quartile': 6,
+                          'p_quartile': 27.4, 'p_without': 11.9}
+    assert q3['expected'] == {'seats': 0, 'right': 190, 'p': 88.0, 'net': 5}
+    assert q3['extreme'] == {'seats': -10, 'right': 180, 'p': 60.7, 'participation': 70, 'left_frac': 80}
+    assert q3['table'] == [{'label': 'Censo CERA', 'before': 2327388, 'after': 2769645, 'change': 442257},
+                           {'label': 'Votantes CERA', 'before': 208431, 'after': 239221, 'change': 30790}]
+    assert q3['changes'] == {'moved': 8.17, 'total': 5.18, 'down': 3.52, 'up': 1.66, 'majority': 0.11}
+    assert q3['provinces']['rows'][0] == {'name': 'Madrid', 'p': 1.89, 'lost': 0.77, 'gained': 0.34, 'other': 0.78,
+                                          'width': 100.0}
+    assert (len(q3['provinces']['rows']), q3['provinces']['ever'], q3['provinces']['total']) == (10, 49, 52)
+    rows = [row for group in q3['ruler']['groups'] for row in group['rows']]
+    assert [(r['name'], r['seats'], r['lo'], r['hi'], r['p']) for r in rows] == [
+        ('9 % voto + 50 % izq.', 0, 0, 1, 88.0), ('50 % voto + 80 % izq.', 1, 0, 3, 85.8),
+        ('Colocación a ciegas', 5, 0, 8, 75.7), ('30 % voto + 60 % izq.', 2, 0, 5, 84.7),
+        ('30 % voto + 80 % izq.', 4, 1, 8, 78.0), ('50 % voto + 80 % izq.', 8, 3, 12, 69.9),
+        ('70 % voto + 80 % izq.', 10, 5, 15, 60.7)]
+    assert rows[0]['detail'] == 'como 2023' and rows[2]['detail'] == '100 % voto + 100 % PSOE'
+    assert q3['ruler']['marks'] == [{'at': 6, 'right': 181}, {'at': 15, 'right': 190}]
+    assert (q3['ruler']['max'], q3['ruler']['ticks']) == (16, [0, 2, 4, 6, 8, 10, 12, 14, 16])
+    assert q3['grid']['rows'][0]['label'] == '9 % voto' and q3['grid']['cols'] == ['50 % izq.', '60 % izq.', '70 % izq.',
+                                                                                 '80 % izq.']
+    assert q3['grid']['rows'][4]['cells'][3] == {'seats': -10, 'p': 60.7, 'drop': 27.34}
+    assert q3['grid']['max_drop'] == 27.34 and q3['grid']['electors'] == 2769645
+    assert q3['placement'] == {'pool': 181032, 'countries': [], 'seats': [1, 5], 'p': [87.2, 75.7]}
+    assert q3['summary'] == {'needed': 15, 'extreme': 10, 'middle': 1} and q3['outcome'] is None
+
+
+def test_cera_majority_view_model_skips_a_row_the_part_does_not_have():
+    """Una fila de la regla cuya celda no está en los ejes de la parte se omite; el resumen sigue su identidad."""
+    meta = fixture_data('study-meta')
+    part = copy.deepcopy(fixture_data('study-majority'))
+    part['new_electors']['participations'][0] = 0.1
+    q3 = pages.cera._majority(part, meta)
+    rows = [row['name'] for group in q3['ruler']['groups'] for row in group['rows']]
+    assert '9 % voto + 50 % izq.' not in rows and len(rows) == 6
+    assert q3['summary']['middle'] == 1  # la segunda entrada de la regla sigue en los ejes
+    part = copy.deepcopy(fixture_data('study-majority'))
+    part['new_electors']['participations'][3] = 0.4
+    q3 = pages.cera._majority(part, meta)
+    rows = [row['name'] for group in q3['ruler']['groups'] for row in group['rows']]
+    assert len(rows) == 6 and q3['summary']['middle'] is None
+    assert pages.cera._majority({}, meta) is None and pages.cera._majority(None, meta) is None
+
+
+def test_cera_increment_keeps_what_the_debate_and_the_check_read():
+    """_increment conserva lo que leen «Lo que dice el debate» y «Comprobación» de cada escenario."""
+    scenarios = pages.cera._increment(fixture_data('study-prediction'))['scenarios']
+    assert [s['key'] for s in scenarios] == ['convocatoria', 'sin_litigio']
+    assert set(scenarios[0]) == {'key', 'label', 'changed', 'unchanged'} and scenarios[0]['unchanged'] is True
+
+
 def test_shade_scale_filter_grows_green_from_lo_to_hi():
     """`shade_scale`: nada sin valor; el verde más claro en `lo`, el más intenso en `hi`, recortado a los extremos."""
     from mtpy.lib.pages.filters import shade_scale
