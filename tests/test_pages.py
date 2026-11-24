@@ -7420,14 +7420,43 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     assert 'los 181.032 electores que entraron con la ley desde Argentina, México, Cuba y Venezuela' in p3
 
 
-def test_cera_page_shows_what_happened_once_the_part_has_an_outcome(api, fresh_app):
-    outcome = {'right': 181, 'left': 140, 'right_without': 182, 'left_without': 139, 'has_majority': True,
-               'majority_without': True, 'changed': False, 'moved': 1, 'net': {'Derecha': -1, 'Izquierda': 1}}
-    publish_study(fresh_app.fs, meta={'checked_at': '2026-12-04'}, parts={'majority': {'outcome': outcome}})
-    text = visible_text(cera_section(cera_page(api), 'p3'))
-    for piece in ('Qué pasó el 29-N', 'La derecha obtuvo 181 escaños', 'movió 1 escaño', 'no cambió la mayoría',
-                  'Lo que sigue es la foto del 23 de noviembre', '190 escaños', '0,11%'):
+def cera_outcome(right, right_without, moved, net_right, checked=True):
+    """Un `outcome` de la parte `majority` hecho a mano (mayoría 176, la del fixture) y el `checked_at` de la meta."""
+    outcome = {'right': right, 'left': 300 - right, 'right_without': right_without, 'left_without': 300 - right_without,
+               'has_majority': right >= 176, 'majority_without': right_without >= 176,
+               'changed': (right >= 176) != (right_without >= 176), 'moved': moved,
+               'net': {'Derecha': net_right, 'Izquierda': -net_right}}
+    return outcome, {'checked_at': '2026-12-04' if checked else None}
+
+
+@pytest.mark.parametrize('outcome, meta, sentence', [
+    (*cera_outcome(181, 181, 0, 0), 'Qué pasó el 29-N. La derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, no movió ningún escaño y no cambió la mayoría.'),
+    (*cera_outcome(181, 182, 1, -1), 'Qué pasó el 29-N. La derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, movió 1 escaño (derecha −1, izquierda +1) y no cambió la mayoría.'),
+    (*cera_outcome(175, 176, 1, -1), 'Qué pasó el 29-N. La derecha obtuvo 175 escaños: no llega a la mayoría absoluta '
+     '(176). El voto CERA, contado el 4 dic 2026, movió 1 escaño (derecha −1, izquierda +1) y cambió la mayoría: sin '
+     'el voto exterior, la derecha habría tenido mayoría absoluta.'),
+    (*cera_outcome(176, 174, 3, 2), 'Qué pasó el 29-N. La derecha obtuvo 176 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, movió 3 escaños (derecha +2, izquierda −2) y cambió la mayoría: sin el '
+     'voto exterior, la derecha no habría tenido mayoría absoluta.'),
+    (*cera_outcome(170, 169, 1, 1, checked=False), 'Qué pasó el 29-N. La derecha obtuvo 170 escaños: no llega a la '
+     'mayoría absoluta (176). El voto CERA movió 1 escaño (derecha +1, izquierda −1) y no cambió la mayoría.'),
+], ids=['none-moved', 'one-moved', 'loses-it', 'keeps-it', 'no-date'])
+def test_cera_page_shows_what_happened_once_the_part_has_an_outcome(api, fresh_app, outcome, meta, sentence):
+    """La banda «Qué pasó el 29-N» dice los cuatro hechos de la spec (D7): los escaños de la derecha, si tiene mayoría,
+    cuántos escaños movió el voto CERA y si sin él la mayoría habría sido otra, y hacia dónde; sin fecha de
+    comprobación, sin «contado el»."""
+    publish_study(fresh_app.fs, meta=meta, parts={'majority': {'outcome': outcome}})
+    p3 = cera_section(cera_page(api), 'p3')
+    band = p3[p3.index('<div class="band">'):]
+    band = re.sub(r'\s+', ' ', visible_text(band[:band.index('</div>')])).strip()
+    assert band == sentence + ' Lo que sigue es la foto del 23 de noviembre, tal como se publicó antes de votar: no se ' \
+                              'ha recalculado.'
+    text = visible_text(p3)
+    for piece in ('190 escaños', '0,11%'):
         assert piece in text, piece
+    assert_public_wording(p3, 'banda del 29-N')
 
 
 def test_cera_page_without_the_majority_part_keeps_rendering(api, fresh_app):
@@ -7452,6 +7481,9 @@ def test_cera_page_how_to_read_question_3_names_the_candidatures(api, fresh_app)
     assert ('cada candidatura pasa al partido del 29-N con su misma sigla; las que ahora se presentan dentro de otro '
             'partido pasan a él (SUMAR → FA, UPN → PP), y las que el modelo no simula van al resto') in text
     assert 'SALF y UP no reciben voto exterior: en 2023 no tuvieron voto CERA propio.' in text
+    # the votes to candidatures come from the raw part (`expected.convocatoria.counts.votes`), the voters from the table
+    assert ('La tabla da los 30.790 votantes nuevos; 30.482 de ellos son votos a candidaturas, los que se suman al '
+            'reparto (el resto son votos en blanco y nulos).') in text
     blocks = {'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'FA'], 'Otros': ['ERC']}
     publish_study(fresh_app.fs, parts={'majority': {'blocks': blocks}})
     text = visible_text(cera_section(cera_page(api), 'p3'))
@@ -7581,7 +7613,10 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert '<summary>Glosario</summary>' in glossary and '<dt>Voto rogado</dt>' in glossary
     assert re.findall(r'<dt>([^<]+)</dt>', glossary) == [
         'CERA', 'Voto rogado', 'Ley de Nietos', 'Censo de la convocatoria', 'Brecha del último escaño', 'Efecto neto',
-        'Inferencia ecológica', 'Provincias sensibles', 'Colocación óptima']
+        'Inferencia ecológica', 'Provincias sensibles', 'Colocación a ciegas', 'Reparto central']
+    assert 'sólo podía guiarse por los resultados de 2023, el plan se decide con ellos' in glossary
+    assert 'Es un límite, no una previsión.' in glossary
+    assert "D'Hondt sobre el voto central de cada provincia" in glossary
     assert not re.search(r'(?<![\d.,])1 (escaños|provincias)\b', page)  # a real singular everywhere
     # a draft: the row of the 29-N says so; with one seat at stake in 2023 and none changed, the verdict says it
     base = fixture_data('study-check')

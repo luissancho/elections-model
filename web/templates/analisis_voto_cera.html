@@ -381,10 +381,13 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         {% set ruler = q3.ruler %}
         {% if out %}
         <div class="band">
-          <b>Qué pasó el 29-N.</b> La derecha obtuvo {{ out.right|int }} escaños. El voto CERA{% if study_meta.checked_at %}, contado
+          <b>Qué pasó el 29-N.</b> La derecha obtuvo {{ many(out.right, 'escaño', 'escaños') }}: {% if out.has_majority %}tiene
+          mayoría absoluta{% else %}no llega a la mayoría absoluta{% endif %} ({{ q3.majority|int }}). El voto CERA{% if study_meta.checked_at %}, contado
           el {{ study_meta.checked_at|date }},{% endif %} {% if out.moved %}movió {{ many(out.moved, 'escaño', 'escaños') }}
           (derecha {{ seats(out.net.get('Derecha')) }}, izquierda {{ seats(out.net.get('Izquierda')) }}){% else %}no movió
-          ningún escaño{% endif %} y {{ 'cambió' if out.changed else 'no cambió' }} la mayoría.<br>
+          ningún escaño{% endif %} y {% if out.changed %}cambió la mayoría: sin el voto exterior, la derecha
+          {{ 'habría tenido' if out.majority_without else 'no habría tenido' }} mayoría absoluta{% else %}no cambió la
+          mayoría{% endif %}.<br>
           <span class="band-sub">Lo que sigue es la foto del {{ snapshot_day }}, tal como se publicó antes de votar: no se ha recalculado.</span>
         </div>
         {% endif %}
@@ -976,8 +979,10 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           <dd>Deducir pautas a partir de datos agregados, aquí por provincia. Sirve para comparar territorios; aplicarla a cada persona es la falacia ecológica.</dd>
           <dt>Provincias sensibles</dt>
           <dd>Las de {% if sens.magnitude is not none %}{{ sens.magnitude|int }} escaños o menos{% else %}pocos escaños{% endif %}, donde pocos votos bastan para mover un escaño.</dd>
-          <dt>Colocación óptima</dt>
-          <dd>Llevar cada voto a la provincia donde el siguiente escaño cuesta menos. Es un límite superior, como si alguien pudiera dirigir cada inscripción y cada voto, no una previsión.</dd>
+          <dt>Colocación a ciegas</dt>
+          <dd>Llevar cada voto a la provincia donde el siguiente escaño cuesta menos. Como quien quisiera colocar electores sólo podía guiarse por los resultados de 2023, el plan se decide con ellos y después se aplica a las simulaciones del 29-N. Es un límite, no una previsión.</dd>
+          <dt>Reparto central</dt>
+          <dd>El reparto de escaños de la predicción del modelo: D'Hondt sobre el voto central de cada provincia, en una sola pasada y sin sorteo. Es el mismo que la web da como titular de escaños.</dd>
         </dl></details>
       </div>
     </div>
