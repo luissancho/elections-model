@@ -1,4 +1,5 @@
 """Exporters of one forecast run, the backfill helpers and ``publish_forecast``."""
+import inspect
 import time
 from datetime import date, datetime, timedelta
 from typing import Callable, Optional
@@ -9,7 +10,8 @@ import pandas as pd
 from .. import bundle
 from ..bundle import BundleWriter
 from ...core.app import App
-from ..data import get_district_communities
+from ..computer import Computer
+from ..data import get_district_communities, get_poll_series
 from ..simulator import Simulator
 from ..utils import REST_BLOCK, norm_range, web_blocks
 from .common import (
@@ -48,6 +50,11 @@ WEIGHTS_COLUMNS = ['name', 'date', 'pollster_id', 'pollster', 'sponsor', 'sample
 # on since 2026-11-21, without effect in a scope without `data/census/{scope}.csv`)
 DEFAULT_CORRECTORS = {'house_effects': True, 'dispersion': True, 'regional_noise': True, 'industry_bias': False,
                       'composition': None, 'swing': 'logistic', 'census': True}
+
+
+# Days within which the polls of a pollster share the weight of one (the over-publication rule of `weight_over`):
+# the default of the `Computer`, the one the compute job stores the weights with
+OVERLAP_WSPAN = inspect.signature(Computer.__init__).parameters['wspan'].default
 
 
 SUMMARY_COLS = ('pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats')
@@ -900,9 +907,51 @@ def district_communities(scope: str) -> dict:
     return get_district_communities(scope)
 
 
+def overlap_overrides(scope: str, event_date: str, drange,
+                      polls: Optional[Callable] = None) -> Optional[pd.DataFrame]:
+    """
+    Overlap weight of the polls of a window computed on those polls alone, as ``weight_overrides`` of the simulator.
+
+    The ``weight_over`` stored in the database is computed with every poll of the cycle: a wave of a tracking
+    weighs nothing once a later wave of the same pollster overlaps it. A retrospective run only takes the polls
+    published up to its day, so with the stored weight the latest wave of that day is left out because of a wave
+    the run does not know (and the pollster counts with an older poll, or not at all). Here the rule of the
+    compute job (``Computer.overlap_weights`` with ``OVERLAP_WSPAN``) is applied to the polls of the window, of
+    every methodology type and context as the compute job does: each poll weighs what it weighed that day. With
+    the window of a run of today the result is the stored weight.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the run.
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+    drange : tuple or int
+        Window of days before the event of the run (the one given to the simulator).
+    polls : callable, optional
+        Injectable replacement of ``get_poll_series``.
+
+    Returns
+    -------
+    pd.DataFrame or None
+        The ``weight_over`` column indexed by (``date``, ``pollster_id``, ``sponsor_id``), with ``date`` as a
+        timestamp; ``None`` without polls in the window.
+    """
+    series = (polls or get_poll_series)(scope, [event_date], drange=tuple(norm_range(drange)))
+    if series.empty:
+        return None
+    index = pd.MultiIndex.from_arrays(
+        [pd.to_datetime(series['date']), series['pollster_id'], series['sponsor_id']],
+        names=['date', 'pollster_id', 'sponsor_id']
+    )
+
+    return Computer.overlap_weights(series, OVERLAP_WSPAN).to_frame().set_axis(index, axis=0)
+
+
 def fitted_simulator(scope: str, event_date: str, drange, alpha: float, seed: int, max_fc: int, correctors: dict,
                      verbose: int = 0, today: Optional[str] = None, limit_date: Optional[str] = None,
-                     simulator: Optional[Callable] = None, step: Optional[Callable[[str], None]] = None):
+                     simulator: Optional[Callable] = None, step: Optional[Callable[[str], None]] = None,
+                     polls: Optional[Callable] = None):
     """
     Build the simulator of a published run in ``nowcast`` mode and fit its average.
 
@@ -925,11 +974,16 @@ def fitted_simulator(scope: str, event_date: str, drange, alpha: float, seed: in
     today : str, optional
         The day taken as today (``YYYY-MM-DD``), cap of the anchor of the average.
     limit_date : str, optional
-        Retrospective anchor of the simulator; only passed when it is not ``None``.
+        Retrospective anchor of the simulator; only passed when it is not ``None``. With it the simulator also
+        gets, as ``weight_overrides``, the overlap weight of the polls of ``drange`` computed on those polls
+        alone (``overlap_overrides``): a retrospective run does not know the polls published after its day
+        (2026-11-25).
     simulator : callable, optional
         Injectable replacement of ``Simulator``.
     step : callable, optional
         Called with ``'init'`` after building the simulator and with ``'fit'`` after fitting it.
+    polls : callable, optional
+        Injectable replacement of ``get_poll_series``, read only with ``limit_date``.
 
     Returns
     -------
@@ -941,7 +995,10 @@ def fitted_simulator(scope: str, event_date: str, drange, alpha: float, seed: in
     NothingToPublish
         Building or fitting raised ``ValueError`` (no polls, or an average that cannot be fitted).
     """
-    cutoff = {} if limit_date is None else {'limit_date': limit_date}
+    cutoff = {}
+    if limit_date is not None:
+        cutoff = {'limit_date': limit_date,
+                  'weight_overrides': overlap_overrides(scope, event_date, drange, polls=polls)}
     try:
         sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
                                        mode='nowcast', verbose=verbose, path='.', today=today, **cutoff, **correctors)
@@ -985,7 +1042,7 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
                      prov: Optional[Callable] = None, limit_date: Optional[str] = None,
                      run_at: Optional[str] = None,
                      progress: Optional[Callable[[str, float], None]] = None,
-                     today: Optional[str] = None) -> dict:
+                     today: Optional[str] = None, polls: Optional[Callable] = None) -> dict:
     """Run the model for one scope and write an immutable run into the bundle.
 
     Pointers (history and manifest) are not touched. ``headline.json`` is written last, so a run
@@ -1017,14 +1074,18 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         Poll cutoff date (``YYYY-MM-DD``) of a retrospective run: only the polls published up to that
         day, inclusive, enter the average, because the lower bound of ``drange`` (days before the
         event) is raised to the days from ``limit_date`` to ``event_date``, as the backtest does; the
-        simulator also gets ``limit_date`` to read ``as_of`` that day. The run is marked ``backfill``
-        and ``meta.limit_date`` records it (``meta.drange`` holds the effective window). ``None``
-        (default) runs with ``drange`` as given.
+        simulator also gets ``limit_date`` to read ``as_of`` that day and the overlap weight of those
+        polls computed on them alone (``overlap_overrides``, 2026-11-25: the stored one knows the waves
+        published later). The run is marked ``backfill`` and ``meta.limit_date`` records it
+        (``meta.drange`` holds the effective window). ``None`` (default) runs with ``drange`` as given
+        and the stored weights.
     run_at : str, optional
         ISO UTC timestamp recorded as the run moment; defaults to the writer clock.
     today : str, optional
         The day taken as today (``YYYY-MM-DD``), given to the simulator as the cap of its anchor: the average
         is read on the day of the run, never in the future (2026-10-26); the date in Europe/Madrid by default.
+    polls : callable, optional
+        Injectable replacement of ``get_poll_series``, read only with ``limit_date``.
     progress : callable, optional
         Called as ``progress(step, seconds)`` when each phase ends, with ``step`` in order ``init``
         (simulator built), ``fit`` (average fitted), ``nowcast`` (simulation of today),
@@ -1073,7 +1134,7 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
 
     laps = {}
     sim = fitted_simulator(scope, event_date, drange, alpha, seed, max_fc, correctors, verbose=verbose, today=today,
-                           limit_date=limit_date, simulator=simulator,
+                           limit_date=limit_date, simulator=simulator, polls=polls,
                            step=lambda phase: laps.__setitem__(phase, report(phase, lap())))
     init, fit, names = laps['init'], laps['fit'], sim.params['names']
     run_mode(sim, 'nowcast', n_sim)

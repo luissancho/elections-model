@@ -1257,7 +1257,7 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `max_fc` | `10` | Pasos máximos del pronóstico |
 | `alpha` | `0.05` | Nivel de los intervalos |
 | `correctors` | `null` | Cambios sobre los correctores por defecto (`house_effects`, `dispersion`, `regional_noise` activos) |
-| `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` |
+| `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` y, opcional, `"since": "YYYY-MM-DD"` (la fecha que la web escribe en «congelado desde …»; sin ella la congelación no lleva fecha, enmienda 2026-11-25) |
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
 | `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG; con `study` y `register`, sustituir un registro que ya existía (enmienda 2026-10-20); con `event`, publicar una fecha aunque falten las tablas del backtest y el evento en vivo tuviera el corte del modelo o la serie, que entonces se retiran (sin `force` la fecha queda `refused`; enmienda 2026-10-31) |
@@ -1354,6 +1354,12 @@ fallos.
   casa se reajustan con ellos; el simulador recibe además `limit_date=<día>`, que solo ancla `as_of` en ese
   día (no filtra sondeos). El run lleva `meta.limit_date = <día>`, la ventana efectiva en `meta.drange`
   (`[55, null]` para el 2026-10-05) y `headline.backfill = true` (y por tanto la fila de `history.json`).
+- El peso por solape (`weight_over`) también es el de ese día (enmienda 2026-11-25): se calcula con los sondeos
+  de la ventana del run y no con el guardado en la base, que conoce las olas publicadas después. Con el guardado,
+  la última ola de un tracking a fecha del run quedaba a 0 por una ola posterior que el run no ve, y la casa
+  contaba con un sondeo más antiguo o no contaba (en `es`, del 13 al 20 de noviembre de 2026, hasta 0,6 puntos
+  en un partido). Los pesos por muestra y por rating siguen siendo los de hoy, y un run de hoy usa los pesos
+  guardados. Las tablas `polls` y `weights` del run llevan el peso por solape de su día.
 - Es una reconstrucción, no lo que se publicó entonces: usa los ratings, la deriva y el catálogo de hoy y el
   evento de hoy (2026-11-29), incluso para días anteriores a la convocatoria. La web los dibuja como puntos
   huecos con "estimación retrospectiva".
@@ -1706,7 +1712,7 @@ Plan de la elección general del 2026-11-29: la veda de sondeos va del 24 al 28 
    run del 23 y otros con el anterior).
 2. Comprobar el manifest (ver "Leer el manifest publicado").
 3. `python deploy/ecs/job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"<texto>"}}' --follow`
-   congela la web (en local, `python job.py publish '{...}'`); `manifest.freeze.since` queda con la fecha del día. Texto sugerido: "Pronóstico definitivo, publicado el 23
+   congela la web (en local, `python job.py publish '{...}'`). La congelación no lleva fecha (`manifest.freeze.since` queda en `null` y la web no escribe «congelado desde …»; enmienda 2026-11-25: antes se guardaba la fecha del día); para ponerla, añadir `"since":"2026-11-24"` a `freeze`. Texto sugerido: "Pronóstico definitivo, publicado el 23
    de noviembre. Durante la veda electoral no se publican sondeos nuevos ni se actualiza el pronóstico."
 4. `bash deploy/check-api.sh https://<host>` comprueba el manifest y, congelado, la cabecera `x-freeze: active` y
    el banner.

@@ -222,7 +222,7 @@ def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_def
     writer = bundle.BundleWriter(fresh_app.fs)
     write_bundle(fresh_app.fs, run_id='20261001-120000', manifest=False)
     publish.update_manifest(writer, {'es': publish.latest_entry(fixture_data('headline') | {'run_id': RUN})},
-                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+                            freeze={'active': True, 'message': 'Veda', 'since': '2026-11-23'})
     webapi.site().manifest_cache_clear()
     assert 'pronóstico definitivo para el' in html(call(api, '/es')[2])
     page = html(call(api, '/es', query='run=20261001-120000&mode=forecast')[2])
@@ -3283,8 +3283,7 @@ def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
     assert 'con el pronóstico definitivo. Los sondeos' in page and 'desde el' not in page
     assert 'no entran en el promedio porque su trabajo de campo acaba dentro de esos cinco días' in page
     assert 'el modelo no los usa' not in page
-    publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'},
-                            today='2026-11-23')
+    publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda', 'since': '2026-11-23'})
     webapi.site().manifest_cache_clear()
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
     assert 'con el pronóstico definitivo: desde el 23 nov 2026. Los sondeos' in page
@@ -3781,7 +3780,16 @@ def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
 
 def test_frozen_manifest_marks_every_page(api, fresh_app):
     writer = bundle.BundleWriter(fresh_app.fs)
-    publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'}, today='2026-11-23')
+    # sin fecha (lo normal desde 2026-11-25): la banda y el pronóstico definitivo, pero ningún «congelado desde»
+    publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'})
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/es')[2])
+    assert 'freeze-banner' in page and 'Veda electoral' in page and 'pronóstico definitivo para el' in page
+    assert 'congelado desde' not in page
+    limits = re.sub(r'\s+', ' ', html(call(api, '/metodo', query='scope=es')[2]))
+    assert 'con el pronóstico definitivo. Los sondeos' in limits and 'definitivo: desde el' not in limits
+    # con la fecha pedida, el pie y las limitaciones la dicen
+    publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral', 'since': '2026-11-23'})
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/es')
     page = html(body)
@@ -4028,7 +4036,7 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
 def test_frozen_site_has_no_control_and_shows_the_forecast(api, fresh_app):
     writer = bundle.BundleWriter(fresh_app.fs)
     publish.update_manifest(writer, {'es': publish.latest_entry(fixture_data('headline') | {'run_id': RUN})},
-                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+                            freeze={'active': True, 'message': 'Veda', 'since': '2026-11-23'})
     webapi.site().manifest_cache_clear()
     for path in ('/es',):
         page = html(call(api, path)[2])
@@ -4042,7 +4050,7 @@ def test_frozen_nowcast_link_keeps_the_run_date_in_the_title(api, fresh_app):
     from datetime import date
     writer = bundle.BundleWriter(fresh_app.fs)
     publish.update_manifest(writer, {'es': publish.latest_entry(fixture_data('headline') | {'run_id': RUN})},
-                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+                            freeze={'active': True, 'message': 'Veda', 'since': '2026-11-23'})
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es', query='mode=nowcast')[2])
     assert 'estimación del' in page
@@ -4596,7 +4604,7 @@ def test_home_follows_the_horizon_of_the_run_even_while_frozen(api, fresh_app):
     page = html(call(api, '/')[2])
     assert 'Si hoy hubiera elecciones' in page and '33,1' in page and '41,5' not in page
     publish.update_manifest(writer, {'es': publish.latest_entry(headline | {'run_id': RUN})},
-                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+                            freeze={'active': True, 'message': 'Veda', 'since': '2026-11-23'})
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/')[2])
     assert 'Si hoy hubiera elecciones' in page and '33,1' in page and 'definitivo' not in page
@@ -4608,7 +4616,7 @@ def test_home_follows_the_horizon_of_the_run_even_while_frozen(api, fresh_app):
     writer.write_json(bundle.path_part('es', RUN, 'meta'), 'meta', fixture_data('meta'), 'es', run_id=RUN)
     writer.write_json(bundle.path_part('es', RUN, 'headline'), 'headline', near, 'es', run_id=RUN)
     publish.update_manifest(writer, {'es': publish.latest_entry(near | {'run_id': RUN})},
-                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+                            freeze={'active': True, 'message': 'Veda', 'since': '2026-11-23'})
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/')[2])
     assert 'Pronóstico definitivo' in page and '41,5%' in page and '>161</b>' in page and 'Si hoy hubiera' not in page

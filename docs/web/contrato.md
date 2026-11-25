@@ -127,7 +127,9 @@ seats_hi, p_first}` en el orden de `vote_forecast()`; `seats` es el titular ente
 `backfill` (enmienda 2026-10-09; booleano, clave obligatoria) es `true` en un run retrospectivo: una
 reconstrucción con el modelo de hoy y solo los sondeos publicados hasta `meta.limit_date`, con `run_id`
 `YYYYMMDD-120000` y `run_at` a las 12:00 UTC de ese día. Un lector trata la clave ausente (runs publicados
-antes de 2026-10-09) como `false`. El contrato sigue en 1: son claves adicionales.
+antes de 2026-10-09) como `false`. El contrato sigue en 1: son claves adicionales. Desde 2026-11-25 el peso por
+solape de esos sondeos (`weight_over` en `polls` y `weights`) se calcula solo con ellos, sin las olas publicadas
+después de `meta.limit_date`; los runs retrospectivos publicados antes llevan el peso guardado en la base ese día.
 
 ### `series`
 
@@ -732,8 +734,10 @@ posteriores a esa hora y, por tanto, normalmente al principio de la lista.
   previo del estudio y si pasó la comprobación); `{}` si no hay ninguno, y un manifest anterior sin la clave se lee
   con `{}`.
 - `freeze`: `{active, message, since}`; interruptor editorial que fija el job con `what: ["manifest"]`. `since`
-  es la fecha ISO (Europe/Madrid) en que pasó de inactivo a activo, se conserva mientras siga activo y es `null`
-  al desactivarlo; un manifest anterior sin la clave se lee con `since: null`.
+  es la fecha ISO que la web escribe en «congelado desde …» o `null`: desde 2026-11-25 solo la lleva si el job
+  la da (`"since": "YYYY-MM-DD"`), se conserva mientras siga activo y es `null` al desactivarlo; antes era el día
+  (Europe/Madrid) en que pasó de inactivo a activo. Un lector no escribe ninguna fecha con `since: null`, esté
+  activo o no; un manifest anterior sin la clave se lee con `since: null`.
 - `attribution`: textos de atribución (`polls`, `results`, `model`). Provisionales; cada escritura del
   manifest la refresca desde `ATTRIBUTION`.
 

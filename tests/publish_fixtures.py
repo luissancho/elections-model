@@ -5,7 +5,7 @@ import pytest
 
 from mtpy.lib import publish
 from mtpy.lib.forecaster import NoPollsError
-from tests.fakes import FakeComputer, FakeSimulator, synthetic_event
+from tests.fakes import FakeComputer, FakePollSeries, FakeSimulator, synthetic_event
 from tests.test_webapi_unit import PARTIES
 
 
@@ -27,16 +27,16 @@ def fixed_prov(monkeypatch):
 @pytest.fixture
 def patched(monkeypatch):
     """`resolve_scopes`, `next_event_date`, `publish_forecast`, `publish_analysis` y `publish_parties` sin base: `es`
-    publica de verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y la procedencia sustituidos, `es-md` no
-    tiene evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete; el
-    catálogo de partidos sale de `PARTIES`. Sin `today`, el día de la publicación es `TODAY` y no el del reloj: la
+    publica de verdad con `FakeSimulator` (o `FakeComputer`), `db_stats`, el lector de sondeos de un run retrospectivo
+    (`FakePollSeries`) y la procedencia sustituidos, `es-md` no tiene evento, `es-cb` no tiene sondeos, `es-ar` rompe
+    y `es-ri` falla con un `ValueError` del paquete; el catálogo de partidos sale de `PARTIES`. Sin `today`, el día de la publicación es `TODAY` y no el del reloj: la
     elección de `es` es la del 29-N y, con el reloj real, del 24 al 29 de noviembre de 2026 la guardia de la LOREG
     rechazaba todo lo que estos tests publican."""
     calls = []
     real_today = publish.common._today
 
     # every module of the package that took `_today` by name, so the guard, the anchor and the pointers agree
-    for module in (publish.common, publish.forecast, publish.events, publish.pointers, publish.studies):
+    for module in (publish.common, publish.forecast, publish.events, publish.studies):
         monkeypatch.setattr(module, '_today', lambda today=None: real_today(TODAY if today is None else today))
 
     real_forecast = publish.publish_forecast
@@ -51,7 +51,7 @@ def patched(monkeypatch):
             raise ValueError("vote: missing keys ['rows']")
         if scope == 'es-ar':
             raise KeyError('x')
-        return real_forecast(scope, writer, run_id, event_date, simulator=FakeSimulator(),
+        return real_forecast(scope, writer, run_id, event_date, simulator=FakeSimulator(), polls=FakePollSeries(),
                              stats=lambda scope, event_date: (7, '2026-10-01'),
                              prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 
@@ -95,7 +95,7 @@ def warned_forecast(monkeypatch, messages):
     real = publish.forecast.publish_forecast
 
     def fake(scope, writer, run_id, event_date, **kwargs):
-        return real(scope, writer, run_id, event_date, simulator=FakeSimulator(warn=messages),
+        return real(scope, writer, run_id, event_date, simulator=FakeSimulator(warn=messages), polls=FakePollSeries(),
                     stats=lambda scope, event_date: (7, '2026-10-01'),
                     prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 

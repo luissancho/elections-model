@@ -13,7 +13,7 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
 from mtpy.lib.forecaster import NoPollsError
-from tests.fakes import (BACKTEST_HORIZONS, BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
+from tests.fakes import (BACKTEST_HORIZONS, BMAPS, NAMES, REGIONS, FakeComputer, FakePollSeries, FakeSimulator, RecordingFileSystem, synthetic_analysis,
                          synthetic_backtest, synthetic_ban, synthetic_cycle, synthetic_legal, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
                          synthetic_rating_check)
 
@@ -705,23 +705,71 @@ def test_publish_forecast_refuses_to_rewrite_a_run(tmp_path):
 
 
 def test_publish_forecast_backfill_freezes_the_polls_and_stamps_the_day(tmp_path):
-    writer, factory = make_writer(tmp_path), FakeSimulator()
+    writer, factory, reader = make_writer(tmp_path), FakeSimulator(), FakePollSeries()
     out = publish.publish_forecast('es', writer, '20261005-120000', '2026-11-29', n_sim=50, simulator=factory,
-                                   stats=fake_stats, prov=fake_prov, limit_date='2026-10-05', run_at='2026-10-05T12:00:00Z')
+                                   stats=fake_stats, prov=fake_prov, limit_date='2026-10-05', run_at='2026-10-05T12:00:00Z',
+                                   polls=reader)
     assert factory.calls[0][3]['limit_date'] == '2026-10-05'
     assert factory.calls[0][3]['drange'] == (55, None)  # 2026-10-05 a 2026-11-29: sólo sondeos hasta ese día
+    # el peso por solape también es el de ese día: se calcula con los sondeos de la ventana del run
+    assert reader.calls == [('es', ['2026-11-29'], (55, None))]
+    assert factory.calls[0][3]['weight_overrides']['weight_over'].to_dict() == {(pd.Timestamp('2026-10-01'), 3, 0): 1.0}
     meta = writer.read_json(bundle.path_part('es', '20261005-120000', 'meta'))['data']
     head = writer.read_json(bundle.path_part('es', '20261005-120000', 'headline'))['data']
     assert meta['limit_date'] == '2026-10-05' and meta['run_at'] == '2026-10-05T12:00:00Z'
     weights = writer.read_json(bundle.path_part('es', '20261005-120000', 'weights'))['data']
     assert weights['date'] == head['as_of'] == '2026-10-05'
     assert head['backfill'] is True and out['entry']['run_at'] == '2026-10-05T12:00:00Z'
-    normal = publish.publish_forecast('es', writer, RUN, '2026-11-29', n_sim=50, simulator=factory, stats=fake_stats, prov=fake_prov)
+    normal = publish.publish_forecast('es', writer, RUN, '2026-11-29', n_sim=50, simulator=factory, stats=fake_stats, prov=fake_prov,
+                                      polls=reader)
     assert 'limit_date' not in [c for c in factory.calls if c[0] == 'init'][-1][3]
+    # un run de hoy usa los pesos guardados: ni lee los sondeos ni sustituye nada
+    assert 'weight_overrides' not in [c for c in factory.calls if c[0] == 'init'][-1][3] and len(reader.calls) == 1
     assert [c for c in factory.calls if c[0] == 'init'][-1][3]['drange'] == 6
     assert writer.read_json(bundle.path_part('es', RUN, 'headline'))['data']['backfill'] is False
     assert writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']['limit_date'] is None
     assert normal['entry']['run_at'] == '2026-10-08T12:00:00Z'
+
+
+def test_overlap_overrides_weigh_each_poll_with_the_polls_of_the_window_alone():
+    """El peso por solape de un run retrospectivo no sabe lo que vino después: la ola de un tracking que acaba el
+    día del run pesa 1 aunque hoy la base la tenga a 0 por la ola siguiente; la anterior sigue a 0 y dos sondeos
+    de una casa sin solape y a tres días se reparten el peso de uno."""
+    reader = FakePollSeries()
+    out = publish.overlap_overrides('es', '2026-11-29', (11, None), polls=reader)  # hasta el 2026-11-18
+    assert reader.calls == [('es', ['2026-11-29'], (11, None))]
+    assert list(out.columns) == ['weight_over'] and list(out.index.names) == ['date', 'pollster_id', 'sponsor_id']
+    assert out['weight_over'].to_dict() == {
+        (pd.Timestamp('2026-11-17'), 1, 5): 0.0, (pd.Timestamp('2026-11-18'), 1, 5): 1.0,
+        (pd.Timestamp('2026-11-05'), 2, 0): 0.5, (pd.Timestamp('2026-11-08'), 2, 0): 0.5,
+        (pd.Timestamp('2026-10-01'), 3, 0): 1.0}
+    # con la ventana de un run de hoy (un entero: hasta 6 días antes de la elección) sale el peso guardado
+    whole = publish.overlap_overrides('es', '2026-11-29', 6, polls=reader)
+    assert reader.calls[-1] == ('es', ['2026-11-29'], (6, None))
+    assert whole['weight_over'].tolist() == [0.0, 0.0, 1.0, 0.5, 0.5, 1.0]
+
+
+def test_overlap_overrides_are_none_without_polls_in_the_window():
+    """Un día sin sondeos no tiene pesos que sustituir: el simulador dirá que no hay nada que publicar."""
+    assert publish.overlap_overrides('es', '2026-11-29', (90, None), polls=FakePollSeries()) is None
+
+
+def test_fitted_simulator_gives_a_retrospective_run_the_overlap_weights_of_its_day():
+    """La receta compartida (publicar y reconstruir un run) pasa al simulador los pesos por solape del día del run
+    sólo cuando el run es retrospectivo (`limit_date`); un run de hoy no lee los sondeos."""
+    factory, reader = FakeSimulator(), FakePollSeries()
+    publish.fitted_simulator('es', '2026-11-29', drange=(11, None), alpha=0.05, seed=42, max_fc=10,
+                             correctors=dict(publish.DEFAULT_CORRECTORS), today='2026-11-23',
+                             limit_date='2026-11-18', simulator=factory, polls=reader)
+    init = factory.calls[0][3]
+    assert init['limit_date'] == '2026-11-18' and reader.calls == [('es', ['2026-11-29'], (11, None))]
+    assert init['weight_overrides']['weight_over'].to_dict()[(pd.Timestamp('2026-11-18'), 1, 5)] == 1.0
+    assert len(init['weight_overrides']) == 5
+    factory = FakeSimulator()
+    publish.fitted_simulator('es', '2026-11-29', drange=6, alpha=0.05, seed=42, max_fc=10,
+                             correctors=dict(publish.DEFAULT_CORRECTORS), today='2026-11-23', simulator=factory,
+                             polls=reader)
+    assert 'weight_overrides' not in factory.calls[0][3] and len(reader.calls) == 1
 
 
 def test_history_is_rebuilt_from_complete_runs_and_is_idempotent(tmp_path):
@@ -744,7 +792,7 @@ def test_manifest_merges_scopes_and_freeze(tmp_path):
     data = publish.update_manifest(writer, {'es': {'latest': '20261009-120000'}})
     assert data['scopes'] == {'es': {'latest': '20261009-120000'}, 'es-md': {'latest': RUN}}
     assert data['updated_at'] == '2026-10-08T12:00:00Z' and data['attribution'] == publish.ATTRIBUTION
-    data = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'}, today='2026-11-23')
+    data = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral', 'since': '2026-11-23'})
     assert data['freeze'] == {'active': True, 'message': 'Veda electoral', 'since': '2026-11-23'} and len(data['scopes']) == 2
     assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None, 'since': None}
     with pytest.raises(ValueError, match='active'):
@@ -780,14 +828,35 @@ def test_loreg_guard_covers_the_national_window_for_every_scope():
         publish.loreg_guard('es', '2026-11-29', today='2026-11-29')
 
 
-def test_update_manifest_stamps_since_on_activation(tmp_path):
+def test_update_manifest_freezes_without_a_date_unless_one_is_given(tmp_path):
+    """La congelación no lleva fecha («congelado desde …» no sale en la web) salvo que se pida una con `since`; lo
+    guardado se conserva mientras siga activa, aunque cambie el mensaje, y se borra al descongelar."""
     writer = make_writer(tmp_path)
     assert publish.read_manifest(writer)['freeze'] == {'active': False, 'message': None, 'since': None}
-    on = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')['freeze']
-    assert on == {'active': True, 'message': 'Veda', 'since': '2026-11-23'}
-    again = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (2)'}, today='2026-11-24')['freeze']
-    assert again['since'] == '2026-11-23' and again['message'] == 'Veda (2)'
+    on = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda'})['freeze']
+    assert on == {'active': True, 'message': 'Veda', 'since': None}
+    again = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (2)'})['freeze']
+    assert again == {'active': True, 'message': 'Veda (2)', 'since': None}
+    dated = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda', 'since': '2026-11-24'})['freeze']
+    assert dated == {'active': True, 'message': 'Veda', 'since': '2026-11-24'}
+    kept = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (3)'})['freeze']
+    assert kept == {'active': True, 'message': 'Veda (3)', 'since': '2026-11-24'}
+    cleared = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (3)', 'since': None})['freeze']
+    assert cleared['since'] is None
+    publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda', 'since': '2026-11-24'})
     assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None, 'since': None}
+    # tras descongelar no queda fecha que heredar
+    assert publish.update_manifest(writer, freeze={'active': True, 'message': 'Otra'})['freeze']['since'] is None
+    bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
+
+
+@pytest.mark.parametrize('since', ['24 de noviembre', '2026-11-31', 20261124, ''])
+def test_update_manifest_refuses_a_freeze_date_that_is_not_a_day(tmp_path, since):
+    """La web escribe esa fecha («congelado desde 24 nov 2026»): tiene que ser un día `YYYY-MM-DD` que exista."""
+    writer = make_writer(tmp_path)
+    with pytest.raises(ValueError, match='since'):
+        publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda', 'since': since})
+    assert not writer.exists(bundle.path_manifest())
 
 
 def test_read_manifest_adds_since_to_an_old_manifest(tmp_path):

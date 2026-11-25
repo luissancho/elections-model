@@ -1197,7 +1197,7 @@ class Computer(Core):
         with other parameters (see `Forecaster`, `weight_overrides`): `proc_sample` (the sample size with the
         missing values filled with the median of the pollster at the event, then of the pollster, then of all the
         polls, capped at `ol_max` and winsorized at `ol_dev` deviations), `weight_sample` (the square root of the
-        ratio between `proc_sample` and its median at the event) and `weight_over` (see `poll_overweights`).
+        ratio between `proc_sample` and its median at the event) and `weight_over` (see `overlap_weights`).
 
         Parameters
         ----------
@@ -1261,6 +1261,40 @@ class Computer(Core):
             axis=1
         ).round(2).astype(float)
 
+        df['weight_over'] = cls.overlap_weights(df, wspan)
+
+        return df[['proc_sample', 'weight_sample', 'weight_over']]
+
+    @classmethod
+    def overlap_weights(
+        cls,
+        polls: pd.DataFrame,
+        wspan: Optional[int]
+    ) -> pd.Series:
+        """
+        Compute the overlap/overflow weight (`weight_over`) of a set of polls, without the database.
+
+        The polls of a pollster for an event, of the same methodology type and context, are weighed together (see
+        `poll_overweights`). The sample sizes play no part, so the weight can be asked for any set of polls, even
+        a single one (`reweight` cannot winsorize the sample size of a lone poll): a retrospective run asks for
+        it with the polls published up to its day (`publish.overlap_overrides`).
+
+        Parameters
+        ----------
+        polls : pd.DataFrame
+            Polls of one or several events, as in `get_poll_series`: `mtype`, `ctype`, `start_date`, `end_date`,
+            `event_date`, `pollster_id`, `sponsor_id` and `date` columns, one row per poll.
+        wspan : int, optional
+            Days range within which the polls of a pollster share the weight of a single poll. If `None`, only the
+            overlap rule applies.
+
+        Returns
+        -------
+        pd.Series
+            The `weight_over` of each poll, with the index of `polls`.
+        """
+        df = polls.copy()
+
         # Compute the days range between the poll start/end date and the final event date
         df['wrange'] = df.apply(lambda dr: (
             (dr['start_date'] - dr['event_date']).days,
@@ -1276,9 +1310,9 @@ class Computer(Core):
             columns='wrange',
             sort=['date', 'sponsor_id']
         ).round(2).astype(float).rename('weight_over').reset_index()
-        df['weight_over'] = df[keys].merge(weight_over, on=keys, how='left')['weight_over'].to_numpy()
 
-        return df[['proc_sample', 'weight_sample', 'weight_over']]
+        return pd.Series(df[keys].merge(weight_over, on=keys, how='left')['weight_over'].to_numpy(),
+                         index=polls.index, name='weight_over')
 
     @staticmethod
     def weighted_mean(values: pd.Series, weights: pd.Series) -> float:
