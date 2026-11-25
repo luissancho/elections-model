@@ -3,6 +3,7 @@
 The study package (``mtpy.lib.studies.cera``, with its regression libraries) is imported inside the functions that
 need it, never at module level: the web imports ``publish`` and must stay light.
 """
+import copy
 import math
 import os
 import re
@@ -421,6 +422,90 @@ def export_study_sensitivity(study) -> tuple:
     return data, frames
 
 
+def _mean_change(dist: dict) -> float:
+    """Mean change of seats of a stored distribution (``{'-1': n, '0': m}``), with four decimals."""
+    total = sum(int(n) for n in dist.values())
+
+    return round(sum(int(k) * int(n) for k, n in dist.items()) / total, 4)
+
+
+def _majority_row(counts: dict, with_majority: int) -> dict:
+    """The columns of a cell of the majority part (without its coordinates), for the CSV twins."""
+    from ..studies.cera.majority import seat_range
+
+    low, high = seat_range(counts['right'])
+
+    return {'votes': counts['votes'], 'lost': counts['lost'], 'gained': counts['gained'], 'moved': counts['moved'],
+            'with_majority': with_majority - counts['lost'] + counts['gained'],
+            'central_right': counts['central']['right'], 'central_left': counts['central']['left'],
+            'right_lo': low, 'right_hi': high, 'mean_right': _mean_change(counts['right']),
+            'mean_left': _mean_change(counts['left'])}
+
+
+def _majority_cells(block: dict, cols_key: str, col_name: str, base: int) -> pd.DataFrame:
+    """Long form of a grid of counts: one row per cell, with its coordinates first."""
+    records = []
+
+    for x, row in zip(block['participations'], block['cells']):
+        for y, counts in zip(block[cols_key], row):
+            records.append({'participation': x, col_name: y, **_majority_row(counts, base)})
+
+    return pd.DataFrame(records)
+
+
+def export_study_majority(study) -> tuple:
+    """Export the frozen snapshot of the model's forecast of the majority (question 3), with its outcome.
+
+    Parameters
+    ----------
+    study : CeraStudy
+        The computed study; its ``majority`` is the snapshot of ``data/cera/majority.json`` and its ``outcome``
+        the comparison with the official results (``None`` until the election is checked).
+
+    Returns
+    -------
+    tuple
+        ``(data, frames)``: ``data`` for ``study-majority``, a deep copy of the snapshot (``run``, ``majority``,
+        ``blocks``, ``lineage``, ``base``, ``expected``, ``new_electors``, ``grid``, ``placement``) plus ``outcome``
+        and, in every ``counts``, ``range``: the interval 2.5 %-97.5 % of the change of seats of the right
+        (``seat_range``). ``frames`` the ``majority-grid``, ``majority-new-electors``, ``majority-placement`` and
+        ``majority-provinces`` twins (the grids in long form; the provinces of both censuses).
+
+    Raises
+    ------
+    ValueError
+        If the study has no snapshot.
+    """
+    from ..studies.cera.majority import seat_range
+
+    if study.majority is None:
+        raise ValueError('voto-cera: data/cera/majority.json is missing: take it with '
+                         'python job.py load \'{"what":"majority"}\'')
+
+    data = copy.deepcopy(study.majority)
+    data['outcome'] = study.outcome
+    counts_all = [data['expected'][key]['counts'] for key in ('convocatoria', 'sin_litigio')]
+
+    for part in ('new_electors', 'grid', 'placement'):
+        counts_all += [counts for row in data[part]['cells'] for counts in row]
+
+    for counts in counts_all:
+        counts['range'] = seat_range(counts['right'])
+
+    base = data['base']['with_majority']
+    keys = ('region_id', 'name', 'moved', 'right_lost', 'right_gained')
+    provinces = [{'census': census, **{key: row[key] for key in keys}}
+                 for census in ('convocatoria', 'sin_litigio') for row in data['expected'][census]['provinces']]
+    frames = {
+        'majority-grid': _majority_cells(data['grid'], 'left_fracs', 'left_frac', base),
+        'majority-new-electors': _majority_cells(data['new_electors'], 'left_fracs', 'left_frac', base),
+        'majority-placement': _majority_cells(data['placement'], 'fracs', 'frac', base),
+        'majority-provinces': pd.DataFrame(provinces),
+    }
+
+    return data, frames
+
+
 def _gap_key(gap) -> tuple:
     """Sort key of a gap of the last seat: the tightest first, a missing one last."""
     missing = gap is None or pd.isna(gap)
@@ -607,7 +692,7 @@ from .ban import (  # noqa: E402
 STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation': export_study_participation,
                                  'vote': export_study_vote, 'placement': export_study_placement,
                                  'prediction': export_study_prediction, 'sensitivity': export_study_sensitivity,
-                                 'check': export_study_check},
+                                 'majority': export_study_majority, 'check': export_study_check},
                    'sesgo-cis': {'summary': export_lean_summary, 'elections': export_lean_elections,
                                  'houses': export_lean_houses, 'matrix': export_lean_matrix,
                                  'election': export_lean_election},

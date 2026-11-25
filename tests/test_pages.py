@@ -5899,7 +5899,7 @@ def test_analisis_unknown_study_is_404(api, fresh_app):
     assert 'class="kpis"' in page and '2.769.645' in page
     assert '<span class="dlt up">▲ 19%</span> frente a 2023 (2.327.388)' in page  # the arrow is not escaped
     assert set(initial(body)) == {'state', 'census', 'origins', 'participation', 'ecological', 'slope', 'cannibal',
-                                  'sensitive', 'gap', 'radar'}
+                                  'sensitive'}
 
 
 def test_inicio_shows_the_studies_band_only_with_a_study(api, fresh_app):
@@ -5938,9 +5938,6 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert figures['net_psoe_2023'] == previous['net_psoe']
     assert figures['census_total'] == 2769645 == meta['election']['census_total']
     assert figures['electors_2023'] == scenario['census'] - scenario['new_electors']
-    # the base of the increment (the monthly close) and Infoelectoral's census of 2023, both from the parts
-    assert figures['baseline_date'] == meta['election']['baseline_date'] == '2023-06-01'
-    assert figures['electors_official'] == 2328260 and figures['electors_gap'] == 2328260 - 2327388
     assert figures['growth_abs'] == scenario['new_electors']
     assert figures['growth_pct'] == pytest.approx(100 * scenario['new_electors'] / figures['electors_2023'])
     assert figures['voters_projected'] == scenario['voters_projected']
@@ -5952,7 +5949,7 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert (figures['g1'], figures['g2'], figures['ratio'], figures['periods_version']) == (600, 900, 1.5, 'now')
     assert (figures['g1_article'], figures['g2_article'], figures['ratio_article']) == (600, 1200, 2.0)
     assert figures['r'] == -0.743 and figures['n_ecological'] == 3
-    assert figures['max_gain'] == 1 and figures['pool'] == 181032 and figures['grid_observed'] == 0
+    assert figures['max_gain'] == 1 and figures['pool'] == 181032
     assert figures['report']['n_max'] == 3 and figures['sensitive_all'] == {'stock_share': 25.0, 'growth_share': 18.1}
     assert figures['sensitive_countries'] == {'stock_share': 31.0, 'growth_share': 27.5}
     assert figures['sensitive_version'] == 'now'
@@ -5964,14 +5961,11 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert [kpi['label'] for kpi in context['kpis']] == ['Censo CERA 29-N', 'Inscripciones en litigio',
                                                          'Votantes CERA esperados']
     assert context['kpis'][0]['value'] == '2.769.645' and context['kpis'][2]['value'] == '239.221'
-    assert len(context['csv_links']) == 11
-    assert {'label': 'Último escaño por provincia',
+    assert len(context['csv_links']) == 15
+    assert {'label': 'Último escaño por provincia (sobre 2023)',
             'href': '/api/v1/studies/voto-cera/prediction?format=csv&table=last-seat'} in context['csv_links']
     assert context['article']['date'] == '2026-06-30' and context['article']['url'].startswith('https://medium.com/')
     assert [page['href'] for page in context['pages'] if page['active']] == ['/analisis']
-    gap = context['initial']['gap']
-    assert set(gap) == {'convocatoria', 'sin_litigio'} and gap['sin_litigio'][0]['net'] == 6.9
-    assert context['initial']['radar']['max'] == [100, 100, 100]
     # the KPI rows quote the litigation and the rates of `params`
     kpis = context['kpis']
     assert '<span class="dlt up">▲ 19%</span> frente a 2023 (2.327.388)' in str(kpis[0]['support'])
@@ -7203,11 +7197,6 @@ def test_cera_page_loads_its_module_and_the_island_carries_what_the_charts_draw(
     assert island['census']['periods'] == census['periods']['now']  # the updated periods, as the page
     assert island['origins'][0] == {'name': 'Latinoamérica', 'g1': 100, 'g2': 150, 'ratio': 1.5}
     assert island['sensitive'] == fixture_data('study-placement')['sensitive']['now']
-    # the parties of the last seat label the rows of the gap chart
-    for rows in island['gap'].values():
-        assert all(set(row) == {'name', 'winner', 'runner_up', 'gap', 'net'} for row in rows)
-    assert island['gap']['convocatoria'][0] == {'name': 'Madrid', 'winner': 'PP', 'runner_up': 'PSOE', 'gap': 120.5,
-                                                'net': 7.1}
 
 
 def cera_census(n):
@@ -7243,14 +7232,15 @@ def test_cera_page_head_and_question_1(api, fresh_app):
     toc = toc[:toc.index('</nav>')]
     assert re.findall(r'href="([^"]+)"', toc) == ['#resumen', '#p1', '#p2', '#p3', '#debate', '#comprobacion', '#datos']
     assert '<a href="#p1" class="q1">1 · ¿Se dispara el censo?</a>' in toc
-    assert 'class="q2">2 · ¿Sesgo o colocación?</a>' in toc and 'class="q3">3 · ¿Mueven escaños?</a>' in toc
+    assert 'class="q2">2 · ¿Sesgo o colocación?</a>' in toc and 'class="q3">3 · ¿Quitan la mayoría?</a>' in toc
     assert '2.769.645' in page[page.index('class="kpis"'):page.index('id="resumen"')]
     resumen = page[page.index('id="resumen"'):page.index('id="p1"')]
     assert re.findall(r'<div class="vv">([^<]+)</div>', resumen) == ['SÍ', 'SIN EVIDENCIA', 'NO']
     assert re.findall(r'<a class="(q[123])" href="#(p[123])">', resumen) == [('q1', 'p1'), ('q2', 'p2'), ('q3', 'p3')]
     assert '(×1,5)' in resumen and '~5%' in resumen and '~10%' in resumen  # the pace of the updated periods
     assert 'el 18% de las altas con el 25% del censo' in resumen
-    assert 'Con el censo real, la participación real y el reparto real: cero escaños.' in resumen
+    assert ('Con el voto que se espera no cambia ningún escaño del reparto central del modelo, y sólo en el 0,11% de '
+            'sus simulaciones cambia el sentido de la mayoría.') in resumen
     assert 'class="note blue"' in resumen and 'los datos por encima de bandos y consignas.</p>' in resumen
     assert page[:page.index('id="p1"')].endswith('<section class="card qcard shot q1" ')
     p1 = page[page.index('id="p1"'):]
@@ -7384,61 +7374,38 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     # question 3
     p3 = cera_section(page, 'p3')
     assert page[:page.index('id="p3"')].endswith('<section class="card qcard shot q3" ')
-    assert '<div class="qn">3</div><h2 class="qt">¿Pueden alterar el reparto de escaños el 29-N?</h2>' in p3
+    assert ('<div class="qn">3</div><h2 class="qt">¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el '
+            '29-N?</h2>') in p3
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', p3) == ['NO']
-    scenario = p3[p3.index('<fieldset class="seg" id="scenario">'):]
-    scenario = scenario[:scenario.index('</fieldset>')]
-    assert '<legend>Escenario</legend>' in scenario
-    assert re.findall(r'<input type="radio" name="scenario" value="(\w+)"( checked)?>', scenario) == [
-        ('convocatoria', ' checked'), ('sin_litigio', '')]
-    prediction = cera_table(p3, 'prediction-table', tables=2)
-    assert re.findall(r'<table data-scenario="(\w+)"( hidden)?>', prediction) == [('convocatoria', ''),
-                                                                                  ('sin_litigio', ' hidden')]
-    first = prediction[:prediction.index('data-scenario="sin_litigio"')]
-    assert '<td>152</td><td>152</td>' in first and '<td>170</td><td>170</td>' in first
-    assert '<td>2.327.388</td><td>2.769.645</td><td><span class="dlt up">▲ 442.257</span></td>' in first
-    assert 'Otros' not in prediction  # the fixture has only the two blocks
-    assert '<b>Sin las 163.020 inscripciones en litigio</b>' in p3
-    assert '8.070 votos menos y, también, cero cambios' in p3
-    for chart in ('gap-chart', 'radar-chart'):
-        assert re.search(r'<div class="chart" id="{}" role="img" aria-label="[^"]+"></div>'.format(chart), p3), chart
-    assert '<h3>¿Qué haría falta para que importara?</h3>' in p3
-    grid = cera_table(p3, 'grid-table')
-    rows = re.findall(r'<tr>\s*<td><b>([^<]+)</b></td>(.*?)</tr>', grid)
-    assert [label for label, _ in rows] == ['9% (observada)', '30%']
-    cells = [re.findall(r'<td[^>]*>', row) for _, row in rows]
-    assert [len(row) for row in cells] == [2, 2] and all('style="background' in td for row in cells for td in row)
-    assert '<td class="cell-shade" style="background-color: rgba(22, 163, 74, 0.55)">+2</td>' in grid  # the max
-    assert '>0*</td>' in grid  # the observed cell, with the uniform split
-    assert 'Reparto uniforme forzado' in p3
-    scenarios = cera_table(p3, 'scenarios-table')
-    assert 'real (×1,19)' in scenarios and 'empírico' in scenarios and '90% izq.' in scenarios
-    assert len(re.findall(r'<tr>\s*<td><b>', scenarios)) == 2
-    placement = cera_table(p3, 'placement-table')
-    assert len(re.findall(r'<tr>\s*<td><b>', placement)) == 2
-    assert 'Sin colocación dirigida, con el reparto real: 0.' in p3 and 'las 181.032 altas' in p3
-    summary = p3[p3.index('class="sum"'):]
-    summary = summary[:summary.index('</div>')]
-    assert '<b>Con datos reales, cero escaños.</b>' in summary and 'ninguna de las 3 provincias' in summary
-    assert 'class="how"' in p3 and '163.020' in p3[p3.index('class="how"'):]
-    assert ('El censo de 2023 que se resta (2.327.388) es el cierre mensual del INE del 1 jun 2023, la base del '
-            'incremento, porque da el desglose por provincia y país que el modelo necesita; no es el censo CERA '
-            'oficial de esas generales en Infoelectoral, 2.328.260 electores, 872 más.') in p3
+    text = visible_text(p3)
+    for piece in ('Foto fija · datos hasta el 23 de noviembre', '190 escaños', '−10 escaños', '2.769.645', '+442.257',
+                  '239.221', '+30.790', '5 simulaciones menos de 10.000', '8,17%', '5,18%',
+                  '3,52% a la baja y 1,66% al alza', 'Sólo en el', '0,11%', 'cambia el sentido de la mayoría',
+                  'Madrid', '1,89%', 'ocurre alguna vez en 49 de las 52',
+                  'El censo incluye las 163.020 inscripciones en litigio.', 'si la derecha suma 181',
+                  'si la derecha suma 190', '9% voto + 50% izq.', 'como 2023', '50% voto + 80% izq.',
+                  'Colocación a ciegas', '30% voto + 60% izq.', '84,7%', '70% voto + 80% izq.', '60,7%',
+                  'Si los 2.769.645 electores del 29-N votaran así', 'entre 1 y 5 escaños', '87,2%', '75,7%',
+                  'ni un escaño: la derecha sigue en 190', 'el 80% lo hiciera a la izquierda, un escaño'):
+        assert piece in text, piece
+    assert p3.count('class="rrow"') == 7 and len(re.findall(r'<td[^>]*class="[^"]*cell-shade', p3)) == 20
+    for gone in ('gap-chart', 'radar-chart', 'id="scenario"', 'prediction-table', 'placement-table', 'la consigue en',
+                 'Qué pasó el 29-N', 'None'):
+        assert gone not in p3, gone
+    assert '<a href="#p3" class="q3">3 · ¿Quitan la mayoría?</a>' in page
+    summary = visible_text(cera_section(page, 'resumen'))
+    assert '¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el 29-N?' in summary
+    assert 'sólo en el 0,11% de sus simulaciones cambia el sentido de la mayoría' in summary
     assert 'medium.com' not in page[:page.index('id="datos"')]
-    # richer parts: the gated sentences follow the data (margins that fall, a null cell, a scenario that changes)
+    # richer parts: the gated sentences follow the data (margins that fall, the countries of the placement)
     vote = fixture_data('study-vote')
     processes = (vote['processes'][:1] + regional_vote('Castilla y León', ('2022-02-13', 6.0, 45.0),
                                                        ('2026-03-15', 1.3, 40.0), 2.0, -2.5, -0.5)
                  + regional_vote('Aragón', ('2023-05-28', 4.0, 44.0), ('2026-02-08', 2.0, 42.0), 1.5, -1.9, -0.4))
-    sensitivity = fixture_data('study-sensitivity')
-    sensitivity['grid']['values'] = [[1, None], [1, 2]]
-    prediction = fixture_data('study-prediction')
-    prediction['scenarios']['sin_litigio']['changed'] = [{'region_id': 28, 'name': 'Madrid'}]
     params = fixture_data('study-meta')['params'] | {
         'sensitive_magnitude': 5, 'madrid_countries': ['MÉXICO', 'VENEZUELA'], 'split_source': '2023-07-23',
         'placement_countries': ['ARGENTINA', 'MÉXICO', 'CUBA', 'VENEZUELA']}
-    publish_study(fresh_app.fs, meta={'params': params}, parts={
-        'vote': {'processes': processes}, 'sensitivity': sensitivity, 'prediction': prediction})
+    publish_study(fresh_app.fs, meta={'params': params}, parts={'vote': {'processes': processes}})
     page = cera_page(api)
     p2, p3 = cera_section(page, 'p2'), cera_section(page, 'p3')
     band = p2[p2.index('class="band"'):]
@@ -7450,11 +7417,77 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     assert 'la cuota de izquierda del CERA baja en todos los procesos desde 2022' in p2
     assert 'Cuota de las provincias de 5 escaños o menos' in p2 and '3 provincias, generales 2023' in p2
     assert 'Cuota de Madrid en las altas de México y Venezuela' in p2 and 'Madrid, 2 países' in p2
-    assert 'las 181.032 altas de Argentina, México, Cuba y Venezuela' in p3
-    grid = cera_table(p3, 'grid-table')
-    assert '<td class="cell-shade">–</td>' in grid and grid.count('style="background') == 3
-    assert '+1*</td>' in grid and 'la celda observada da +1; con el reparto real por provincia, 0' in p3
-    assert 'cero cambios' not in p3 and 'el reparto cambia en 1 provincia (Madrid)' in p3
+    assert 'los 181.032 electores que entraron con la ley desde Argentina, México, Cuba y Venezuela' in p3
+
+
+def cera_outcome(right, right_without, moved, net_right, checked=True):
+    """Un `outcome` de la parte `majority` hecho a mano (mayoría 176, la del fixture) y el `checked_at` de la meta."""
+    outcome = {'right': right, 'left': 300 - right, 'right_without': right_without, 'left_without': 300 - right_without,
+               'has_majority': right >= 176, 'majority_without': right_without >= 176,
+               'changed': (right >= 176) != (right_without >= 176), 'moved': moved,
+               'net': {'Derecha': net_right, 'Izquierda': -net_right}}
+    return outcome, {'checked_at': '2026-12-04' if checked else None}
+
+
+@pytest.mark.parametrize('outcome, meta, sentence', [
+    (*cera_outcome(181, 181, 0, 0), 'Qué pasó el 29-N. La derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, no movió ningún escaño y no cambió la mayoría.'),
+    (*cera_outcome(181, 182, 1, -1), 'Qué pasó el 29-N. La derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, movió 1 escaño (derecha −1, izquierda +1) y no cambió la mayoría.'),
+    (*cera_outcome(175, 176, 1, -1), 'Qué pasó el 29-N. La derecha obtuvo 175 escaños: no llega a la mayoría absoluta '
+     '(176). El voto CERA, contado el 4 dic 2026, movió 1 escaño (derecha −1, izquierda +1) y cambió la mayoría: sin '
+     'el voto exterior, la derecha habría tenido mayoría absoluta.'),
+    (*cera_outcome(176, 174, 3, 2), 'Qué pasó el 29-N. La derecha obtuvo 176 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, movió 3 escaños (derecha +2, izquierda −2) y cambió la mayoría: sin el '
+     'voto exterior, la derecha no habría tenido mayoría absoluta.'),
+    (*cera_outcome(170, 169, 1, 1, checked=False), 'Qué pasó el 29-N. La derecha obtuvo 170 escaños: no llega a la '
+     'mayoría absoluta (176). El voto CERA movió 1 escaño (derecha +1, izquierda −1) y no cambió la mayoría.'),
+], ids=['none-moved', 'one-moved', 'loses-it', 'keeps-it', 'no-date'])
+def test_cera_page_shows_what_happened_once_the_part_has_an_outcome(api, fresh_app, outcome, meta, sentence):
+    """La banda «Qué pasó el 29-N» dice los cuatro hechos de la spec (D7): los escaños de la derecha, si tiene mayoría,
+    cuántos escaños movió el voto CERA y si sin él la mayoría habría sido otra, y hacia dónde; sin fecha de
+    comprobación, sin «contado el»."""
+    publish_study(fresh_app.fs, meta=meta, parts={'majority': {'outcome': outcome}})
+    p3 = cera_section(cera_page(api), 'p3')
+    band = p3[p3.index('<div class="band">'):]
+    band = re.sub(r'\s+', ' ', visible_text(band[:band.index('</div>')])).strip()
+    assert band == sentence + ' Lo que sigue es la foto del 23 de noviembre, tal como se publicó antes de votar: no se ' \
+                              'ha recalculado.'
+    text = visible_text(p3)
+    for piece in ('190 escaños', '0,11%'):
+        assert piece in text, piece
+    assert_public_wording(p3, 'banda del 29-N')
+
+
+def test_cera_page_without_the_majority_part_keeps_rendering(api, fresh_app):
+    publish_study(fresh_app.fs)  # then the bundle of a study published before this change: no such part
+    bundle.BundleWriter(fresh_app.fs).remove(bundle.path_study('voto-cera', 'majority'))
+    webapi.site().manifest_cache_clear()
+    page = cera_page(api)
+    p3 = visible_text(cera_section(page, 'p3'))
+    assert 'Esta pregunta se está actualizando' in p3 and 'None' not in p3
+    assert 'id="p1"' in page and 'id="debate"' in page and 'id="comprobacion"' in page
+    third = cera_section(page, 'resumen')
+    third = third[third.index('href="#p3"'):]
+    third = third[:third.index('</a>')]
+    assert '¿Puede el voto CERA arrebatar' in third and '<div class="vv">NO</div>' in third and '<p>' not in third
+
+
+def test_cera_page_how_to_read_question_3_names_the_candidatures(api, fresh_app):
+    """«Cómo leerlo» de la pregunta 3: las siglas que cambian van aparte de la regla y el verbo concuerda en número con
+    los partidos sin voto CERA propio."""
+    publish_study(fresh_app.fs)
+    text = visible_text(cera_section(cera_page(api), 'p3'))
+    assert ('cada candidatura pasa al partido del 29-N con su misma sigla; las que ahora se presentan dentro de otro '
+            'partido pasan a él (SUMAR → FA, UPN → PP), y las que el modelo no simula van al resto') in text
+    assert 'SALF y UP no reciben voto exterior: en 2023 no tuvieron voto CERA propio.' in text
+    # the votes to candidatures come from the raw part (`expected.convocatoria.counts.votes`), the voters from the table
+    assert ('La tabla da los 30.790 votantes nuevos; 30.482 de ellos son votos a candidaturas, los que se suman al '
+            'reparto (el resto son votos en blanco y nulos).') in text
+    blocks = {'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'FA'], 'Otros': ['ERC']}
+    publish_study(fresh_app.fs, parts={'majority': {'blocks': blocks}})
+    text = visible_text(cera_section(cera_page(api), 'p3'))
+    assert 'SALF no recibe voto exterior: en 2023 no tuvo voto CERA propio.' in text
 
 
 def test_cera_page_question_1_copy_fixes(api, fresh_app):
@@ -7570,7 +7603,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     # data and method: the sources, the CSV and, last, the article
     datos = cera_section(page, 'datos')
     assert '<ul class="src-list">' in datos and '<a href="https://infoelectoral.interior.gob.es/">' in datos
-    assert datos.count('class="pill brand" href="/api/v1/studies/voto-cera/') == 11
+    assert datos.count('class="pill brand" href="/api/v1/studies/voto-cera/') == 15
     assert page.count('medium.com') == 1 and page.index('medium.com') > page.index('id="datos"')
     assert datos.rstrip().endswith('El voto CERA en España y el efecto de la «Ley de Nietos»</a>.</p>')
     assert 'se publicó en Medium el 30 jun 2026' in datos
@@ -7580,7 +7613,10 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert '<summary>Glosario</summary>' in glossary and '<dt>Voto rogado</dt>' in glossary
     assert re.findall(r'<dt>([^<]+)</dt>', glossary) == [
         'CERA', 'Voto rogado', 'Ley de Nietos', 'Censo de la convocatoria', 'Brecha del último escaño', 'Efecto neto',
-        'Inferencia ecológica', 'Provincias sensibles', 'Colocación óptima']
+        'Inferencia ecológica', 'Provincias sensibles', 'Colocación a ciegas', 'Reparto central']
+    assert 'sólo podía guiarse por los resultados de 2023, el plan se decide con ellos' in glossary
+    assert 'Es un límite, no una previsión.' in glossary
+    assert "D'Hondt sobre el voto central de cada provincia" in glossary
     assert not re.search(r'(?<![\d.,])1 (escaños|provincias)\b', page)  # a real singular everywhere
     # a draft: the row of the 29-N says so; with one seat at stake in 2023 and none changed, the verdict says it
     base = fixture_data('study-check')
@@ -7631,7 +7667,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
 
 
 def test_cera_page_names_the_candidatures_by_their_siglas(api, fresh_app):
-    """The parts carry the full Infoelectoral names and their siglas: the page and its island print only the siglas."""
+    """The parts carry the full Infoelectoral names and their siglas: the page prints only the siglas."""
     publish_study(fresh_app.fs)
     body = call(api, '/analisis/voto-cera')[2]
     page = re.sub(r'\s+', ' ', html(body))
@@ -7642,15 +7678,61 @@ def test_cera_page_names_the_candidatures_by_their_siglas(api, fresh_app):
     assert '<td class="pos">Sí, al PP, cruza de bloque</td>' in debate
     assert '<td>Madrid: PSOE → PP</td>' in cera_table(check, 'check-table')
     assert 'Madrid (PSOE frente a PP)' in check and 'el neto del CERA favorece al PSOE' in cera_section(page, 'p2')
-    gap = initial(body)['gap']['convocatoria'][0]
-    assert (gap['winner'], gap['runner_up']) == ('PP', 'PSOE')
-    # an older part without the siglas: the name it has, as it comes
-    prediction = fixture_data('study-prediction')
-    prediction['last_seat'] = [{key: value for key, value in row.items() if not key.endswith('_sigla')}
-                               for row in prediction['last_seat']]
-    publish_study(fresh_app.fs, parts={'prediction': prediction})
-    gap = initial(call(api, '/analisis/voto-cera')[2])['gap']['convocatoria'][0]
-    assert (gap['winner'], gap['runner_up']) == ('PARTIDO POPULAR', 'PARTIDO SOCIALISTA OBRERO ESPAÑOL')
+
+
+def test_cera_majority_view_model_reads_everything_from_the_part():
+    """El modelo de vista de la tarjeta de la mayoría sale entero de la parte publicada (la foto fija real)."""
+    q3 = pages.cera._majority(fixture_data('study-majority'), fixture_data('study-meta'))
+    assert (q3['as_of'], q3['n_sim'], q3['majority'], q3['litigation']) == ('2026-11-23', 10000, 176, 163020)
+    assert q3['base'] == {'right': 190, 'needed': 15, 'p': 88.1, 'quartile': 181, 'needed_quartile': 6,
+                          'p_quartile': 27.4, 'p_without': 11.9}
+    assert q3['expected'] == {'seats': 0, 'right': 190, 'p': 88.0, 'net': 5}
+    assert q3['extreme'] == {'seats': -10, 'right': 180, 'p': 60.7, 'participation': 70, 'left_frac': 80}
+    assert q3['table'] == [{'label': 'Censo CERA', 'before': 2327388, 'after': 2769645, 'change': 442257},
+                           {'label': 'Votantes CERA', 'before': 208431, 'after': 239221, 'change': 30790}]
+    assert q3['changes'] == {'moved': 8.17, 'total': 5.18, 'down': 3.52, 'up': 1.66, 'majority': 0.11}
+    assert q3['provinces']['rows'][0] == {'name': 'Madrid', 'p': 1.89, 'lost': 0.77, 'gained': 0.34, 'other': 0.78,
+                                          'width': 100.0}
+    assert (len(q3['provinces']['rows']), q3['provinces']['ever'], q3['provinces']['total']) == (10, 49, 52)
+    rows = [row for group in q3['ruler']['groups'] for row in group['rows']]
+    assert [(r['name'], r['seats'], r['lo'], r['hi'], r['p']) for r in rows] == [
+        ('9% voto + 50% izq.', 0, 0, 1, 88.0), ('50% voto + 80% izq.', 1, 0, 3, 85.8),
+        ('Colocación a ciegas', 5, 0, 8, 75.7), ('30% voto + 60% izq.', 2, 0, 5, 84.7),
+        ('30% voto + 80% izq.', 4, 1, 8, 78.0), ('50% voto + 80% izq.', 8, 3, 12, 69.9),
+        ('70% voto + 80% izq.', 10, 5, 15, 60.7)]
+    assert rows[0]['detail'] == 'como 2023' and rows[2]['detail'] == '100% voto + 100% PSOE'
+    assert q3['ruler']['marks'] == [{'at': 6, 'right': 181}, {'at': 15, 'right': 190}]
+    assert (q3['ruler']['max'], q3['ruler']['ticks']) == (16, [0, 2, 4, 6, 8, 10, 12, 14, 16])
+    assert q3['grid']['rows'][0]['label'] == '9% voto'
+    assert q3['grid']['cols'] == ['50% izq.', '60% izq.', '70% izq.', '80% izq.']
+    assert q3['grid']['rows'][4]['cells'][3] == {'seats': -10, 'p': 60.7, 'drop': 27.34}
+    assert q3['grid']['max_drop'] == 27.34 and q3['grid']['electors'] == 2769645
+    assert q3['placement'] == {'pool': 181032, 'countries': [], 'seats': [1, 5], 'p': [87.2, 75.7]}
+    assert q3['summary'] == {'needed': 15, 'extreme': 10, 'middle': 1} and q3['outcome'] is None
+
+
+def test_cera_majority_view_model_skips_a_row_the_part_does_not_have():
+    """Una fila de la regla cuya celda no está en los ejes de la parte se omite; el resumen sigue su identidad."""
+    meta = fixture_data('study-meta')
+    part = copy.deepcopy(fixture_data('study-majority'))
+    part['new_electors']['participations'][0] = 0.1
+    q3 = pages.cera._majority(part, meta)
+    rows = [row['name'] for group in q3['ruler']['groups'] for row in group['rows']]
+    assert '9% voto + 50% izq.' not in rows and len(rows) == 6
+    assert q3['summary']['middle'] == 1  # la segunda entrada de la regla sigue en los ejes
+    part = copy.deepcopy(fixture_data('study-majority'))
+    part['new_electors']['participations'][3] = 0.4
+    q3 = pages.cera._majority(part, meta)
+    rows = [row['name'] for group in q3['ruler']['groups'] for row in group['rows']]
+    assert len(rows) == 6 and q3['summary']['middle'] is None
+    assert pages.cera._majority({}, meta) is None and pages.cera._majority(None, meta) is None
+
+
+def test_cera_increment_keeps_what_the_debate_and_the_check_read():
+    """_increment conserva lo que leen «Lo que dice el debate» y «Comprobación» de cada escenario."""
+    scenarios = pages.cera._increment(fixture_data('study-prediction'))['scenarios']
+    assert [s['key'] for s in scenarios] == ['convocatoria', 'sin_litigio']
+    assert set(scenarios[0]) == {'key', 'label', 'changed', 'unchanged'} and scenarios[0]['unchanged'] is True
 
 
 def test_shade_scale_filter_grows_green_from_lo_to_hi():

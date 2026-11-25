@@ -900,6 +900,84 @@ def district_communities(scope: str) -> dict:
     return get_district_communities(scope)
 
 
+def fitted_simulator(scope: str, event_date: str, drange, alpha: float, seed: int, max_fc: int, correctors: dict,
+                     verbose: int = 0, today: Optional[str] = None, limit_date: Optional[str] = None,
+                     simulator: Optional[Callable] = None, step: Optional[Callable[[str], None]] = None):
+    """
+    Build the simulator of a published run in ``nowcast`` mode and fit its average.
+
+    It is the recipe shared by ``publish_forecast`` and by whoever rebuilds a published run.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the run.
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+    drange : tuple or int
+        Window of days before the event (already adjusted to ``limit_date`` by the caller, if any).
+    alpha, seed, max_fc : float, int, int
+        Model parameters.
+    correctors : dict
+        Full corrector arguments of the simulator (``DEFAULT_CORRECTORS`` plus overrides).
+    verbose : int
+        Simulator verbosity.
+    today : str, optional
+        The day taken as today (``YYYY-MM-DD``), cap of the anchor of the average.
+    limit_date : str, optional
+        Retrospective anchor of the simulator; only passed when it is not ``None``.
+    simulator : callable, optional
+        Injectable replacement of ``Simulator``.
+    step : callable, optional
+        Called with ``'init'`` after building the simulator and with ``'fit'`` after fitting it.
+
+    Returns
+    -------
+    Simulator
+        The fitted simulator, in ``nowcast`` mode.
+
+    Raises
+    ------
+    NothingToPublish
+        Building or fitting raised ``ValueError`` (no polls, or an average that cannot be fitted).
+    """
+    cutoff = {} if limit_date is None else {'limit_date': limit_date}
+    try:
+        sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
+                                       mode='nowcast', verbose=verbose, path='.', today=today, **cutoff, **correctors)
+    except ValueError as e:
+        raise NothingToPublish(str(e)) from e
+    if step is not None:
+        step('init')
+    try:
+        sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
+    except ValueError as e:
+        raise NothingToPublish(str(e)) from e
+    if step is not None:
+        step('fit')
+    return sim
+
+
+def run_mode(sim, mode: str, n_sim: int) -> None:
+    """
+    Run a fitted simulator in one mode, as a published run does.
+
+    Parameters
+    ----------
+    sim : Simulator
+        Simulator returned by ``fitted_simulator``.
+    mode : str
+        ``'nowcast'`` or ``'forecast'`` (the latter runs to the deadline horizon).
+    n_sim : int
+        Number of simulations.
+    """
+    if mode == 'forecast':
+        sim.mode = 'forecast'
+        sim.run(split=True, random=True, n_sim=n_sim, horizon='deadline')
+    else:
+        sim.run(split=True, random=True, n_sim=n_sim)
+
+
 def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: str, n_sim: int = 1000,
                      seed: int = 42, drange=6, max_fc: int = 10, alpha: float = 0.05,
                      correctors: Optional[dict] = None, freeze: bool = False, verbose: int = 0,
@@ -970,14 +1048,12 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     """
     writer.begin_run(scope, run_id)
     run_at = run_at or bundle.iso_utc(writer.now())
-    cutoff = {}
     if limit_date is not None:
         # The polls are cut by `drange` (days before the event), not by `limit_date`, which only anchors
         # `as_of`: `days >= cut` keeps the polls published up to `limit_date`, inclusive
         lo, hi = norm_range(drange)
         cut = (date.fromisoformat(event_date) - date.fromisoformat(limit_date)).days
         drange = (max(int(lo or 0), cut), hi)
-        cutoff = {'limit_date': limit_date}
     correctors = {**DEFAULT_CORRECTORS, **(correctors or {})}
     heads, clip = {}, {}
     start = mark = time.perf_counter()
@@ -995,26 +1071,18 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
             progress(step, seconds)
         return seconds
 
-    try:
-        sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
-                                       mode='nowcast', verbose=verbose, path='.', today=today, **cutoff, **correctors)
-    except ValueError as e:
-        raise NothingToPublish(str(e)) from e
-    init = report('init', lap())
-    try:
-        names = sim.params['names']
-        sim.fit_forecast(names=names, max_fc=max_fc, fillna=True)
-    except ValueError as e:
-        raise NothingToPublish(str(e)) from e
-    fit = report('fit', lap())
-    sim.run(split=True, random=True, n_sim=n_sim)
+    laps = {}
+    sim = fitted_simulator(scope, event_date, drange, alpha, seed, max_fc, correctors, verbose=verbose, today=today,
+                           limit_date=limit_date, simulator=simulator,
+                           step=lambda phase: laps.__setitem__(phase, report(phase, lap())))
+    init, fit, names = laps['init'], laps['fit'], sim.params['names']
+    run_mode(sim, 'nowcast', n_sim)
     clip['nowcast'] = float(sim.clip_rate())
     nowcast = report('nowcast', lap())
     communities = district_communities(scope)
     heads['nowcast'] = publish_mode(sim, writer, scope, run_id, communities)
     export = report('export-nowcast', lap())
-    sim.mode = 'forecast'
-    sim.run(split=True, random=True, n_sim=n_sim, horizon='deadline')
+    run_mode(sim, 'forecast', n_sim)
     clip['forecast'] = float(sim.clip_rate())
     forecast = report('forecast', lap())
     heads['forecast'] = publish_mode(sim, writer, scope, run_id, communities)

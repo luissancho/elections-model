@@ -31,5 +31,6 @@
     "Regionalista": ["PNV", "CC", "BNG", "UPN", "NA+"]
   },
   "baseline_scrutiny": "2023-07-23",
-  "split_source": "2023-07-23"
+  "split_source": "2023-07-23",
+  "majority": {"aliases": {}}
 }

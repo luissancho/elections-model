@@ -1004,16 +1004,104 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .band { margin: var(--space-3) 0; padding: 10px 12px; border: 1px solid #e2ded5; border-radius: var(--radius-sm); background: #f3f1ec; font-size: 13.5px; }
 .sum { margin-top: var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: var(--qc-soft); font-size: 14px; font-weight: 500; }
 .sum b { font-weight: 800; }
-/* Question 3: the lead beside the scenario selector, the subheading, the notes under the tables and the gap chart
-   with room for ten rows; without JS the selector still swaps the two tables of the prediction */
+/* A card head with the lead beside a pill, the subheadings and the notes under the tables and charts */
 .qcard .card-h { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-3); }
 .qcard .card-h .lead { flex: 1 1 32rem; margin: 0; }
 .qcard h3 { margin: 18px 0 4px; font: 700 16px/1.3 var(--font-head); }
 .qcard h3 + .lead { margin: 0 0 var(--space-3); }
 .tnote { margin: 8px 0 0; font-size: 12.5px; color: var(--color-muted); }
-.qcard .chart#gap-chart { height: 360px; }
-#p3:has(#scenario input[value="sin_litigio"]:checked) #prediction-table table[data-scenario="convocatoria"] { display: none; }
-#p3:has(#scenario input[value="sin_litigio"]:checked) #prediction-table table[data-scenario="sin_litigio"][hidden] { display: table; }
+/* The card of the majority (question 3 of the CERA study, the approved mockup v10). The ruler of the scenarios, the
+   bars of the provinces and the three figures of the simulations are HTML and CSS, so that they come out the same
+   in the image of the card; nothing in them is a pseudo-element (html2canvas misplaces absolute ones), and the
+   colours of the bars and the lines are written out, as in the herd study. */
+.band-sub { color: var(--color-muted); }
+#majority-kpis { margin-bottom: var(--space-4); background: var(--color-bg); box-shadow: none; }
+#majority-kpis .kpi .l, #majority-kpis .kpi .s { white-space: normal; overflow: visible; text-overflow: clip; }
+/* the three figures are the headline of the card, as in the mockup: the label in small capitals, the value and its
+   unit at the same large size, the sentence under it in plain text */
+#majority-kpis .kpi .l { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+#majority-kpis .kpi .v { gap: .25em; font: 800 28px/1.1 var(--font-head); letter-spacing: -.01em; }
+#majority-kpis .kpi .v small { font: inherit; color: inherit; }
+#majority-kpis .kpi .s { font-size: 12.5px; font-weight: 400; }
+.qcard .card-h.sub-h { align-items: center; margin: 18px 0 6px; }
+.qcard .card-h.sub-h h3 { margin: 0; }
+.sims { margin-top: var(--space-4); }
+.sims .csub { margin-bottom: 8px; }
+.sim-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-bg); overflow: hidden; }
+.sim-step { min-width: 0; padding: 10px 12px; border-right: 1px solid var(--color-line); }
+.sim-step:last-child { border-right: 0; }
+.sim-step i { display: block; font-size: 11.5px; font-style: normal; font-weight: 600; color: var(--color-muted); }
+.sim-step b { display: block; font: 800 24px/1.1 var(--font-head); letter-spacing: -.01em; white-space: nowrap; }
+.sim-step span { display: block; margin-top: 3px; font-size: 12.5px; font-weight: 600; line-height: 1.3; }
+.sim-step small { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.35; color: var(--color-muted); }
+.pbars .prow { display: grid; grid-template-columns: 110px minmax(0, 1fr) 56px; gap: 8px; align-items: center; padding: 3px 0; font-size: 12.5px; }
+.pbar { display: flex; height: 14px; border-radius: 3px; overflow: hidden; }
+.pbar i, .pkey i { display: block; height: 100%; }
+.pbar .lost, .pkey .lost { background: #d1495b; }
+.pbar .gained, .pkey .gained { background: #2f6fb3; }
+.pbar .other, .pkey .other { background: #c5c9d3; }
+.pval { text-align: right; font-weight: 700; white-space: nowrap; }
+.pkey { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11.5px; color: var(--color-muted); }
+.pkey i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+.grid2 + .note { margin-top: var(--space-4); }
+.grid2.lead-left { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+/* the ruler: a row per scenario (its label, the track with a grid line at every inner tick of the axis, the bar,
+   the range and the two lines of what it would take, and the seats and the probability); the grid lines are
+   elements placed like the numbers of the axis, so that they fall on them on screen and in the image */
+.ruler { margin: 10px 0 6px; }
+.rrow { display: grid; grid-template-columns: 148px minmax(0, 1fr) 92px; gap: 10px; align-items: center; padding: 5px 0; font-size: 12.5px; }
+.rgroup { margin: 8px 0 1px; font: 700 10.5px var(--font-head); letter-spacing: .06em; text-transform: uppercase; color: #9298ac; }
+.rl { line-height: 1.3; }
+.rl small { display: block; font-size: 11.5px; color: var(--color-muted); }
+.rtrack { position: relative; height: 16px; border-radius: 4px; background: #eceef2; }
+.rgl { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -1px; background: rgba(0, 0, 0, .1); }
+.rbar { position: absolute; top: 0; bottom: 0; left: 0; min-width: 3px; border-radius: 4px; background: #d1495b; }
+.rwh { position: absolute; top: 4px; height: 8px; border-left: 2px solid #1a1c22; border-right: 2px solid #1a1c22; }
+.rwh i { position: absolute; top: 3px; right: 0; left: 0; height: 2px; background: #1a1c22; }
+.rln { position: absolute; top: -6px; bottom: -6px; border-left: 2px dashed #1a1c22; }
+.rln.q { border-left-color: #e8912b; }
+.rv { text-align: right; white-space: nowrap; }
+.rv b { font: 800 15px var(--font-head); }
+.rv span { margin-left: 6px; font-size: 12px; color: var(--color-muted); }
+.rhead .rtrack, .raxis .rtrack { background: none; }
+.rhead .rtrack { height: 34px; }
+.rtick { position: absolute; bottom: 0; transform: translateX(-50%); font-size: 11.5px; font-weight: 600; line-height: 1.2; text-align: center; white-space: nowrap; }
+.rtick.q { color: #b45309; }
+.rtick.end { transform: translateX(-100%); padding-right: 5px; text-align: right; }
+.rhead .rv { align-self: end; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; line-height: 1.25; text-transform: uppercase; white-space: normal; color: var(--color-muted); }
+.raxis { padding: 0; }
+.raxis .rtrack { height: 15px; }
+.raxis .rtrack span { position: absolute; top: 1px; transform: translateX(-50%); font-size: 10.5px; color: var(--color-muted); }
+.raxis-title { text-align: center; font-size: 11px; color: var(--color-muted); }
+/* the grid: two figures per cell, the seats over the probability, aligned right under their header */
+.cell-seats { display: block; font: 800 15px/1.2 var(--font-head); }
+.cell-p { display: block; font-size: 11.5px; opacity: .85; }
+.aside { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-bg); font-size: 13px; color: var(--color-muted); }
+.aside p { margin: 0; }
+.aside b { color: var(--color-text); }
+@media (max-width: 899px) {
+  .grid2.lead-left { grid-template-columns: 1fr; }
+}
+/* on phones the figures of the simulations stack and the label of each scenario goes above its bar */
+@media (max-width: 719px) {
+  #majority-kpis { grid-template-columns: 1fr; }
+  #majority-kpis .kpi { min-height: 0; background: none; }
+  #majority-kpis .kpi + .kpi { border-top: 1px solid var(--color-line); }
+  #majority-kpis .kpi .v { font-size: 24px; }
+  .sim-steps { grid-template-columns: 1fr; }
+  .sim-step { border-right: 0; border-bottom: 1px solid var(--color-line); }
+  .sim-step:last-child { border-bottom: 0; }
+  .pbars .prow { grid-template-columns: 92px minmax(0, 1fr) 52px; }
+  .rrow { grid-template-columns: minmax(0, 1fr) 88px; row-gap: 2px; }
+  .rrow .rl { grid-column: 1 / -1; }
+  .rrow > span:first-child:empty { display: none; }
+  /* the two tables of the card fit the phone: tighter cells, headers that may wrap and a first column that is not
+     held at the width of the long tables of the site */
+  #majority-table th, #majority-table td, #majority-grid th, #majority-grid td { padding-right: 4px; padding-left: 4px; }
+  #majority-table th, #majority-grid th { letter-spacing: 0; white-space: normal; }
+  .table-wrap #majority-table td:first-child, .table-wrap #majority-grid td:first-child,
+  .table-wrap #majority-table th:first-child, .table-wrap #majority-grid th:first-child { min-width: 0; }
+}
 /* The claims of the debate: what each one computes, what it lacks and the verdict (task 17) */
 .claim { padding: 12px 14px; border: 1px solid var(--color-line-strong); border-radius: 12px; background: var(--color-bg); }
 .claim h3, .claim h4 { margin: 0 0 4px; font-size: 15px; }

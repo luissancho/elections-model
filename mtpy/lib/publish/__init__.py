@@ -48,7 +48,7 @@ from .events import (
 from .forecast import (
     backfill_days, backfill_run_at, backfill_run_id, DEFAULT_CORRECTORS, DISP_COLUMNS, WEIGHTS_COLUMNS, export_dispersion, export_weights,
     export_dist, export_districts, export_fan, export_headline, export_house_effects, export_meta, export_poll_rows,
-    export_polls, poll_seats,
+    export_polls, fitted_simulator, poll_seats, run_mode,
     export_projection, export_scenario, export_seat_odds, export_series, export_summary, export_vote, HE_COLUMNS,
     headline_mode,
     MODE_EXPORTERS, n_polls, PCT_COLS, POLL_COLUMNS, PROB_COLS, publish_forecast, publish_mode, SEATS_COLS,
@@ -57,7 +57,7 @@ from .forecast import (
 from .parties import export_parties, PARTIES_COLUMNS, publish_parties
 from .pointers import point, read_manifest, rebuild_history, unpublish, update_manifest
 from .studies import (
-    export_study_census, export_study_check, export_study_meta, export_study_participation, export_study_placement,
+    export_study_census, export_study_check, export_study_majority, export_study_meta, export_study_participation, export_study_placement,
     export_study_prediction, export_study_sensitivity, export_study_vote, publish_study, registered_claim,
     compute_for_publish, export_lean_election, export_lean_elections, export_lean_houses, export_lean_matrix,
     export_lean_meta, export_lean_summary, export_herd_current, export_herd_elections, export_herd_meta,

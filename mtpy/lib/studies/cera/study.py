@@ -29,7 +29,7 @@ from .behaviour import (
     sensitive_share
 )
 from .census import MARKS, baseline_date, election_growth, trend_break, two_periods, update_periods
-from .check import with_without
+from .check import majority_outcome, with_without
 from .data import (
     MissingCeraColumns,
     Results,
@@ -39,6 +39,7 @@ from .data import (
     read_candidatures_map,
     read_countries,
     read_election_census,
+    read_majority,
     read_monthly,
     read_provinces,
     read_results,
@@ -177,8 +178,9 @@ class CeraStudy:
         `stress.scenario_table` of `SCENARIO_ROWS`.
     placement : dict
         `stress.optimal_placement` of the pool (`grid`, `contrast`) with `PLACEMENT_PARTICIPATIONS` ×
-        `PLACEMENT_FRACS` for `PLACEMENT_CANDIDATURE`, and `pool`, the electors of the pool
-        (`stress.placement_pool` of `params['placement_countries']` since the law).
+        `PLACEMENT_FRACS` for `PLACEMENT_CANDIDATURE`, `pool`, the electors of the pool
+        (`stress.placement_pool` of `params['placement_countries']` since the law), and `electors`, the same pool by
+        `region_id`.
     hist : pd.DataFrame
         `seats.participation_history` over `results`: mean and maximum CERA participation by province since 1986.
     report : dict
@@ -189,6 +191,12 @@ class CeraStudy:
     verdict_input : dict or None
         `{'net_psoe', 'net_left'}` of the check of the study's election (`params['election']['date']`), the
         arguments of `check.verdict`; `None` while that election has no check.
+    majority : dict or None
+        The snapshot of the study on the model's forecast (`cera/majority.json`, `data.read_majority`); `None` if
+        the file does not exist or the study was computed with `majority=False`.
+    outcome : dict or None
+        The seats of the two blocks with and without the exterior vote from the official results of the study's
+        election (`check.majority_outcome`); `None` until the study has the check of that election and a snapshot.
     """
     params: dict
     countries: pd.DataFrame
@@ -230,6 +238,8 @@ class CeraStudy:
     report: dict
     checks: dict
     verdict_input: dict | None
+    majority: dict | None = None
+    outcome: dict | None = None
 
 
 def _read_all_results(data: FileSystem) -> dict[str, Results]:
@@ -577,7 +587,7 @@ def _seats_block(params: dict, inputs: dict, census: dict, last: pd.DataFrame) -
                               GRID_PARTICIPATIONS, GRID_LEFT_FRACS, results.siglas, blocks),
         'scenario_rows': scenario_table(results, baseline, convocation, countries, params['participation'], split,
                                         results.siglas, blocks, SCENARIO_ROWS),
-        'placement': {**placement, 'pool': int(pool.sum())},
+        'placement': {**placement, 'pool': int(pool.sum()), 'electors': pool},
         'hist': hist,
         'report': report_replication(results, inputs['census_by_province'], hist)
     }
@@ -612,7 +622,38 @@ def _checks_block(params: dict, inputs: dict) -> dict:
     return {'checks': checks, 'verdict_input': verdict_input}
 
 
-def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
+def _outcome_of(params: dict, inputs: dict, checks: dict, snapshot: dict | None) -> dict | None:
+    """
+    The outcome of the study's election, if its results are in and there is a snapshot.
+
+    Parameters
+    ----------
+    params : dict
+        The parameters of the study.
+    inputs : dict
+        The output of `_read_inputs`.
+    checks : dict
+        The field `checks` of `_checks_block`.
+    snapshot : dict or None
+        The snapshot on the forecast.
+
+    Returns
+    -------
+    dict or None
+        `check.majority_outcome` with the snapshot's blocks and majority and the aliases of `majority.aliases` (none
+        when `params` lacks the key); `None` without the check of the election or without a snapshot.
+    """
+    date = params['election']['date']
+    if snapshot is None or date not in checks:
+        return None
+
+    return majority_outcome(
+        inputs['results'][date], inputs['cera'][date], snapshot['blocks'], snapshot['majority'],
+        aliases=params.get('majority', {}).get('aliases', {})
+    )
+
+
+def compute_cera(data: FileSystem, params: dict | None = None, majority: bool = True) -> CeraStudy:
     """
     Compute the whole CERA study from its inputs in `data/`.
 
@@ -622,6 +663,9 @@ def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
         The file system rooted at `data/`.
     params : dict, optional
         The parameters of the study; `cera/params.json` (`data.load_params`) if `None`.
+    majority : bool, default True
+        Whether to read the snapshot on the forecast (`cera/majority.json`). With `False` the file is not opened at
+        all, even if it is unreadable or invalid, and `CeraStudy.majority` is `None`.
 
     Returns
     -------
@@ -632,7 +676,7 @@ def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
     ------
     ValueError
         If D'Hondt does not reproduce the official seats of the baseline election or of an election with a CERA
-        scrutiny.
+        scrutiny, or if the snapshot exists and is not valid for the study's election (`data.read_majority`).
     """
     params = load_params(data) if params is None else params
     inputs = _read_inputs(data, params)
@@ -642,4 +686,9 @@ def compute_cera(data: FileSystem, params: dict | None = None) -> CeraStudy:
     seats = _seats_block(params, inputs, census, dhondt['last'])
     checks = _checks_block(params, inputs)
 
-    return CeraStudy(params=params, **inputs, **dhondt, **census, **behaviour, **seats, **checks)
+    snapshot = read_majority(data, params) if majority else None
+
+    outcome = _outcome_of(params, inputs, checks['checks'], snapshot)
+
+    return CeraStudy(params=params, **inputs, **dhondt, **census, **behaviour, **seats, **checks, majority=snapshot,
+                     outcome=outcome)

@@ -84,7 +84,8 @@ EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
 EVENT_CSV = ('pollsters', 'polls', 'cycle', 'ban', 'ban-legal', 'results', 'model-shares', 'model-seats', 'model-blocks',
              'model-ban', 'series')
 STUDIES = ('voto-cera', 'sesgo-cis', 'rebano', 'voto-oculto', 'andorra')
-STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
+STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity',
+                           'majority', 'check'),
                'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election'),
                'rebano': ('meta', 'summary', 'elections', 'current', 'weeks', 'chance'),
                'voto-oculto': ('meta', 'summary', 'elections', 'groups'),
@@ -95,7 +96,9 @@ STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['vo
                  'voto-oculto': {part: 'voto-oculto-' + part for part in STUDY_PARTS['voto-oculto']},
                  'andorra': {part: 'andorra-' + part for part in STUDY_PARTS['andorra']}}
 STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
-                           'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
+                           'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid',
+                           'majority-grid', 'majority-new-electors', 'majority-placement', 'majority-provinces',
+                           'check'),
              'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses'),
              'rebano': ('elections', 'weeks', 'robustness', 'chance'),
              'voto-oculto': ('elections', 'groups'),
@@ -104,6 +107,8 @@ STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'c
                               'participation': ('participation',), 'vote': ('vote', 'ecological'),
                               'prediction': ('last-seat',),
                               'sensitivity': ('sensitivity-grid', 'sensitivity-scenarios', 'placement-grid'),
+                              'majority': ('majority-grid', 'majority-new-electors', 'majority-placement',
+                                           'majority-provinces'),
                               'check': ('check',)},
                 'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
                               'election': ('election-houses',)},
@@ -185,6 +190,8 @@ SCHEMAS = {
     'study-placement': {'sensitive': dict, 'acceleration': list, 'correlations': dict, 'madrid': list},
     'study-prediction': {'scenarios': dict, 'last_seat': list, 'report': dict},
     'study-sensitivity': {'grid': dict, 'scenarios': list, 'placement': dict},
+    'study-majority': {'run': dict, 'majority': int, 'blocks': dict, 'lineage': dict, 'base': dict, 'expected': dict,
+                       'new_electors': dict, 'grid': dict, 'placement': dict, 'outcome': (dict, type(None))},
     'study-check': {'elections': list, 'rows': list, 'verdict': NULLABLE_STR},
     'sesgo-cis-meta': {'study': str, 'title': str, 'subtitle': str, 'pollster': str, 'periods': dict, 'blocks': list,
                        'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,

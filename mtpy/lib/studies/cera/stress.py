@@ -132,6 +132,42 @@ def _biased_split(weights: pd.DataFrame, left_frac: float, siglas: dict, blocks:
     return biased
 
 
+def exterior_votes(cera_2023: pd.DataFrame, results: Results, census_by_province: pd.Series, participation: float,
+                   left_frac: float, siglas: dict, blocks: dict) -> pd.DataFrame:
+    """
+    The whole exterior vote at a participation and a left share, by province and candidature.
+
+    `census_p · participation · 0.99` votes in each province, split as `_biased_split` does with the 2023 CERA votes
+    of the province as weights.
+
+    Parameters
+    ----------
+    cera_2023 : pd.DataFrame
+        The CERA votes of the election by `region_id` and candidature.
+    results : Results
+        The results of the election (2023), whose provinces and candidatures give the shape.
+    census_by_province : pd.Series
+        The CERA electors by `region_id`.
+    participation : float
+        Participation rate (0-1).
+    left_frac : float
+        Fraction (0-1) of the left + right vote that goes to the left.
+    siglas : dict
+        Candidature full name to its sigla.
+    blocks : dict
+        Block name to the list of its siglas.
+
+    Returns
+    -------
+    pd.DataFrame
+        Float votes with the index and columns of `results.votes`.
+    """
+    weights = cera_2023.reindex(index=results.votes.index, columns=results.votes.columns, fill_value=0)
+    electors = census_by_province.reindex(results.votes.index, fill_value=0)
+
+    return _biased_split(weights, left_frac, siglas, blocks).mul(electors * participation * VALID_SHARE, axis=0)
+
+
 def exterior_grid(results: Results, cera_2023: pd.DataFrame, census_by_province: pd.Series,
                   participations: list[float], left_fracs: list[float], siglas, blocks) -> pd.DataFrame:
     """
@@ -167,16 +203,14 @@ def exterior_grid(results: Results, cera_2023: pd.DataFrame, census_by_province:
         columns (integers).
     """
     base = peninsular_results(results, cera_2023)
-    weights = cera_2023.reindex(index=results.votes.index, columns=results.votes.columns, fill_value=0)
-    electors = census_by_province.reindex(results.votes.index, fill_value=0)
     official = block_seats(results.seats, siglas, blocks)[LEFT]
     grid = pd.DataFrame(0, index=pd.Index(participations, name='participation'),
                         columns=pd.Index(left_fracs, name='left_frac'), dtype='int64')
 
     for frac in left_fracs:
-        shares = _biased_split(weights, frac, siglas, blocks)
         for participation in participations:
-            votes = base.votes + shares.mul(electors * participation * VALID_SHARE, axis=0)
+            votes = base.votes + exterior_votes(cera_2023, results, census_by_province, participation, frac, siglas,
+                                                blocks)
             grid.loc[participation, frac] = block_seats(allocate_results(base, votes), siglas, blocks)[LEFT] - official
 
     return grid
@@ -316,7 +350,7 @@ def _seat_cost(row: pd.Series, won: pd.Series, blank: float, candidature: str) -
 
 
 def _greedy_seats(results: Results, seats: pd.DataFrame, costs: pd.Series, candidature: str, votes_left: float,
-                  step: int) -> int:
+                  step: int) -> tuple[int, pd.Series]:
     """
     Place votes of one candidature, `step` at a time, where its next seat is cheapest, and count its seats.
 
@@ -337,10 +371,11 @@ def _greedy_seats(results: Results, seats: pd.DataFrame, costs: pd.Series, candi
 
     Returns
     -------
-    int
-        The candidature's seats once every vote is placed.
+    tuple[int, pd.Series]
+        The candidature's seats once every vote is placed and the votes placed by `region_id`.
     """
     votes, seats, costs = results.votes.astype('float64'), seats.copy(), costs.copy()
+    placed_by = pd.Series(0., index=votes.index)
     blank, magnitude = results.totals['blank'], results.totals['n_seats']
 
     while votes_left > 0:
@@ -348,12 +383,23 @@ def _greedy_seats(results: Results, seats: pd.DataFrame, costs: pd.Series, candi
         placed = min(step, votes_left)
         votes.at[region, candidature] += placed
         votes_left -= placed
+        placed_by.at[region] += placed
         row = votes.loc[region]
         won = pd.Series(_allocate_row(row, int(magnitude.at[region]), float(row.sum() + blank.at[region])))
         seats.loc[region] = won[seats.columns].values
         costs.at[region] = _seat_cost(row, seats.loc[region], float(blank.at[region]), candidature)
 
-    return int(seats[candidature].sum())
+    return int(seats[candidature].sum()), placed_by
+
+
+def _seat_costs(results: Results, seats: pd.DataFrame, candidature: str) -> pd.Series:
+    """The `_seat_cost` of a candidature in each province of `results`, with `seats` as their allocation."""
+    blank = results.totals['blank']
+
+    return pd.Series({
+        region: _seat_cost(row, seats.loc[region], float(blank.at[region]), candidature)
+        for region, row in results.votes.iterrows()
+    })
 
 
 def optimal_placement(results: Results, pool: pd.Series, participations: list[float], fracs: list[float],
@@ -392,11 +438,7 @@ def optimal_placement(results: Results, pool: pd.Series, participations: list[fl
         integers) and `contrast` (its change of seats without the placement, which should be 0).
     """
     seats = allocate_results(results)
-    blank = results.totals['blank']
-    costs = pd.Series({
-        region: _seat_cost(row, seats.loc[region], float(blank.at[region]), candidature)
-        for region, row in results.votes.iterrows()
-    })
+    costs = _seat_costs(results, seats, candidature)
     official = int(seats[candidature].sum())
     grid = pd.DataFrame(0, index=pd.Index(participations, name='participation'),
                         columns=pd.Index(fracs, name='frac'), dtype='int64')
@@ -404,7 +446,8 @@ def optimal_placement(results: Results, pool: pd.Series, participations: list[fl
     for participation in participations:
         for frac in fracs:
             useful = float(pool.sum()) * participation * frac * VALID_SHARE
-            grid.loc[participation, frac] = _greedy_seats(results, seats, costs, candidature, useful, step) - official
+            placed = _greedy_seats(results, seats, costs, candidature, useful, step)[0]
+            grid.loc[participation, frac] = placed - official
 
     if split is None:
         split = empirical_split(results.votes)
@@ -413,6 +456,37 @@ def optimal_placement(results: Results, pool: pd.Series, participations: list[fl
     after = increment_model(results, extra, results.siglas, {})['seats_after']
 
     return {'grid': grid, 'contrast': int(after[candidature].sum()) - official}
+
+
+def placement_plan(results: Results, pool: pd.Series, participation: float, frac: float, candidature: str,
+                   step: int = 500) -> pd.Series:
+    """
+    The votes `optimal_placement` places for one participation and fraction, by province.
+
+    Parameters
+    ----------
+    results : Results
+        The results of the election (2023).
+    pool : pd.Series
+        Electors to place by `region_id`.
+    participation : float
+        Participation rate (0-1).
+    frac : float
+        Fraction (0-1) of the votes that go to `candidature`.
+    candidature : str
+        The candidature full name.
+    step : int, default 500
+        The votes placed at a time.
+
+    Returns
+    -------
+    pd.Series
+        The votes placed, by `region_id` (all of the provinces of `results`).
+    """
+    seats = allocate_results(results)
+    useful = float(pool.sum()) * participation * frac * VALID_SHARE
+
+    return _greedy_seats(results, seats, _seat_costs(results, seats, candidature), candidature, useful, step)[1]
 
 
 def report_replication(results: Results, census_by_province: pd.Series, hist: pd.DataFrame) -> dict:

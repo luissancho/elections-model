@@ -93,7 +93,7 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
     UsageError
         For an empty job, invalid JSON or what must run on the laptop: ``load`` with the ``params`` target,
         ``backtest`` or ``tune`` with ``action`` ``push``/``pull`` or an ``out`` folder (they use the repository
-        copy) and the ``pipeline`` job selecting ``load.params`` or such a ``backtest.backtest`` or ``tune.tune``.
+        copy) and the ``pipeline`` job selecting ``load.params``, ``load.majority`` or such a ``backtest.backtest`` or ``tune.tune``.
     """
     if not job:
         raise UsageError('job name is required')
@@ -110,12 +110,14 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
         targets = what if isinstance(what, list) else [what]
         if 'params' in targets:
             raise UsageError('load params runs on the laptop (it rewrites data/params.json)')
+        if 'majority' in targets:
+            raise UsageError('load majority runs on the laptop (it writes data/cera/majority.json)')
     if job in LAPTOP_COPIES and laptop_backtest(parsed):
         raise UsageError(f'{job} push/pull/out run on the laptop (they use the repository copy)')
     if job == 'pipeline' and isinstance(parsed, dict):
         select = parsed.get('select')
         copies = select in (f'{name}.{name}' for name in LAPTOP_COPIES)
-        if select == 'load.params' or (copies and laptop_backtest(parsed)):
+        if select in ('load.params', 'load.majority') or (copies and laptop_backtest(parsed)):
             raise UsageError('this pipeline runs on the laptop')
     return f'{job} {params}'
 

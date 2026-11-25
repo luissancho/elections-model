@@ -7,6 +7,14 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib.studies.cera import CeraStudy, compute_cera
 from mtpy.lib.studies.cera import study as study_module
+from mtpy.lib.studies.cera.check import with_without
+from mtpy.lib.studies.cera.data import check_majority
+from mtpy.lib.studies.cera.majority import seat_range
+from mtpy.lib.studies.cera.scenarios import expected_table
+from mtpy.lib.studies.cera.seats import allocate_results
+from mtpy.lib.studies.cera.stress import peninsular_results
+from tests.test_cera_check import BLOCKS_2023
+from tests.test_cera_seats import study_inputs  # noqa: F401 (the module-scoped fixture shared with the seat tests)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -117,3 +125,102 @@ def test_read_scrutinies_skips_the_elections_without_results_and_needs_their_can
 
 def test_compute_cera_records_the_skipped_scrutinies(study):
     assert study.skipped_scrutinies == []
+
+
+def test_the_real_snapshot_is_the_run_of_23_n_and_agrees_with_the_study(study):
+    """La foto fija `cera/majority.json` es la del run 20261124-135758 (as_of 23-N) y cuadra con el estudio."""
+    snap = study.majority
+    assert {key: snap['run'][key] for key in ('scope', 'event_date', 'run_id', 'as_of', 'n_sim', 'seed')} == {
+        'scope': 'es', 'event_date': '2026-11-29', 'run_id': '20261124-135758', 'as_of': '2026-11-23',
+        'n_sim': 10000, 'seed': 42}
+    assert snap['majority'] == 176
+    assert snap['blocks'] == {
+        'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'FA', 'UP'],
+        'Otros': ['ERC', 'JxCat', 'EHB', 'PNV', 'BNG', 'CC', 'AA']}
+    assert snap['base']['with_majority'] == 8807 and snap['base']['central'] == {'Derecha': 190, 'Izquierda': 129}
+    assert snap['new_electors']['participations'] == snap['grid']['participations']
+    expected = snap['expected']['convocatoria']
+    if study.params['election']['date'] not in study.checks:
+        # the frozen table is the live study's only while there are no 29-N results (spec D3): the scrutiny of the
+        # election would change the live inputs, never the snapshot
+        assert expected['table'] == expected_table(study, 'convocatoria')
+    assert len(expected['provinces']) == 52
+    counts = expected['counts']
+    assert (counts['votes'], counts['lost'], counts['gained'], counts['moved']) == (30482, 8, 3, 817)
+    assert counts['right'] == {'-2': 7, '-1': 345, '0': 9482, '1': 164, '2': 2}
+    assert counts['central'] == {'right': 0, 'left': 0}
+    lit = snap['expected']['sin_litigio']['counts']
+    assert (lit['votes'], lit['lost'], lit['gained'], lit['moved']) == (22412, 6, 3, 625)
+    madrid = next(row for row in expected['provinces'] if row['region_id'] == 28)
+    assert (madrid['moved'], madrid['right_lost'], madrid['right_gained']) == (189, 77, 34)
+    assert sum(1 for row in expected['provinces'] if row['moved']) == 49
+    cells = [snap[key]['cells'][i][j] for key, i, j in (
+        ('grid', 0, 0), ('grid', 2, 1), ('grid', 2, 3), ('grid', 3, 3), ('grid', 4, 3), ('new_electors', 0, 0),
+        ('new_electors', 3, 3), ('placement', 3, 4), ('placement', 0, 0))]
+    assert [(c['lost'], c['gained'], c['central']['right']) for c in cells] == [
+        (32, 26, 0), (345, 11, -2), (1005, 0, -4), (1815, 0, -8), (2734, 0, -10), (13, 7, 0), (228, 0, -1),
+        (1234, 0, -5), (84, 0, -1)]
+    every = [cell for key in ('new_electors', 'grid', 'placement') for row in snap[key]['cells'] for cell in row]
+    assert len(every) == 60
+    assert all(seat_range(c['right'])[0] <= c['central']['right'] <= seat_range(c['right'])[1] for c in every)
+    assert check_majority(snap, study.params) == []
+
+
+def assert_outcome_agrees(outcome, results, cera, check, majority):
+    """El resultado de una elección cuadra con su comprobación: los escaños de los dos bloques caben en la cámara,
+    la mayoría es la de la foto y `moved` son los escaños que cambian provincia a provincia entre el reparto oficial y
+    el reparto sin el voto exterior, en las provincias que la comprobación da por decididas."""
+    chamber = int(results.totals['n_seats'].sum())
+    assert outcome['right'] + outcome['left'] <= chamber
+    assert outcome['right_without'] + outcome['left_without'] <= chamber
+    assert outcome['has_majority'] == (outcome['right'] >= majority)
+    assert outcome['majority_without'] == (outcome['right_without'] >= majority)
+    differ = allocate_results(results) - allocate_results(peninsular_results(results, cera))
+    assert outcome['moved'] == int(differ.clip(lower=0).sum().sum())
+    assert sorted(int(region) for region in differ.index[differ.ne(0).any(axis=1)]) == check['decided']
+    assert outcome['moved'] >= check['n_decided'] and (outcome['moved'] == 0) == (check['n_decided'] == 0)
+
+
+def test_the_study_has_an_outcome_exactly_when_its_election_is_checked(study):
+    """El resultado existe sólo cuando el estudio tiene la comprobación de su elección y entonces cuadra con ella;
+    los alias de siglas son un diccionario de cadenas (vacío hoy, con las siglas del 29-N después). Vale antes y
+    después de cargar el escrutinio: la rama con resultados la ejercita, con 2023 en su lugar, la prueba de
+    `_outcome_of`."""
+    date = study.params['election']['date']
+    aliases = study.params['majority']['aliases']
+    assert isinstance(aliases, dict) and all(isinstance(key, str) and isinstance(value, str)
+                                             for key, value in aliases.items())
+    if date not in study.checks:
+        assert study.outcome is None
+    else:
+        assert_outcome_agrees(study.outcome, study.results[date], study.cera[date], study.checks[date],
+                              study.majority['majority'])
+
+
+def test_outcome_of_needs_the_check_of_the_election_and_a_snapshot(study_inputs):
+    """La rama que correrá tras el 29-N, con 2023 en el lugar del 29-N y los bloques de la foto: con escrutinio y foto
+    da el resultado (UPN suma al PP: 171) y cuadra con la comprobación; sin una de las dos, None."""
+    s = study_inputs
+    date = '2026-11-29'
+    params = {'election': {'date': date}, 'majority': {'aliases': {'SUMAR': 'FA', 'UPN': 'PP'}}}
+    inputs = {'results': {date: s.results_2023}, 'cera': {date: s.cera_2023}}
+    checks = {date: with_without(s.results_2023, s.cera_2023, s.siglas, s.blocks)}
+    snapshot = {'blocks': BLOCKS_2023, 'majority': 176}
+    out = study_module._outcome_of(params, inputs, checks, snapshot)
+    assert out == {'right': 171, 'left': 152, 'right_without': 170, 'left_without': 153, 'has_majority': False,
+                   'majority_without': False, 'changed': False, 'moved': 1, 'net': {'Derecha': 1, 'Izquierda': -1}}
+    assert_outcome_agrees(out, s.results_2023, s.cera_2023, checks[date], 176)
+    assert study_module._outcome_of(params, inputs, checks, None) is None
+    assert study_module._outcome_of(params, inputs, {}, snapshot) is None
+
+
+def test_outcome_of_reads_params_without_aliases_as_no_aliases(study_inputs):
+    """Unos parámetros sin `majority.aliases` valen como sin alias: el estudio se niega por las siglas sin mapear, no
+    con un `KeyError`."""
+    s = study_inputs
+    date = '2026-11-29'
+    inputs = {'results': {date: s.results_2023}, 'cera': {date: s.cera_2023}}
+    snapshot = {'blocks': BLOCKS_2023, 'majority': 176}
+    for params in ({'election': {'date': date}}, {'election': {'date': date}, 'majority': {}}):
+        with pytest.raises(ValueError, match=r'SUMAR \(31\), UPN \(1\)'):
+            study_module._outcome_of(params, inputs, {date: {}}, snapshot)

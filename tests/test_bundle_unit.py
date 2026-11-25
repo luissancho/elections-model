@@ -85,7 +85,7 @@ def test_analysis_exists_needs_the_meta(tmp_path):
 
 def test_study_registry_is_per_study():
     assert bundle.STUDIES == ('voto-cera', 'sesgo-cis', 'rebano', 'voto-oculto', 'andorra')
-    assert bundle.STUDY_PARTS['voto-cera'] == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
+    assert bundle.STUDY_PARTS['voto-cera'] == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'majority', 'check')
     assert bundle.STUDY_PARTS['sesgo-cis'] == ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')
     assert bundle.STUDY_SCHEMAS['voto-cera'] == {part: 'study-' + part for part in bundle.STUDY_PARTS['voto-cera']}
     assert bundle.STUDY_SCHEMAS['sesgo-cis'] == {part: 'sesgo-cis-' + part for part in bundle.STUDY_PARTS['sesgo-cis']}

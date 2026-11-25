@@ -45,6 +45,8 @@ VEDA_DAYS = 6
 # The parties that take the article in prose («al PSOE», «el PP»); the others go bare («a Vox», «Sumar»)
 WITH_ARTICLE = ('PP', 'PSOE', 'PNV', 'PSC', 'BNG', 'PRC', 'PAR')
 WORDS = ('ninguna', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez')
+# The two of them that change in the masculine
+MASCULINE = {0: 'ningún', 1: 'un'}
 
 
 def _num(x, digits: int = 2) -> str:
@@ -60,6 +62,11 @@ def _count(k, n) -> Optional[str]:
 def words(n) -> str:
     """A small count in words, feminine («cinco», «una»; «ninguna» for 0); the figure from eleven on."""
     return WORDS[n] if isinstance(n, int) and 0 <= n < len(WORDS) else fmt_int(n)
+
+
+def masculine_words(n) -> str:
+    """The masculine twin of ``words``: «un» for 1 and «ningún» for 0 («un escaño»), the rest as ``words``."""
+    return MASCULINE.get(n, words(n)) if isinstance(n, int) else words(n)
 
 
 def the_count(n, plural: str = '', singular: str = '') -> str:

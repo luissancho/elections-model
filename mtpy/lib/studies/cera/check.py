@@ -5,9 +5,12 @@ The official allocation (with the CERA votes) is compared with the allocation of
 them) province by province, and the CERA voters of each province with the gap of its last seat. The verdict rule
 then judges a prediction of the seats the new CERA electors would move against the largest gain measured.
 """
+from typing import Optional
+
 import pandas as pd
 
 from .data import Results
+from .majority import LEFT, RIGHT
 from .seats import OTHER_BLOCK, _sigla_seats, allocate_results, block_seats, last_seat
 from .stress import peninsular_results
 
@@ -17,6 +20,8 @@ ROW_COLUMNS = [
 ]
 HIT = 'acierto'
 MISS = 'fallo'
+# the target of `majority.aliases` for a candidature the model does not simulate: its seats go to the rest
+REST_ALIAS = '-'
 
 
 def _block_of(candidature: str | None, siglas: dict, blocks: dict) -> str:
@@ -134,3 +139,156 @@ def verdict(net_psoe: int, net_left: int, max_gain: int) -> str:
         `'acierto'` when neither prediction exceeds `max_gain`, `'fallo'` otherwise.
     """
     return HIT if max(net_psoe, net_left) <= max_gain else MISS
+
+
+def _moved_seats(seats_with: pd.DataFrame, seats_without: pd.DataFrame) -> int:
+    """
+    The seats that change hands between two allocations, province by province.
+
+    Parameters
+    ----------
+    seats_with : pd.DataFrame
+        Seats with the CERA vote (`allocate_results`), `region_id` × candidature.
+    seats_without : pd.DataFrame
+        Seats without it, on the same provinces and candidatures.
+
+    Returns
+    -------
+    int
+        The positive differences by province and candidature, added: two seats that offset in the national total
+        (one won in a province, one lost in another) both count, as in the provinces the check lists as decided.
+    """
+    return int((seats_with - seats_without.reindex_like(seats_with)).clip(lower=0).sum().sum())
+
+
+def _outcome_errors(seats: dict, seats_without: dict, blocks: dict, aliases: dict) -> list[str]:
+    """
+    What keeps the official siglas from being counted by the parties of the model.
+
+    Parameters
+    ----------
+    seats, seats_without : dict
+        Seats by official sigla with and without the exterior vote (`_sigla_seats`).
+    blocks : dict
+        Block name to the list of its parties of the model; every block names parties of the model.
+    aliases : dict
+        Official sigla to the party of the model it stands for, or `REST_ALIAS`.
+
+    Returns
+    -------
+    list[str]
+        One sentence per kind of error, empty when every seat can be counted: the aliases to no party of the model,
+        the seat-winning siglas that stand for no party of the model (with their seats) and the parties of `RIGHT`
+        and `LEFT`, in that order, for which no sigla of the results stands.
+    """
+    parties = {party for members in blocks.values() for party in members}
+    errors = []
+
+    wrong = [f'{sigla} → {target}' for sigla, target in aliases.items()
+             if target not in parties and target != REST_ALIAS]
+    if wrong:
+        errors.append(f'the aliases {", ".join(wrong)} point to no party of the model nor to "{REST_ALIAS}"')
+
+    unmapped = [
+        f'{sigla} ({seats.get(sigla, 0)})' if seats.get(sigla, 0) == seats_without.get(sigla, 0)
+        else f'{sigla} ({seats.get(sigla, 0)}; {seats_without.get(sigla, 0)} without the exterior vote)'
+        for sigla in sorted(set(seats) | set(seats_without), key=lambda s: (-seats.get(s, 0), s))
+        if (seats.get(sigla, 0) or seats_without.get(sigla, 0))
+        and aliases.get(sigla, sigla) not in parties and aliases.get(sigla, sigla) != REST_ALIAS
+    ]
+    if unmapped:
+        errors.append(
+            f'the siglas {", ".join(unmapped)} win seats and stand for no party of the model: map each to a party of '
+            f'the model or to "{REST_ALIAS}" in majority.aliases of data/cera/params.json'
+        )
+
+    stands = {aliases.get(sigla, sigla) for sigla in seats}
+    missing = [party for name in (RIGHT, LEFT) for party in blocks[name] if party not in stands]
+    if missing:
+        errors.append(
+            f'no candidature of the results stands for {", ".join(missing)}: add its sigla to majority.aliases in '
+            f'data/cera/params.json'
+        )
+
+    return errors
+
+
+def majority_outcome(results: Results, cera: pd.DataFrame, blocks: dict, majority: int,
+                     aliases: Optional[dict] = None) -> dict:
+    """
+    The seats of the two blocks of the majority, with and without the exterior vote, from the official results.
+
+    The parties of the model are those of every block of `blocks`. An official sigla stands for `aliases.get(sigla,
+    sigla)`: a party of the model or `REST_ALIAS` (`"-"`, a candidature the model does not simulate); the seats of
+    several siglas that stand for one party add up. Every seat must be accounted for: an alias to anything else, a
+    seat-winning sigla (with or without the exterior vote) that stands for nothing of the two, or a party of `RIGHT`
+    or `LEFT` for which no sigla stands is refused, all of them in one message. Only the seats of `RIGHT` and `LEFT`
+    are counted, and a party of another block is never required in the results.
+
+    Parameters
+    ----------
+    results : Results
+        The official results of the election, with the CERA votes.
+    cera : pd.DataFrame
+        The CERA votes by `region_id` and candidature full name.
+    blocks : dict
+        Block name to the list of its parties of the model (the snapshot's `blocks`, every key).
+    majority : int
+        The seats of the absolute majority.
+    aliases : dict, optional
+        Official sigla to the party of the model it stands for, or `"-"`; empty if `None`.
+
+    Returns
+    -------
+    dict
+        `right`, `left` (official seats of the blocks), `right_without`, `left_without` (seats of the peninsular
+        allocation), `has_majority` (`right >= majority`) and `majority_without` (the same without the exterior
+        vote), `changed` (they differ), `moved` (seats the exterior vote decided: the positive differences by
+        province and candidature between the two allocations, added, `_moved_seats`) and `net` (`{RIGHT: right -
+        right_without, LEFT: left - left_without}`).
+
+    Raises
+    ------
+    ValueError
+        If an official sigla cannot be counted (`_outcome_errors`), or if the right, the left and the rest do not add
+        up to the seats of the chamber, with or without the exterior vote.
+    """
+    aliases = aliases or {}
+    allocation = allocate_results(results)
+    allocation_without = allocate_results(peninsular_results(results, cera))
+    seats = _sigla_seats(allocation, results.siglas)
+    seats_without = _sigla_seats(allocation_without, results.siglas)
+
+    errors = _outcome_errors(seats, seats_without, blocks, aliases)
+    if errors:
+        raise ValueError('voto-cera: the seats of the results cannot be counted by the parties of the model: '
+                         + '; '.join(errors))
+
+    def total(sigla_seats: dict, members: list) -> int:
+        """Add up the seats of the siglas that stand for some of `members`."""
+        return sum(count for sigla, count in sigla_seats.items() if aliases.get(sigla, sigla) in members)
+
+    in_blocks = set(blocks[RIGHT]) | set(blocks[LEFT])
+    rest_of = [party for members in blocks.values() for party in members if party not in in_blocks] + [REST_ALIAS]
+    chamber = int(results.totals['n_seats'].sum())
+    for sigla_seats in (seats, seats_without):
+        counted = total(sigla_seats, blocks[RIGHT]) + total(sigla_seats, blocks[LEFT]) + total(sigla_seats, rest_of)
+        if counted != chamber:
+            raise ValueError(f'voto-cera: the right, the left and the rest add up to {counted} seats and do not add '
+                             f'up to the {chamber} seats of the chamber: never publish this count')
+
+    right, left = total(seats, blocks[RIGHT]), total(seats, blocks[LEFT])
+    right_without, left_without = total(seats_without, blocks[RIGHT]), total(seats_without, blocks[LEFT])
+    has_majority, majority_without = right >= majority, right_without >= majority
+
+    return {
+        'right': right,
+        'left': left,
+        'right_without': right_without,
+        'left_without': left_without,
+        'has_majority': has_majority,
+        'majority_without': majority_without,
+        'changed': has_majority != majority_without,
+        'moved': _moved_seats(allocation, allocation_without),
+        'net': {RIGHT: right - right_without, LEFT: left - left_without}
+    }

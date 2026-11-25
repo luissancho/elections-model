@@ -715,7 +715,7 @@ def test_error_estimator_is_skipped_without_errors_or_past_elections():
     assert sim.fit_error_estimator() is None
 
 
-from tests.fakes import NAMES, synthetic_simulator
+from tests.fakes import NAMES, REGIONS, synthetic_simulator
 
 
 def test_central_result_is_a_dhondt_allocation_of_the_central_vote():
@@ -747,6 +747,32 @@ def test_central_result_leaves_the_simulations_and_the_generators_alone():
     b.run(reset=False)
     assert np.array_equal(a.results, b.results) and b.params['random'] is True and b.rng is not None
     assert b.central_table is None  # `run` vacía la caché
+
+
+def test_central_shares_are_the_vote_behind_the_central_allocation():
+    """El voto central de cada región, repartido con D'Hondt, da exactamente el reparto central."""
+    sim = synthetic_simulator()
+    shares, central = sim.central_shares(), sim.central_result()
+    assert list(shares.index) == REGIONS and list(shares.columns) == NAMES + ['-']
+    for loc, region in enumerate(REGIONS[1:], start=1):
+        valid = float(sim.prev_totals['votes'].loc[region])
+        votes = np.round(shares.loc[region, NAMES].to_numpy() * valid / 100)
+        seats = Simulator.alloc_seats(dict(zip(NAMES, votes.tolist())), int(sim.reg_totals['seats'].loc[region]),
+                                      valid_votes=valid, threshold=sim.threshold)
+        assert [seats[name] for name in NAMES] == central.iloc[loc].tolist()
+    flat = synthetic_simulator()
+    flat.params['split'] = False
+    assert flat.central_shares() is None
+
+
+def test_central_shares_leave_the_simulations_and_the_generators_alone():
+    """Pedir el voto central no mueve los generadores: las simulaciones de `run` son las mismas."""
+    a, b = synthetic_simulator(), synthetic_simulator()
+    a.params['n_sim'] = b.params['n_sim'] = 5
+    a.run(reset=False)
+    b.central_shares()
+    b.run(reset=False)
+    assert np.array_equal(a.results, b.results) and b.params['random'] is True
 
 
 def test_central_result_is_the_same_in_both_modes_and_cached():
