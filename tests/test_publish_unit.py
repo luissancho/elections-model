@@ -792,7 +792,7 @@ def test_manifest_merges_scopes_and_freeze(tmp_path):
     data = publish.update_manifest(writer, {'es': {'latest': '20261009-120000'}})
     assert data['scopes'] == {'es': {'latest': '20261009-120000'}, 'es-md': {'latest': RUN}}
     assert data['updated_at'] == '2026-10-08T12:00:00Z' and data['attribution'] == publish.ATTRIBUTION
-    data = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'}, today='2026-11-23')
+    data = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral', 'since': '2026-11-23'})
     assert data['freeze'] == {'active': True, 'message': 'Veda electoral', 'since': '2026-11-23'} and len(data['scopes']) == 2
     assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None, 'since': None}
     with pytest.raises(ValueError, match='active'):
@@ -828,14 +828,35 @@ def test_loreg_guard_covers_the_national_window_for_every_scope():
         publish.loreg_guard('es', '2026-11-29', today='2026-11-29')
 
 
-def test_update_manifest_stamps_since_on_activation(tmp_path):
+def test_update_manifest_freezes_without_a_date_unless_one_is_given(tmp_path):
+    """La congelación no lleva fecha («congelado desde …» no sale en la web) salvo que se pida una con `since`; lo
+    guardado se conserva mientras siga activa, aunque cambie el mensaje, y se borra al descongelar."""
     writer = make_writer(tmp_path)
     assert publish.read_manifest(writer)['freeze'] == {'active': False, 'message': None, 'since': None}
-    on = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')['freeze']
-    assert on == {'active': True, 'message': 'Veda', 'since': '2026-11-23'}
-    again = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (2)'}, today='2026-11-24')['freeze']
-    assert again['since'] == '2026-11-23' and again['message'] == 'Veda (2)'
+    on = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda'})['freeze']
+    assert on == {'active': True, 'message': 'Veda', 'since': None}
+    again = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (2)'})['freeze']
+    assert again == {'active': True, 'message': 'Veda (2)', 'since': None}
+    dated = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda', 'since': '2026-11-24'})['freeze']
+    assert dated == {'active': True, 'message': 'Veda', 'since': '2026-11-24'}
+    kept = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (3)'})['freeze']
+    assert kept == {'active': True, 'message': 'Veda (3)', 'since': '2026-11-24'}
+    cleared = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (3)', 'since': None})['freeze']
+    assert cleared['since'] is None
+    publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda', 'since': '2026-11-24'})
     assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None, 'since': None}
+    # tras descongelar no queda fecha que heredar
+    assert publish.update_manifest(writer, freeze={'active': True, 'message': 'Otra'})['freeze']['since'] is None
+    bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
+
+
+@pytest.mark.parametrize('since', ['24 de noviembre', '2026-11-31', 20261124, ''])
+def test_update_manifest_refuses_a_freeze_date_that_is_not_a_day(tmp_path, since):
+    """La web escribe esa fecha («congelado desde 24 nov 2026»): tiene que ser un día `YYYY-MM-DD` que exista."""
+    writer = make_writer(tmp_path)
+    with pytest.raises(ValueError, match='since'):
+        publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda', 'since': since})
+    assert not writer.exists(bundle.path_manifest())
 
 
 def test_read_manifest_adds_since_to_an_old_manifest(tmp_path):

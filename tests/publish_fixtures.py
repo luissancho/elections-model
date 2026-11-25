@@ -36,7 +36,7 @@ def patched(monkeypatch):
     real_today = publish.common._today
 
     # every module of the package that took `_today` by name, so the guard, the anchor and the pointers agree
-    for module in (publish.common, publish.forecast, publish.events, publish.pointers, publish.studies):
+    for module in (publish.common, publish.forecast, publish.events, publish.studies):
         monkeypatch.setattr(module, '_today', lambda today=None: real_today(TODAY if today is None else today))
 
     real_forecast = publish.publish_forecast

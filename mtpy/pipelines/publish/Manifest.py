@@ -34,7 +34,8 @@ class Manifest(PublishPipeline):
         dry_run : bool, default False
             Leave the manifest alone: ``{'status': 'skipped', 'reason': 'dry run'}``.
         freeze : dict, optional
-            Freeze notice of the manifest (``{'active': bool, 'message': str}``).
+            Freeze notice of the manifest (``{'active': bool, 'message': str}`` and, optionally, ``since``, the
+            day the web dates it with: see ``publish.update_manifest``).
 
         Notes
         -----

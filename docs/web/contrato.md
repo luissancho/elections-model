@@ -734,8 +734,10 @@ posteriores a esa hora y, por tanto, normalmente al principio de la lista.
   previo del estudio y si pasó la comprobación); `{}` si no hay ninguno, y un manifest anterior sin la clave se lee
   con `{}`.
 - `freeze`: `{active, message, since}`; interruptor editorial que fija el job con `what: ["manifest"]`. `since`
-  es la fecha ISO (Europe/Madrid) en que pasó de inactivo a activo, se conserva mientras siga activo y es `null`
-  al desactivarlo; un manifest anterior sin la clave se lee con `since: null`.
+  es la fecha ISO que la web escribe en «congelado desde …» o `null`: desde 2026-11-25 solo la lleva si el job
+  la da (`"since": "YYYY-MM-DD"`), se conserva mientras siga activo y es `null` al desactivarlo; antes era el día
+  (Europe/Madrid) en que pasó de inactivo a activo. Un lector no escribe ninguna fecha con `since: null`, esté
+  activo o no; un manifest anterior sin la clave se lee con `since: null`.
 - `attribution`: textos de atribución (`polls`, `results`, `model`). Provisionales; cada escritura del
   manifest la refresca desde `ATTRIBUTION`.
 

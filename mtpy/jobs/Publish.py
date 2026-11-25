@@ -140,7 +140,8 @@ class Publish(SequenceJob):
         correctors : dict, optional
             Correctors passed to the forecast.
         freeze : dict, optional
-            Freeze notice of the manifest (``{'active': bool, 'message': str}``).
+            Freeze notice of the manifest (``{'active': bool, 'message': str}``; with ``'since': 'YYYY-MM-DD'``
+            the web also says since when, otherwise the freeze carries no date).
         run : str, optional
             Run id to point to or remove. Required by ``point`` and ``unpublish``.
         dry_run : bool, default False

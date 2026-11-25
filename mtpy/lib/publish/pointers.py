@@ -1,10 +1,10 @@
 """Manifest and run pointers: ``rebuild_history``, ``update_manifest``, ``point`` and ``unpublish``."""
-from datetime import date, datetime
+from datetime import date
 from typing import Optional
 
 from .. import bundle
 from ..bundle import BundleReader, BundleWriter
-from .common import ATTRIBUTION, latest_entry, _today
+from .common import ATTRIBUTION, ISO_DAY_RE, latest_entry
 
 
 def rebuild_history(writer: BundleWriter, scope: str) -> dict:
@@ -70,8 +70,47 @@ def _write_manifest(writer: BundleWriter, data: dict) -> dict:
     return data
 
 
+def _freeze_since(freeze: dict, previous: dict) -> Optional[str]:
+    """
+    Day an active freeze is dated with, if any (``since`` of the manifest).
+
+    Parameters
+    ----------
+    freeze : dict
+        The freeze switch as given to ``update_manifest``.
+    previous : dict
+        The freeze stored in the manifest.
+
+    Returns
+    -------
+    str or None
+        ``None`` for a freeze switched off; the ``since`` given (a day or ``None``); without one, the stored day
+        while the freeze was already active and ``None`` otherwise.
+
+    Raises
+    ------
+    ValueError
+        ``since`` is neither ``None`` nor an existing day ``YYYY-MM-DD``.
+    """
+    if not freeze['active']:
+        return None
+    if 'since' not in freeze:
+        return previous.get('since') if previous.get('active') else None
+    since = freeze['since']
+    if since is None:
+        return None
+    try:
+        valid = isinstance(since, str) and ISO_DAY_RE.fullmatch(since) is not None and bool(date.fromisoformat(since))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError('publish: freeze "since" must be a day YYYY-MM-DD or null')
+
+    return since
+
+
 def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze: Optional[dict] = None,
-                    today: Optional[str | date | datetime] = None, studies: Optional[dict] = None) -> dict:
+                    studies: Optional[dict] = None) -> dict:
     """Merge scope and study entries and/or the freeze switch into the manifest and write it.
 
     Parameters
@@ -81,11 +120,10 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
     scopes : dict, optional
         Entries by scope code; each replaces the existing entry of its scope.
     freeze : dict, optional
-        ``{'active': bool, 'message': str | None}``. The manifest stores it with ``since``: the date
-        (Europe/Madrid) it went from inactive to active, kept while it stays active and ``None`` when
-        it is switched off.
-    today : str, datetime.date or datetime.datetime, optional
-        Date taken as today for ``since``, as in ``loreg_guard``.
+        ``{'active': bool, 'message': str | None}`` and, optionally, ``since``: the day (``YYYY-MM-DD``) the web
+        says the publication is frozen since. The manifest always stores ``since``: the day given; without one,
+        ``None`` (an active freeze carries no date unless asked for: until 2026-11-25 the day of the activation
+        was stamped), or the stored one while the freeze stays active; ``None`` when it is switched off.
     studies : dict, optional
         Entries by study slug (``{published_at, registered_at, checked}``); each replaces the existing
         entry of its study.
@@ -98,7 +136,7 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
     Raises
     ------
     ValueError
-        ``freeze`` has no boolean ``active``.
+        ``freeze`` has no boolean ``active``, or its ``since`` is not a day (``_freeze_since``).
     """
     if freeze is not None and not (isinstance(freeze, dict) and isinstance(freeze.get('active'), bool)):
         raise ValueError('publish: freeze needs a boolean "active"')
@@ -106,11 +144,8 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
     data['scopes'].update(scopes or {})
     data['studies'] = {**data.get('studies', {}), **(studies or {})}
     if freeze is not None:
-        previous = data['freeze']
-        since = None
-        if freeze['active']:
-            since = previous['since'] if previous.get('active') and previous.get('since') else _today(today).isoformat()
-        data['freeze'] = {'active': freeze['active'], 'message': freeze.get('message'), 'since': since}
+        data['freeze'] = {'active': freeze['active'], 'message': freeze.get('message'),
+                          'since': _freeze_since(freeze, data['freeze'])}
     return _write_manifest(writer, data)
 
 
