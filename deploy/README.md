@@ -1354,6 +1354,12 @@ fallos.
   casa se reajustan con ellos; el simulador recibe además `limit_date=<día>`, que solo ancla `as_of` en ese
   día (no filtra sondeos). El run lleva `meta.limit_date = <día>`, la ventana efectiva en `meta.drange`
   (`[55, null]` para el 2026-10-05) y `headline.backfill = true` (y por tanto la fila de `history.json`).
+- El peso por solape (`weight_over`) también es el de ese día (enmienda 2026-11-25): se calcula con los sondeos
+  de la ventana del run y no con el guardado en la base, que conoce las olas publicadas después. Con el guardado,
+  la última ola de un tracking a fecha del run quedaba a 0 por una ola posterior que el run no ve, y la casa
+  contaba con un sondeo más antiguo o no contaba (en `es`, del 13 al 20 de noviembre de 2026, hasta 0,6 puntos
+  en un partido). Los pesos por muestra y por rating siguen siendo los de hoy, y un run de hoy usa los pesos
+  guardados. Las tablas `polls` y `weights` del run llevan el peso por solape de su día.
 - Es una reconstrucción, no lo que se publicó entonces: usa los ratings, la deriva y el catálogo de hoy y el
   evento de hoy (2026-11-29), incluso para días anteriores a la convocatoria. La web los dibuja como puntos
   huecos con "estimación retrospectiva".

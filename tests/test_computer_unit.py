@@ -1417,6 +1417,22 @@ def test_reweight_recomputes_sample_and_overlap_weights():
     assert w2.loc[polls.pollster_id == 1, 'weight_over'].tolist() == [1.0, 1.0]
 
 
+def test_overlap_weights_are_the_weight_over_of_reweight_and_need_no_sample_sizes():
+    """El peso por solape se puede pedir solo (lo usa un run retrospectivo, con los sondeos de su día): la casa 1,
+    con dos sondeos sin solape a dos días, reparte el peso de uno; la casa 2, con un mes entre los suyos, no. Un
+    sondeo solo pesa 1: ahí `reweight` no puede recortar los tamaños de muestra, que este peso no mira."""
+    polls = _polls_frame()
+    w = Computer.overlap_weights(polls, wspan=4)
+    assert w.name == 'weight_over' and w.index.equals(polls.index)
+    assert w.tolist() == [0.5, 1.0, 0.5, 1.0]
+    assert Computer.overlap_weights(polls, wspan=1).tolist() == [1.0, 1.0, 1.0, 1.0]
+    assert Computer.overlap_weights(polls.iloc[[1]], wspan=4).tolist() == [1.0]
+    # una ola que empieza antes de que acabe la anterior de la misma casa la deja sin peso
+    polls.loc[12, 'start_date'] = pd.Timestamp('2026-10-07')
+    assert Computer.overlap_weights(polls, wspan=4).tolist() == [0.0, 1.0, 1.0, 1.0]
+    assert Computer.reweight(polls, wspan=4)['weight_over'].tolist() == [0.0, 1.0, 1.0, 1.0]
+
+
 def test_reweight_accepts_categorical_pollsters():
     """La serie real llega con `pollster` y `mtype` categóricas (`get_poll_series`): agrupar por ellas no debe
     depender del valor por defecto de `observed` (aviso de pandas en cada carga y cada compute) y una casa del

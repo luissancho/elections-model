@@ -197,8 +197,39 @@ class FakeSimulator:
         return sim
 
 
+class FakePollSeries:
+    """Lector con la firma de `get_poll_series` sobre seis sondeos de la elección del 2026-11-29, con el peso por
+    solape que la base guarda hoy (`weight_over`, calculado con todo el ciclo): anota las llamadas y, como el real,
+    sólo devuelve los sondeos de la ventana (`days` entre los dos extremos de `drange`).
+
+    - Casa 1 (un tracking para el patrocinador 5): tres olas que se solapan, con campo hasta el 17, el 18 y el 19 de
+      noviembre; hoy sólo pesa la última.
+    - Casa 2: dos sondeos sin solape que acaban con tres días de diferencia (5 y 8 de noviembre): medio peso cada uno.
+    - Casa 3: un sondeo del 1 de octubre.
+    """
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, scope, event_dates=None, metric='pct', drange=None, drop_mtypes=None, drop_contexts=None):
+        self.calls.append((scope, event_dates, tuple(drange)))
+        event = pd.Timestamp('2026-11-29')
+        end = pd.to_datetime(['2026-11-17', '2026-11-18', '2026-11-19', '2026-11-05', '2026-11-08', '2026-10-01'])
+        polls = pd.DataFrame({
+            'event_date': event, 'event_scope': scope, 'date': end, 'pollster_id': [1, 1, 1, 2, 2, 3],
+            'sponsor_id': [5, 5, 5, 0, 0, 0], 'pollster': ['A', 'A', 'A', 'B', 'B', 'C'],
+            'start_date': pd.to_datetime(['2026-11-11', '2026-11-12', '2026-11-13', '2026-11-03', '2026-11-07',
+                                          '2026-09-28']),
+            'end_date': end, 'sample_size': [1000., 1000., 1000., 1200., 1200., 800.], 'mtype': 'cati', 'ctype': None,
+            'days': (event - end).days, 'proc_sample': [1000, 1000, 1000, 1200, 1200, 800],
+            'weight_sample': [1., 1., 1., 1.1, 1.1, .89], 'weight_over': [0., 0., 1., .5, .5, 1.],
+        })
+        lo, hi = drange
+        return polls.loc[(polls['days'] >= (lo or 0)) & (polls['days'] <= (hi if hi else polls['days'].max()))]
+
+
 HOUSES = ['40dB', 'CIS', 'GAD3']
-ANALYSIS_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']  # dos elecciones pasadas y el ciclo en curso
+ANALYSIS_EVENTS =['2019-11-10', '2023-07-23', '2026-11-29']  # dos elecciones pasadas y el ciclo en curso
 
 
 def synthetic_analysis():

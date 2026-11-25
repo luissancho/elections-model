@@ -127,7 +127,9 @@ seats_hi, p_first}` en el orden de `vote_forecast()`; `seats` es el titular ente
 `backfill` (enmienda 2026-10-09; booleano, clave obligatoria) es `true` en un run retrospectivo: una
 reconstrucción con el modelo de hoy y solo los sondeos publicados hasta `meta.limit_date`, con `run_id`
 `YYYYMMDD-120000` y `run_at` a las 12:00 UTC de ese día. Un lector trata la clave ausente (runs publicados
-antes de 2026-10-09) como `false`. El contrato sigue en 1: son claves adicionales.
+antes de 2026-10-09) como `false`. El contrato sigue en 1: son claves adicionales. Desde 2026-11-25 el peso por
+solape de esos sondeos (`weight_over` en `polls` y `weights`) se calcula solo con ellos, sin las olas publicadas
+después de `meta.limit_date`; los runs retrospectivos publicados antes llevan el peso guardado en la base ese día.
 
 ### `series`
 
