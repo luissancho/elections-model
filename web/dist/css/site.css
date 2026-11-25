@@ -1044,12 +1044,14 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .pkey { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11.5px; color: var(--color-muted); }
 .pkey i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
 .grid2 + .note { margin-top: var(--space-4); }
-.grid2.lead-left { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+/* the two charts of what it would take sit apart, so that the figures of the ruler read as its own column; the
+   gutter narrows with the window, where the grid of the right has no room to spare */
+.grid2.lead-left { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); column-gap: clamp(16px, 3vw, 40px); }
 /* the ruler: a row per scenario (its label, the track with a grid line at every inner tick of the axis, the bar,
-   the range and the two lines of what it would take, and the seats and the probability); the grid lines are
-   elements placed like the numbers of the axis, so that they fall on them on screen and in the image */
+   the range and the line of what it would take, and the seats and the probability, next to the bar); the grid
+   lines are elements placed like the numbers of the axis, so that they fall on them on screen and in the image */
 .ruler { margin: 10px 0 6px; }
-.rrow { display: grid; grid-template-columns: 148px minmax(0, 1fr) 92px; gap: 10px; align-items: center; padding: 5px 0; font-size: 12.5px; }
+.rrow { display: grid; grid-template-columns: 168px minmax(0, 1fr) 78px; gap: 10px; align-items: center; padding: 5px 0; font-size: 12.5px; }
 .rgroup { margin: 8px 0 1px; font: 700 10.5px var(--font-head); letter-spacing: .06em; text-transform: uppercase; color: #9298ac; }
 .rl { line-height: 1.3; }
 .rl small { display: block; font-size: 11.5px; color: var(--color-muted); }
@@ -1059,15 +1061,13 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .rwh { position: absolute; top: 4px; height: 8px; border-left: 2px solid #1a1c22; border-right: 2px solid #1a1c22; }
 .rwh i { position: absolute; top: 3px; right: 0; left: 0; height: 2px; background: #1a1c22; }
 .rln { position: absolute; top: -6px; bottom: -6px; border-left: 2px dashed #1a1c22; }
-.rln.q { border-left-color: #e8912b; }
-.rv { text-align: right; white-space: nowrap; }
-.rv b { font: 800 15px var(--font-head); }
+.rv { white-space: nowrap; }
+.rv b { display: inline-block; min-width: 28px; text-align: right; font: 800 15px var(--font-head); }
 .rv span { margin-left: 6px; font-size: 12px; color: var(--color-muted); }
 .rhead .rtrack, .raxis .rtrack { background: none; }
 .rhead .rtrack { height: 34px; }
-.rtick { position: absolute; bottom: 0; transform: translateX(-50%); font-size: 11.5px; font-weight: 600; line-height: 1.2; text-align: center; white-space: nowrap; }
-.rtick.q { color: #b45309; }
-.rtick.end { transform: translateX(-100%); padding-right: 5px; text-align: right; }
+/* the label of the line ends at it: the line falls near the end of the track */
+.rtick { position: absolute; bottom: 0; transform: translateX(-100%); padding-right: 5px; font-size: 11.5px; font-weight: 600; line-height: 1.2; text-align: right; white-space: nowrap; }
 .rhead .rv { align-self: end; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; line-height: 1.25; text-transform: uppercase; white-space: normal; color: var(--color-muted); }
 .raxis { padding: 0; }
 .raxis .rtrack { height: 15px; }
@@ -1092,7 +1092,7 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
   .sim-step { border-right: 0; border-bottom: 1px solid var(--color-line); }
   .sim-step:last-child { border-bottom: 0; }
   .pbars .prow { grid-template-columns: 92px minmax(0, 1fr) 52px; }
-  .rrow { grid-template-columns: minmax(0, 1fr) 88px; row-gap: 2px; }
+  .rrow { grid-template-columns: minmax(0, 1fr) 78px; row-gap: 2px; }
   .rrow .rl { grid-column: 1 / -1; }
   .rrow > span:first-child:empty { display: none; }
   /* the two tables of the card fit the phone: tighter cells, headers that may wrap and a first column that is not
