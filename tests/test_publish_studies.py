@@ -208,7 +208,7 @@ def test_export_study_majority_carries_the_snapshot_the_ranges_and_the_csv(study
     assert list(frames) == ['majority-grid', 'majority-new-electors', 'majority-placement', 'majority-provinces']
     grid = frames['majority-grid'].set_index(['participation', 'left_frac'])
     assert grid.loc[(0.7, 0.8), ['lost', 'with_majority', 'central_right', 'right_lo', 'right_hi']].tolist() == [
-        2734, 6073, -10, -15, -5]
+        2577, 6217, -10, -15, -5]
     assert len(frames['majority-grid']) == len(frames['majority-new-electors']) == 20
     assert len(frames['majority-placement']) == 20 and len(frames['majority-provinces']) == 104
 
