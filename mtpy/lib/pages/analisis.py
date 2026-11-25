@@ -30,7 +30,7 @@ CERA = 'voto-cera'
 VERDICTS = [('SÍ', 'q1'), ('SIN EVIDENCIA', 'q2'), ('NO', 'q3')]
 QUESTIONS = ('¿Se dispara el censo de los españoles en el exterior?',
              '¿Sesgo de izquierdas o reparto en provincias «estratégicas»?',
-             '¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el 29-N?')
+             '¿Puede arrebatar la mayoría absoluta a la Derecha el 29-N?')
 ARTICLE = {'url': 'https://medium.com/@luis_sancho/el-voto-cera-en-espa%C3%B1a-y-el-efecto-de-la-ley-de-nietos-ae2cd1b063a5',
            'date': '2026-06-30'}
 # First auto of the Supreme Court that suspended the inscriptions in litigation: a fact of the context, not of the
@@ -51,7 +51,7 @@ CSV_LABELS = {
         'placement-grid': 'Rejilla de colocación óptima (sobre 2023)',
         'majority-grid': 'Mayoría: rejilla de todo el censo',
         'majority-new-electors': 'Mayoría: rejilla de los electores nuevos',
-        'majority-placement': 'Mayoría: colocación a ciegas',
+        'majority-placement': 'Mayoría: colocación de electores',
         'majority-provinces': 'Mayoría: provincias',
         'check': 'Comprobación con y sin voto CERA por provincia',
     },

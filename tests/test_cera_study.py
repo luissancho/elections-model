@@ -128,16 +128,16 @@ def test_compute_cera_records_the_skipped_scrutinies(study):
 
 
 def test_the_real_snapshot_is_the_run_of_23_n_and_agrees_with_the_study(study):
-    """La foto fija `cera/majority.json` es la del run 20261124-135758 (as_of 23-N) y cuadra con el estudio."""
+    """La foto fija `cera/majority.json` es la del run 20261125-155527 (as_of 23-N) y cuadra con el estudio."""
     snap = study.majority
     assert {key: snap['run'][key] for key in ('scope', 'event_date', 'run_id', 'as_of', 'n_sim', 'seed')} == {
-        'scope': 'es', 'event_date': '2026-11-29', 'run_id': '20261124-135758', 'as_of': '2026-11-23',
+        'scope': 'es', 'event_date': '2026-11-29', 'run_id': '20261125-155527', 'as_of': '2026-11-23',
         'n_sim': 10000, 'seed': 42}
     assert snap['majority'] == 176
     assert snap['blocks'] == {
         'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'FA', 'UP'],
         'Otros': ['ERC', 'JxCat', 'EHB', 'PNV', 'BNG', 'CC', 'AA']}
-    assert snap['base']['with_majority'] == 8807 and snap['base']['central'] == {'Derecha': 190, 'Izquierda': 129}
+    assert snap['base']['with_majority'] == 8794 and snap['base']['central'] == {'Derecha': 190, 'Izquierda': 129}
     assert snap['new_electors']['participations'] == snap['grid']['participations']
     expected = snap['expected']['convocatoria']
     if study.params['election']['date'] not in study.checks:
@@ -146,20 +146,20 @@ def test_the_real_snapshot_is_the_run_of_23_n_and_agrees_with_the_study(study):
         assert expected['table'] == expected_table(study, 'convocatoria')
     assert len(expected['provinces']) == 52
     counts = expected['counts']
-    assert (counts['votes'], counts['lost'], counts['gained'], counts['moved']) == (30482, 8, 3, 817)
-    assert counts['right'] == {'-2': 7, '-1': 345, '0': 9482, '1': 164, '2': 2}
+    assert (counts['votes'], counts['lost'], counts['gained'], counts['moved']) == (30482, 8, 4, 893)
+    assert counts['right'] == {'-2': 5, '-1': 353, '0': 9435, '1': 206, '2': 1}
     assert counts['central'] == {'right': 0, 'left': 0}
     lit = snap['expected']['sin_litigio']['counts']
-    assert (lit['votes'], lit['lost'], lit['gained'], lit['moved']) == (22412, 6, 3, 625)
+    assert (lit['votes'], lit['lost'], lit['gained'], lit['moved']) == (22412, 7, 4, 688)
     madrid = next(row for row in expected['provinces'] if row['region_id'] == 28)
-    assert (madrid['moved'], madrid['right_lost'], madrid['right_gained']) == (189, 77, 34)
-    assert sum(1 for row in expected['provinces'] if row['moved']) == 49
+    assert (madrid['moved'], madrid['right_lost'], madrid['right_gained']) == (176, 64, 35)
+    assert sum(1 for row in expected['provinces'] if row['moved']) == 50
     cells = [snap[key]['cells'][i][j] for key, i, j in (
         ('grid', 0, 0), ('grid', 2, 1), ('grid', 2, 3), ('grid', 3, 3), ('grid', 4, 3), ('new_electors', 0, 0),
         ('new_electors', 3, 3), ('placement', 3, 4), ('placement', 0, 0))]
     assert [(c['lost'], c['gained'], c['central']['right']) for c in cells] == [
-        (32, 26, 0), (345, 11, -2), (1005, 0, -4), (1815, 0, -8), (2734, 0, -10), (13, 7, 0), (228, 0, -1),
-        (1234, 0, -5), (84, 0, -1)]
+        (31, 31, 0), (321, 16, -2), (947, 1, -4), (1707, 0, -8), (2577, 0, -10), (10, 6, 0), (205, 2, 0),
+        (1149, 0, -4), (73, 0, -1)]
     every = [cell for key in ('new_electors', 'grid', 'placement') for row in snap[key]['cells'] for cell in row]
     assert len(every) == 60
     assert all(seat_range(c['right'])[0] <= c['central']['right'] <= seat_range(c['right'])[1] for c in every)

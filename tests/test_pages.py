@@ -7239,8 +7239,8 @@ def test_cera_page_head_and_question_1(api, fresh_app):
     assert re.findall(r'<a class="(q[123])" href="#(p[123])">', resumen) == [('q1', 'p1'), ('q2', 'p2'), ('q3', 'p3')]
     assert '(×1,5)' in resumen and '~5%' in resumen and '~10%' in resumen  # the pace of the updated periods
     assert 'el 18% de las altas con el 25% del censo' in resumen
-    assert ('Con el voto que se espera no cambia ningún escaño del reparto central del modelo, y sólo en el 0,11% de '
-            'sus simulaciones cambia el sentido de la mayoría.') in resumen
+    assert ('Si el voto CERA se comporta como en años anteriores, no cambia ningún escaño del reparto central del '
+            'modelo, y sólo en el 0,12% de sus simulaciones cambia el sentido de la mayoría.') in resumen
     assert 'class="note blue"' in resumen and 'los datos por encima de bandos y consignas.</p>' in resumen
     assert page[:page.index('id="p1"')].endswith('<section class="card qcard shot q1" ')
     p1 = page[page.index('id="p1"'):]
@@ -7374,28 +7374,40 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     # question 3
     p3 = cera_section(page, 'p3')
     assert page[:page.index('id="p3"')].endswith('<section class="card qcard shot q3" ')
-    assert ('<div class="qn">3</div><h2 class="qt">¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el '
-            '29-N?</h2>') in p3
+    assert ('<div class="qn">3</div><h2 class="qt">¿Puede arrebatar la mayoría absoluta a la Derecha el 29-N?</h2>'
+            ) in p3
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', p3) == ['NO']
     text = visible_text(p3)
     for piece in ('Foto fija · datos hasta el 23 de noviembre', '190 escaños', '−10 escaños', '2.769.645', '+442.257',
-                  '239.221', '+30.790', '5 simulaciones menos de 10.000', '8,17%', '5,18%',
-                  '3,52% a la baja y 1,66% al alza', 'Sólo en el', '0,11%', 'cambia el sentido de la mayoría',
-                  'Madrid', '1,89%', 'ocurre alguna vez en 49 de las 52',
-                  'El censo incluye las 163.020 inscripciones en litigio.', 'si la derecha suma 181',
-                  'si la derecha suma 190', '9% voto + 50% izq.', 'como 2023', '50% voto + 80% izq.',
-                  'Colocación a ciegas', '30% voto + 60% izq.', '84,7%', '70% voto + 80% izq.', '60,7%',
-                  'Si los 2.769.645 electores del 29-N votaran así', 'entre 1 y 5 escaños', '87,2%', '75,7%',
-                  'ni un escaño: la derecha sigue en 190', 'el 80% lo hiciera a la izquierda, un escaño'):
+                  '239.221', '+30.790', 'la conservaría en el 87,9% de las simulaciones', '8,93%', '5,65%',
+                  '3,58% a la baja y 2,07% al alza', 'Sólo en el', '0,12%', 'cambia el sentido de la mayoría',
+                  'Madrid', '1,76%', 'Ocurre alguna vez en 50 de las 52',
+                  'El censo incluye las 163.020 inscripciones suspendidas por el Tribunal Supremo, actualmente en '
+                  'litigio.', 'La línea discontinua, los 15 escaños que tendría que perder',
+                  'pierde la mayoría (parte de 190)', '9% voto + 50% izq.', 'como en 2023', '50% voto + 80% izq.',
+                  'muy improbable', '100% voto + 100% PSOE', 'votos colocados a conciencia',
+                  '30% voto + 60% izq.', '84,9%', '70% voto + 80% izq.', '62,2%',
+                  'Escaños que pierde la Derecha', 'del voto a los dos bloques, la mitad fue a cada uno',
+                  'entre 1 y 4 escaños', '87,2%', '76,5%', 'si votaran todos, y todos al PSOE',
+                  'ni un escaño: la Derecha sigue en 190', 'el 80% lo hiciera a la Izquierda, ni un escaño',
+                  'ni el escenario más extremo llega (10)'):
         assert piece in text, piece
+    # «el escenario más extremo» is the grid's last cell: the blind placement keeps its own name
+    assert 'escenario extremo' not in text
+    # card 3 names the two blocks with a capital letter; the only lower-case one is the direction of the ruler
+    assert re.findall(r'\b[Ll]a (?:derecha|izquierda)\b', text) == ['la derecha']
+    assert 'A la derecha, la probabilidad de que la conserve' in text
     assert p3.count('class="rrow"') == 7 and len(re.findall(r'<td[^>]*class="[^"]*cell-shade', p3)) == 20
+    # a single dashed line, what it takes from the central allocation (15 of 16 on the axis), on every row
+    assert p3.count('<i class="rln" style="left: 93.75%"></i>') == 7 and p3.count('class="rtick"') == 1
+    assert 'Colocación a ciegas' not in text and 'a ciegas' not in text
     for gone in ('gap-chart', 'radar-chart', 'id="scenario"', 'prediction-table', 'placement-table', 'la consigue en',
                  'Qué pasó el 29-N', 'None'):
         assert gone not in p3, gone
     assert '<a href="#p3" class="q3">3 · ¿Quitan la mayoría?</a>' in page
     summary = visible_text(cera_section(page, 'resumen'))
-    assert '¿Puede el voto CERA arrebatar la mayoría absoluta a la derecha el 29-N?' in summary
-    assert 'sólo en el 0,11% de sus simulaciones cambia el sentido de la mayoría' in summary
+    assert '¿Puede arrebatar la mayoría absoluta a la Derecha el 29-N?' in summary
+    assert 'sólo en el 0,12% de sus simulaciones cambia el sentido de la mayoría' in summary
     assert 'medium.com' not in page[:page.index('id="datos"')]
     # richer parts: the gated sentences follow the data (margins that fall, the countries of the placement)
     vote = fixture_data('study-vote')
@@ -7430,18 +7442,18 @@ def cera_outcome(right, right_without, moved, net_right, checked=True):
 
 
 @pytest.mark.parametrize('outcome, meta, sentence', [
-    (*cera_outcome(181, 181, 0, 0), 'Qué pasó el 29-N. La derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
+    (*cera_outcome(181, 181, 0, 0), 'Qué pasó el 29-N. La Derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
      'El voto CERA, contado el 4 dic 2026, no movió ningún escaño y no cambió la mayoría.'),
-    (*cera_outcome(181, 182, 1, -1), 'Qué pasó el 29-N. La derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
-     'El voto CERA, contado el 4 dic 2026, movió 1 escaño (derecha −1, izquierda +1) y no cambió la mayoría.'),
-    (*cera_outcome(175, 176, 1, -1), 'Qué pasó el 29-N. La derecha obtuvo 175 escaños: no llega a la mayoría absoluta '
-     '(176). El voto CERA, contado el 4 dic 2026, movió 1 escaño (derecha −1, izquierda +1) y cambió la mayoría: sin '
-     'el voto exterior, la derecha habría tenido mayoría absoluta.'),
-    (*cera_outcome(176, 174, 3, 2), 'Qué pasó el 29-N. La derecha obtuvo 176 escaños: tiene mayoría absoluta (176). '
-     'El voto CERA, contado el 4 dic 2026, movió 3 escaños (derecha +2, izquierda −2) y cambió la mayoría: sin el '
-     'voto exterior, la derecha no habría tenido mayoría absoluta.'),
-    (*cera_outcome(170, 169, 1, 1, checked=False), 'Qué pasó el 29-N. La derecha obtuvo 170 escaños: no llega a la '
-     'mayoría absoluta (176). El voto CERA movió 1 escaño (derecha +1, izquierda −1) y no cambió la mayoría.'),
+    (*cera_outcome(181, 182, 1, -1), 'Qué pasó el 29-N. La Derecha obtuvo 181 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, movió 1 escaño (Derecha −1, Izquierda +1) y no cambió la mayoría.'),
+    (*cera_outcome(175, 176, 1, -1), 'Qué pasó el 29-N. La Derecha obtuvo 175 escaños: no llega a la mayoría absoluta '
+     '(176). El voto CERA, contado el 4 dic 2026, movió 1 escaño (Derecha −1, Izquierda +1) y cambió la mayoría: sin '
+     'el voto exterior, la Derecha habría tenido mayoría absoluta.'),
+    (*cera_outcome(176, 174, 3, 2), 'Qué pasó el 29-N. La Derecha obtuvo 176 escaños: tiene mayoría absoluta (176). '
+     'El voto CERA, contado el 4 dic 2026, movió 3 escaños (Derecha +2, Izquierda −2) y cambió la mayoría: sin el '
+     'voto exterior, la Derecha no habría tenido mayoría absoluta.'),
+    (*cera_outcome(170, 169, 1, 1, checked=False), 'Qué pasó el 29-N. La Derecha obtuvo 170 escaños: no llega a la '
+     'mayoría absoluta (176). El voto CERA movió 1 escaño (Derecha +1, Izquierda −1) y no cambió la mayoría.'),
 ], ids=['none-moved', 'one-moved', 'loses-it', 'keeps-it', 'no-date'])
 def test_cera_page_shows_what_happened_once_the_part_has_an_outcome(api, fresh_app, outcome, meta, sentence):
     """La banda «Qué pasó el 29-N» dice los cuatro hechos de la spec (D7): los escaños de la derecha, si tiene mayoría,
@@ -7454,7 +7466,7 @@ def test_cera_page_shows_what_happened_once_the_part_has_an_outcome(api, fresh_a
     assert band == sentence + ' Lo que sigue es la foto del 23 de noviembre, tal como se publicó antes de votar: no se ' \
                               'ha recalculado.'
     text = visible_text(p3)
-    for piece in ('190 escaños', '0,11%'):
+    for piece in ('190 escaños', '0,12%'):
         assert piece in text, piece
     assert_public_wording(p3, 'banda del 29-N')
 
@@ -7470,7 +7482,7 @@ def test_cera_page_without_the_majority_part_keeps_rendering(api, fresh_app):
     third = cera_section(page, 'resumen')
     third = third[third.index('href="#p3"'):]
     third = third[:third.index('</a>')]
-    assert '¿Puede el voto CERA arrebatar' in third and '<div class="vv">NO</div>' in third and '<p>' not in third
+    assert '¿Puede arrebatar' in third and '<div class="vv">NO</div>' in third and '<p>' not in third
 
 
 def test_cera_page_how_to_read_question_3_names_the_candidatures(api, fresh_app):
@@ -7613,7 +7625,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert '<summary>Glosario</summary>' in glossary and '<dt>Voto rogado</dt>' in glossary
     assert re.findall(r'<dt>([^<]+)</dt>', glossary) == [
         'CERA', 'Voto rogado', 'Ley de Nietos', 'Censo de la convocatoria', 'Brecha del último escaño', 'Efecto neto',
-        'Inferencia ecológica', 'Provincias sensibles', 'Colocación a ciegas', 'Reparto central']
+        'Inferencia ecológica', 'Provincias sensibles', 'Colocación de electores', 'Reparto central']
     assert 'sólo podía guiarse por los resultados de 2023, el plan se decide con ellos' in glossary
     assert 'Es un límite, no una previsión.' in glossary
     assert "D'Hondt sobre el voto central de cada provincia" in glossary
@@ -7684,31 +7696,32 @@ def test_cera_majority_view_model_reads_everything_from_the_part():
     """El modelo de vista de la tarjeta de la mayoría sale entero de la parte publicada (la foto fija real)."""
     q3 = pages.cera._majority(fixture_data('study-majority'), fixture_data('study-meta'))
     assert (q3['as_of'], q3['n_sim'], q3['majority'], q3['litigation']) == ('2026-11-23', 10000, 176, 163020)
-    assert q3['base'] == {'right': 190, 'needed': 15, 'p': 88.1, 'quartile': 181, 'needed_quartile': 6,
-                          'p_quartile': 27.4, 'p_without': 11.9}
-    assert q3['expected'] == {'seats': 0, 'right': 190, 'p': 88.0, 'net': 5}
-    assert q3['extreme'] == {'seats': -10, 'right': 180, 'p': 60.7, 'participation': 70, 'left_frac': 80}
+    assert q3['base'] == {'right': 190, 'needed': 15, 'p': 87.9, 'quartile': 181, 'needed_quartile': 6,
+                          'p_quartile': 26.6, 'p_without': 12.1}
+    assert q3['expected'] == {'seats': 0, 'right': 190, 'p': 87.9, 'net': 4}
+    assert q3['extreme'] == {'seats': -10, 'right': 180, 'p': 62.2, 'participation': 70, 'left_frac': 80}
     assert q3['table'] == [{'label': 'Censo CERA', 'before': 2327388, 'after': 2769645, 'change': 442257},
                            {'label': 'Votantes CERA', 'before': 208431, 'after': 239221, 'change': 30790}]
-    assert q3['changes'] == {'moved': 8.17, 'total': 5.18, 'down': 3.52, 'up': 1.66, 'majority': 0.11}
-    assert q3['provinces']['rows'][0] == {'name': 'Madrid', 'p': 1.89, 'lost': 0.77, 'gained': 0.34, 'other': 0.78,
+    assert q3['changes'] == {'moved': 8.93, 'total': 5.65, 'down': 3.58, 'up': 2.07, 'majority': 0.12}
+    assert q3['provinces']['rows'][0] == {'name': 'Madrid', 'p': 1.76, 'lost': 0.64, 'gained': 0.35, 'other': 0.77,
                                           'width': 100.0}
-    assert (len(q3['provinces']['rows']), q3['provinces']['ever'], q3['provinces']['total']) == (10, 49, 52)
+    assert (len(q3['provinces']['rows']), q3['provinces']['ever'], q3['provinces']['total']) == (10, 50, 52)
     rows = [row for group in q3['ruler']['groups'] for row in group['rows']]
     assert [(r['name'], r['seats'], r['lo'], r['hi'], r['p']) for r in rows] == [
-        ('9% voto + 50% izq.', 0, 0, 1, 88.0), ('50% voto + 80% izq.', 1, 0, 3, 85.8),
-        ('Colocación a ciegas', 5, 0, 8, 75.7), ('30% voto + 60% izq.', 2, 0, 5, 84.7),
-        ('30% voto + 80% izq.', 4, 1, 8, 78.0), ('50% voto + 80% izq.', 8, 3, 12, 69.9),
-        ('70% voto + 80% izq.', 10, 5, 15, 60.7)]
-    assert rows[0]['detail'] == 'como 2023' and rows[2]['detail'] == '100% voto + 100% PSOE'
-    assert q3['ruler']['marks'] == [{'at': 6, 'right': 181}, {'at': 15, 'right': 190}]
+        ('9% voto + 50% izq.', 0, 0, 1, 87.9), ('50% voto + 80% izq.', 0, 0, 3, 85.9),
+        ('100% voto + 100% PSOE', 4, 0, 8, 76.5), ('30% voto + 60% izq.', 2, 0, 5, 84.9),
+        ('30% voto + 80% izq.', 4, 1, 8, 78.5), ('50% voto + 80% izq.', 8, 3, 12, 70.9),
+        ('70% voto + 80% izq.', 10, 5, 15, 62.2)]
+    assert [r['detail'] for r in rows[:3]] == ['como en 2023', 'muy improbable', 'votos colocados a conciencia']
+    assert [len(group['rows']) for group in q3['ruler']['groups']] == [3, 4]
+    assert q3['ruler']['mark'] == 15  # what the right must lose from the central allocation (190 − 176 + 1)
     assert (q3['ruler']['max'], q3['ruler']['ticks']) == (16, [0, 2, 4, 6, 8, 10, 12, 14, 16])
     assert q3['grid']['rows'][0]['label'] == '9% voto'
     assert q3['grid']['cols'] == ['50% izq.', '60% izq.', '70% izq.', '80% izq.']
-    assert q3['grid']['rows'][4]['cells'][3] == {'seats': -10, 'p': 60.7, 'drop': 27.34}
-    assert q3['grid']['max_drop'] == 27.34 and q3['grid']['electors'] == 2769645
-    assert q3['placement'] == {'pool': 181032, 'countries': [], 'seats': [1, 5], 'p': [87.2, 75.7]}
-    assert q3['summary'] == {'needed': 15, 'extreme': 10, 'middle': 1} and q3['outcome'] is None
+    assert q3['grid']['rows'][4]['cells'][3] == {'seats': -10, 'p': 62.2, 'drop': 25.77}
+    assert q3['grid']['max_drop'] == 25.77 and q3['grid']['electors'] == 2769645
+    assert q3['placement'] == {'pool': 181032, 'countries': [], 'seats': [1, 4], 'p': [87.2, 76.5]}
+    assert q3['summary'] == {'needed': 15, 'extreme': 10, 'middle': 0} and q3['outcome'] is None
 
 
 def test_cera_majority_view_model_skips_a_row_the_part_does_not_have():
@@ -7719,7 +7732,7 @@ def test_cera_majority_view_model_skips_a_row_the_part_does_not_have():
     q3 = pages.cera._majority(part, meta)
     rows = [row['name'] for group in q3['ruler']['groups'] for row in group['rows']]
     assert '9% voto + 50% izq.' not in rows and len(rows) == 6
-    assert q3['summary']['middle'] == 1  # la segunda entrada de la regla sigue en los ejes
+    assert q3['summary']['middle'] == 0  # la segunda entrada de la regla sigue en los ejes
     part = copy.deepcopy(fixture_data('study-majority'))
     part['new_electors']['participations'][3] = 0.4
     q3 = pages.cera._majority(part, meta)

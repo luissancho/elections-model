@@ -40,11 +40,15 @@ SCENARIOS = tuple(SCENARIO_LABELS)
 RULER_MAX = 16
 RULER_STEP = 2
 PROVINCES_RANKED = 10
-RULER = (('Electores nuevos desde 2023', (('new_electors', 0.09, 0.5, None, 'como 2023'),
-                                          ('new_electors', 0.5, 0.8, None, None),
-                                          ('placement', 1.0, 1.0, 'Colocación a ciegas', '100% voto + 100% PSOE'))),
-         ('Todo el censo exterior', (('grid', 0.3, 0.6, None, None), ('grid', 0.3, 0.8, None, None),
-                                     ('grid', 0.5, 0.8, None, None), ('grid', 0.7, 0.8, None, None))))
+RULER = (('Comportamiento de los votantes nuevos, asumiendo que los antiguos lo hacen como en 2023',
+          (('new_electors', 0.09, 0.5, None, 'como en 2023'),
+           ('new_electors', 0.5, 0.8, None, 'muy improbable'),
+           ('placement', 1.0, 1.0, '100% voto + 100% PSOE', 'votos colocados a conciencia'))),
+         ('Todo el censo exterior, no sólo los nuevos, cambia su comportamiento y vota en masa a la Izquierda',
+          (('grid', 0.3, 0.6, None, None),
+           ('grid', 0.3, 0.8, None, None),
+           ('grid', 0.5, 0.8, None, None),
+           ('grid', 0.7, 0.8, None, None))))
 # The debate and the check: the period of ``participation.generales`` before the voto rogado (the historical
 # participation the report of the 23 seats uses) and the provinces of the table of the check shown before «Ver más»
 BEFORE_ROGADO = 'antes'
@@ -990,15 +994,14 @@ def _majority_ruler(part: dict, base: dict) -> tuple:
     Returns
     -------
     tuple
-        ``(ruler, middle)``: ``ruler`` is ``{'max', 'ticks', 'marks', 'groups'}`` (the rows of ``RULER`` whose
-        cell the part has, a group without rows left out) and ``middle`` the ``seats`` of the second entry of
-        ``RULER``, or ``None`` when that entry is left out.
+        ``(ruler, middle)``: ``ruler`` is ``{'max', 'ticks', 'mark', 'groups'}`` (``mark`` the seats the right
+        must lose from the central allocation to lose the majority, the dashed line of the chart; the rows of
+        ``RULER`` whose cell the part has, a group without rows left out) and ``middle`` the ``seats`` of the
+        second entry of ``RULER``, or ``None`` when that entry is left out.
     """
     groups = [(title, [_ruler_row(part, entry) for entry in entries]) for title, entries in RULER]
     middle = groups[0][1][1]
-    ruler = {'max': RULER_MAX, 'ticks': list(range(0, RULER_MAX + 1, RULER_STEP)),
-             'marks': [{'at': base['needed_quartile'], 'right': base['quartile']},
-                       {'at': base['needed'], 'right': base['right']}],
+    ruler = {'max': RULER_MAX, 'ticks': list(range(0, RULER_MAX + 1, RULER_STEP)), 'mark': base['needed'],
              'groups': [{'title': title, 'rows': [row for row in rows if row]} for title, rows in groups
                         if any(rows)]}
 
