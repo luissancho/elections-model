@@ -754,8 +754,10 @@ def _sims(distribution: dict, test) -> int:
 
 def _scenario_p(counts: dict, base: dict, n_sim: int) -> float:
     """
-    Probability, in per cent, that the right keeps the majority in a scenario: the simulations that have it in the
-    base run, less those that lose it and plus those that gain it.
+    Probability that the right keeps the majority in a scenario: the simulations that have it in the base run,
+    less those that lose it and plus those that gain it, over all of them. It is a level, the figure the event
+    page writes as P(majority), so it goes unrounded and the template writes it with ``prob``, without decimals
+    (Luis, 2026-11-26); the small effects of the card (``_share``) keep their per cent with two decimals.
 
     Parameters
     ----------
@@ -769,9 +771,9 @@ def _scenario_p(counts: dict, base: dict, n_sim: int) -> float:
     Returns
     -------
     float
-        The probability with one decimal.
+        The probability, in [0, 1].
     """
-    return _share(base['with_majority'] - counts['lost'] + counts['gained'], n_sim, 1)
+    return (base['with_majority'] - counts['lost'] + counts['gained']) / n_sim
 
 
 def _axis_label(x: float) -> str:
@@ -853,17 +855,18 @@ def _majority_base(part: dict) -> dict:
         ``{'right', 'needed', 'p', 'quartile', 'needed_quartile', 'p_quartile', 'p_without'}``: ``needed`` the
         seats the right must lose to lose the majority (``right − majority + 1``), ``quartile`` the percentile 25
         of its seats over the simulations, ``p_quartile`` the simulations with the right at or under it and
-        ``p_without`` those with the right under the majority.
+        ``p_without`` those with the right under the majority; the three ``p`` are probabilities in [0, 1],
+        unrounded (see ``_scenario_p``).
     """
     base, majority, n_sim = part['base'], part['majority'], part['run']['n_sim']
     right = base['central'][RIGHT]
     seats = base['right_seats']
     quartile = _whole(np.percentile(np.repeat([int(k) for k in seats], list(seats.values())), 25))
 
-    return {'right': right, 'needed': right - majority + 1, 'p': _share(base['with_majority'], n_sim, 1),
+    return {'right': right, 'needed': right - majority + 1, 'p': base['with_majority'] / n_sim,
             'quartile': quartile, 'needed_quartile': _whole(quartile - majority + 1),
-            'p_quartile': _share(_sims(seats, lambda k: k <= quartile), n_sim, 1),
-            'p_without': _share(_sims(seats, lambda k: k < majority), n_sim, 1)}
+            'p_quartile': _sims(seats, lambda k: k <= quartile) / n_sim,
+            'p_without': _sims(seats, lambda k: k < majority) / n_sim}
 
 
 def _majority_expected(part: dict) -> dict:
@@ -881,7 +884,8 @@ def _majority_expected(part: dict) -> dict:
     dict
         ``expected`` (``{'seats', 'right', 'p', 'net'}``, ``net`` the simulations that lose the majority less
         those that gain it), ``extreme`` (``{'seats', 'right', 'p', 'participation', 'left_frac'}``, the last cell
-        of ``grid``) and ``table`` (the census and the voters, 2023 and 29-N).
+        of ``grid``) and ``table`` (the census and the voters, 2023 and 29-N); ``p`` is ``_scenario_p``, in
+        [0, 1].
     """
     base, n_sim = part['base'], part['run']['n_sim']
     scenario = part['expected'][SCENARIOS[0]]
@@ -966,7 +970,8 @@ def _ruler_row(part: dict, entry: tuple) -> Optional[dict]:
     -------
     dict or None
         ``{'name', 'detail', 'seats', 'lo', 'hi', 'p'}`` (``lo`` and ``hi`` the seats lost at the 2.5 and 97.5 %
-        quantiles of the change, cut at zero), or ``None`` when the cell is not on the axes of the part.
+        quantiles of the change, cut at zero; ``p`` the probability of the majority, in [0, 1]), or ``None`` when
+        the cell is not on the axes of the part.
     """
     source, participation, frac, name, detail = entry
     counts = _cell(part, source, participation, frac)
@@ -1022,7 +1027,7 @@ def _majority_grid(part: dict) -> dict:
     dict
         ``{'electors', 'cols', 'rows', 'max_drop'}``: a row per participation (``{'label', 'cells'}``) with, per
         share to the left, ``{'seats', 'p', 'drop'}``: the signed change of the right, the probability of the
-        majority and the per cent of the simulations that lose it less those that gain it (unrounded).
+        majority (in [0, 1]) and the per cent of the simulations that lose it less those that gain it (unrounded).
     """
     grid, n_sim = part['grid'], part['run']['n_sim']
     rows = [{'label': _axis_label(participation) + '% voto',
@@ -1049,8 +1054,8 @@ def _majority_placement(part: dict, params: dict) -> dict:
     -------
     dict
         ``{'pool', 'countries', 'seats', 'p'}``: the electors of the pool, its countries as the prose names them,
-        the seats the right loses over the cells (``[least, most]``) and the probability of the majority
-        (``[highest, lowest]``).
+        the seats the right loses over the cells (``[least, most]``) and the probability of the majority, in
+        [0, 1] (``[highest, lowest]``).
     """
     placement, n_sim = part['placement'], part['run']['n_sim']
     cells = [cell for row in placement['cells'] for cell in row]

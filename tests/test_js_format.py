@@ -50,6 +50,17 @@ def test_shade_around_follows_the_python_filter():
         assert run_js(expr) == 'transparent', expr
 
 
+def test_fmt_prob_follows_the_python_filter():
+    """`fmtProb` escribe las probabilidades como `fmt_prob` en Python: sin decimal salvo que se pida, con «> 99%» y
+    «< 1%» en los extremos (Luis, 2026-11-26)."""
+    for p in (0, 1, 0.879, 0.968, 0.995, 0.9949, 0.003, 0.005, 0.0051, 0.5, 0.125, 0.9995, 0.0004):
+        assert run_js(f'f.fmtProb({p})') == pages.fmt_prob(p), p
+        assert run_js(f'f.fmtProb({p}, 1)') == pages.fmt_prob(p, 1), p
+    assert run_js('f.fmtProb(0.879)') == '88%' and run_js('f.fmtProb(0.996)') == '> 99%'
+    assert run_js('f.fmtProb(0.004)') == '< 1%' and run_js('f.fmtProb(0.879, 1)') == '87,9%'
+    assert run_js('f.fmtProb(null)') == run_js('f.fmtProb(undefined)') == '–'
+
+
 def test_fmt_delta_follows_the_badge_filter():
     """`fmtDelta` escribe la flecha y la magnitud de una diferencia, el texto de `delta_badge` en Python."""
     for x, digits in ((6, 0), (-1, 0), (0, 0), (0.04, 1), (-12.38, 1), (1.0, 1), (-0.05, 1), (-25, 0)):

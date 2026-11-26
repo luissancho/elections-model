@@ -55,7 +55,9 @@ Todo JSON es un sobre:
 ## Convenciones
 
 - Redondeos: porcentajes (`pct`, `lo`, `hi`, `mean`, `sd`, ...) a 2 decimales; probabilidades (`p_*`,
-  `weight`, y las razones de `dispersion`) a 3; escaños estadísticos (`seats_mean`, `seats_lo`, ...) a 1.
+  `weight`, y las razones de `dispersion`) a 3; escaños estadísticos (`seats_mean`, `seats_lo`, ...) a 1. Las
+  probabilidades conservan aquí sus tres decimales, pero la web las escribe redondeadas al punto (2026-11-26):
+  son partes de las simulaciones y, con 10.000, el sorteo las mueve hasta medio punto.
 - `NaN` e infinitos se escriben como `null`.
 - Fechas `YYYY-MM-DD`; instantes ISO 8601 en UTC con `Z` (`2026-10-08T18:11:00Z`).
 - `run_id` es `YYYYMMDD-HHMMSS` en UTC, uno por invocación (compartido por todos los ámbitos); ordena
