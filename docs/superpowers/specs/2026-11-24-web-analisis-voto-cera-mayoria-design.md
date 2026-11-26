@@ -120,6 +120,12 @@ la mayoría en las 10.000 simulaciones.
     yo: 50 % (en 2023 fue el 49,6 %).
 30. En la parte de todo el censo, los dos primeros son «30 % voto + 60 % izq.» y «30 % voto + 80 % izq.»; los otros
     dos, iguales.
+31. (2026-11-26) Las probabilidades de toda la web pasan a escribirse sin decimales: con 10.000 simulaciones el
+    sorteo las mueve más que una décima. En la tarjeta, «hazlo así» a mi propuesta: los niveles en enteros (la
+    probabilidad de que la Derecha conserve la mayoría: la cifra de partida, la regla, la rejilla y la colocación;
+    «88%», la misma cifra que escribe `/es`) y decimales sólo en los efectos pequeños (las simulaciones que cambian
+    y las barras de provincias), que son recuentos exactos sobre las mismas simulaciones. Es presentación: no
+    cambian la foto, el código que mide ni la parte publicada. Sustituye al «uno en las casillas» de mi decisión 6.
 
 ## Objetivos
 
@@ -369,7 +375,8 @@ Como la maqueta, de arriba abajo:
 - **«Cómo leerlo»**.
 
 Las casillas se sombrean por lo que baja la probabilidad respecto a la de hoy. Las probabilidades de las casillas
-van con un decimal; las cifras de las simulaciones que cambian y las barras de provincias, con dos (ver
+van sin decimales, como las de la cifra de partida, la regla y la colocación (decisión 31 de Luis, del 2026-11-26;
+hasta entonces iban con uno); las cifras de las simulaciones que cambian y las barras de provincias, con dos (ver
 «Decisiones mías»). En la rejilla y en las cifras de cabecera los escaños son el cambio de la derecha, con signo
 («−3»); el gráfico dibuja escaños que pierde. Su línea fina se corta en cero si en una punta del rango la derecha
 gana escaños. Pasa en dos de las siete filas, «9 % voto + 50 % izq.» y «30 % voto + 60 % izq.»: en las dos el rango
@@ -528,7 +535,8 @@ Si el run publicado al hacer la foto es otro, las cifras serán las suyas; estas
    el gráfico sólo enseña dos: es todo lo que quedará si Luis cambia otra vez las filas. Sustituye a las nueve
    filas de múltiplos, que ya no enseña nadie. El censo sin litigio sigue en la foto y en los CSV.
 6. **Dos decimales en las cifras de las simulaciones que cambian y en las barras de provincias**, uno en las
-   casillas. Con uno, casi todas las provincias empataban en 0,3 % y las partes no sumaban el total.
+   casillas. Con uno, casi todas las provincias empataban en 0,3 % y las partes no sumaban el total. (Las casillas
+   y el resto de los niveles van sin decimales desde el 2026-11-26: decisión 31 de Luis.)
 7. **Gráfico nuevo de provincias** en el sitio del de brechas de 2023.
 8. **La tabla de censo, votantes y votos sale de la foto**, no de `prediction`.
 9. **Qué guarda la foto** (D3). Guarda más de lo que la tarjeta enseña, porque después del 29-N no se podrá

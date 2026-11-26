@@ -7532,19 +7532,32 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', p3) == ['NO']
     text = visible_text(p3)
     for piece in ('Foto fija · datos hasta el 23 de noviembre', '190 escaños', '−10 escaños', '2.769.645', '+442.257',
-                  '239.221', '+30.790', 'la conservaría en el 87,9% de las simulaciones', '8,93%', '5,65%',
+                  '239.221', '+30.790', 'la conservaría en el 88% de las simulaciones', '8,93%', '5,65%',
                   '3,58% a la baja y 2,07% al alza', 'Sólo en el', '0,12%', 'cambia el sentido de la mayoría',
                   'Madrid', '1,76%', 'Ocurre alguna vez en 50 de las 52',
                   'El censo incluye las 163.020 inscripciones suspendidas por el Tribunal Supremo, actualmente en '
                   'litigio.', 'La línea discontinua, los 15 escaños que tendría que perder',
                   'pierde la mayoría (parte de 190)', '9% voto + 50% izq.', 'como en 2023', '50% voto + 80% izq.',
                   'muy improbable', '100% voto + 100% PSOE', 'votos colocados a conciencia',
-                  '30% voto + 60% izq.', '84,9%', '70% voto + 80% izq.', '62,2%',
+                  '30% voto + 60% izq.', '70% voto + 80% izq.', '(hoy, 88%)',
                   'Escaños que pierde la Derecha', 'del voto a los dos bloques, la mitad fue a cada uno',
-                  'entre 1 y 4 escaños', '87,2%', '76,5%', 'si votaran todos, y todos al PSOE',
+                  'entre 1 y 4 escaños', 'su mayoría quedaría entre el 87% (con la participación de 2023',
+                  'y el 76% (si votaran todos, y todos al PSOE)',
                   'ni un escaño: la Derecha sigue en 190', 'el 80% lo hiciera a la Izquierda, ni un escaño',
                   'ni el escenario más extremo llega (10)'):
         assert piece in text, piece
+    # the levels (the probability that the Derecha keeps the majority) go without decimals, as everywhere else on
+    # the web (Luis, 2026-11-26): the base figure, the ruler, the grid and the placement
+    assert re.findall(r'<span class="rv"><b>[^<]*</b><span>([^<]*)</span>', p3) == [
+        '88%', '86%', '76%', '85%', '78%', '71%', '62%']
+    assert re.findall(r'<span class="cell-p">([^<]*)</span>', p3) == [
+        '88%', '87%', '86%', '86%', '88%', '86%', '84%', '82%', '88%', '85%', '82%', '78%',
+        '87%', '82%', '77%', '71%', '87%', '80%', '72%', '62%']
+    # the small effects are exact counts on the same simulations and keep their two decimals; from the ruler to the
+    # summary (the ruler, the grid and the placement) no per cent carries one
+    assert text.count('(hoy, 88%)') == 2 and '87,9%' not in text  # under the titles of the ruler and of the grid
+    assert p3.count('class="ruler"') == 1 and p3.count('<div class="sum">') == 1
+    assert re.findall(r'\d,\d+%', visible_text(p3[p3.index('class="ruler"'):p3.index('<div class="sum">')])) == []
     # «el escenario más extremo» is the grid's last cell: the blind placement keeps its own name
     assert 'escenario extremo' not in text
     # card 3 names the two blocks with a capital letter; the only lower-case one is the direction of the ruler
@@ -7849,10 +7862,11 @@ def test_cera_majority_view_model_reads_everything_from_the_part():
     """El modelo de vista de la tarjeta de la mayoría sale entero de la parte publicada (la foto fija real)."""
     q3 = pages.cera._majority(fixture_data('study-majority'), fixture_data('study-meta'))
     assert (q3['as_of'], q3['n_sim'], q3['majority'], q3['litigation']) == ('2026-11-23', 10000, 176, 163020)
-    assert q3['base'] == {'right': 190, 'needed': 15, 'p': 87.9, 'quartile': 181, 'needed_quartile': 6,
-                          'p_quartile': 26.6, 'p_without': 12.1}
-    assert q3['expected'] == {'seats': 0, 'right': 190, 'p': 87.9, 'net': 4}
-    assert q3['extreme'] == {'seats': -10, 'right': 180, 'p': 62.2, 'participation': 70, 'left_frac': 80}
+    # the levels are probabilities in [0, 1], exact (count / n_sim): the page rounds them once, with `prob`
+    assert q3['base'] == {'right': 190, 'needed': 15, 'p': 0.8794, 'quartile': 181, 'needed_quartile': 6,
+                          'p_quartile': 0.2658, 'p_without': 0.1206}
+    assert q3['expected'] == {'seats': 0, 'right': 190, 'p': 0.879, 'net': 4}
+    assert q3['extreme'] == {'seats': -10, 'right': 180, 'p': 0.6217, 'participation': 70, 'left_frac': 80}
     assert q3['table'] == [{'label': 'Censo CERA', 'before': 2327388, 'after': 2769645, 'change': 442257},
                            {'label': 'Votantes CERA', 'before': 208431, 'after': 239221, 'change': 30790}]
     assert q3['changes'] == {'moved': 8.93, 'total': 5.65, 'down': 3.58, 'up': 2.07, 'majority': 0.12}
@@ -7861,19 +7875,19 @@ def test_cera_majority_view_model_reads_everything_from_the_part():
     assert (len(q3['provinces']['rows']), q3['provinces']['ever'], q3['provinces']['total']) == (10, 50, 52)
     rows = [row for group in q3['ruler']['groups'] for row in group['rows']]
     assert [(r['name'], r['seats'], r['lo'], r['hi'], r['p']) for r in rows] == [
-        ('9% voto + 50% izq.', 0, 0, 1, 87.9), ('50% voto + 80% izq.', 0, 0, 3, 85.9),
-        ('100% voto + 100% PSOE', 4, 0, 8, 76.5), ('30% voto + 60% izq.', 2, 0, 5, 84.9),
-        ('30% voto + 80% izq.', 4, 1, 8, 78.5), ('50% voto + 80% izq.', 8, 3, 12, 70.9),
-        ('70% voto + 80% izq.', 10, 5, 15, 62.2)]
+        ('9% voto + 50% izq.', 0, 0, 1, 0.879), ('50% voto + 80% izq.', 0, 0, 3, 0.8591),
+        ('100% voto + 100% PSOE', 4, 0, 8, 0.7645), ('30% voto + 60% izq.', 2, 0, 5, 0.8489),
+        ('30% voto + 80% izq.', 4, 1, 8, 0.7848), ('50% voto + 80% izq.', 8, 3, 12, 0.7087),
+        ('70% voto + 80% izq.', 10, 5, 15, 0.6217)]
     assert [r['detail'] for r in rows[:3]] == ['como en 2023', 'muy improbable', 'votos colocados a conciencia']
     assert [len(group['rows']) for group in q3['ruler']['groups']] == [3, 4]
     assert q3['ruler']['mark'] == 15  # what the right must lose from the central allocation (190 − 176 + 1)
     assert (q3['ruler']['max'], q3['ruler']['ticks']) == (16, [0, 2, 4, 6, 8, 10, 12, 14, 16])
     assert q3['grid']['rows'][0]['label'] == '9% voto'
     assert q3['grid']['cols'] == ['50% izq.', '60% izq.', '70% izq.', '80% izq.']
-    assert q3['grid']['rows'][4]['cells'][3] == {'seats': -10, 'p': 62.2, 'drop': 25.77}
+    assert q3['grid']['rows'][4]['cells'][3] == {'seats': -10, 'p': 0.6217, 'drop': 25.77}
     assert q3['grid']['max_drop'] == 25.77 and q3['grid']['electors'] == 2769645
-    assert q3['placement'] == {'pool': 181032, 'countries': [], 'seats': [1, 4], 'p': [87.2, 76.5]}
+    assert q3['placement'] == {'pool': 181032, 'countries': [], 'seats': [1, 4], 'p': [0.8721, 0.7645]}
     assert q3['summary'] == {'needed': 15, 'extreme': 10, 'middle': 0} and q3['outcome'] is None
 
 

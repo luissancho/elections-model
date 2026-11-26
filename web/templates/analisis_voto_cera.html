@@ -27,7 +27,9 @@
 {% macro precedents(rows) -%}
 Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, el voto CERA {% if row.n_decided %}decidió {{ many(row.n_decided, 'escaño', 'escaños') }}{% if row.where %} ({{ decided(row.where) }}){% endif %}{% elif row.n_decided == 0 %}no decidió ningún escaño{% else %}se comprobó{% endif %}{% if row.net_left is not none %} y dejó a la izquierda un saldo de {{ seats(row.net_left) }}{% endif %}{{ '; ' if not loop.last else '.' }}{% endfor %}
 {%- endmacro %}
-{#- A per cent of the card of question 3, without a space before the sign, as the rest of the site: «87,3%». -#}
+{#- A per cent of the card of question 3, without a space before the sign, as the rest of the site: «8,93%». It writes the
+    small effects (shares of the simulations, with two decimals); the levels, the probability of the majority, are
+    probabilities in [0, 1] and go with `prob`, without decimals (Luis, 2026-11-26): «88%». -#}
 {% macro pc(x, digits=1) -%}{{ x|num(digits) }}%{%- endmacro %}
 {#- A count that is usually whole (a percentile of seats): without decimals when whole, with one otherwise. -#}
 {% macro whole(x) -%}{{ x|num(0 if x is integer else 1) }}{%- endmacro %}
@@ -400,7 +402,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           </p>
           <span class="pill brand">Foto fija · datos hasta el {{ snapshot_day }}</span>
         </div>
-        {% set support_base %}tendría que perder {{ b.needed|int }} para quedarse sin mayoría absoluta, la conservaría en el {{ pc(b.p) }} de las simulaciones.{% endset %}
+        {% set support_base %}tendría que perder {{ b.needed|int }} para quedarse sin mayoría absoluta, la conservaría en el {{ b.p|prob }} de las simulaciones.{% endset %}
         {% set support_expected %}{{ 'se mantiene en' if x.seats == 0 else 'se queda en' }} {{ x.right|int }}.{% endset %}
         {% set support_extreme %}se queda en {{ ext.right|int }}.{% endset %}
         {{ m.kpis([
@@ -494,7 +496,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         <div class="grid2 lead-left">
           <div>
             <p class="ctitle">¿Cuántos escaños perdería la Derecha en cada uno de los escenarios?</p>
-            <p class="csub">Cada barra representa el número de escaños que perdería la Derecha desde el reparto central del modelo ({{ b.right|int }}). La línea fina negra marca el rango en el que cae esa pérdida en el 95% de las simulaciones. La línea discontinua, los {{ b.needed|int }} escaños que tendría que perder para quedarse sin mayoría absoluta. A la derecha, la probabilidad de que la conserve en cada escenario (hoy, {{ pc(b.p) }}). «Voto» es la participación e «izq.», la parte del voto a los dos bloques que va a la Izquierda.</p>
+            <p class="csub">Cada barra representa el número de escaños que perdería la Derecha desde el reparto central del modelo ({{ b.right|int }}). La línea fina negra marca el rango en el que cae esa pérdida en el 95% de las simulaciones. La línea discontinua, los {{ b.needed|int }} escaños que tendría que perder para quedarse sin mayoría absoluta. A la derecha, la probabilidad de que la conserve en cada escenario (hoy, {{ b.p|prob }}). «Voto» es la participación e «izq.», la parte del voto a los dos bloques que va a la Izquierda.</p>
             {% set top = ruler.max %}
             {% set gridlines %}{% for n in ruler.ticks[1:-1] %}<i class="rgl" style="left: {{ at(n, top) }}"></i>{% endfor %}{% endset %}
             {% set line %}<i class="rln" style="left: {{ at(ruler.mark, top) }}"></i>{% endset %}
@@ -504,7 +506,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
               <div class="rgroup">{{ group.title }}</div>
               {% for row in group.rows %}
               <div class="rrow"><span class="rl"><b>{{ row.name }}</b>{% if row.detail %}<small>{{ row.detail }}</small>{% endif %}</span><span class="rtrack">{{ gridlines }}<i class="rbar" style="width: {{ at([row.seats, top]|min, top) }}"></i>
-                {%- if row.hi > row.lo %}<i class="rwh" style="left: {{ at(row.lo, top) }}; width: {{ at([row.hi, top]|min - row.lo, top) }}"><i></i></i>{% endif %}{{ line }}</span><span class="rv"><b>{{ seats(-row.seats) }}</b><span>{{ pc(row.p) }}</span></span></div>
+                {%- if row.hi > row.lo %}<i class="rwh" style="left: {{ at(row.lo, top) }}; width: {{ at([row.hi, top]|min - row.lo, top) }}"><i></i></i>{% endif %}{{ line }}</span><span class="rv"><b>{{ seats(-row.seats) }}</b><span>{{ row.p|prob }}</span></span></div>
               {% endfor %}
               {% endfor %}
               <div class="rrow raxis"><span></span><span class="rtrack">{% for n in ruler.ticks %}<span style="left: {{ at(n, top) }}">{{ n }}</span>{% endfor %}</span><span></span></div>
@@ -513,7 +515,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           </div>
           <div>
             <p class="ctitle">¿Qué haría falta para que importara si todo el censo exterior votara en masa a la Izquierda?</p>
-            <p class="csub">Cada casilla representa el número de escaños que perdería la Derecha desde el reparto central del modelo ({{ b.right|int }}) y la probabilidad de que conserve la mayoría absoluta en cada escenario (hoy, {{ pc(b.p) }}).</p>
+            <p class="csub">Cada casilla representa el número de escaños que perdería la Derecha desde el reparto central del modelo ({{ b.right|int }}) y la probabilidad de que conserve la mayoría absoluta en cada escenario (hoy, {{ b.p|prob }}).</p>
             <div class="table-wrap">
               <table id="majority-grid">
                 <caption class="sr-only">Cambio de los escaños de la Derecha desde el reparto central y probabilidad de que conserve la mayoría, según la participación de todo el censo exterior (filas) y la parte de su voto que va a la Izquierda (columnas).</caption>
@@ -527,7 +529,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
                   {% for row in q3.grid.rows %}
                   <tr>
                     <td><b>{{ row.label }}</b></td>
-                    {%- for cell in row.cells %}{% set bg = cell.drop|shade_scale(0, q3.grid.max_drop) %}<td class="cell-shade"{% if bg %} style="background-color: {{ bg }}"{% endif %}><span class="cell-seats">{{ seats(cell.seats) }}</span><span class="cell-p">{{ pc(cell.p) }}</span></td>{% endfor %}
+                    {%- for cell in row.cells %}{% set bg = cell.drop|shade_scale(0, q3.grid.max_drop) %}<td class="cell-shade"{% if bg %} style="background-color: {{ bg }}"{% endif %}><span class="cell-seats">{{ seats(cell.seats) }}</span><span class="cell-p">{{ cell.p|prob }}</span></td>{% endfor %}
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -551,8 +553,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
             se hubieran inscrito en las provincias donde al PSOE le costaba menos votos el siguiente escaño en 2023, le
             quitarían a la Derecha {% if pl.seats[0] == pl.seats[1] %}{{ many(pl.seats[0], 'escaño', 'escaños') }}{% else %}entre
             {{ pl.seats[0]|int }} y {{ many(pl.seats[1], 'escaño', 'escaños') }}{% endif %} del reparto central, y su mayoría
-            quedaría entre el {{ pc(pl.p[0]) }} (con la participación de 2023 y la mitad de su voto al PSOE) y el
-            {{ pc(pl.p[1]) }} (si votaran todos, y todos al PSOE). Es un límite, no una previsión: nadie puede dirigir cada
+            quedaría entre el {{ pl.p[0]|prob }} (con la participación de 2023 y la mitad de su voto al PSOE) y el
+            {{ pl.p[1]|prob }} (si votaran todos, y todos al PSOE). Es un límite, no una previsión: nadie puede dirigir cada
             inscripción ni cada voto.
           </p>
         </div>

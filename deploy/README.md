@@ -184,7 +184,11 @@ Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
   servidor y `fmtProb` en el navegador, que sólo escriben decimales si se les piden), aquí, en la portada, en la
   calculadora de mayorías, en el detalle de una elección y en el backtest: son partes de las simulaciones y el
   sorteo las mueve más que un decimal (ver "Campaña"). El p-valor de la nota técnica de `/analisis/sesgo-cis`
-  conserva el suyo y el estudio del voto CERA, sus décimas; los histogramas llevan la línea
+  conserva el suyo. En la tarjeta de la mayoría del estudio del voto CERA, los niveles (la probabilidad de que la
+  Derecha conserve la mayoría: la cifra de partida, la regla, la rejilla y la colocación) van también sin
+  decimales, que es la misma cifra que escribe `/es`, y sólo los efectos pequeños (las simulaciones que cambian y
+  las barras de provincias) conservan sus dos decimales, que son recuentos exactos sobre las mismas
+  simulaciones; los histogramas llevan la línea
   de la mediana (gruesa) y las del rango del 95 % (finas), sin el valor escrito; una sola tabla de bloques
   ("Bloques ideológicos, con todos los partidos"); la calculadora usa las mismas píldoras.
 - Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 720 px y centrada en su tarjeta, como las
