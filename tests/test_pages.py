@@ -3504,6 +3504,8 @@ def test_metodo_links_the_andorra_study_only_when_published(events_site, fresh_a
     publish_study(fresh_app.fs, study='andorra')
     page = html(call(events_site, '/metodo')[2])
     assert 'href="/analisis/andorra"' in page and 'El mercado de la fruta en Andorra' in page
+    assert ('Los sondeos que se hacen durante la veda, se publiquen fuera de España o al cerrar las urnas, se cargan '
+            'en la base, pero no entran en el promedio') in flat_text(page)
     assert_public_wording(page, '/metodo')
 
 
@@ -6845,10 +6847,18 @@ def test_andorra_page_renders_the_mockup_figures(events_site, fresh_app):
     assert 'del 1,70 del promedio congelado al 1,21 del consenso clandestino' in text
     assert 'en abril de 2019, de 1,56 a 1,58, la única que no' in text
     assert 'una moneda lo hace menos de 1 vez entre 10.000' in text
+    assert ('En las cinco generales desde 2015, el consenso de los sondeos hechos esos días, los que salen fuera y '
+            'los que esperan al cierre de las urnas, estuvo más cerca del resultado que el promedio congelado en '
+            'cuatro, y quedó más cerca del resultado en 19 de las 24 cifras de partido.') in text
+    assert 'Evidencia histórica · 5 generales con modelo · 116 pares de sondeos desde 1996, con las autonómicas' in text
+    # the figures that were not closer, counted with the labels of the cells table below
+    assert ('de las otras 5, 2 pasaron de largo y 3 se alejaron: el PSOE en 2015, el PSOE y Vox en abril de 2019, '
+            'el PSOE y UP en noviembre de 2019') in text
+    assert 'apuntaron en la dirección correcta' not in text
     # question 1: the table by election, the sums and the exception
     assert '1996 – 2014' in text and 'Autonómicas' in text and '(40 elecciones)' in text and '24 (73%)' in text
     assert 'Cataluña es la excepción: 17 pares y sólo 6 más cerca' in text
-    assert 'Sí: en 7 de cada 10 pares' in text
+    assert 'Sí: en el 70% de los pares el sondeo clandestino estuvo más cerca' in text
     # question 2: the movement of each cell, the model table and the counterfactual
     for move in ('hacia el resultado · +0,3 de +1,0', 'se alejó · −0,4', 'clavado · +3,1 de +3,1',
                  'pasó de largo · −2,3 cuando faltaban −0,7', 'pasó de largo, pero más cerca · +1,9 cuando faltaba +1,0',
@@ -6859,6 +6869,8 @@ def test_andorra_page_renders_the_mockup_figures(events_site, fresh_app):
     # question 3: the houses with their profile, the big polls
     assert 'href="/casas/gad3"' in page and 'Sigma Dos · RTVE' in text and '17.550' in text
     assert 'Los grandes afinan: 11 de los 12 sondeos de la jornada' in text
+    assert ('Entre las casas con diez vedas o más, GAD3 (16 de 20) y Sigma Dos (10 de 13) son las que más afinan; '
+            'la que menos, SocioMétrica (8 de 12, sin mejora media).') in text
     # the card of the election in progress, closed; the data and the downloads
     assert 'El 29-N: el mercado de la fruta de 2026' in text and 'class="locked"' in page
     assert page.count('class="pill brand" href="/api/v1/studies/andorra/') == 5
@@ -6879,9 +6891,116 @@ def test_andorra_page_keeps_the_card_closed_without_results(events_site, fresh_a
     assert 'class="locked"' in page and 'Se abre tras el cierre de urnas del 29 de noviembre' in page
     assert '<span class="pill warn">Se completa con 2026 tras el cierre de urnas del 29-N</span>' in page
     assert 'Frutería Clandestina' not in page and 'Diario Vedado' not in page and 'id="latest-table"' not in page
-    assert 'Desde el 23 de noviembre los sondeos de 2026 sólo se publican fuera de España' in flat_text(page)
+    assert 'Desde el 24 de noviembre los sondeos de 2026 sólo se publican fuera de España' in flat_text(page)
     card = pages.ban_context(pages.parse_state({}))['latest']
     assert card['open'] is False and card['polls'] == [] and 'Frutería' not in json.dumps(card)
+
+
+def test_andorra_card_dates_the_veda_five_days_before_the_vote():
+    """The LOREG (art. 69.7) bans polls «durante los cinco días anteriores al de la votación»: with the vote on
+    Sunday the 29th the ban starts on Tuesday the 24th, and Monday the 23rd is the last day with legal polls."""
+    from mtpy.lib.pages import ban
+
+    assert ban.latest_card(None, {'event_date': '2026-11-29', 'open': False})['veda_from'] == '24 de noviembre'
+    assert ban.latest_card(None, {'event_date': '2023-07-23', 'open': False})['veda_from'] == '18 de julio'
+
+
+def test_andorra_page_says_where_the_polls_of_the_day_are_published(events_site, fresh_app):
+    """Los sondeos de la jornada (RTVE, Mediaset…) se hacen durante la veda pero se publican en España al cerrar las
+    urnas: la página no dice que salgan fuera la víspera, y llama clandestinos a los dos tipos diciéndolo."""
+    publish_study(fresh_app.fs, study='andorra')
+    text = flat_text(html(call(events_site, '/analisis/andorra')[2]))
+    for wrong in ('también se publican fuera la víspera', 'publican fuera antes', 'publicados durante la veda',
+                  'publican fuera de España la víspera', 'sólo que fuera', 'que publicó durante la veda'):
+        assert wrong not in text, wrong
+    for right in ('se hacen esos mismos días pero no salen fuera: se publican en España a las ocho de la tarde de la '
+                  'jornada electoral, al cerrar las urnas.',
+                  'Aquí llamamos sondeos «clandestinos» a todos los que se hacen durante la veda: los que se publican '
+                  'fuera esos días y llegan como fruta, y los que se guardan hasta el cierre de las urnas. Unos y '
+                  'otros, hechos y publicados con todas las de la ley.',
+                  'frente al último que hizo durante la veda, en la misma elección.',
+                  'para la noche electoral y publican al cerrar las urnas.',
+                  'Sondeos clandestinos con 5.000 entrevistas o más: los que las televisiones y otros medios publican '
+                  'en España al cerrar las urnas',
+                  '(los que Wikipedia marca como hechos después del inicio de la veda, se publicaran fuera de España '
+                  'o al cerrar las urnas; la base no distingue unos de otros)'):
+        assert right in text, right
+
+
+def test_andorra_question_1_gives_the_share_as_a_percentage_and_the_exact_coin():
+    """58 de 88 es el 66%, no «7 de cada 10», y la moneda sale de la binomial exacta de los pares (1 entre 534), no
+    de la probabilidad publicada con tres cifras (0,00187, que daría 535)."""
+    ban = pages.ban
+    pairs = {'n': 88, 'k': 58, 'ties': 0, 'share': 0.66, 'mean_d': -0.34, 'p': 0.00187,
+             'generals': {'n': 33, 'k': 24, 'n_events': 10}, 'regional': {'n': 55, 'k': 34, 'n_events': 26}}
+    summary = {'pairs': pairs, 'elections': None, 'big': {'threshold': 5000, 'n': 0, 'k': 0}}
+    text = ban.p1_sum(summary)
+    assert text['strong'] == ('Sí: en el 66% de los pares el sondeo clandestino estuvo más cerca del resultado que el '
+                              'último legal de su casa')
+    assert 'Que una moneda acierte 58 veces de 88 pasa 1 vez entre 534: no es azar.' in text['rest']
+    assert ban.kpis(summary, [], [], {'since': '1996-01-01'})[2]['support'].endswith(
+        'una moneda lo hace 1 vez entre 534')
+    # the ties are left out of the coin, as in the test of the study: 58 of 86 is rarer
+    tied = {**summary, 'pairs': {**pairs, 'ties': 2, 'p': 0.000803}}
+    assert 'Que una moneda acierte 58 veces de 86 pasa 1 vez entre 1.246: no es azar.' in ban.p1_sum(tied)['rest']
+    # without the pairs, the published probability; from 0,05 on, no coin
+    assert ban.coin_text(0.00187, 58, 88) == '1 vez entre 534' and ban.coin_text(0.00187) == '1 vez entre 535'
+    assert ban.coin_text(0.2, 5, 7) is None and ban.coin_text(0.00001, 81, 116) == 'menos de 1 vez entre 10.000'
+    # the other two verdicts
+    low = {**summary, 'pairs': {**pairs, 'k': 35, 'share': 0.4, 'p': 0.98}}
+    assert ban.p1_sum(low)['strong'].startswith('No: sólo en el 40% de los pares el sondeo clandestino')
+    half = {**summary, 'pairs': {**pairs, 'k': 48, 'share': 0.55, 'p': 0.23}}
+    assert ban.p1_sum(half)['strong'].startswith('A medias: en el 55% de los pares el sondeo clandestino')
+
+
+def test_andorra_question_3_names_the_best_and_the_worst_of_two_houses():
+    """Con sólo dos casas de diez vedas o más, la segunda no es de «las que más afinan»: es la que menos."""
+    ban = pages.ban
+    summary = {'pairs': {'n': 88, 'k': 58, 'share': 0.66, 'p': 0.00187}, 'elections': None,
+               'big': {'threshold': 5000, 'n': 9, 'k': 8, 'mean_d': -0.63}}
+    gad3 = {'pollster': 'GAD3', 'n': 15, 'k': 11, 'share': 0.73, 'mean_d': -0.51}
+    panel = {'pollster': 'ElectoPanel', 'n': 14, 'k': 8, 'share': 0.57, 'mean_d': -0.12}
+    few = {'pollster': 'Sigma Dos', 'n': 8, 'k': 6, 'share': 0.75, 'mean_d': -0.48}
+    assert ban.p3_sum(summary, [few, gad3, panel])['rest'].endswith(
+        ' Entre las casas con diez vedas o más, GAD3 es la que más afina (11 de 15) y ElectoPanel, la que menos '
+        '(8 de 14).')
+    flat = dict(panel, mean_d=0.01)
+    assert ban.p3_sum(summary, [gad3, flat])['rest'].endswith(
+        'GAD3 es la que más afina (11 de 15) y ElectoPanel, la que menos (8 de 14, sin mejora media).')
+    # level, neither is the best nor the worst: the sentence is left out
+    level = dict(panel, n=15, k=11, share=0.73)
+    assert 'vedas o más' not in ban.p3_sum(summary, [gad3, level])['rest']
+    # a single house, as before
+    assert ban.p3_sum(summary, [few, gad3])['rest'].endswith(
+        ' Entre las casas con diez vedas o más, GAD3 (11 de 15) es la que más afina.')
+
+
+def test_andorra_kpi_counts_the_other_figures_with_the_labels_of_the_table():
+    """Las cifras que no quedaron más cerca se cuentan como las nombra la tabla de debajo («pasó de largo», «se
+    alejó», «no se movió»), con el singular y sin repartir cuando todas hicieron lo mismo."""
+    ban = pages.ban
+
+    def cell(party, closer, crossed=False, move=1.0, gap=2.0):
+        return {'event_date': '2023-07-23', 'label': '2023', 'party': party, 'closer': closer, 'crossed': crossed,
+                'move': move, 'gap': gap, 'frozen': 20.0, 'consensus': 20.0 + move, 'official': 20.0 + gap}
+
+    def support(cells):
+        missed = [{'label': c['label'], 'party': c['party']} for c in cells if not c['closer']]
+        summary = {'pairs': {}, 'elections': {'n': 1, 'k_beaten': 1},
+                   'cells': {'n': len(cells), 'k_closer': len(cells) - len(missed), 'missed': missed}}
+        return ban.kpis(summary, [], cells, {'since': '1996-01-01'})[1]['support']
+
+    crossed, away = cell('PSOE', False, crossed=True, move=3.0, gap=1.0), cell('Vox', False, move=-1.0, gap=2.0)
+    still, closer = cell('Sumar', False, move=0.0, gap=2.0), cell('PP', True)
+    assert support([closer, crossed, away, dict(away, party='UP')]).endswith(
+        ' · de las otras 3, 1 pasó de largo y 2 se alejaron: el PSOE, Vox y UP en 2023')
+    assert support([closer, crossed, away, still]).endswith(
+        ' · de las otras 3, 1 pasó de largo, 1 se alejó y 1 no se movió: el PSOE, Vox y Sumar en 2023')
+    assert support([closer, away, dict(away, party='UP')]).endswith(' · las otras 2 se alejaron: Vox y UP en 2023')
+    assert support([closer, crossed]).endswith(' · la otra pasó de largo: el PSOE en 2023')
+    assert support([closer, away]).endswith(' · la otra se alejó: Vox en 2023')
+    # every figure closer: nothing to add
+    assert 'otra' not in support([closer, dict(closer, party='PSOE')])
 
 
 def test_andorra_page_opens_the_card_with_the_published_election(events_site, fresh_app):
@@ -6980,7 +7099,8 @@ def test_andorra_texts_with_a_single_general_election():
              ' '.join(str(kpi) for kpi in ban.kpis(summary, [row], cells, params))]
     joined = ' '.join(texts)
     assert 'las una' not in joined and 'una generales' not in joined and 'Error medio de la única' in joined
-    assert texts[0].startswith('En la única general desde 2015, el consenso de esos sondeos estuvo más cerca del '
+    assert texts[0].startswith('En la única general desde 2015, el consenso de los sondeos hechos esos días, los '
+                               'que salen fuera y los que esperan al cierre de las urnas, estuvo más cerca del '
                                'resultado que el promedio congelado, y quedó')
     assert 'no estuvo más cerca del resultado que el promedio congelado, y' in texts[1] and 'en ninguna' not in texts[1]
     assert 'no bate al promedio congelado en la única general.' in texts[3]

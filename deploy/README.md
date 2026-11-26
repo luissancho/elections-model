@@ -1547,8 +1547,8 @@ catálogo y los sondeos del run `latest` de `es` (`polls`), con los linajes y la
 `data/voto-oculto/`; sin base de datos ni registro; es un estudio vivo (`studies` lo republica en cada `update`).
 
 **Mercado de la fruta.** `{"what":["study"],"study":"andorra"}` calcula «El mercado de la fruta en Andorra»
-(`mtpy/lib/studies/ban/`: los sondeos «clandestinos» publicados durante la veda frente al último legal de cada casa y
-frente al promedio congelado) y lo escribe en `studies/andorra/` (partes `summary`, `pairs`, `elections`, `cells`,
+(`mtpy/lib/studies/ban/`: los sondeos «clandestinos», los hechos durante la veda, se publiquen fuera de España esos
+días o en España al cerrar las urnas, frente al último legal de cada casa y frente al promedio congelado) y lo escribe en `studies/andorra/` (partes `summary`, `pairs`, `elections`, `cells`,
 `houses` y `latest` con sus gemelos CSV, y `meta` la última). Es vivo, como el rebaño: lo republica `studies`. **Sólo lee
 partes ya publicadas** del paquete vivo: de cada elección, `meta`, `ban`, `pollsters`, `results` y `model` (con la
 clave `ban` del backtest), y el run de `es` para la elección en curso; sin base de datos ni registro. Tras el 29-N: añadir

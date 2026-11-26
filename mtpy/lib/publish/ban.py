@@ -186,8 +186,9 @@ def export_ban_latest(study) -> tuple:
     return data, {'latest-polls': _frame(rows)}
 
 
-def _subtitle(template: str, study) -> str:
-    """Render the subtitle from the summary: with a model the elections and cells, without it the pairs."""
+def _subtitle(study) -> str:
+    """Write the subtitle from the summary: with a model the elections and cells, in the sentence the page says too
+    (``texts.lead_sentence``); without it the pairs."""
     elections = study.summary['elections']
 
     if elections is None:
@@ -195,8 +196,12 @@ def _subtitle(template: str, study) -> str:
         return (f"{BAN_INTRO} En {pairs['n']} pares casa a casa desde {study.params['since'][:4]}, el sondeo "
                 f"clandestino estuvo más cerca del resultado que el último legal en {pairs['k']}.")
 
+    # imported here: the web imports ``publish`` without the study package
+    from ..studies.ban.texts import lead_sentence
+
     cells = study.summary['cells']
-    return template.format(year=study.params['chart_since'][:4], n=elections['n'], k=elections['k_beaten'], kc=cells['k_closer'], nc=cells['n'])
+    return BAN_INTRO + ' ' + lead_sentence(elections['n'], elections['k_beaten'], study.params['chart_since'][:4],
+                                           cells['k_closer'], cells['n'])
 
 
 def export_ban_meta(study, study_id: str = 'andorra', registration: Optional[dict] = None,
@@ -212,10 +217,10 @@ def export_ban_meta(study, study_id: str = 'andorra', registration: Optional[dic
     tuple
         ``(data, {})``: ``data`` for ``andorra-meta``. No CSV twin.
     """
-    title, template = STUDY_TITLES[study_id]
+    title = STUDY_TITLES[study_id][0]
     prov = prov or {'commit': None, 'dirty': False, 'versions': {}}
     data = {
-        'study': study_id, 'title': title, 'subtitle': _subtitle(template, study),
+        'study': study_id, 'title': title, 'subtitle': _subtitle(study),
         'params': _rounded(study.params, None), 'inputs': study.inputs, 'next': study.next,
         'sources': [dict(s) for s in BAN_SOURCES],
         'commit': prov['commit'], 'dirty': bool(prov['dirty']), 'versions': prov['versions'], 'seconds': seconds or {},
