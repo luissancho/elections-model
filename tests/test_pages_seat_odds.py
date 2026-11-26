@@ -450,28 +450,21 @@ def test_the_card_switches_its_views_and_its_districts_without_javascript():
     assert re.search(r'#seat-odds #district-select:not\(\[hidden\]\)\s*\{\s*display:\s*block', narrow)
 
 
-def test_the_block_of_a_district_lands_below_the_header_and_below_the_banner_only_where_it_sticks():
-    # the page script scrolls a block into view: below the sticky header (56 px) and the freeze banner when it shows;
-    # on phones the header (52 px) goes back to the top with the banner, which sticks over it, so the block keeps its
-    # 68 px with the banner too (they clear a banner of one line, 48 px)
+def test_the_block_of_a_district_lands_below_the_header():
+    # the page script scrolls a block into view: below the sticky header (56 px; 52 px on phones), with one margin
+    # for every width, now that no bar sticks above the header
     css = site_css()
     assert re.search(r'(^|\n)#seat-odds \.so-ficha \{\s*scroll-margin-top:\s*68px', css)
-    assert re.search(r'(^|\n)body:has\(#freeze-banner:not\(\[hidden\]\)\) #seat-odds \.so-ficha \{\s*'
-                     r'scroll-margin-top:\s*114px', css)
-    narrow = css[css.index('@media (max-width: 719px)', css.index('#seat-odds #district-select')):]
-    narrow = narrow[:narrow.index('\n}')]
-    assert re.search(r'body:has\(#freeze-banner:not\(\[hidden\]\)\) #seat-odds \.so-ficha \{\s*scroll-margin-top:\s*68px',
-                     narrow)
+    assert len(re.findall(r'#seat-odds \.so-ficha \{\s*scroll-margin-top:', css)) == 1
 
 
 def test_side_by_side_the_column_of_the_block_stays_in_view_while_the_map_scrolls():
-    # from 1,200 px the column of the block sticks below the header (68 px), and below the freeze banner too when it
-    # shows (114 px), so that its name stays in view when the reader scrolls down to the southern tiles; only there
+    # from 1,200 px the column of the block sticks below the header (68 px), so that its name stays in view when the
+    # reader scrolls down to the southern tiles; only there
     css = site_css()
     wide = css[css.rindex('@media (min-width: 1200px)', 0, css.index('#seat-odds .so-split {')):]
     wide = wide[:wide.index('\n}')]
     assert re.search(r'(^|\n)\s*#seat-odds \.so-fichas \{[^}]*position:\s*sticky;[^}]*top:\s*68px', wide)
-    assert re.search(r'body:has\(#freeze-banner:not\(\[hidden\]\)\) #seat-odds \.so-fichas \{\s*top:\s*114px', wide)
     assert css.count('position: sticky; top: 68px') == wide.count('position: sticky; top: 68px') == 1
     # the copy the image is drawn from does not stick: html2canvas would draw the column where the scroll of the page
     # left it, below the top of the map
@@ -483,13 +476,21 @@ def test_side_by_side_the_column_of_the_block_stays_in_view_while_the_map_scroll
 def test_the_cards_of_the_seats_section_land_below_the_header_like_the_sections():
     # the links of the territory table land on its card (`#districts`) and the addresses of the page that was land on
     # «Escaños que bailan» (`#seat-odds`), both inside the section: the same margin as the sections, under the sticky
-    # header (and the freeze banner where it sticks under it)
+    # header (56 px; 52 px on phones)
     css = site_css()
-    banner = 'body:has(#freeze-banner:not([hidden]))'
     assert re.search(r'(^|\n)\.event-section, #districts, #seat-odds \{\s*scroll-margin-top:\s*56px', css)
-    assert '{0} .event-section, {0} #districts, {0} #seat-odds {{ scroll-margin-top: 102px; }}'.format(banner) in css
-    assert ('.event-section, #districts, #seat-odds, {0} .event-section, {0} #districts, {0} #seat-odds '
-            '{{ scroll-margin-top: 52px; }}').format(banner) in css
+    assert '\n  .event-section, #districts, #seat-odds { scroll-margin-top: 52px; }\n' in css
+
+
+def test_nothing_in_the_web_draws_a_freeze_banner_or_keeps_room_for_it():
+    # the yellow bar of the veda is gone (Luis, 2026-11-26): the layout does not draw it and the styles and the page
+    # scripts that made room for it above the header no longer name it
+    root = os.path.join(os.path.dirname(__file__), '..', 'web')
+    for path in ('templates/base.html', 'dist/css/site.css', 'dist/js/pages/seat-odds-wire.js', 'dist/js/seat-odds.js'):
+        source = open(os.path.join(root, *path.split('/')), encoding='utf-8').read().lower()
+        assert 'freeze-banner' not in source and 'freeze banner' not in source, path
+    wire = open(os.path.join(root, 'dist', 'js', 'pages', 'seat-odds-wire.js'), encoding='utf-8').read()
+    assert "const TOP_BARS = '#site-header';" in wire
 
 
 def test_on_phones_the_block_of_a_district_lands_above_the_tab_bar():

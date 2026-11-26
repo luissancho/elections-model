@@ -92,6 +92,14 @@ def test_init_refuses_an_idle_container(tmp_path):
     assert subprocess.run(['bash', '-n', 'deploy/docker/init.sh'], cwd=ROOT).returncode == 0
 
 
+def test_check_api_asks_a_frozen_site_for_the_header_and_not_for_a_banner():
+    """Con la publicación congelada, `check-api.sh` comprueba la cabecera `x-freeze` de la API; la barra de la veda
+    ya no existe (2026-11-26) y pedirla haría fallar la comprobación de un despliegue sano."""
+    script = read('deploy/check-api.sh')
+    assert 'check_header /api/v1/scopes x-freeze active' in script
+    assert 'freeze-banner' not in script and 'banner' not in script.lower()
+
+
 def test_nginx_trusts_the_private_ranges_and_reports_the_client():
     """nginx confía en los rangos privados de la VPC y /healthz informa de la IP del cliente."""
     conf = read('deploy/docker/nginx.conf')

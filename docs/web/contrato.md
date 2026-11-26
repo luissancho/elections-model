@@ -737,7 +737,9 @@ posteriores a esa hora y, por tanto, normalmente al principio de la lista.
   es la fecha ISO que la web escribe en «congelado desde …» o `null`: desde 2026-11-25 solo la lleva si el job
   la da (`"since": "YYYY-MM-DD"`), se conserva mientras siga activo y es `null` al desactivarlo; antes era el día
   (Europe/Madrid) en que pasó de inactivo a activo. Un lector no escribe ninguna fecha con `since: null`, esté
-  activo o no; un manifest anterior sin la clave se lee con `since: null`.
+  activo o no; un manifest anterior sin la clave se lee con `since: null`. `message` es un texto libre que
+  viaja en el manifest: la web lo pintaba en una barra sobre la cabecera (`#freeze-banner`) y desde 2026-11-26
+  no lo muestra.
 - `attribution`: textos de atribución (`polls`, `results`, `model`). Provisionales; cada escritura del
   manifest la refresca desde `ATTRIBUTION`.
 
@@ -888,9 +890,9 @@ Las rutas desconocidas y los métodos distintos de GET reciben el 404 JSON gené
   (solo `GET`, sin preflight). La pone el controlador, no el router: el 404 genérico del router (ruta
   desconocida o método distinto de GET) no la lleva.
 - `x-freeze: active` cuando `manifest.freeze.active` está activo (en `scopes`, `runs`, `forecast/...`).
-  Es solo un aviso: la API sigue sirviendo los datos. Las páginas lo muestran con un banner (`#freeze-banner`,
-  enlazado a `/metodo#limitaciones`), el título «Pronóstico definitivo» en modo `forecast` y «congelado desde»
-  en el pie.
+  Es solo un aviso: la API sigue sirviendo los datos. Las páginas lo muestran con el título «Pronóstico definitivo»
+  en modo `forecast` y, si el manifest trae `since`, «congelado desde» en el pie; la barra de aviso
+  (`#freeze-banner`) se quitó el 2026-11-26.
 
 ## Rutas de base y de análisis (fase 4)
 

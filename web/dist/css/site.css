@@ -141,19 +141,6 @@ main {
   box-shadow: inset 0 -3px 0 var(--color-accent);
 }
 
-/* Freeze banner (electoral silence), above the header, sticky too */
-#freeze-banner {
-  position: sticky;
-  top: 0;
-  z-index: 21;
-  padding: var(--space-3) var(--band-pad);
-  background: #fff3cd;
-  border-bottom: 1px solid #e0b100;
-  font-weight: 600;
-}
-#freeze-banner[hidden] { display: none; }
-body:has(#freeze-banner:not([hidden])) #site-header, body:has(#freeze-banner:not([hidden])) .hdr { top: 46px; }
-
 /* Bottom tab bar (mobile only): five entries with an icon and a label; hidden on desktop */
 .tabbar { display: none; }
 
@@ -179,11 +166,10 @@ svg[hidden] { display: none; }
 .evbar > h2 small { display: block; margin-top: 3px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-muted); }
 .event-index { grid-area: tabs; justify-self: start; }
 /* Sections of the event page: anchors of the index, unseen wrappers of their cards that land under the sticky
-   header (56 px; 52 px on phones, plus the freeze banner when it shows); so do the two cards of the seats section:
+   header (56 px; 52 px on phones); so do the two cards of the seats section:
    the territory card, where the links of its table land (`#districts`), and «Escaños que bailan», where the
    addresses of the page it replaced land (`#seat-odds`) */
 .event-section, #districts, #seat-odds { scroll-margin-top: 56px; }
-body:has(#freeze-banner:not([hidden])) .event-section, body:has(#freeze-banner:not([hidden])) #districts, body:has(#freeze-banner:not([hidden])) #seat-odds { scroll-margin-top: 102px; }
 .evbar .run { grid-area: run; justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .evbar .run small { font-size: 11.5px; color: var(--color-muted); }
 
@@ -1365,10 +1351,8 @@ tr.sep td { border-top: 2px solid var(--color-line-strong); }
 #seat-odds .so-head h3 { margin: 0; font: 700 20px/1.2 var(--font-head); }
 #seat-odds .so-fichas { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-line); }
 #seat-odds #district-select { display: none; }
-/* the page script scrolls a block taller than the window to its top: below the sticky header and, where the header
-   sits under it, the freeze banner */
+/* the page script scrolls a block taller than the window to its top: below the sticky header */
 #seat-odds .so-ficha { scroll-margin-top: 68px; }
-body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 114px; }
 @media (min-width: 1200px) {
   #seat-odds .so-split { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 1fr); gap: 0 28px; align-items: start; }
   #seat-odds .so-split .so-map { margin: 14px 0 8px; }
@@ -1376,17 +1360,13 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   #seat-odds .so-split .so-grid { grid-template-columns: max-content minmax(0, 1fr); }
   #seat-odds .so-split .so-note { display: none; }
   /* the column of the block stays in view while the map scrolls (the grid aligns it to the top, so it is as tall as
-     its block and can travel): below the sticky header, and below the freeze banner when it shows */
+     its block and can travel): below the sticky header */
   #seat-odds .so-fichas { position: sticky; top: 68px; }
-  body:has(#freeze-banner:not([hidden])) #seat-odds .so-fichas { top: 114px; }
   /* not in the copy the image is drawn from: html2canvas would draw the column where the scroll of the page left it */
   #seat-odds.shot-image .so-fichas { position: static; }
 }
 @media (max-width: 719px) {
   #seat-odds #district-select:not([hidden]) { display: block; width: 100%; max-width: 360px; margin-top: 12px; }
-  /* on phones the header (52 px) goes back to the top with the freeze banner, which sticks over it: the block keeps
-     its margin, which clears a banner of one line (48 px) */
-  body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top: 68px; }
   /* the tab bar sticks to the foot of the window (62 px in Chrome, and the safe area): a block scrolled up from below
      the map ends above it, with 6 px of air */
   #seat-odds .so-ficha { scroll-margin-bottom: calc(68px + env(safe-area-inset-bottom)); }
@@ -1439,7 +1419,6 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   #site-header, .hdr { min-height: 52px; }
   #site-header .wordmark img { height: 22px; }
   #site-header nav, .hdr nav { display: none; }
-  body:has(#freeze-banner:not([hidden])) #site-header, body:has(#freeze-banner:not([hidden])) .hdr { top: 0; }
 
   .tabbar {
     position: sticky;
@@ -1462,7 +1441,7 @@ body:has(#freeze-banner:not([hidden])) #seat-odds .so-ficha { scroll-margin-top:
   }
   .evbar > h2 { font-size: 22px; }
   .event-index { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
-  .event-section, #districts, #seat-odds, body:has(#freeze-banner:not([hidden])) .event-section, body:has(#freeze-banner:not([hidden])) #districts, body:has(#freeze-banner:not([hidden])) #seat-odds { scroll-margin-top: 52px; }
+  .event-section, #districts, #seat-odds { scroll-margin-top: 52px; }
   .evbar .run { justify-self: start; align-items: flex-start; }
 
   .hero-t { font-size: 32px; margin: var(--space-2) 0; }

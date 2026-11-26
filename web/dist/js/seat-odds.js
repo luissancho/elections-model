@@ -40,9 +40,9 @@ export function outOfView(rect, height, top = 0, foot = 0) {
 }
 
 /**
- * What the bars stuck to the window cover of it: from its top down to the lowest bottom of the top bars (the freeze
- * banner and the header), and from its foot up to the highest top of the foot bars (the tab bar of the phones), each
- * within the window.
+ * What the bars stuck to the window cover of it: from its top down to the lowest bottom of the top bars (the
+ * header), and from its foot up to the highest top of the foot bars (the tab bar of the phones), each within the
+ * window.
  *
  * @param {Array<{top: number, bottom: number}>} tops the boxes of the bars stuck to the top, relative to the window
  * @param {Array<{top: number, bottom: number}>} foots the boxes of the bars stuck to the foot

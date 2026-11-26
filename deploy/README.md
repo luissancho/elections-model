@@ -135,8 +135,8 @@ el 2026-11-13; controlador `Circunscripciones`) → `/X?…#seat-odds` (su tarje
 si `X` no está publicado); `/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
 (`proxy_cache_valid 200 60s`). La canonical de `/X` es `/X`, sin consulta, como la de todas las páginas.
 
-Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
-el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
+Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores.
+Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
 `event_bar` de `common_context`): nombre del evento ("Elecciones generales" o "Elecciones autonómicas · {nombre}"),
 fecha y días que faltan (Europe/Madrid), el índice de secciones (anclas de la misma página, `pages.EVENT_SECTIONS`) y, con un run fijado, el chip del run. Desde la fase 7b la barra no
 lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
@@ -1257,7 +1257,7 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `max_fc` | `10` | Pasos máximos del pronóstico |
 | `alpha` | `0.05` | Nivel de los intervalos |
 | `correctors` | `null` | Cambios sobre los correctores por defecto (`house_effects`, `dispersion`, `regional_noise` activos) |
-| `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` y, opcional, `"since": "YYYY-MM-DD"` (la fecha que la web escribe en «congelado desde …»; sin ella la congelación no lleva fecha, enmienda 2026-11-25) |
+| `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` y, opcional, `"since": "YYYY-MM-DD"` (la fecha que la web escribe en «congelado desde …»; sin ella la congelación no lleva fecha, enmienda 2026-11-25). La web enseña la congelación en los títulos («Pronóstico definitivo»); `message` queda en el manifest y la web ya no lo pinta (la barra amarilla de la veda se quitó el 2026-11-26) |
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
 | `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG; con `study` y `register`, sustituir un registro que ya existía (enmienda 2026-10-20); con `event`, publicar una fecha aunque falten las tablas del backtest y el evento en vivo tuviera el corte del modelo o la serie, que entonces se retiran (sin `force` la fecha queda `refused`; enmienda 2026-10-31) |
@@ -1712,10 +1712,9 @@ Plan de la elección general del 2026-11-29: la veda de sondeos va del 24 al 28 
    run del 23 y otros con el anterior).
 2. Comprobar el manifest (ver "Leer el manifest publicado").
 3. `python deploy/ecs/job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"<texto>"}}' --follow`
-   congela la web (en local, `python job.py publish '{...}'`). La congelación no lleva fecha (`manifest.freeze.since` queda en `null` y la web no escribe «congelado desde …»; enmienda 2026-11-25: antes se guardaba la fecha del día); para ponerla, añadir `"since":"2026-11-24"` a `freeze`. Texto sugerido: "Pronóstico definitivo, publicado el 23
+   congela la web (en local, `python job.py publish '{...}'`). La congelación no lleva fecha (`manifest.freeze.since` queda en `null` y la web no escribe «congelado desde …»; enmienda 2026-11-25: antes se guardaba la fecha del día); para ponerla, añadir `"since":"2026-11-24"` a `freeze`. La web la enseña en los títulos («Pronóstico definitivo»); el texto queda en el manifest para quien lo lea, pero la web ya no lo pinta (la barra amarilla que lo llevaba se quitó el 2026-11-26). Texto sugerido: "Pronóstico definitivo, publicado el 23
    de noviembre. Durante la veda electoral no se publican sondeos nuevos ni se actualiza el pronóstico."
-4. `bash deploy/check-api.sh https://<host>` comprueba el manifest y, congelado, la cabecera `x-freeze: active` y
-   el banner.
+4. `bash deploy/check-api.sh https://<host>` comprueba el manifest y, congelado, la cabecera `x-freeze: active`.
 
 **Noche del 29**: `python deploy/ecs/job.py publish '{"what":["manifest"],"freeze":{"active":false}}' --follow` (`since`
 vuelve a `null`; en local, `python job.py publish '{...}'`). **Después**, con los resultados oficiales cargados,
@@ -1737,7 +1736,7 @@ semana del 17 de noviembre.
 3. `S3_BUCKET= python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"Ensayo"}}'` sobre
    el paquete local.
 4. `S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` y `bash deploy/check-api.sh http://127.0.0.1:8001`
-   comprueba cabecera y banner.
+   comprueba la cabecera `x-freeze: active`.
 5. Desactivar: `S3_BUCKET= python job.py publish '{"what":["manifest"],"freeze":{"active":false}}'`.
 
 ### Leer el manifest publicado

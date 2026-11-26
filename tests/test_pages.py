@@ -125,17 +125,20 @@ def test_nowcast_and_pinned_run_are_reflected(api):
     assert '<a href="#resultados">Resultados</a>' in bar and '<a href="#escanos">Escaños</a>' in bar
 
 
-def test_freeze_banner_and_attribution(api, fresh_app):
+def test_frozen_pages_draw_no_banner_and_keep_the_attribution(api, fresh_app):
+    # the freeze shows in the titles («pronóstico definitivo»), not in a bar across the top of the page (Luis,
+    # 2026-11-26): the message stays in the manifest, for whoever reads it
     publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda electoral'})
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es')[2])
-    assert 'id="freeze-banner"' in page and 'Veda electoral' in page
+    assert 'freeze-banner' not in page and 'Veda electoral' not in page
+    assert 'pronóstico definitivo para el' in page
     assert 'Sondeos: Wikipedia' in page and 'href="/api/v1/manifest"' in page
 
 
 def test_frozen_manifest_written_before_phase_6_still_renders(api, fresh_app, tmp_path):
-    """Un manifest congelado por un job anterior a la fase 6 (`freeze` sin `since`) no rompe las páginas: 200, banner
-    y sin "congelado desde"."""
+    """Un manifest congelado por un job anterior a la fase 6 (`freeze` sin `since`) no rompe las páginas: 200, el
+    pronóstico definitivo y sin "congelado desde"."""
     publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'})
     path = tmp_path / bundle.PREFIX / bundle.path_manifest()
     envelope = json.loads(path.read_text())
@@ -144,7 +147,7 @@ def test_frozen_manifest_written_before_phase_6_still_renders(api, fresh_app, tm
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/es')
     page = html(body)
-    assert status == 200 and 'id="freeze-banner"' in page and 'Veda' in page
+    assert status == 200 and 'pronóstico definitivo para el' in page and 'freeze-banner' not in page
     assert 'congelado desde' not in page
 
 
@@ -3780,11 +3783,12 @@ def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
 
 def test_frozen_manifest_marks_every_page(api, fresh_app):
     writer = bundle.BundleWriter(fresh_app.fs)
-    # sin fecha (lo normal desde 2026-11-25): la banda y el pronóstico definitivo, pero ningún «congelado desde»
+    # sin fecha (lo normal desde 2026-11-25): el pronóstico definitivo, pero ningún «congelado desde»; la barra de
+    # la veda ya no se pinta (2026-11-26)
     publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'})
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es')[2])
-    assert 'freeze-banner' in page and 'Veda electoral' in page and 'pronóstico definitivo para el' in page
+    assert 'freeze-banner' not in page and 'Veda electoral' not in page and 'pronóstico definitivo para el' in page
     assert 'congelado desde' not in page
     limits = re.sub(r'\s+', ' ', html(call(api, '/metodo', query='scope=es')[2]))
     assert 'con el pronóstico definitivo. Los sondeos' in limits and 'definitivo: desde el' not in limits
@@ -3794,11 +3798,11 @@ def test_frozen_manifest_marks_every_page(api, fresh_app):
     status, _, body = call(api, '/es')
     page = html(body)
     assert status == 200 and 'pronóstico definitivo para el' in page and 'congelado desde 23 nov 2026' in page
-    assert 'freeze-banner' in page and 'href="/metodo#limitaciones"' in page
+    assert 'freeze-banner' not in page
     status, _, body = call(api, '/es', query='mode=nowcast')
     assert 'estimación del' in html(body) and 'pronóstico definitivo' not in html(body)
     status, _, body = call(api, '/metodo', query='scope=es')
-    assert 'freeze-banner' in html(body)
+    assert 'freeze-banner' not in html(body)
     assert 'Las actualizaciones se congelan al empezar la veda' in re.sub(r'\s+', ' ', html(body))  # Limitaciones
     publish.update_manifest(writer, freeze={'active': False})
     webapi.site().manifest_cache_clear()
