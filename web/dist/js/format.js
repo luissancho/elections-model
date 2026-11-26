@@ -44,11 +44,12 @@ export function fmtPct(x, digits = 1) {
 
 /**
  * Probability in [0, 1] as a percentage that never rounds a near-certainty away (the mirror of `fmt_prob` of
- * `pages/filters.py`): '0,0%' and '100,0%' only when exact; capped below the top value the decimals can show
- * ('> 99,9%' from 0.9995 with one decimal, '> 99%' from 0.995 with none) and floored above zero ('< 0,1%' up to
- * 0.0005, '< 1%' up to 0.005).
+ * `pages/filters.py`), without decimals unless asked (Luis, 2026-11-26: with 10,000 simulations the decimal is
+ * noise of the draw): '0%' and '100%' only when exact; capped below the top value the decimals can show ('> 99%'
+ * from 0.995 with none, '> 99,9%' from 0.9995 with one decimal) and floored above zero ('< 1%' up to 0.005,
+ * '< 0,1%' up to 0.0005).
  */
-export function fmtProb(p, digits = 1) {
+export function fmtProb(p, digits = 0) {
   if (isMissing(p)) {
     return DASH;
   }

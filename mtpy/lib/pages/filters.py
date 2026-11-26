@@ -120,7 +120,7 @@ def fmt_pct(x, digits: int = 1) -> str:
     return text if text == DASH else text + '%'
 
 
-def fmt_prob(p, digits: int = 1) -> str:
+def fmt_prob(p, digits: int = 0) -> str:
     """
     Format a probability in [0, 1] as a percentage that never rounds a near-certainty away.
 
@@ -129,15 +129,18 @@ def fmt_prob(p, digits: int = 1) -> str:
     p : float or None
         Probability.
     digits : int, optional
-        Number of decimals of the percentage (one everywhere, Luis, 2026-10-15).
+        Number of decimals of the percentage. None by default (Luis, 2026-11-26; one until then): the
+        probabilities of the model are shares of its simulations, and with 10,000 of them the draw alone moves
+        a share by up to half a point (one standard deviation), so a decimal would be noise. A figure that does
+        not come from a draw (the p value of a test) asks for its decimals.
 
     Returns
     -------
     str
-        ``'0,0%'`` and ``'100,0%'`` only when exact; a near-certainty is capped below the top value the
-        decimals can show (``'> 99,9%'`` from 0.9995 with one decimal, ``'> 99%'`` from 0.995 with none) and
-        a near-impossibility floored above zero (``'< 0,1%'`` up to 0.0005, ``'< 1%'`` up to 0.005), else
-        the percentage with ``digits`` decimals; ``DASH`` when ``p`` is missing.
+        ``'0%'`` and ``'100%'`` only when exact; a near-certainty is capped below the top value the decimals
+        can show (``'> 99%'`` from 0.995 with none, ``'> 99,9%'`` from 0.9995 with one decimal) and a
+        near-impossibility floored above zero (``'< 1%'`` up to 0.005, ``'< 0,1%'`` up to 0.0005), else the
+        percentage with ``digits`` decimals; ``DASH`` when ``p`` is missing.
     """
     if isinstance(p, bool) or _is_missing(p):
         return DASH

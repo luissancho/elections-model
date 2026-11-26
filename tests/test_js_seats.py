@@ -57,8 +57,8 @@ def test_coalition_text_gives_the_central_seats_and_the_probability():
     """La franja de la calculadora de mayorías: los partidos, sus escaños en el reparto central (la cifra de la barra
     y de los bloques) y la probabilidad de mayoría absoluta (Luis, 2026-10-21)."""
     text = run_js('s.coalitionText(3, 202, {median: 201, lo: 181, hi: 221, pMajority: 0.992})')
-    assert text == '3 partidos · 202 escaños · P(mayoría absoluta): 99,2%'
-    assert run_js('s.coalitionText(1, 140, {median: 139, lo: 118, hi: 160, pMajority: 0})') == '1 partido · 140 escaños · P(mayoría absoluta): 0,0%'
+    assert text == '3 partidos · 202 escaños · P(mayoría absoluta): 99%'
+    assert run_js('s.coalitionText(1, 140, {median: 139, lo: 118, hi: 160, pMajority: 0})') == '1 partido · 140 escaños · P(mayoría absoluta): 0%'
 
 
 def test_coalition_caption_gives_the_simulations_the_central_seats_and_the_range():

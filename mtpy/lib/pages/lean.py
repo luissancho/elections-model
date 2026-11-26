@@ -186,11 +186,12 @@ def chance_text(values: list) -> Optional[str]:
     if p < P_CHANCE:
         return lead + ' a una probabilidad por azar inferior a una entre {}.'.format(fmt_int(floor_odds(p * P_MARGIN)))
 
+    # an exact p value, not a share of simulations: it keeps the decimal that `fmt_prob` drops by default
     if n == 1:
-        return 'No basta para descartar el azar: su probabilidad es del {}.'.format(fmt_prob(p))
+        return 'No basta para descartar el azar: su probabilidad es del {}.'.format(fmt_prob(p, 1))
 
     return 'No todas bastan para descartar el azar: la mayor de las {} probabilidades es del {}.'.format(
-        TEST_COUNTS.get(n, fmt_int(n)), fmt_prob(p))
+        TEST_COUNTS.get(n, fmt_int(n)), fmt_prob(p, 1))
 
 
 def tech_note(summary: Optional[dict]) -> dict:

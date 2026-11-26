@@ -179,7 +179,12 @@ Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
   menor. La tabla "Todas las encuestas" (fase 7c) tiene la columna "Sondeo" (`pages.poll_name`: `encuestadora / medio`, o la
   encuestadora sola, como el cargador) en lugar de Casa y Patrocinador; el servidor pinta las 15 más recientes, la
   isla lleva todas y el JS pagina, filtra y ordena. Sin JS se ven esas filas y el CSV tiene todas.
-- Escaños: tabla Partido, Escaños, Rango 95 %, P(escaño), P(primero), P(mayoría); los histogramas llevan la línea
+- Escaños: tabla Partido, Escaños, Rango 95 %, P(escaño), P(primero), P(mayoría); las probabilidades van sin
+  decimales desde el 2026-11-26 («88%», «> 99%» desde el 99,5 % y «< 1%» hasta el 0,5 %; `fmt_prob` en el
+  servidor y `fmtProb` en el navegador, que sólo escriben decimales si se les piden), aquí, en la portada, en la
+  calculadora de mayorías, en el detalle de una elección y en el backtest: son partes de las simulaciones y el
+  sorteo las mueve más que un decimal (ver "Campaña"). El p-valor de la nota técnica de `/analisis/sesgo-cis`
+  conserva el suyo y el estudio del voto CERA, sus décimas; los histogramas llevan la línea
   de la mediana (gruesa) y las del rango del 95 % (finas), sin el valor escrito; una sola tabla de bloques
   ("Bloques ideológicos, con todos los partidos"); la calculadora usa las mismas píldoras.
 - Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 720 px y centrada en su tarjeta, como las
@@ -1177,7 +1182,12 @@ Rutina, por situación:
   `python deploy/ecs/job.py publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}' --follow` y
   después la del segundo JSON con `--follow`. Desde el 30 de octubre de 2026 `es` va con 10.000
   porque su P(mayoría) es el titular y con 1.000 depende de la semilla (±0,5 pp y extremos del rango 95 % que
-  bailan hasta 3 escaños, medido con 10 semillas); con 10.000 el error baja a ±0,15 pp y ±0,3 escaños. Los
+  bailan hasta 3 escaños, medido con 10 semillas); con 10.000 el error baja a ±0,15 pp y ±0,3 escaños, con la
+  mayoría en el 97,8 % de aquel día. El error crece al acercarse la probabilidad al 50 %: con la mayoría en el 88 %
+  del 23 de noviembre es de ±0,3 pp (una desviación típica; ±0,6 al 95 %), y un ensayo con 40.000 simulaciones del
+  26-11 (5 min y 2 GB en el portátil, `dist.json` de 1,3 MB por modo, las 10.000 primeras idénticas a las
+  publicadas) dio 88,4 % donde las 10.000 dan 87,9 %. Por eso la web escribe las probabilidades sin decimales
+  desde ese día y `es` sigue con 10.000. Los
   autonómicos no llevan probabilidades en titular y multiplicar por 5 su tiempo no compensa. Comprobar en el
   resumen que cada ámbito termina `published` y mirar los "· n avisos".
 - **Veda (del 24 al 28)**: no se publica nada; `manifest` con `freeze` el 23 y la noche del 29 (ver "Veda"). La

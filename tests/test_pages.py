@@ -490,15 +490,31 @@ def test_templates_compile_with_strict_undefined():
         env.get_template(name)
 
 
+def test_prob_filter_writes_whole_percentages():
+    """El filtro `prob` de las plantillas escribe las probabilidades de las simulaciones sin decimal (Luis,
+    2026-11-26) y sólo con decimales si la plantilla los pide."""
+    prob = pages.environment().filters['prob']
+    assert prob(0.879) == '88%' and prob(0.719) == '72%' and prob(0.996) == '> 99%' and prob(0.004) == '< 1%'
+    assert prob(0.879, 1) == '87,9%' and prob(None) == '–'
+
+
 def test_filters_follow_the_js_rules():
     assert pages.fmt_pct(32.66) == '32,7%' and pages.fmt_pct(None) == '–' and pages.fmt_pct(40, 0) == '40%'
     assert pages.fmt_num(1234567) == '1.234.567' and pages.fmt_num(3.14159, 1) == '3,1'
     assert pages.fmt_num(-1234.5, 1) == '-1.234,5' and pages.fmt_num(-1.25, 1) == '-1,3'
-    assert pages.fmt_prob(0.995, 0) == '> 99%' and pages.fmt_prob(0.003, 0) == '< 1%' and pages.fmt_prob(0) == '0,0%'
-    assert pages.fmt_prob(1) == '100,0%' and pages.fmt_prob(0.968) == '96,8%' and pages.fmt_prob(0.968, 0) == '97%' and pages.fmt_prob(None) == '–'
-    # Con un decimal (el filtro `prob` de las tablas): el tope y el suelo se mueven un orden de magnitud
-    assert pages.fmt_prob(0.968, 1) == '96,8%' and pages.fmt_prob(0.995) == '99,5%' and pages.fmt_prob(0.9995) == '> 99,9%'
-    assert pages.fmt_prob(0.003) == '0,3%' and pages.fmt_prob(0.0004) == '< 0,1%' and pages.fmt_prob(0, 0) == '0%' and pages.fmt_prob(1, 0) == '100%'
+    # Las probabilidades van sin decimal (Luis, 2026-11-26): con 10.000 simulaciones el decimal es ruido del sorteo
+    assert pages.fmt_prob(0.968) == '97%' and pages.fmt_prob(0.879) == '88%' and pages.fmt_prob(None) == '–'
+    assert pages.fmt_prob(0) == '0%' and pages.fmt_prob(1) == '100%'
+    assert pages.fmt_prob(0.995) == '> 99%' and pages.fmt_prob(0.9949) == '99%'
+    assert pages.fmt_prob(0.003) == '< 1%' and pages.fmt_prob(0.005) == '< 1%' and pages.fmt_prob(0.0051) == '1%'
+    assert pages.fmt_prob(0.968, 0) == '97%' and pages.fmt_prob(0.995, 0) == '> 99%'
+    assert pages.fmt_prob(0.003, 0) == '< 1%'
+    # Con un decimal, pedido a propósito (el p-valor de un contraste): el tope y el suelo se mueven un orden de
+    # magnitud
+    assert pages.fmt_prob(0.968, 1) == '96,8%' and pages.fmt_prob(0.995, 1) == '99,5%'
+    assert pages.fmt_prob(0.9995, 1) == '> 99,9%'
+    assert pages.fmt_prob(0.003, 1) == '0,3%' and pages.fmt_prob(0.0004, 1) == '< 0,1%'
+    assert pages.fmt_prob(0, 1) == '0,0%' and pages.fmt_prob(1, 1) == '100,0%'
     assert pages.fmt_range(27.31, 38.02) == '27,3–38,0' and pages.fmt_range(118.0, 159.5, 0) == '118–160'
     assert pages.fmt_date('2026-10-13') == '13 oct 2026' and pages.fmt_date('2026-09-05') == '5 sept 2026'
     assert pages.fmt_date('garbage') == '–' and pages.fmt_date(None) == '–'
@@ -1037,8 +1053,8 @@ def test_event_page_results_table_columns(events_site, api):
     assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', blocks) == [
         'Bloque', '% Voto', 'vs 2023', 'Escaños', 'vs 2023', 'Rango 95%', 'P(mayoría)']
     row = re.findall(r'<tr>(.*?)</tr>', parties, re.S)[1]
-    assert row.count('<td') == 9 and re.findall(r'<td>([^<]*)</td>', row)[-3:] == ['50,0%', '62,0%', '0,0%']
-    assert re.findall(r'<td>([^<]*)</td>', re.findall(r'<tr>(.*?)</tr>', blocks, re.S)[1])[-1] == '0,0%'
+    assert row.count('<td') == 9 and re.findall(r'<td>([^<]*)</td>', row)[-3:] == ['50%', '62%', '0%']
+    assert re.findall(r'<td>([^<]*)</td>', re.findall(r'<tr>(.*?)</tr>', blocks, re.S)[1])[-1] == '0%'
 
 
 def test_event_page_results_table_without_a_published_election(api):
@@ -4259,13 +4275,18 @@ def test_elecciones_without_analysis_has_no_bullseye_download(events_site):
     assert 'errors-download' not in html(call(events_site, '/elecciones')[2])
 
 
-def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(api):
+def test_tables_and_the_home_chip_show_probabilities_without_decimals(api):
+    """Las probabilidades son partes de las simulaciones y van redondeadas al punto (Luis, 2026-11-26; hasta
+    entonces, con un decimal): con 10.000 simulaciones el decimal es ruido del sorteo. El voto conserva el suyo."""
     page = html(call(api, '/es')[2])
     table = page[page.index('id="parties-table"'):page.index('</table>', page.index('id="parties-table"'))]
-    cells = re.findall(r'<td>([^<]*%)</td>', table)
-    assert cells and all(re.fullmatch(r'(?:[<>] )?\d+,\d%', cell) for cell in cells), cells
+    rows = [re.findall(r'<td>([^<]*%)</td>', row) for row in re.findall(r'<tr>(.*?)</tr>', table, re.S)[1:]]
+    assert rows and all(len(cells) == 4 for cells in rows), rows
+    for vote, *probs in rows:  # % Voto and P(escaño), P(primero), P(mayoría)
+        assert re.fullmatch(r'\d+,\d%', vote), vote
+        assert all(re.fullmatch(r'(?:[<>] )?\d+%', cell) for cell in probs), probs
     home = html(call(api, '/')[2])
-    assert re.search(r'· Derecha (?:> )?\d+,\d%</small>', home)  # the majority chip of the hero, one decimal
+    assert re.search(r'· Derecha (?:[<>] )?\d+%</small>', home)  # the majority chip of the hero
 
 
 def test_polls_table_offers_the_seats_view_only_when_a_poll_publishes_seats(api, fresh_app):
@@ -4413,7 +4434,7 @@ def test_promedios_opens_with_the_kpis_and_the_party_cards(events_site):
     flat = page.replace('\n', '')
     assert '<div class="v" style="color: #1d84ce">PP<small>33,1% del voto</small></div>' in flat
     assert '135<small>de 350</small>' in flat and 'Rango 95%: 120–150' in page
-    assert '<div class="s">PP: 135 escaños</div>' in page and '41,0%<small>Derecha</small>' in flat
+    assert '<div class="s">PP: 135 escaños</div>' in page and '41%<small>Derecha</small>' in flat
     assert '120<small>de 15 encuestadoras</small>' in flat and '5 oct<small>Sigma Dos</small>' in flat
     card = re.search(r'<article class="pc" style="--c: #1d84ce" data-name="PP">(.*?)</article>', page, re.S).group(1)
     assert '<span class="rk">1.º</span>' in card
@@ -4471,7 +4492,7 @@ def test_event_page_blocks_table_lists_the_three_blocks_and_dashes_the_majority_
     assert [re.search(r'</span>(\w+)</span>', row).group(1) for row in rows] == ['Otros', 'Derecha', 'Izquierda']
     assert 'background-color: {}'.format(pages.OTHERS_COLOR) in rows[0]
     assert re.findall(r'<td>([^<]*)</td>\s*$', rows[0].strip(), re.S) == ['–']  # P(mayoría) of Otros, on the event page
-    assert re.findall(r'<td>([^<]*)</td>\s*$', rows[1].strip(), re.S) == ['41,0%']
+    assert re.findall(r'<td>([^<]*)</td>\s*$', rows[1].strip(), re.S) == ['41%']
 
 
 def test_event_page_blocks_table_caption_names_the_parties_of_each_block(api, fresh_app):
@@ -4500,7 +4521,7 @@ def test_promedios_majority_kpi_keeps_the_vs_block_when_otros_has_the_most_seats
     write_summary(fresh_app.fs, three_block_summary(otros_seats=250))
     page = html(call(api, '/es')[2]).replace('\n', ' ')
     kpi = re.search(r'<div class="l">Mayoría absoluta</div>(.*?)</div>\s*</div>', page, re.S).group(1)
-    assert 'Derecha' in kpi and 'Otros' not in kpi and '41,0%' in kpi
+    assert 'Derecha' in kpi and 'Otros' not in kpi and '41%' in kpi
 
 
 def test_promedios_without_polls_part_and_with_an_unknown_party_still_renders(api, fresh_app, tmp_path):
@@ -4530,7 +4551,7 @@ def test_home_hero_is_the_national_scope_with_its_figures(api):
     assert '<i style="width: 38.6%; background: #1d84ce" title="PP 135"></i>' in bar and 'left: 50.3%' in bar
     assert 'Derecha 135' in bar
     # con p < 0,5 el chip va en gris: "Sin mayoría clara · Derecha 41%" (D4); con p >= 0,5, `.chip.ok`
-    assert '<span class="chip">Sin mayoría clara <small>· Derecha 41,0%</small></span>' in flat
+    assert '<span class="chip">Sin mayoría clara <small>· Derecha 41%</small></span>' in flat
     assert 'href="/es">Ver el promedio' in page and 'class="btn" href="/es#resultados">Escaños' in page
     assert 'Actualizado: 8 oct 2026 · 120 sondeos de 15 encuestadoras' in page
     assert 'id="hemicycle-mini"' in page and '/dist/js/pages/inicio.js' in page
@@ -4547,7 +4568,7 @@ def test_home_lists_the_regional_scopes_as_rows_and_names_the_unpublished_ones(a
     page = html(call(api, '/')[2])
     rows = re.search(r'<div class="card rows" id="auto-rows">(.*?)</div>\s*</div>\s*<aside', page, re.S).group(1)
     assert rows.count('class="row"') == 1 and 'href="/es-md"' in rows and '<div class="n">Madrid</div>' in rows
-    assert 'PP 33,1% · 135 esc.' in rows and 'Derecha: <b>41,0%</b> de mayoría' in rows
+    assert 'PP 33,1% · 135 esc.' in rows and 'Derecha: <b>41%</b> de mayoría' in rows
     assert 'Sin pronóstico todavía: Andalucía, Aragón' in rows and rows.count(',') >= 15 and 'Madrid,' not in rows
     assert 'card-muted' not in page and 'Pronóstico no publicado todavía' not in page
     assert page.index('href="/es"') < page.index('href="/es-md"')
@@ -4587,7 +4608,7 @@ def test_home_without_summary_or_polls_keeps_the_hero_without_the_bar(api, fresh
     assert status == 200 and 'id="hero-card"' in page and 'id="hero-seatbar"' not in page
     assert 'id="latest-polls"' not in page and 'initial-data' not in page
     assert '<b style="color: #1d84ce">135</b>' in page.replace('\n', '')  # el líder sale del headline
-    assert 'Sin mayoría clara <small>· Derecha 41,0%</small>' in page.replace('\n', '')
+    assert 'Sin mayoría clara <small>· Derecha 41%</small>' in page.replace('\n', '')
 
 
 def test_home_hero_segments_read_the_chamber_from_the_summary():
