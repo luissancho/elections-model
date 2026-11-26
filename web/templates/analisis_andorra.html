@@ -43,8 +43,8 @@
         <p class="study-subtitle">Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y en las redes circulan como precios de la fruta. {{ lead }}</p>
         <div class="intro">
           <p><b>La ley.</b> Desde 1985, la Ley Electoral prohíbe «la publicación y difusión o reproducción de sondeos electorales por cualquier medio de comunicación» durante los cinco días anteriores a la votación (artículo 69.7 de la LOREG). Saltársela se castiga con hasta un año de cárcel, multa e inhabilitación. En 2011 se añadió la «reproducción», pensando en las redes sociales, sin aclarar si una cuenta de Twitter es un medio de comunicación.</p>
-          <p><b>Por qué existen.</b> La ley acaba en la frontera. Las encuestadoras siguen haciendo campo hasta la víspera y los medios que pagan los sondeos los publican fuera de España. El Periòdic d'Andorra lleva desde 2015 publicando a diario el tracking de GESOP para El Periódico; el escocés The National hizo lo mismo con Feedback en las catalanas de 2017; The Times publicó los de Sigma Dos para El Mundo en 2008 y 2011, y en 2023 el tracking de GESOP salió en The Adelaide Review, en Australia. Los grandes sondeos de la noche electoral de RTVE y Mediaset, con diez mil entrevistas o más, también se publican fuera la víspera.</p>
-          <p><b>Cómo funcionan.</b> Para que lleguen a España sin nombrar partidos nació en 2015 la «frutería de Andorra», una idea de la cuenta Electograph: los partidos son productos y sus porcentajes, precios. El agua es el PP; la fresa o la rosa, el PSOE; la berenjena, Podemos; la naranja, Ciudadanos; el brócoli, Vox. En noviembre de 2019 el mercado abrió con «notable ascenso del brócoli y descalabro de la naranja», y en las aragonesas de 2026 unos estudiantes de la Universidad de Zaragoza vendían «ppollo», chocolate, jamón de Teruel y frutos rojos en el Mercado Central. Los sondeos «clandestinos» son esos: hechos y publicados con todas las de la ley, sólo que fuera.</p>
+          <p><b>Por qué existen.</b> La ley acaba en la frontera. Las encuestadoras siguen haciendo campo hasta la víspera y los medios que pagan los sondeos los publican fuera de España. El Periòdic d'Andorra lleva desde 2015 publicando a diario el tracking de GESOP para El Periódico; el escocés The National hizo lo mismo con Feedback en las catalanas de 2017; The Times publicó los de Sigma Dos para El Mundo en 2008 y 2011, y en 2023 el tracking de GESOP salió en The Adelaide Review, en Australia. Los grandes sondeos de la noche electoral de RTVE y Mediaset, con diez mil entrevistas o más, se hacen esos mismos días pero no salen fuera: se publican en España a las ocho de la tarde de la jornada electoral, al cerrar las urnas.</p>
+          <p><b>Cómo funcionan.</b> Para que lleguen a España sin nombrar partidos nació en 2015 la «frutería de Andorra», una idea de la cuenta Electograph: los partidos son productos y sus porcentajes, precios. El agua es el PP; la fresa o la rosa, el PSOE; la berenjena, Podemos; la naranja, Ciudadanos; el brócoli, Vox. En noviembre de 2019 el mercado abrió con «notable ascenso del brócoli y descalabro de la naranja», y en las aragonesas de 2026 unos estudiantes de la Universidad de Zaragoza vendían «ppollo», chocolate, jamón de Teruel y frutos rojos en el Mercado Central. Aquí llamamos sondeos «clandestinos» a todos los que se hacen durante la veda: los que se publican fuera esos días y llegan como fruta, y los que se guardan hasta el cierre de las urnas. Unos y otros, hechos y publicados con todas las de la ley.</p>
           <p><b>Qué hacemos con ellos.</b> Los cargamos en la base con su marca, pero no entran en el promedio, en el rating ni en las tablas del sitio: la ley no permite publicarlos en España y esta página tampoco lo hace. Lo que sí podemos hacer, pasada cada elección, es compararlos con el resultado. Eso es esta página.</p>
           <p class="srcs">Fuentes de la explicación: <a href="https://www.elconfidencial.com/espana/cataluna/elecciones-catalanas/2017-12-18/encuesta-sondeo-electoral-prohibido-periodic-andorra_1494464/">El Confidencial (18-12-2017)</a> · <a href="https://www.ondacero.es/noticias/espana/encuestas-electorales-andorra-ascenso-brocoli-descalabro-naranja_201911065dc2b2650cf2767d148c38e5.html">Onda Cero (6-11-2019)</a> · <a href="https://www.heraldo.es/noticias/aragon/2026/02/05/las-encuestas-de-las-elecciones-en-aragon-a-traves-de-ppollo-brocolis-y-frutos-rojos-1891137.html">Heraldo de Aragón (5-2-2026)</a>.</p>
         </div>
@@ -72,7 +72,7 @@
         {{ qhead(v1, 1) }}
         <p class="lead">
           La comparación más limpia: cada casa contra sí misma. Su último sondeo publicado antes de la veda frente al
-          último que publicó durante la veda, en la misma elección. Si el sondeo clandestino sólo sirviera para repetir
+          último que hizo durante la veda, en la misma elección. Si el sondeo clandestino sólo sirviera para repetir
           las cifras, el error sería el mismo; si la opinión se mueve en la última semana y los sondeos lo recogen, el
           clandestino estará más cerca.
         </p>
@@ -199,7 +199,7 @@
         <p class="lead">
           Casa a casa, con todas las elecciones: cuántas veces su sondeo clandestino estuvo más cerca que su último
           legal, y cuánto. Y aparte, los sondeos de la jornada: los que las televisiones encargan con miles de
-          entrevistas para la noche electoral y publican fuera antes.
+          entrevistas para la noche electoral y publican al cerrar las urnas.
         </p>
         <div class="grid2">
           <div>
@@ -222,7 +222,7 @@
           </div>
           <div>
             <p class="ctitle">Los sondeos de la jornada</p>
-            <p class="csub">Sondeos clandestinos con {{ big.get('threshold')|int }} entrevistas o más: los que las televisiones publican fuera de España la víspera o el mismo día</p>
+            <p class="csub">Sondeos clandestinos con {{ big.get('threshold')|int }} entrevistas o más: los que las televisiones y otros medios publican en España al cerrar las urnas</p>
             {% if big_rows %}
             <div class="table-wrap">
               <table id="big-table">
@@ -287,7 +287,7 @@
           <div>
             <p class="ctitle">Datos</p>
             <ul class="src-list">
-              <li>Los sondeos clandestinos de cada elección (los que Wikipedia marca como publicados durante la veda), con su casa, su medio, su fecha de fin de campo y su muestra: desde {{ since_year }}, {{ pairs.get('n')|int }} con un último sondeo legal de la misma casa con el que compararlos.</li>
+              <li>Los sondeos clandestinos de cada elección (los que Wikipedia marca como hechos después del inicio de la veda, se publicaran fuera de España o al cerrar las urnas; la base no distingue unos de otros), con su casa, su medio, su fecha de fin de campo y su muestra: desde {{ since_year }}, {{ pairs.get('n')|int }} con un último sondeo legal de la misma casa con el que compararlos.</li>
               <li>El último sondeo legal de cada casa: el último publicado antes de la veda, el mismo que usa el rating; si tiene más de {{ params.get('max_days')|int }} días, el par no cuenta.</li>
               <li>El promedio congelado de cada generales desde {{ chart_year }}: la cifra de «Lo que dijo el modelo» de la página de la <a href="/elecciones">elección</a> (horizonte de {{ counts.horizon }} días).</li>
               <li>Sin agregadores; los paneles abiertos, sólo en la comparación consigo mismos.</li>

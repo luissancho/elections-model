@@ -18,6 +18,8 @@ from .cera import MONTHS_LONG, _get
 from .filters import DASH, MONTHS, delta_text, fmt_int, fmt_num
 from .herd import _date, _is_num, day_month, names, short_day
 from .lean import house_href
+from ..studies.ban.texts import COUNT_WORDS, lead_sentence
+from ..studies.lean.stats import sign_chance
 
 BAN = 'andorra'
 QUESTIONS = ('¿Aciertan más que el último sondeo legal?',
@@ -40,11 +42,12 @@ TIE = 0.1
 STRONG_MOVE = 1
 # Pairs a house needs to be named in the texts of question 3, and a scope among the best of question 1
 HOUSE_MIN, SCOPE_MIN = 10, 5
-# Days between the start of the LOREG ban on polls and the election
-VEDA_DAYS = 6
+# Days between the start of the LOREG ban on polls and the election: art. 69.7 bans them «durante los cinco días
+# anteriores al de la votación», so the day before the ban starts is the last one with legal polls
+VEDA_DAYS = 5
 # The parties that take the article in prose («al PSOE», «el PP»); the others go bare («a Vox», «Sumar»)
 WITH_ARTICLE = ('PP', 'PSOE', 'PNV', 'PSC', 'BNG', 'PRC', 'PAR')
-WORDS = ('ninguna', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez')
+WORDS = COUNT_WORDS
 # The two of them that change in the masculine
 MASCULINE = {0: 'ningún', 1: 'un'}
 
@@ -97,15 +100,41 @@ def long_label(label: Optional[str]) -> str:
     return label or DASH
 
 
-def coin_text(p) -> Optional[str]:
+def coin_text(p, k: Optional[int] = None, n: Optional[int] = None) -> Optional[str]:
     """
-    How often a fair coin gets the pairs: «menos de 1 vez entre 10.000» below ``P_FLOOR``, «1 vez entre 37» below
-    ``P_CHANCE``, ``None`` from ``P_CHANCE`` on (the texts then say chance cannot be ruled out) or without ``p``.
+    How often a fair coin gets the pairs.
+
+    Parameters
+    ----------
+    p : float or None
+        The published probability of ``k`` or more closer pairs of ``n`` by chance (three significant figures).
+    k : int, optional
+        Pairs where the clandestine poll was closer.
+    n : int, optional
+        Pairs compared, the ties left out.
+
+    Returns
+    -------
+    str or None
+        «menos de 1 vez entre 10.000» below ``P_FLOOR``, «1 vez entre 534» below ``P_CHANCE``, ``None`` from
+        ``P_CHANCE`` on (the texts then say chance cannot be ruled out) or without ``p``. With ``k`` and ``n`` the
+        odds are the exact ones of the binomial (``sign_chance``): the inverse of the published ``p`` is a unit or
+        two off (0,00187 gives 535 for the 534 of 58 pairs of 88).
     """
     if not _is_num(p) or p >= P_CHANCE:
         return None
 
-    return 'menos de 1 vez entre 10.000' if p < P_FLOOR else '1 vez entre ' + fmt_int(round(1 / p))
+    if p < P_FLOOR:
+        return 'menos de 1 vez entre 10.000'
+
+    exact = sign_chance(n, k) if isinstance(k, int) and isinstance(n, int) else None
+
+    return '1 vez entre ' + fmt_int(exact['odds_exact'] if exact else round(1 / p))
+
+
+def _untied(pairs: dict) -> int:
+    """The pairs the coin is tossed for: all of them but the ties, as the test of the study counts them."""
+    return (pairs.get('n') or 0) - (pairs.get('ties') or 0)
 
 
 def _gain(mean_d, unit: str = 'puntos por partido') -> str:
@@ -242,8 +271,9 @@ def lead_text(summary: Optional[dict], cells: list, params: dict) -> str:
     -------
     str
         With a model, the elections where the consensus beat the frozen average and the party figures closer to the
-        result, then «Lo que no vio nadie, tampoco lo vio la fruta…» when the last election has a ``blind_cell``
-        (otherwise a neutral sentence); without a model, the pairs.
+        result (``texts.lead_sentence``, the same sentence of the published subtitle), then «Lo que no vio nadie,
+        tampoco lo vio la fruta…» when the last election has a ``blind_cell`` (otherwise a neutral sentence); without
+        a model, the pairs.
     """
     elections, pairs = _get(summary, 'elections'), _get(summary, 'pairs') or {}
 
@@ -252,15 +282,8 @@ def lead_text(summary: Optional[dict], cells: list, params: dict) -> str:
                 'legal de la misma casa en {}.').format(fmt_int(pairs.get('n')),
                                                          (params.get('since') or '')[:4] or DASH, fmt_int(pairs.get('k')))
 
-    n, k = elections.get('n'), elections.get('k_beaten')
-    if n == 1:  # «En la única general…, estuvo (no estuvo) más cerca», without «en todas» / «en ninguna»
-        verb, where = 'estuvo' if k == 1 else 'no estuvo', ''
-    else:
-        verb, where = 'estuvo', ' en todas' if k == n else ' en ninguna' if k == 0 else ' en ' + words(k)
-    text = ('En {} desde {}, el consenso de esos sondeos {} más cerca del resultado que el promedio congelado{}, y '
-            'quedó más cerca del resultado en {} de las {} cifras de partido.').format(
-        the_count(n, 'generales', 'general'), (params.get('chart_since') or '')[:4] or DASH, verb, where,
-        fmt_int(_get(summary, 'cells', 'k_closer')), fmt_int(_get(summary, 'cells', 'n')))
+    text = lead_sentence(elections.get('n'), elections.get('k_beaten'), (params.get('chart_since') or '')[:4] or DASH,
+                         fmt_int(_get(summary, 'cells', 'k_closer')), fmt_int(_get(summary, 'cells', 'n')))
     blind = blind_cell(cells, last=True)
 
     if blind:
@@ -280,6 +303,51 @@ def _missed_text(missed: list) -> Optional[str]:
         groups.setdefault(cell.get('label'), []).append(the(cell.get('party')))
 
     return ', '.join('{} en {}'.format(names(parties), long_label(label)) for label, parties in groups.items()) or None
+
+
+# What the figures that did not end closer did, as the cells table says it: (kind, one, several)
+OTHER_KINDS = (('crossed', 'pasó de largo', 'pasaron de largo'), ('away', 'se alejó', 'se alejaron'),
+               ('still', 'no se movió', 'no se movieron'))
+
+
+def _others_text(cells: list, missed: list) -> Optional[str]:
+    """
+    The party figures that did not end closer to the result, counted with the labels of the cells table.
+
+    Parameters
+    ----------
+    cells : list of dict
+        The rows of the ``cells`` part.
+    missed : list of dict
+        ``summary.cells.missed``: the label and the party of those that were not closer.
+
+    Returns
+    -------
+    str or None
+        «de las otras 6, 3 pasaron de largo y 3 se alejaron: el PSOE en 2015, …»; «las otras 2 se alejaron: …» when
+        all of them did the same and «la otra pasó de largo: …» for a single one; the plain «las que no: …» when the
+        cells do not tell what each one did, and ``None`` when every figure ended closer.
+    """
+    names_text = _missed_text(missed)
+
+    if not names_text:
+        return None
+
+    kinds = [movement_kind(cell) for cell in cells if cell.get('closer') is False]
+    counts = [(kinds.count(kind), one, several) for kind, one, several in OTHER_KINDS]
+    counts = [count for count in counts if count[0]]
+
+    if len(kinds) != len(missed) or sum(count[0] for count in counts) != len(kinds):
+        return 'las que no: ' + names_text
+
+    if len(counts) == 1:
+        n, one, several = counts[0]
+        return ('la otra {}: {}'.format(one, names_text) if n == 1 else
+                'las otras {} {}: {}'.format(fmt_int(n), several, names_text))
+
+    parts = names(['{} {}'.format(fmt_int(n), one if n == 1 else several) for n, one, several in counts])
+
+    return 'de las otras {}, {}: {}'.format(fmt_int(len(kinds)), parts, names_text)
 
 
 def kpis(summary: Optional[dict], elections: list, cells: list, params: dict) -> list:
@@ -313,7 +381,7 @@ def kpis(summary: Optional[dict], elections: list, cells: list, params: dict) ->
     support = ['{} pares en generales desde {} ({} más cerca) y {} en autonómicas ({})'.format(
         fmt_int(generals.get('n')), since, fmt_int(generals.get('k')), fmt_int(regional.get('n')),
         fmt_int(regional.get('k'))), _gain(pairs.get('mean_d'))]
-    coin = coin_text(pairs.get('p'))
+    coin = coin_text(pairs.get('p'), pairs.get('k'), _untied(pairs))
 
     if coin:
         support.append('una moneda lo hace ' + coin)
@@ -375,12 +443,10 @@ def kpis(summary: Optional[dict], elections: list, cells: list, params: dict) ->
             'con ' + count(lo) if lo == hi else 'de {} a {}'.format(count(lo), count(hi)),
             '' if len(parties) == 1 else ' cada una'))
 
-    second.append('{} apuntaron en la dirección correcta y {} pasaron de largo'.format(
-        fmt_int(cs.get('k_direction')), fmt_int(cs.get('k_crossed'))))
-    missed_cells = _missed_text(cs.get('missed') or [])
+    others = _others_text(cells, cs.get('missed') or [])
 
-    if missed_cells:
-        second.append('las que no: ' + missed_cells)
+    if others:
+        second.append(others)
 
     return [
         dict(row, label='Generales en que la fruta afinó el promedio congelado',
@@ -535,17 +601,17 @@ def p1_sum(summary: Optional[dict]) -> dict:
     Returns
     -------
     dict
-        ``{'strong', 'rest'}``: the share of closer pairs in tenths with the word of the verdict («Sí:», «A
-        medias:», «No: sólo»); the mean improvement, the general elections, the coin only with ``p < P_CHANCE``
-        (otherwise that chance cannot be ruled out) and «La última semana mueve voto…» only with «SÍ».
+        ``{'strong', 'rest'}``: the share of closer pairs as a percentage with the word of the verdict («Sí: en el
+        66%», «A medias:», «No: sólo»; tenths would turn 58 of 88 into «7 de cada 10»); the mean improvement, the
+        general elections, the coin only with ``p < P_CHANCE`` (otherwise that chance cannot be ruled out) and «La
+        última semana mueve voto…» only with «SÍ».
     """
     pairs = _get(summary, 'pairs') or {}
     label = verdicts(summary)[0]['label']
     share = pairs.get('share')
-    tenths = fmt_int(round(share * 10)) if _is_num(share) else DASH
-    lead = {'SÍ': 'Sí: en {}', 'NO': 'No: sólo en {}'}.get(label, 'A medias: en {}').format(tenths)
-    strong = lead + (' de cada 10 pares el sondeo clandestino estuvo más cerca del resultado que el último legal de '
-                     'su casa')
+    percent = fmt_int(round(share * 100)) + '%' if _is_num(share) else DASH
+    lead = {'SÍ': 'Sí: en el {}', 'NO': 'No: sólo en el {}'}.get(label, 'A medias: en el {}').format(percent)
+    strong = lead + ' de los pares el sondeo clandestino estuvo más cerca del resultado que el último legal de su casa'
     mean_d = pairs.get('mean_d')
     rest = [', con una {}.'.format(_gain(mean_d)) if _is_num(mean_d) and mean_d < 0 else '; {}.'.format(_gain(mean_d))]
     generals = _count(_get(pairs, 'generals', 'k'), _get(pairs, 'generals', 'n'))
@@ -553,8 +619,8 @@ def p1_sum(summary: Optional[dict]) -> dict:
     if generals:
         rest.append(' En generales, {}.'.format(generals))
 
-    coin = coin_text(pairs.get('p'))
-    k, n = pairs.get('k'), (pairs.get('n') or 0) - (pairs.get('ties') or 0)
+    k, n = pairs.get('k'), _untied(pairs)
+    coin = coin_text(pairs.get('p'), k, n)
 
     if coin:
         rest.append(' Que una moneda acierte {} veces de {} pasa {}: no es azar.'.format(fmt_int(k), fmt_int(n), coin))
@@ -681,7 +747,9 @@ def p3_sum(summary: Optional[dict], houses: list) -> dict:
     dict
         ``{'strong', 'rest'}``: the big polls («Los grandes afinan:» only with the verdict «LOS GRANDES»; without
         big polls, that none reached the threshold) and, when there are, the two best houses with ``HOUSE_MIN`` pairs
-        or more and the worst of them («sin mejora media» when its mean change is below ``NAILED``).
+        or more and the worst of them («sin mejora media» when its mean change is below ``NAILED``). With only two
+        such houses the second is not one of «las que más afinan» but the worst («GAD3 es la que más afina (11 de
+        15) y ElectoPanel, la que menos (8 de 14)»), and nothing is said of two houses with the same share.
     """
     big = _get(summary, 'big') or {}
 
@@ -701,19 +769,26 @@ def p3_sum(summary: Optional[dict], houses: list) -> dict:
         rest = []
 
     ranked = _ranked(houses)
+    among = ' Entre las casas con {} vedas o más, '.format(words(HOUSE_MIN))
 
-    if ranked:
+    def worst(row: dict) -> str:
+        flat = _is_num(row.get('mean_d')) and abs(row['mean_d']) < NAILED
+        return '{}{}'.format(_count(row.get('k'), row.get('n')), ', sin mejora media' if flat else '')
+
+    if len(ranked) == 2:
+        best, low = ranked
+
+        if best['share'] > low['share']:
+            rest.append(among + '{} es la que más afina ({}) y {}, la que menos ({}).'.format(
+                best.get('pollster'), _count(best.get('k'), best.get('n')), low.get('pollster'), worst(low)))
+    elif ranked:
         top = ranked[:2]
-        rest.append(' Entre las casas con {} vedas o más, {} {}'.format(
-            words(HOUSE_MIN), names(['{} ({})'.format(row.get('pollster'), _count(row.get('k'), row.get('n')))
-                                     for row in top]),
+        rest.append(among + '{} {}'.format(
+            names(['{} ({})'.format(row.get('pollster'), _count(row.get('k'), row.get('n'))) for row in top]),
             'son las que más afinan' if len(top) > 1 else 'es la que más afina'))
 
         if len(ranked) > 2:
-            low = ranked[-1]
-            flat = _is_num(low.get('mean_d')) and abs(low['mean_d']) < NAILED
-            rest.append('; la que menos, {} ({}{})'.format(low.get('pollster'), _count(low.get('k'), low.get('n')),
-                                                           ', sin mejora media' if flat else ''))
+            rest.append('; la que menos, {} ({})'.format(ranked[-1].get('pollster'), worst(ranked[-1])))
 
         rest.append('.')
 
@@ -824,6 +899,35 @@ def exception_text(summary: Optional[dict], scope_names: dict) -> Optional[str]:
     return text
 
 
+def movement_kind(cell: dict) -> Optional[str]:
+    """
+    What the consensus did with a party figure, as the cells table names it and the KPI of the figures counts it.
+
+    Returns
+    -------
+    str or None
+        ``'nailed'`` (within ``NAILED`` of the result), ``'crossed'`` (it ended on the other side of the result,
+        closer or not), ``'toward'`` (closer without crossing), ``'still'`` (not closer with a move within
+        ``NAILED``) or ``'away'``; ``None`` without the figures.
+    """
+    move, gap = cell.get('move'), cell.get('gap')
+    consensus, official = cell.get('consensus'), cell.get('official')
+
+    if not all(_is_num(x) for x in (move, gap, consensus, official)):
+        return None
+
+    if abs(consensus - official) < NAILED:
+        return 'nailed'
+
+    if cell.get('crossed'):
+        return 'crossed'
+
+    if cell.get('closer'):
+        return 'toward'
+
+    return 'still' if abs(move) <= NAILED else 'away'
+
+
 def movement(cell: dict) -> dict:
     """
     What the consensus did with a party figure, for the last column of the cells table.
@@ -837,29 +941,28 @@ def movement(cell: dict) -> dict:
         move within ``NAILED``); «se alejó · −0,4» (``ko`` from ``STRONG_MOVE``, else ``kol``); «no se movió»
         (``mut``); a dash (``mut``) without the figures.
     """
-    move, gap = cell.get('move'), cell.get('gap')
-    consensus, official = cell.get('consensus'), cell.get('official')
+    move, gap, kind = cell.get('move'), cell.get('gap'), movement_kind(cell)
 
-    if not all(_is_num(x) for x in (move, gap, consensus, official)):
+    if kind is None:
         return {'text': DASH, 'tone': 'mut'}
 
-    if abs(consensus - official) < NAILED:
+    if kind == 'nailed':
         return {'text': 'clavado · {} de {}'.format(delta_text(move, 1), delta_text(gap, 1)), 'tone': 'ok'}
 
-    if cell.get('crossed'):
+    if kind == 'crossed':
         verb = 'faltaba' if fmt_num(abs(gap), 1) == '1,0' else 'faltaban'
         text = '{} · {} cuando {} {}'.format('pasó de largo, pero más cerca' if cell.get('closer') else 'pasó de largo',
                                              delta_text(move, 1), verb, delta_text(gap, 1))
         return {'text': text, 'tone': 'okl' if cell.get('closer') else 'kol'}
 
-    if cell.get('closer'):
+    if kind == 'toward':
         if abs(move) <= NAILED:
             return {'text': 'hacia el resultado · apenas ({})'.format(delta_text(move, 2)), 'tone': 'okl'}
 
         return {'text': 'hacia el resultado · {} de {}'.format(delta_text(move, 1), delta_text(gap, 1)),
                 'tone': 'ok' if cell.get('half') else 'okl'}
 
-    if abs(move) <= NAILED:
+    if kind == 'still':
         return {'text': 'no se movió', 'tone': 'mut'}
 
     return {'text': 'se alejó · ' + delta_text(move, 1), 'tone': 'ko' if abs(move) >= STRONG_MOVE else 'kol'}
@@ -1017,8 +1120,8 @@ def pills(summary: Optional[dict], params: dict, card: dict) -> dict:
     Returns
     -------
     dict
-        ``{'evidence', 'state', 'state_tone'}``: «Evidencia histórica · 5 generales con modelo · 116 sondeos
-        clandestinos desde 1996, con las autonómicas» (without the model clause without a model); «Se completa con
+        ``{'evidence', 'state', 'state_tone'}``: «Evidencia histórica · 5 generales con modelo · 116 pares de
+        sondeos desde 1996, con las autonómicas» (without the model clause without a model); «Se completa con
         2026 tras el cierre de urnas del 29-N» (``warn``) while the card is closed, «Completada con 2026» (``ok``)
         once open, ``None`` without the election in progress.
     """
@@ -1028,7 +1131,7 @@ def pills(summary: Optional[dict], params: dict, card: dict) -> dict:
     if n:
         evidence.append('{} generales con modelo'.format(fmt_int(n)))
 
-    evidence.append('{} sondeos clandestinos desde {}, con las autonómicas'.format(
+    evidence.append('{} pares de sondeos desde {}, con las autonómicas'.format(
         fmt_int(_get(summary, 'pairs', 'n')), (params.get('since') or '')[:4] or DASH))
 
     if not card.get('year'):

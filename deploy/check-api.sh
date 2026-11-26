@@ -177,17 +177,11 @@ check_nginx_only /dist/img/logo.svg image/svg+xml
 check_nginx_only /favicon.ico image/x-icon
 check /api/v1/health 200 json
 check /api/v1/manifest 200 json
-# Congelacion editorial: si el manifest la declara activa, la cabecera y el banner deben verse.
+# Congelacion editorial: si el manifest la declara activa, la API debe decirlo en su cabecera.
 frozen="$(curl -s --max-time 20 "$base/api/v1/manifest" | "$PY" -c \
     "import json,sys; print(str(bool(json.load(sys.stdin)['data'].get('freeze', {}).get('active'))).lower())" 2>/dev/null || true)"
 if [ "$frozen" = true ]; then
     check_header /api/v1/scopes x-freeze active
-    if curl -s --max-time 20 "$base/" | grep -q freeze-banner; then
-        echo "OK   / (freeze-banner)"
-    else
-        echo "FAIL /: sin freeze-banner con la publicacion congelada"
-        failures=$((failures + 1))
-    fi
 else
     echo "n/a  congelación: inactiva"
 fi

@@ -480,7 +480,9 @@ republica; `ban` desde la enmienda 2026-11-05, ver abajo):
   sondeos que `polls.rows` (`Computer.filter_polls(featured=True)`: cada fila de la tabla tiene su error), por
   fecha y casa ascendentes, con `sample_size` nulo cuando no se conoce y `weight` el producto del peso global y el
   de muestra; los escaños salen de `forecaster.published_seats`. El gemelo CSV añade `seats_min_*`/`seats_max_*`.
-- `ban` (opcional): los sondeos publicados durante la veda (`ctype` `wban`, los «clandestinos») de la elección, con la
+- `ban` (opcional): los sondeos hechos durante la veda (`ctype` `wban`, los «clandestinos»: la fila roja de Wikipedia,
+  «poll conducted after legal ban», se publicaran fuera de España esos días o en España al cerrar las urnas, como los
+  de la noche electoral de las televisiones; la base no distingue unos de otros) de la elección, con la
   forma de `cycle` (`parties`, `columns` y `polls`, cada uno con `error_avg`, `error_blocks` y `bias_blocks`) y `legal`,
   el último sondeo legal de cada casa que publicó uno clandestino (la misma forma). `publish event` la escribe siempre:
   sin sondeos clandestinos, `polls` y `legal` van vacíos (con `parties` y `columns`) y `meta.n_ban` es 0. Es opcional
@@ -664,8 +666,10 @@ van aplanados en `block_left`/`block_right`, `name_{linaje}`, `polls_{clave}` y 
 
 ### `andorra`
 
-«El mercado de la fruta en Andorra»: los sondeos publicados fuera durante los cinco días de veda («clandestinos»)
-frente al último sondeo legal de cada casa y frente al promedio congelado. Siete partes; las filas llevan `pollster_id`
+«El mercado de la fruta en Andorra»: los sondeos hechos durante los cinco días de veda («clandestinos»: los que se
+publican fuera de España esos días y los que se publican en España al cerrar las urnas) frente al último sondeo legal
+de cada casa y frente al promedio congelado. El `subtitle` de `meta` lo escribe `publish.ban._subtitle` con la misma
+frase que dice la página (`studies.ban.texts.lead_sentence`). Siete partes; las filas llevan `pollster_id`
 y `pollster` y **no `slug`** (la página calcula los enlaces a los perfiles). Se calcula con las partes ya publicadas del
 paquete (`event` de cada elección, con su parte `ban` y la clave `ban` de `model`), es vivo (`live`) y no se registra
 (`"register":true` termina `refused`):
@@ -737,7 +741,9 @@ posteriores a esa hora y, por tanto, normalmente al principio de la lista.
   es la fecha ISO que la web escribe en «congelado desde …» o `null`: desde 2026-11-25 solo la lleva si el job
   la da (`"since": "YYYY-MM-DD"`), se conserva mientras siga activo y es `null` al desactivarlo; antes era el día
   (Europe/Madrid) en que pasó de inactivo a activo. Un lector no escribe ninguna fecha con `since: null`, esté
-  activo o no; un manifest anterior sin la clave se lee con `since: null`.
+  activo o no; un manifest anterior sin la clave se lee con `since: null`. `message` es un texto libre que
+  viaja en el manifest: la web lo pintaba en una barra sobre la cabecera (`#freeze-banner`) y desde 2026-11-26
+  no lo muestra.
 - `attribution`: textos de atribución (`polls`, `results`, `model`). Provisionales; cada escritura del
   manifest la refresca desde `ATTRIBUTION`.
 
@@ -888,9 +894,9 @@ Las rutas desconocidas y los métodos distintos de GET reciben el 404 JSON gené
   (solo `GET`, sin preflight). La pone el controlador, no el router: el 404 genérico del router (ruta
   desconocida o método distinto de GET) no la lleva.
 - `x-freeze: active` cuando `manifest.freeze.active` está activo (en `scopes`, `runs`, `forecast/...`).
-  Es solo un aviso: la API sigue sirviendo los datos. Las páginas lo muestran con un banner (`#freeze-banner`,
-  enlazado a `/metodo#limitaciones`), el título «Pronóstico definitivo» en modo `forecast` y «congelado desde»
-  en el pie.
+  Es solo un aviso: la API sigue sirviendo los datos. Las páginas lo muestran con el título «Pronóstico definitivo»
+  en modo `forecast` y, si el manifest trae `since`, «congelado desde» en el pie; la barra de aviso
+  (`#freeze-banner`) se quitó el 2026-11-26.
 
 ## Rutas de base y de análisis (fase 4)
 

@@ -51,7 +51,7 @@ def test_a_card_is_out_of_view_only_when_none_of_it_shows():
 
 
 def test_the_free_band_is_what_the_bars_stuck_to_the_window_leave():
-    # the top bars cover down to the lowest of their bottoms (the freeze banner and the header under it), the foot bars
+    # the top bars cover down to the lowest of their bottoms (one bar and another under it), the foot bars
     # up from the highest of their tops; no bars, no cover; a bar beyond the window covers no more than the window
     assert run_js("s.coveredBand([{top: 0, bottom: 48}, {top: 46, bottom: 103}], [{top: 787, bottom: 844}], 844)") == {
         'top': 103, 'foot': 57}

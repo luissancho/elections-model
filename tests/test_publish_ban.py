@@ -74,14 +74,17 @@ def test_export_ban_latest_frame_has_a_row_per_poll_with_the_shares(study):
     assert all(round(v, 1) == v for poll in data['polls'] for v in poll['pct'].values())
 
 
-def test_export_ban_meta_formats_the_subtitle_with_the_live_figures(study):
+def test_export_ban_meta_writes_the_subtitle_with_the_sentence_of_the_page(study):
+    """El subtítulo publicado (tarjeta de /analisis, descripción y enlaces) lleva la misma frase que la página: con
+    palabras («las dos generales», «en una») y diciendo que el consenso junta los dos tipos de sondeo."""
     meta, _ = publish.export_ban_meta(study, prov=fake_prov())
-    s = study.summary
     assert meta['title'] == publish.STUDY_TITLES['andorra'][0]
-    assert f"En las {s['elections']['n']} generales desde 2015" in meta['subtitle']
-    assert f"que el promedio congelado en {s['elections']['k_beaten']}, y quedó más cerca del resultado en " \
-           f"{s['cells']['k_closer']} de las {s['cells']['n']} cifras de partido." in meta['subtitle']
-    assert '{' not in meta['subtitle']
+    assert (study.summary['elections']['n'], study.summary['elections']['k_beaten']) == (2, 1)
+    assert meta['subtitle'] == (
+        'Los cinco días anteriores a la votación la ley prohíbe publicar sondeos en España. Se publican fuera, y en '
+        'las redes circulan como precios de la fruta. En las dos generales desde 2015, el consenso de los sondeos '
+        'hechos esos días, los que salen fuera y los que esperan al cierre de las urnas, estuvo más cerca del '
+        'resultado que el promedio congelado en una, y quedó más cerca del resultado en 4 de las 7 cifras de partido.')
 
 
 def test_export_ban_meta_without_a_model_uses_the_pairs_sentence(study):

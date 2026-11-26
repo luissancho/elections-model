@@ -90,7 +90,8 @@
             la opinión en esos últimos días. Las actualizaciones se congelan al empezar la veda, cinco días antes de
             la votación, con el pronóstico
             definitivo{% if frozen and freeze.since %}: desde el {{ freeze.since|date }}{% endif %}. Los sondeos
-            que se publican fuera de España durante la veda se cargan en la base, pero no entran en el promedio
+            que se hacen durante la veda, se publiquen fuera de España o al cerrar las urnas, se cargan en la base,
+            pero no entran en el promedio
             porque su trabajo de campo acaba dentro de esos cinco días, y la API en vivo no los sirve.{% if andorra_published %} Si aciertan más que los legales, elección a elección,
             está en <a href="/analisis/andorra">El mercado de la fruta en Andorra</a>.{% endif %}</li>
         </ul>

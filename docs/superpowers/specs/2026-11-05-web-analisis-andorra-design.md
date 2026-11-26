@@ -535,3 +535,29 @@ seis días) y ahora toma el último legal; es la consecuencia buscada del filtro
 «último sondeo» de `/metodo/backtest` a 6 días. `backtest push` (11 ficheros), referencia del repositorio
 actualizada (`ffc3aa1`), `publish event` de todos los ámbitos y fechas, `publish study andorra` y despliegue: ver la
 entrega de la sesión.
+
+### Corrección de los textos (2026-11-26)
+
+Revisión antes de promocionar la página, con los textos aprobados por Luis:
+
+- **Qué es un `wban`.** La fila roja de Wikipedia es «poll conducted after legal ban on opinion polls»: sondeos
+  *hechos* durante la veda, no «publicados fuera». Entran los que se publican fuera de España esos días (GESOP en El
+  Periòdic d'Andorra o The Adelaide Review) y los de la noche electoral (RTVE, Mediaset, Antena 3, El Español…), que
+  se publican en España a las ocho de la tarde, al cerrar las urnas. La base no distingue unos de otros. La página
+  decía en varios sitios que los grandes se publicaban fuera la víspera; ahora llama «clandestinos» a los dos tipos
+  y lo dice (cabecera, entradillas de las preguntas 1 y 3, subtítulo de «Los sondeos de la jornada», «Datos» y la
+  frase del consenso del subtítulo, que comparten la página y el `subtitle` publicado). En las generales desde 2015,
+  19 de los 25 pares tienen el fin de campo la víspera o el mismo día; con sólo los sondeos de campo cerrado dos días
+  antes o más (aproximación de lo que pudo circular antes de votar), el consenso bate al promedio congelado en 4 de 5
+  y el error medio es 1,45 (1,68 el congelado, 1,19 con todos). Separar los dos tipos pide marcar dónde y cuándo se
+  publicó cada sondeo: queda para después del 29-N.
+- **La veda empieza cinco días antes de votar** (`VEDA_DAYS = 5`): el 24 de noviembre para el 29-N. La tarjeta decía
+  el 23, el último día con sondeos legales.
+- **Frases que las cifras vivas dejaron mal:** la proporción de pares va en porcentaje («en el 66%», no «7 de cada
+  10»); la moneda sale de la binomial exacta de los pares (1 entre 534; la inversa de la `p` publicada con tres cifras
+  daba 535); con sólo dos casas de diez vedas o más, la segunda es «la que menos» afina, no una de «las que más»; las
+  cifras que no quedaron más cerca se cuentan con las etiquetas de la tabla («3 pasaron de largo y 3 se alejaron»),
+  no con `k_direction` y `k_crossed`, que siguen en la parte `summary` sin texto que las lea; la pastilla de cabecera
+  cuenta pares, no sondeos.
+- **Para que se vea:** desplegar la web y `publish '{"what":["study"],"study":"andorra"}'` (el `subtitle` de `meta`
+  cambia: tarjeta de /analisis, descripción y enlaces).

@@ -45,9 +45,6 @@
   {% include '_consent.html' +%}
   {% endif %}
   {% include '_svg.html' +%}
-  {% if manifest.freeze.active %}
-  <div id="freeze-banner">{{ manifest.freeze.message or 'Actualizaciones congeladas.' }} <a href="/metodo#limitaciones">Más información</a></div>
-  {% endif %}
   {% include '_header.html' +%}
   {# The <h1> of the page: its title, for screen readers and crawlers only. A page with a visible <h1> empties
      the block. It goes before the event bar, so that reading on from it goes through the bar and the content. #}

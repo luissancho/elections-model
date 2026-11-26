@@ -44,13 +44,10 @@ STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley d
                                 'dado a la izquierda menos voto del que sacó en {k_under} y más en '
                                 '{k_over}{vox_clause}. Los sondeos se equivocan con cada partido grande en {size} '
                                 'puntos de media{tail}.'),
-                # The subtitle is a template: {n} general elections with a model, {k} of them where the clandestine
-                # consensus beat the frozen average, {kc} of {nc} party figures closer to the result
+                # The subtitle is not a template: ``ban._subtitle`` writes it from the summary, with ``BAN_INTRO``
+                # and the sentence the page says too (``studies.ban.texts.lead_sentence``)
                 'andorra': ('El mercado de la fruta en Andorra: ¿aciertan más los sondeos «clandestinos» de última '
-                            'hora?',
-                            BAN_INTRO + ' En las {n} generales desde {year}, el consenso de esos sondeos estuvo más '
-                            'cerca del resultado que el promedio congelado en {k}, y quedó más cerca del resultado '
-                            'en {kc} de las {nc} cifras de partido.')}
+                            'hora?', None)}
 
 REGISTRATION_KEYS = ('registered_at', 'registered_commit', 'registered', 'registered_changed_at')
 
